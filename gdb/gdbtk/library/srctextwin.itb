@@ -888,9 +888,9 @@ body SrcTextWin::ClearTags {} {
 body SrcTextWin::_mtime_changed {filename} {
   global tcl_platform
 
-  set f [gdb_find_file $filename]
-
-  if {$f == ""} {
+  if [catch {gdb_find_file $filename} f] {
+    set r 1
+  } elseif {$f == ""} {
     set r 1
   } else {
     if {[string compare $tcl_platform(platform) "windows"] == 0} {
@@ -1198,7 +1198,13 @@ body SrcTextWin::location {tagname filename funcname line addr pc_addr lib} {
   
   if {$oldmode != "" \
 	&& [string compare $filename $current(filename)] != 0} {
-    if {[gdb_find_file $filename] != ""} {
+
+    if [catch {gdb_find_file $filename} fullname] {
+      dbug W "$filename: $fullname"
+      set fullname ""
+    }
+
+    if {$fullname != ""} {
       set tmp $oldmode
       set oldmode ""
       $parent mode "" $tmp 0

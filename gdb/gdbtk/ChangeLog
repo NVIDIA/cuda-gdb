@@ -1,3 +1,12 @@
+2001-02-06  Fernando Nasser  <fnasser@redhat.com>
+
+	Originally from Martin Hunt <hunt@redhat.com>, with modifications
+	* library/srcwin.itb (_name): Check for errors when invoking
+	gdb_find_file.
+	* library/srctextwin.itb (_mtime_changed, location): Ditto.
+	* generic/gdbtk-cmds.c (gdb_find_file_command): Better error checking.
+	(full_lookup_symtab): Fix misleading comment.
+
 2001-02-04  Fernando Nasser  <fnasser@redhat.com>
 
 	* library/plugins/plugins.tcl: Fix typos and remove "-transient"

@@ -1319,8 +1319,8 @@ gdb_get_function_command (clientData, interp, objc, objv)
  * Tcl Arguments:
  *    filename: the file name to search for.
  * Tcl Result:
- *    The full path to the file, or an empty string if the file is not
- *    found.
+ *    The full path to the file, an empty string if the file was not
+ *    available or an error message if the file is not found in the symtab.
  */
 
 static int
@@ -1330,8 +1330,8 @@ gdb_find_file_command (clientData, interp, objc, objv)
      int objc;
      Tcl_Obj *CONST objv[];
 {
-  char *filename = NULL;
   struct symtab *st;
+  char *filename;
 
   if (objc != 2)
     {
@@ -1339,17 +1339,25 @@ gdb_find_file_command (clientData, interp, objc, objv)
       return TCL_ERROR;
     }
 
-  st = full_lookup_symtab (Tcl_GetStringFromObj (objv[1], NULL));
-  if (st)
-    filename = st->fullname;
+  filename = Tcl_GetStringFromObj (objv[1], NULL);
+  st = full_lookup_symtab (filename);
 
-  if (filename == NULL)
+  /* We should always get a symtab. */
+  if (!st)
     {
-      Tcl_SetStringObj ( result_ptr->obj_ptr, "File not found in symtab (2)", -1);
+      Tcl_SetStringObj ( result_ptr->obj_ptr,
+                         "File not found in symtab (2)", -1);
       return TCL_ERROR;
     }
-  else
-    Tcl_SetStringObj (result_ptr->obj_ptr, filename, -1);
+
+  /* We may not be able to open the file (not available). */
+  if (!st->fullname)
+    {
+      Tcl_SetStringObj (result_ptr->obj_ptr, "", -1);
+      return TCL_OK;
+    }
+
+  Tcl_SetStringObj (result_ptr->obj_ptr, st->fullname, -1);
 
   return TCL_OK;
 }
@@ -4648,8 +4656,8 @@ perror_with_name_wrapper (args)
 /* The lookup_symtab() in symtab.c doesn't work correctly */
 /* It will not work will full pathnames and if multiple */
 /* source files have the same basename, it will return */
-/* the first one instead of the correct one.  This version */
-/* also always makes sure symtab->fullname is set. */
+/* the first one instead of the correct one. */
+/* symtab->fullname will be NULL if the file is not available. */
 
 static struct symtab *
 full_lookup_symtab (file)
