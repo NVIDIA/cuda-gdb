@@ -44,7 +44,6 @@ typedef enum gdb_wrapper_status { GDB_OK, GDB_ERROR } gdb_result;
    function. */
 extern gdb_result GDB_evaluate_expression (struct expression *expr,
 					   value_ptr * val);
-extern gdb_result GDB_select_frame (struct frame_info *fi, int level);
 extern gdb_result GDB_type_print (value_ptr val, char *varstring,
 				  struct ui_file *stream, int show);
 extern gdb_result GDB_val_print (struct type *type, char *valaddr,

@@ -1,3 +1,9 @@
+2002-05-04  Andrew Cagney  <ac131313@redhat.com>
+
+	* generic/gdbtk-wrapper.h (GDB_select_frame): Delete declaration.
+	* generic/gdbtk-wrapper.c (GDB_select_frame): Delete function.
+	(wrap_select_frame): Delete function.
+
 2002-04-26  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/interface.tcl (gdbtk_force_quit): New function.
