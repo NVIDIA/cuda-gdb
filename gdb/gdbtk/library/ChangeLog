@@ -1,3 +1,9 @@
+2000-03-01  James Ingham  <jingham@leda.cygnus.com>
+
+	* interface.tcl (_open_file): The window which had the focus could 
+	get deleted by the vwait implicit in the tk_getOpenFile call.  So
+	check and make sure it is still around before raising it...
+
 2000-02-23  Keith R Seitz  <kseitz@nwlink.com>
 
         * srctextwin.ith (_highlightAsmLine): Define new method.

@@ -776,9 +776,11 @@ proc _open_file {{file ""}} {
     ide_grab_support enable_all
     
     # If no one had the focus before, leave it that way (since I
-    # am not sure how this could happen...
+    # am not sure how this could happen...  Also, the vwait in 
+    # tk_getOpenFile could have allowed the curFocus window to actually
+    # be destroyed, so make sure it is still around.
     
-    if {$curFocus != ""} {
+    if {$curFocus != "" && [winfo exists $curFocus]} {
       raise [winfo toplevel $curFocus]
       focus $curFocus
     }
