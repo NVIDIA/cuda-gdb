@@ -1,3 +1,7 @@
+2001-03-01  Nicholas Duffek  <nsd@redhat.com>
+
+	* library/srctextwin.itb (config_win): Give focus to $win.
+
 Tue Feb 27 23:56:23 2001  Andrew Cagney  <ac131313@redhat.com>
 
 	* generic/gdbtk-cmds.c: Include recently created "regcache.h"

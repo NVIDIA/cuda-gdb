@@ -689,6 +689,9 @@ body SrcTextWin::config_win {win {asm S}} {
   # Up/Down arrow key bindings
   bind_plain_key $win Up [list %W yview scroll -1 units]
   bind_plain_key $win Down [list %W yview scroll +1 units]
+
+  # Make key bindings usable immediately (without mouse click in window).
+  focus $win
 }
 
 # ------------------------------------------------------------------
@@ -1211,6 +1214,8 @@ body SrcTextWin::location {tagname filename funcname line addr pc_addr lib} {
     }
   }
   
+  set oldpane $_tpane
+
   switch $current(mode) {
     SOURCE {
       FillSource t $tagname $filename $funcname $line $addr $pc_addr $lib
@@ -1232,6 +1237,13 @@ body SrcTextWin::location {tagname filename funcname line addr pc_addr lib} {
       }
     }
   }
+
+  # After switching panes, clear the previous pane's cursor so that it isn't
+  # used as the default when no other cursors are set.
+  if { "$oldpane" != "$_tpane" } {
+    $twin configure -cursor ""
+  }
+
   set current(line) $line
   set current(tag) $tagname
   set current(addr) $addr
