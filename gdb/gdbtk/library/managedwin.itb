@@ -255,7 +255,7 @@ body ManagedWin::_create { class args } {
 
   if {$transient} {
     wm resizable $top 0 0
-    wm transient $top .
+    wm transient $top [winfo toplevel [namespace tail [lindex [ManagedWin::find SrcWin] 0]]]
   } elseif {$::tcl_platform(platform) == "unix"} {
     # Modal dialogs DONT get Icons...
     if {[pref get gdb/use_icons] && ![$newwin isa ModalDialog]} {

@@ -25,6 +25,12 @@
 	* generic/gdbtk-cmds.c (hex2bin): Replace LITTLE_ENDIAN with
 	BFD_ENDIAN_LITTLE.
 
+2001-12-11  Ian Roxborough  <irox@redhat.com>
+
+	* library/managedwin.itb (ManagedWin::_create):  When
+	making a modal window transient, use the source window
+	as the master and not ".".
+
 2001-12-10  Ian Roxborough  <irox@redhat.com>
 
 	* library/interface.tcl (set_target_name): Call "pref getd"
