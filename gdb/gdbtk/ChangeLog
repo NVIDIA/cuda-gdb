@@ -1,3 +1,7 @@
+Tue Feb 27 23:56:23 2001  Andrew Cagney  <ac131313@redhat.com>
+
+	* generic/gdbtk-cmds.c: Include recently created "regcache.h"
+
 2001-02-27  Keith Seitz  <kseitz@nwlink.com>
 
 	* generic/gdbtk-cmds.c (gdb_fetch_registers): Mark
