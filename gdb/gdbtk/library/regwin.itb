@@ -347,7 +347,7 @@ body RegWin::reg_select { r } {
 #          register window
 # ------------------------------------------------------------------
 body RegWin::dimensions {} {
-  set rows 16
+  set rows [pref get gdb/reg/rows]
   #    set rows [expr int(floor(sqrt($num_regs)))]
   set cols [expr {int(ceil(sqrt($num_regs)))}]
   

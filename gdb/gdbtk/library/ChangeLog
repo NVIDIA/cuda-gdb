@@ -1,3 +1,14 @@
+2000-04-03  Steve Johnson  <sbjohnson@ozemail.com.au>
+
+	* regwin.itb (dimensions): Use rows from preference file rather
+	than hard-coding a preference.
+	* prefs.tcl (pref_set_defaults): Add gdb/reg/rows preference.
+
+2000-04-03  James Ingham  <jingham@leda.cygnus.com>
+
+	* util.tcl (find_iwidgets_library): Follow links in determining
+	the location of the executable.
+
 2000-03-30  Fernando Nasser  <fnasser@totem.to.cygnus.com>
 
 	* variables.tcl (edit): Remove call to close, which caused editing
@@ -10,6 +21,7 @@
         (open): Make sure to abort any ongoing edit.  This was causing problems
 	when someone tried to expand an structure while editing its pointer.
 
+>>>>>>> 1.12
 2000-03-28  James Ingham  <jingham@leda.cygnus.com>
 
 	* managedwin.itb (ManagedWin::startup): Open the SrcWin, this does 

@@ -310,6 +310,7 @@ proc pref_set_defaults {} {
 
   # Register Window
   pref define gdb/reg/highlight_fg        blue
+  pref define gdb/reg/rows                16
 
   # Global Prefs Dialogs
   pref define gdb/global_prefs/save_fg    red
