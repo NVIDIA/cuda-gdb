@@ -2272,7 +2272,7 @@ gdb_loc (ClientData clientData, Tcl_Interp *interp, int objc, Tcl_Obj *CONST obj
 	  pc = selected_frame->pc;
 	  sal = find_pc_line (selected_frame->pc,
 			      selected_frame->next != NULL
-			      && !selected_frame->next->signal_handler_caller
+			      && !(get_frame_type (selected_frame->next) == SIGTRAMP_FRAME)
 			      && !deprecated_frame_in_dummy (selected_frame->next));
 	}
       else

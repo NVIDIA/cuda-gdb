@@ -1,3 +1,10 @@
+2002-11-19  Andrew Cagney  <ac131313@redhat.com>
+
+	* generic/gdbtk-cmds.c (gdb_loc): Use get_frame_type instead of
+	->signal_handler_caller.
+	* generic/gdbtk-stack.c (get_frame_name): Ditto.
+	(get_frame_name): Ditto.
+
 2002-11-12  Andrew Cagney  <ac131313@redhat.com>
 
 	From 2002-11-11 David Carlton <carlton@math.stanford.edu>

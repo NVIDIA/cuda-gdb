@@ -526,7 +526,7 @@ get_frame_name (Tcl_Interp *interp, Tcl_Obj *list, struct frame_info *fi)
       Tcl_ListObjAppendElement (interp, list, objv[0]);
       return;
     }
-  if (fi->signal_handler_caller)
+  if ((get_frame_type (fi) == SIGTRAMP_FRAME))
     {
       objv[0] = Tcl_NewStringObj ("<signal handler called>\n", -1);
       Tcl_ListObjAppendElement (interp, list, objv[0]);
@@ -536,7 +536,7 @@ get_frame_name (Tcl_Interp *interp, Tcl_Obj *list, struct frame_info *fi)
   sal =
     find_pc_line (fi->pc,
 		  fi->next != NULL
-		  && !fi->next->signal_handler_caller
+		  && !(get_frame_type (fi) == SIGTRAMP_FRAME)
 		  && !deprecated_frame_in_dummy (fi->next));
 
   func = find_pc_function (fi->pc);
