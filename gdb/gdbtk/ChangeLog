@@ -1,3 +1,13 @@
+2001-06-13  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-bp.c (gdbtk_tracepoint_create): Change
+	parameter to int to match breakpoint notifications.
+	(gdbtk_tracepoint_modify): Ditto.
+	(gdbtk_tracepoint_delete): Ditto.
+	(tracepoint_notify): Ditto.
+	* generic/gdbtk-hooks.c (gdbtk_add_hooks): Remove
+	tracepoint hooks and install tracepoint event handlers.
+
 2001-06-11  Tom Tromey  <tromey@redhat.com>
 
 	* library/help/session.html: New file.

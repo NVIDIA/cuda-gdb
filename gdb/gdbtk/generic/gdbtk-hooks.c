@@ -71,9 +71,9 @@ int gdbtk_force_detach = 0;
 extern void gdbtk_create_breakpoint (int);
 extern void gdbtk_delete_breakpoint (int);
 extern void gdbtk_modify_breakpoint (int);
-extern void gdbtk_create_tracepoint (struct tracepoint *);
-extern void gdbtk_delete_tracepoint (struct tracepoint *);
-extern void gdbtk_modify_tracepoint (struct tracepoint *);
+extern void gdbtk_create_tracepoint (int);
+extern void gdbtk_delete_tracepoint (int);
+extern void gdbtk_modify_tracepoint (int);
 
 extern void (*pre_add_symbol_hook) (char *);
 extern void (*post_add_symbol_hook) (void);
@@ -129,6 +129,9 @@ gdbtk_add_hooks (void)
   handlers.breakpoint_create = gdbtk_create_breakpoint;
   handlers.breakpoint_modify = gdbtk_modify_breakpoint;
   handlers.breakpoint_delete = gdbtk_delete_breakpoint;
+  handlers.tracepoint_create = gdbtk_create_tracepoint;
+  handlers.tracepoint_modify = gdbtk_modify_tracepoint;
+  handlers.tracepoint_delete = gdbtk_delete_tracepoint;
   set_gdb_event_hooks (&handlers);
 
   /* Hooks */
@@ -153,9 +156,6 @@ gdbtk_add_hooks (void)
   file_changed_hook = gdbtk_file_changed;
   specify_exec_file_hook (gdbtk_exec_file_display);
 
-  create_tracepoint_hook = gdbtk_create_tracepoint;
-  delete_tracepoint_hook = gdbtk_delete_tracepoint;
-  modify_tracepoint_hook = gdbtk_modify_tracepoint;
   trace_find_hook = gdbtk_trace_find;
   trace_start_stop_hook = gdbtk_trace_start_stop;
 

@@ -123,11 +123,11 @@ static int tracepoint_exists (char *args);
 void gdbtk_create_breakpoint (int);
 void gdbtk_delete_breakpoint (int);
 void gdbtk_modify_breakpoint (int);
-void gdbtk_create_tracepoint (struct tracepoint *);
-void gdbtk_delete_tracepoint (struct tracepoint *);
-void gdbtk_modify_tracepoint (struct tracepoint *);
+void gdbtk_create_tracepoint (int);
+void gdbtk_delete_tracepoint (int);
+void gdbtk_modify_tracepoint (int);
 static void breakpoint_notify (int, const char *);
-static void tracepoint_notify (struct tracepoint *, const char *);
+static void tracepoint_notify (int, const char *);
 
 int
 Gdbtk_Breakpoint_Init (Tcl_Interp *interp)
@@ -942,36 +942,33 @@ gdb_tracepoint_exists_command (clientData, interp, objc, objv)
  */
 
 void
-gdbtk_create_tracepoint (tp)
-     struct tracepoint *tp;
+gdbtk_create_tracepoint (int num)
 {
-  tracepoint_notify (tp, "create");
+  tracepoint_notify (num, "create");
 }
 
 void
-gdbtk_delete_tracepoint (tp)
-     struct tracepoint *tp;
+gdbtk_delete_tracepoint (int num)
 {
-  tracepoint_notify (tp, "delete");
+  tracepoint_notify (num, "delete");
 }
 
 void
-gdbtk_modify_tracepoint (tp)
-     struct tracepoint *tp;
+gdbtk_modify_tracepoint (int num)
 {
-  tracepoint_notify (tp, "modify");
+  tracepoint_notify (num, "modify");
 }
 
 static void
-tracepoint_notify (tp, action)
-     struct tracepoint *tp;
+tracepoint_notify (num, action)
+     int num;
      const char *action;
 {
   char *buf;
 
   /* We ensure that ACTION contains no special Tcl characters, so we
      can do this.  */
-  xasprintf (&buf, "gdbtk_tcl_tracepoint %s %d", action, tp->number);
+  xasprintf (&buf, "gdbtk_tcl_tracepoint %s %d", action, num);
 
   if (Tcl_Eval (gdbtk_interp, buf) != TCL_OK)
     report_error ();
