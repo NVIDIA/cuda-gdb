@@ -64,6 +64,9 @@ class SrcBar {
     # Pack the toolbar
     pack $Tool -expand 1 -fill both
 
+    # Set the srcbar's initial state
+    enable_ui 2
+
     eval itk_initialize $args
     add_hook gdb_no_inferior_hook "$this enable_ui 2"
     add_hook gdb_trace_find_hook "$this handle_trace_find_hook"

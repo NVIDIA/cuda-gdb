@@ -1,5 +1,10 @@
 2001-06-04  Keith Seitz  <keiths@redhat.com>
 
+	* library/srcbar.itcl (constructor): Set the toolbar's initial
+	state.
+
+2001-06-04  Keith Seitz  <keiths@redhat.com>
+
 	* library/interface.tcl (gdb_update_hook): Mark as deprecated.
 	(gdbtk_update): Dispatch and UpdateEvent, too.
 	* library/ehandler.ith (update): New event handler.
