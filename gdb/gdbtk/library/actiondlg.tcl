@@ -1,5 +1,5 @@
-# Tracepoint actions dialog for GDBtk.
-# Copyright 1997, 1998, 1999 Cygnus Solutions
+# Tracepoint actions dialog for Insight.
+# Copyright 1997, 1998, 1999, 2001 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
