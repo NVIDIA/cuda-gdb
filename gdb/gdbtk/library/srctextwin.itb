@@ -2067,6 +2067,8 @@ body SrcTextWin::do_source_popup { X Y x y } {
 	  -command [list $this addToWatch $variable]
 	$popups(source) add command -label "Dump Memory at $variable" \
 	  -command [list ManagedWin::open MemWin -force -addr_exp $variable]
+	$popups(source) add command -label "Set Breakpoint at $variable" \
+	  -command [list gdb_cmd "break $variable"]
 	$popups(source) add separator
       }
     }

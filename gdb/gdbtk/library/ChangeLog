@@ -1,5 +1,8 @@
 2000-12-07  Tom Tromey  <tromey@redhat.com>
 
+	* srctextwin.itb (SrcTextWin::do_source_popup): Added "Set
+	Breakpoint" to popup menu.
+
 	* srcwin.itb (SrcWin::edit): Use uplevel, not eval, to evaluate
 	external editor expression.
 
