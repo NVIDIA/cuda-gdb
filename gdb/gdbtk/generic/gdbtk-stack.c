@@ -1,5 +1,5 @@
 /* Tcl/Tk command definitions for Insight - Stack.
-   Copyright 2001, 2002 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2003 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -125,7 +125,7 @@ gdb_block_vars (ClientData clientData, Tcl_Interp *interp,
 		case LOC_COMPUTED:	  /* computed location     */
 		case LOC_COMPUTED_ARG:	  /* computed location arg */
 		  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-					    Tcl_NewStringObj (SYMBOL_NAME (sym),
+					    Tcl_NewStringObj (DEPRECATED_SYMBOL_NAME (sym),
 							      -1));
 		  break;
 
@@ -345,7 +345,7 @@ gdb_get_vars_command (ClientData clientData, Tcl_Interp *interp,
 	    case LOC_COMPUTED_ARG:	/* computed location arg */
 	      if (arguments)
 		Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-					  Tcl_NewStringObj (SYMBOL_NAME (sym), -1));
+					  Tcl_NewStringObj (DEPRECATED_SYMBOL_NAME (sym), -1));
 	      break;
 	    case LOC_LOCAL:	/* stack local           */
 	    case LOC_BASEREG:	/* basereg local         */
@@ -354,7 +354,7 @@ gdb_get_vars_command (ClientData clientData, Tcl_Interp *interp,
 	    case LOC_COMPUTED:	/* computed location     */
 	      if (!arguments)
 		Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-					  Tcl_NewStringObj (SYMBOL_NAME (sym), -1));
+					  Tcl_NewStringObj (DEPRECATED_SYMBOL_NAME (sym), -1));
 	      break;
 	    }
 	}

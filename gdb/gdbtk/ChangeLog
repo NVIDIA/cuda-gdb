@@ -1,3 +1,10 @@
+2003-02-25  David Carlton  <carlton@math.stanford.edu>
+
+	* generic/gdbtk.h: Replace all instances of SYMBOL_NAME by
+	DEPRECATED_SYMBOL_NAME.
+	* generic/gdbtk-stack.c, generic/gdbtk-cmds.c: Ditto.
+	* generic/gdbtk-stack.c, generic/gdbtk-cmds.c: Update copyright.
+
 2003-02-21  Tom Tromey  <tromey@redhat.com>
 
 	* generic/gdbtk-interp.c (gdbtk_interpreter_init): Declare locals

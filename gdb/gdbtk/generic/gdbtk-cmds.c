@@ -1,5 +1,5 @@
 /* Tcl/Tk command definitions for Insight.
-   Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2001, 2002
+   Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2001, 2002, 2003
    Free Software Foundation, Inc.
 
    Written by Stu Grossman <grossman@cygnus.com> of Cygnus Support.
@@ -1365,8 +1365,8 @@ gdb_search (ClientData clientData, Tcl_Interp *interp,
 
       /* Strip off some C++ special symbols, like RTTI and global
          constructors/destructors. */
-      if ((p->symbol != NULL && !STREQN (SYMBOL_NAME (p->symbol), "__tf", 4)
-	   && !STREQN (SYMBOL_NAME (p->symbol), "_GLOBAL_", 8))
+      if ((p->symbol != NULL && !STREQN (DEPRECATED_SYMBOL_NAME (p->symbol), "__tf", 4)
+	   && !STREQN (DEPRECATED_SYMBOL_NAME (p->symbol), "_GLOBAL_", 8))
 	  || p->msymbol != NULL)
 	{
 	  elem = Tcl_NewListObj (0, NULL);
@@ -1484,7 +1484,7 @@ gdb_listfuncs (clientData, interp, objc, objv)
 		}
 	      else
 		{
-		  funcVals[0] = Tcl_NewStringObj (SYMBOL_NAME (sym), -1);
+		  funcVals[0] = Tcl_NewStringObj (DEPRECATED_SYMBOL_NAME (sym), -1);
 		  funcVals[1] = not_mangled;
 		}
 	      Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
