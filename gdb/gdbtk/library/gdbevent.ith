@@ -1,0 +1,124 @@
+# GDBEvent class definitions for Insight.
+# Copyright 2001 Red Hat, Inc.
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License (GPL) as published by
+# the Free Software Foundation; either version 2 of the License, or (at
+# your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# For reasons unknown to me, I cannot put any of the constructors
+# in the implementation files. The very first instance of the class
+# will call the (empty) constructor in here instead of the one
+# defined in the implementation file. Sigh.
+
+class GDBEvent {
+  public method get {what} { return "" }
+  public method handler {} { return "unknown" }
+}
+
+# BREAKPOINT EVENT
+#
+# action ....... what type of BP event ("create", "delete", "modify")
+# number ....... gdb's internal token for the BP
+# file ......... filename in which event occurred
+# function ..... function in which event occurred
+# line ......... line number in file
+# address ...... address of BP
+# type ......... breakpoint type ("breakpoint", "hw breakpoint", "step resume", etc)
+# enabled ...... BP enabled?
+# disposition .. BP's disposition ("delete", "delstop", "disable", "donttouch")
+# ignore_count . BP's ignore count
+# commands ..... list of commands to run when BP hit
+# condition .... BP condition
+# thread ....... thread in which BP is set (or -1 for all threads) 
+# hit_count .... number of times BP has been hit
+
+class BreakpointEvent {
+  inherit GDBEvent
+
+  public variable action {}
+  public variable number {}
+
+  #constructor {args} {}
+  constructor {args} {
+    eval configure $args
+
+    # If creating/modifying a breakpoint, then get
+    # all info about it and save it away.
+    _init
+  }
+  #destructor { dbug I "" }
+
+  public method get {what}
+  public method handler {} { return "breakpoint" }
+
+  private variable _file         {}
+  private variable _function     {}
+  private variable _line         {}
+  private variable _address      {}
+  private variable _type         {}
+  private variable _enabled      {}
+  private variable _disposition  {}
+  private variable _ignore_count {}
+  private variable _commands     {}
+  private variable _condition    {}
+  private variable _thread       {}
+  private variable _hit_count    {}
+
+  private method _init {}
+}
+
+# TRACEPOINT EVENT
+#
+# action ....... what type of BP event ("create", "delete", "modify")
+# number ....... gdb's internal token for the BP
+# file ......... filename in which event occurred
+# function ..... function in which event occurred
+# line ......... line number in file
+# address ...... address of BP
+# enabled ...... BP enabled?
+# pass_count ...
+# step_count ...
+# thread ....... thread in which BP is set (or -1 for all threads) 
+# hit_count .... number of times BP has been hit
+# actions ...... a list of actions to be performed when the tracepoint is hit
+class TracepointEvent {
+  inherit GDBEvent
+
+  public variable action {}
+  public variable number {}
+
+  # For reasons unknown to me, I cannot put this in the implementation
+  # file. The very first instance of the class will call this empty
+  # constructor instead of the one defined in the implementation file.
+  #constructor {args} {}
+  constructor {args} {
+    eval configure $args
+
+    # If creating/modifying a tracepoint, then get
+    # all info about it and save it away.
+    _init
+  }
+  #destructor { dbug I "" }
+  public method get {what}
+  public method handler {} { return "tracepoint" }
+
+
+  private variable _file       {}
+  private variable _function   {}
+  private variable _line       {}
+  private variable _address    {}
+  private variable _enabled    {}
+  private variable _pass_count {}
+  private variable _step_count {}
+  private variable _thread     {}
+  private variable _hit_count  {}
+  private variable _actions    {}
+
+  private method _init {}
+}

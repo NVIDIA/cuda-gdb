@@ -1,3 +1,16 @@
+2001-04-19  Keith Seitz  <keiths@cygnus.com>
+
+	* library/gdbevent.ith: New file. Defines new event model.
+	* library/gdbevent.itb: New file. Implements new event
+	model.
+	* library/ehandler.ith: New file. Defines new event model.
+	* library/ehandler.itb: New file. Implements new event
+	model.
+	* library/gdbwin.ith: Inherit from GDBEventHandler.
+	(update): Delete unused method.
+	(_state): Delete unused variable.
+	* library/tclIndex: Regenerated.
+
 2001-04-18  Martin M. Hunt  <hunt@redhat.com>
 	
 	* generic/gdbtk.c (gdbtk_init): Initialize uiout.
