@@ -1,3 +1,31 @@
+2000-11-28  Tom Tromey  <tromey@cygnus.com>
+
+	* gdbtk-cmds.c (gdb_clear_file): Use Tcl_WrongNumArgs.
+	(gdb_confirm_quit): Likewise.
+	(gdb_force_quit): Likewise.
+	(gdb_eval): Likewise.
+	(gdb_immediate_command): Likewise.
+	(gdb_get_vars_command): Likewise.
+	(gdb_get_line_command): Likewise.
+	(gdb_get_file_command): Likewise.
+	(gdb_get_function_command): Likewise.
+	(gdb_cmd): Likewise.  Also, don't allow more than 2 arguments.
+	(gdb_listfiles): Corrected usage of Tcl_WrongNumArgs.
+	(gdb_listfuncs): Use Tcl_WrongNumArgs.  Return error.
+	(gdb_fetch_registers): Likewise.
+	(gdb_tracepoint_exists_command): Use Tcl_WrongNumArgs.
+	(gdb_get_tracepoint_info): Likewise.
+	(gdb_get_trace_frame_num): Likewise.
+	(gdb_actions_command): Likewise.
+	(gdb_disassemble): Likewise.  Also, return error.
+	(gdb_get_breakpoint_list): Likewise.
+	(gdb_path_conv): Likewise.
+	(gdb_load_disassembly): Use Tcl_WrongNumArgs.
+	(gdb_loc): Likewise.
+	(gdb_set_bp): Likewise.
+	(gdb_set_bp_addr): Likewise.
+	(gdb_get_breakpoint_info): Likewise.
+
 2000-10-23  Fernando Nasser  <fnasser@redhat.com>
 
 	From 2000-10-19  Steven Johnson  <sbjohnson@ozemail.com.au>

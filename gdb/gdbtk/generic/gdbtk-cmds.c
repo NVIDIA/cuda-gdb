@@ -581,8 +581,10 @@ gdb_clear_file (clientData, interp, objc, objv)
      Tcl_Obj *CONST objv[];
 {
   if (objc != 1)
-    Tcl_SetStringObj (result_ptr->obj_ptr,
-		      "Wrong number of args, none are allowed.", -1);
+    {
+      Tcl_WrongNumArgs (interp, 1, objv, NULL);
+      return TCL_ERROR;
+    }
 
   if (inferior_pid != 0 && target_has_execution)
     {
@@ -622,8 +624,7 @@ gdb_confirm_quit (clientData, interp, objc, objv)
 
   if (objc != 1)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr,
-			"Wrong number of args, should be none.", -1);
+      Tcl_WrongNumArgs (interp, 1, objv, NULL);
       return TCL_ERROR;
     }
 
@@ -650,8 +651,7 @@ gdb_force_quit (clientData, interp, objc, objv)
 {
   if (objc != 1)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr,
-			"Wrong number of args, should be none.", -1);
+      Tcl_WrongNumArgs (interp, 1, objv, NULL);
       return TCL_ERROR;
     }
 
@@ -747,8 +747,7 @@ gdb_eval (clientData, interp, objc, objv)
 
   if (objc != 2)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr,
-		     "wrong # args, should be \"gdb_eval expression\"", -1);
+      Tcl_WrongNumArgs (interp, 1, objv, "expression");
       return TCL_ERROR;
     }
 
@@ -797,9 +796,9 @@ gdb_cmd (clientData, interp, objc, objv)
 {
   int from_tty = 0;
 
-  if (objc < 2)
+  if (objc < 2 || objc > 3)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr, "wrong # args", -1);
+      Tcl_WrongNumArgs (interp, 1, objv, "command ?from_tty?");
       return TCL_ERROR;
     }
 
@@ -867,9 +866,9 @@ gdb_immediate_command (clientData, interp, objc, objv)
 
   int from_tty = 0;
 
-  if (objc < 2)
+  if (objc < 2 || objc > 3)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr, "wrong # args", -1);
+      Tcl_WrongNumArgs (interp, 1, objv, "command ?from_tty?");
       return TCL_ERROR;
     }
 
@@ -1074,10 +1073,8 @@ gdb_get_vars_command (clientData, interp, objc, objv)
 
   if (objc > 2)
     {
-      Tcl_AppendStringsToObj (result_ptr->obj_ptr,
-			      "wrong # of args: should be \"",
-			      Tcl_GetStringFromObj (objv[0], NULL),
-			    " [function:line|function|line|*addr]\"", NULL);
+      Tcl_WrongNumArgs (interp, 1, objv,
+			"[function:line|function|line|*addr]");
       return TCL_ERROR;
     }
 
@@ -1182,10 +1179,7 @@ gdb_get_line_command (clientData, interp, objc, objv)
 
   if (objc != 2)
     {
-      Tcl_AppendStringsToObj (result_ptr->obj_ptr,
-			      "wrong # of args: should be \"",
-			      Tcl_GetStringFromObj (objv[0], NULL),
-			      " linespec\"", NULL);
+      Tcl_WrongNumArgs (interp, 1, objv, "linespec");
       return TCL_ERROR;
     }
 
@@ -1224,10 +1218,7 @@ gdb_get_file_command (clientData, interp, objc, objv)
 
   if (objc != 2)
     {
-      Tcl_AppendStringsToObj (result_ptr->obj_ptr,
-			      "wrong # of args: should be \"",
-			      Tcl_GetStringFromObj (objv[0], NULL),
-			      " linespec\"", NULL);
+      Tcl_WrongNumArgs (interp, 1, objv, "linespec");
       return TCL_ERROR;
     }
 
@@ -1266,10 +1257,7 @@ gdb_get_function_command (clientData, interp, objc, objv)
 
   if (objc != 2)
     {
-      Tcl_AppendStringsToObj (result_ptr->obj_ptr,
-			      "wrong # of args: should be \"",
-			      Tcl_GetStringFromObj (objv[0], NULL),
-			      " linespec\"", NULL);
+      Tcl_WrongNumArgs (interp, 1, objv, "linespec");
       return TCL_ERROR;
     }
 
@@ -1364,7 +1352,7 @@ gdb_listfiles (clientData, interp, objc, objv)
 
   if (objc > 2)
     {
-      Tcl_WrongNumArgs (interp, 1, objv, "Usage: gdb_listfiles ?pathname?");
+      Tcl_WrongNumArgs (interp, 1, objv, "?pathname?");
       return TCL_ERROR;
     }
   else if (objc == 2)
@@ -1670,7 +1658,8 @@ gdb_listfuncs (clientData, interp, objc, objv)
 
   if (objc != 2)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr, "wrong # args", -1);
+      Tcl_WrongNumArgs (interp, 1, objv, "file");
+      return TCL_ERROR;
     }
 
   symtab = full_lookup_symtab (Tcl_GetStringFromObj (objv[1], NULL));
@@ -1910,8 +1899,8 @@ gdb_fetch_registers (clientData, interp, objc, objv)
 
   if (objc < 2)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr,
-			"wrong # args, should be gdb_fetch_registers format ?register1 register2 ...?", -1);
+      Tcl_WrongNumArgs (interp, 1, objv, "format ?register1 register2 ...?");
+      return TCL_ERROR;
     }
   objc -= 2;
   objv++;
@@ -2137,10 +2126,8 @@ gdb_tracepoint_exists_command (clientData, interp, objc, objv)
 
   if (objc != 2)
     {
-      Tcl_AppendStringsToObj (result_ptr->obj_ptr,
-			      "wrong # of args: should be \"",
-			      Tcl_GetStringFromObj (objv[0], NULL),
-			      " function:line|function|line|*addr\"", NULL);
+      Tcl_WrongNumArgs (interp, 1, objv,
+			"function:line|function|line|*addr");
       return TCL_ERROR;
     }
 
@@ -2166,7 +2153,7 @@ gdb_get_tracepoint_info (clientData, interp, objc, objv)
 
   if (objc != 2)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr, "wrong # args", -1);
+      Tcl_WrongNumArgs (interp, 1, objv, "tpnum");
       return TCL_ERROR;
     }
 
@@ -2261,10 +2248,7 @@ gdb_get_trace_frame_num (clientData, interp, objc, objv)
 {
   if (objc != 1)
     {
-      Tcl_AppendStringsToObj (result_ptr->obj_ptr,
-			      "wrong # of args: should be \"",
-			      Tcl_GetStringFromObj (objv[0], NULL),
-			      " linespec\"", NULL);
+      Tcl_WrongNumArgs (interp, 1, objv, "linespec");
       return TCL_ERROR;
     }
 
@@ -2300,10 +2284,7 @@ gdb_actions_command (clientData, interp, objc, objv)
 
   if (objc != 3)
     {
-      Tcl_AppendStringsToObj (result_ptr->obj_ptr,
-			      "wrong # args: should be: \"",
-			      Tcl_GetStringFromObj (objv[0], NULL),
-			      " number actions\"", NULL);
+      Tcl_WrongNumArgs (interp, 1, objv, "number actions");
       return TCL_ERROR;
     }
 
@@ -2385,7 +2366,10 @@ gdb_disassemble (clientData, interp, objc, objv)
   int mixed_source_and_assembly;
 
   if (objc != 3 && objc != 4)
-    error ("wrong # args");
+    {
+      Tcl_WrongNumArgs (interp, 1, objv, "source lowaddr ?highaddr?");
+      return TCL_ERROR;
+    }
 
   arg_ptr = Tcl_GetStringFromObj (objv[1], NULL);
   if (*arg_ptr == 's' && strcmp (arg_ptr, "source") == 0)
@@ -2441,10 +2425,11 @@ gdb_load_disassembly (clientData, interp, objc, objv)
   char *arg_ptr;
   char *map_name;
 
-  if (objc != 6 && objc != 7) {
-    Tcl_SetStringObj (result_ptr->obj_ptr, "wrong # args, should be: widget [source|nosource] map_arr index_prefix low_address ?hi_address", -1);
-    return TCL_ERROR;
-  }
+  if (objc != 6 && objc != 7)
+    {
+      Tcl_WrongNumArgs (interp, 1, objv, "[source|nosource] map_arr index_prefix low_address ?hi_address");
+      return TCL_ERROR;
+    }
 
   client_data.widget = Tcl_GetStringFromObj (objv[1], NULL);
   if ( Tk_NameToWindow (interp, client_data.widget,
@@ -3186,7 +3171,7 @@ gdb_loc (clientData, interp, objc, objv)
     }
   else
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr, "wrong # args", -1);
+      Tcl_WrongNumArgs (interp, 1, objv, "?symbol?");
       return TCL_ERROR;
     }
 
@@ -3697,8 +3682,7 @@ gdb_set_bp (clientData, interp, objc, objv)
 
   if (objc != 4 && objc != 5)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr,
-      "wrong number of args, should be \"filename line type [thread]\"", -1);
+      Tcl_WrongNumArgs (interp, 1, objv, "filename line type ?thread?");
       return TCL_ERROR;
     }
 
@@ -3811,10 +3795,9 @@ gdb_set_bp_addr (clientData, interp, objc, objv)
   Tcl_DString cmd;
   enum bpdisp disp;
 
-  if (objc != 4 && objc != 3)
+  if (objc != 3 && objc != 4)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr,
-	   "wrong number of args, should be \"address type [thread]\"", -1);
+      Tcl_WrongNumArgs (interp, 1, objv, "address type ?thread?");
       return TCL_ERROR;
     }
 
@@ -4013,8 +3996,7 @@ gdb_get_breakpoint_info (clientData, interp, objc, objv)
 
   if (objc != 2)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr,
-			"wrong number of args, should be \"breakpoint\"", -1);
+      Tcl_WrongNumArgs (interp, 1, objv, "breakpoint");
       return TCL_ERROR;
     }
 
@@ -4103,7 +4085,10 @@ gdb_get_breakpoint_list (clientData, interp, objc, objv)
   Tcl_Obj *new_obj;
 
   if (objc != 1)
-    error ("wrong number of args, none are allowed");
+    {
+      Tcl_WrongNumArgs (interp, 1, objv, NULL);
+      return TCL_ERROR;
+    }
 
   for (b = breakpoint_chain; b; b = b->next)
     if (b->type == bp_breakpoint)
@@ -4582,7 +4567,10 @@ gdb_path_conv (clientData, interp, objc, objv)
      Tcl_Obj *CONST objv[];
 {
   if (objc != 2)
-    error ("wrong # args");
+    {
+      Tcl_WrongNumArgs (interp, 1, objv, NULL);
+      return TCL_ERROR;
+    }
 
 #ifdef __CYGWIN__
   {
