@@ -29,6 +29,9 @@ itcl::body ManagedWin::destructor {} {
   # splash screen at startup...
 
   if {!$numTopWins && [quit_if_last]} {
+    if {$::iipc && [pref get gdb/ipc/exit]} {
+      $::insight_ipc send quit
+    }
     gdb_force_quit
   } else {
     destroy_toplevel

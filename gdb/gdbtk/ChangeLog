@@ -1,3 +1,29 @@
+2004-08-27  Martin Hunt  <hunt@redhat.com>
+
+	* library/ipc.tcl: New file.
+	* library/ipcpref.ith: New file.
+	* library/ipcpref.itb: New file.
+
+	* library/srcwin.itb (SrcWin::inferior): Call ipc
+	send if enabled.
+	
+	* library/prefs.tcl (pref_set_defaults): Enable color
+	schemes by default. Add IPC defaults.
+	
+	* library/srcbar.itcl (create_pref_menu): Create
+	"Advanced" cascade menu and put "Edit Color Schemes"
+	and "IPC Support" under it.
+
+	* library/managedwin.itb (ManagedWin::destructor): 
+	If IPC enabled then send "quit" on exit.
+	
+	* library/main.tcl: Start IPC if enabled.
+
+	* library/prefs.tcl (pref_set_defaults): Add IPC defaults.
+
+	* library/gdbmenubar.itcl (menubar_get_current_menu): 
+	New method.
+
 2004-08-09  Ben Elliston  <bje@au.ibm.com>
 
 	* generic/gdbtk-register.c (get_register_size): Use

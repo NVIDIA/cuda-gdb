@@ -457,9 +457,18 @@ itcl::class SrcBar {
     $Menu add command Other "Source..." \
       "ManagedWin::open SrcPref -transient" -underline 0
 
-    $Menu add command Color "Edit Color Schemes..." \
-      "ManagedWin::open CSPref -transient" -underline 0
-    
+    set save_menu [$Menu menubar_get_current_menu]
+
+    set advanced_menu [$Menu add cascade adv Advanced "Advanced" 0]
+
+    $advanced_menu add command -label "Edit Color Schemes..." -underline 0 \
+      -command "ManagedWin::open CSPref -transient" -underline 0
+
+    $advanced_menu add command -label "IPC Support..." -underline 0 \
+      -command "ManagedWin::open IPCPref -transient" -underline 0
+
+    $Menu menubar_set_current_menu $save_menu
+
     $Menu add separator
 
     set color_menu [$Menu add cascade use_cs Color "Use Color Scheme" 0]

@@ -288,6 +288,14 @@ itcl::class GDBMenuBar {
     set current_menu $menup
     return $saved_menu
   }
+
+  # ------------------------------------------------------------------
+  # METHOD:  menubar_get_current_menu - Get the current_menu pointer.
+  #          Returns the current value so it can be restored.
+  # ------------------------------------------------------------------
+  method menubar_get_current_menu {} {
+    return $current_menu
+  }
 
   ####################################################################
   #

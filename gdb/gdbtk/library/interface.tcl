@@ -1297,7 +1297,7 @@ proc run_executable { {auto_start 1} } {
     } else {
       SrcWin::point_to_main
     }
-
+    
     gdbtk_update
     gdbtk_idle
   } elseif {[pref get gdb/mode]} {

@@ -209,7 +209,7 @@ proc pref_save {{win {}}} {
     # FIXME: this is broken.  We should discover the list
     # dynamically.
     lappend secs load console src reg stack locals watch bp search \
-      process geometry help browser kod window session mem bg
+      process geometry help browser kod window session mem bg ipc
 
     foreach section $secs {
       puts $fd "\[$section\]"
@@ -418,7 +418,7 @@ proc pref_set_defaults {} {
 
   # background colors
   set ::gdb_bg_num 0
-  pref define gdb/use_color_schemes	0
+  pref define gdb/use_color_schemes	1
   pref define gdb/bg/0	\#ffffff
   pref define gdb/bg/1	\#ffffd0
   pref define gdb/bg/2	\#ffd0ff
@@ -435,6 +435,17 @@ proc pref_set_defaults {} {
   pref define gdb/bg/13	\#b0b0ff
   pref define gdb/bg/14	\#b0b0b0
   pref define gdb/bg/15	\#d0b0d0
+
+  # IPC prefs
+  # set prefs based on GDB version?
+  #set vers [lindex [split [lindex [split [gdb_cmd "show version"]] end-1 ] \"] 1]
+  pref define gdb/ipc/enabled	1
+  pref define gdb/ipc/port		9909
+  pref define gdb/ipc/stop_button	1
+  pref define gdb/ipc/step_button	1
+  pref define gdb/ipc/cont_button	1
+  pref define gdb/ipc/run_button	1
+  pref define gdb/ipc/exit		1
 }
 
 
