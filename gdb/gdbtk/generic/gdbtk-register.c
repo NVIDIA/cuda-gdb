@@ -23,6 +23,7 @@
 #include "regcache.h"
 #include "value.h"
 #include "target.h"
+#include "gdb_string.h"
 
 #include <tcl.h>
 #include "gdbtk.h"

@@ -19,7 +19,7 @@
 
 #include "defs.h"
 #include "value.h"
-
+#include "gdb_string.h"
 #include "varobj.h"
 
 #include <tcl.h>
