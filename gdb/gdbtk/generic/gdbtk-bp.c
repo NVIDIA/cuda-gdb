@@ -252,7 +252,7 @@ gdb_find_bp_at_line (clientData, interp, objc, objv)
       return TCL_ERROR;
     }
 
-  s = full_lookup_symtab (Tcl_GetStringFromObj (objv[1], NULL));
+  s = lookup_symtab (Tcl_GetStringFromObj (objv[1], NULL));
   if (s == NULL)
     return TCL_ERROR;
 
@@ -493,7 +493,7 @@ gdb_set_bp (ClientData clientData, Tcl_Interp *interp,
       return TCL_ERROR;
     }
 
-  sal.symtab = full_lookup_symtab (Tcl_GetStringFromObj (objv[1], NULL));
+  sal.symtab = lookup_symtab (Tcl_GetStringFromObj (objv[1], NULL));
   if (sal.symtab == NULL)
     return TCL_ERROR;
 

@@ -38,10 +38,6 @@ struct wrapped_call_args
    tcl. ALL tcl commands should be wrapped in this call. */
 extern int gdbtk_call_wrapper (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 
-/* Like lookup_symtab but this deals with full pathnames and multiple
-   source files with the same basename. FIXME: why doesn't gdb use this? */
-extern struct symtab *full_lookup_symtab (char *file);
-
 /* Returns the source (demangled) name for a function at PC. Returns empty string
    if not found. Memory is owned by gdb. Do not free it. */
 extern char *pc_function_name (CORE_ADDR pc);

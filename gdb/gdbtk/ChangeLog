@@ -1,3 +1,14 @@
+2001-12-21  Tom Tromey  <tromey@redhat.com>
+
+	* generic/gdbtk-cmds.h (full_lookup_symtab): Don't declare.
+	* generic/gdbtk-cmds.c (gdb_find_file_command): Use
+	lookup_symtab.
+	(gdb_listfuncs): Likewise.
+	(gdb_loadfile): Likewise.
+	(full_lookup_symtab): Removed.
+	* generic/gdbtk-bp.c (gdb_find_bp_at_line): Use lookup_symtab.
+	(gdb_set_bp): Likewise.
+
 2001-12-21  Keith Seitz  <keiths@redhat.com>
 
 	* library/bpwin.ith (_select_and_popup): New private method.

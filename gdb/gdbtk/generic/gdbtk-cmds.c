@@ -1111,7 +1111,7 @@ gdb_find_file_command (clientData, interp, objc, objv)
     }
 
   filename = Tcl_GetStringFromObj (objv[1], NULL);
-  st = full_lookup_symtab (filename);
+  st = lookup_symtab (filename);
 
   /* We should always get a symtab. */
   if (!st)
@@ -1479,7 +1479,7 @@ gdb_listfuncs (clientData, interp, objc, objv)
       return TCL_ERROR;
     }
 
-  symtab = full_lookup_symtab (Tcl_GetStringFromObj (objv[1], NULL));
+  symtab = lookup_symtab (Tcl_GetStringFromObj (objv[1], NULL));
   if (!symtab)
     {
       gdbtk_set_result (interp, "No such file (%s)", 
@@ -2786,7 +2786,7 @@ gdb_loadfile (ClientData clientData, Tcl_Interp *interp, int objc,
   file  = Tcl_GetStringFromObj (objv[2], NULL);
   Tcl_GetBooleanFromObj (interp, objv[3], &linenumbers);
 
-  symtab = full_lookup_symtab (file);
+  symtab = lookup_symtab (file);
   if (!symtab)
     {
       gdbtk_set_result (interp, "File not found in symtab");
@@ -3012,68 +3012,6 @@ perror_with_name_wrapper (args)
 {
   perror_with_name (args);
   return 1;
-}
-
-/* The lookup_symtab() in symtab.c doesn't work correctly */
-/* It will not work will full pathnames and if multiple */
-/* source files have the same basename, it will return */
-/* the first one instead of the correct one. */
-/* symtab->fullname will be NULL if the file is not available. */
-
-struct symtab *
-full_lookup_symtab (file)
-     char *file;
-{
-  struct symtab *st;
-  struct objfile *objfile;
-  char *bfile, *fullname;
-  struct partial_symtab *pt;
-
-  if (!file)
-    return NULL;
-
-  /* first try a direct lookup */
-  st = lookup_symtab (file);
-  if (st)
-    {
-      if (!st->fullname)
-	symtab_to_filename (st);
-      return st;
-    }
-
-  /* if the direct approach failed, try */
-  /* looking up the basename and checking */
-  /* all matches with the fullname */
-  bfile = basename (file);
-  ALL_SYMTABS (objfile, st)
-  {
-    if (!strcmp (bfile, basename (st->filename)))
-      {
-	if (!st->fullname)
-	  fullname = symtab_to_filename (st);
-	else
-	  fullname = st->fullname;
-
-	if (!strcmp (file, fullname))
-	  return st;
-      }
-  }
-
-  /* still no luck?  look at psymtabs */
-  ALL_PSYMTABS (objfile, pt)
-  {
-    if (!strcmp (bfile, basename (pt->filename)))
-      {
-	st = PSYMTAB_TO_SYMTAB (pt);
-	if (st)
-	  {
-	    fullname = symtab_to_filename (st);
-	    if (!strcmp (file, fullname))
-	      return st;
-	  }
-      }
-  }
-  return NULL;
 }
 
 /* Look for the function that contains PC and return the source
