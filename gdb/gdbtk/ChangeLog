@@ -1,3 +1,9 @@
+2002-04-01  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-cmds.c (gdb_load_disassembly): Use string_to_core_addr
+	instead of parse_and_eval_address.
+	Use xfree instead of free.
+
 2002-03-25  Elena Zannoni  <ezannoni@redhat.com>
 
         * generic/gdbtk-hooks.c: Include cli/cli-decode.h for

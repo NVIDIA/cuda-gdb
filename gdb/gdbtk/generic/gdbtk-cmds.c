@@ -1672,7 +1672,7 @@ gdb_load_disassembly (ClientData clientData, Tcl_Interp *interp,
 
   /* Now parse the addresses */
   
-  low = parse_and_eval_address (Tcl_GetStringFromObj (objv[5], NULL));
+  low = string_to_core_addr (Tcl_GetStringFromObj (objv[5], NULL));
   orig = low;
 
   if (objc == 6)
@@ -1682,7 +1682,7 @@ gdb_load_disassembly (ClientData clientData, Tcl_Interp *interp,
 	       paddr_nz (orig), Tcl_GetStringFromObj (objv[5], NULL));
     }
   else
-    high = parse_and_eval_address (Tcl_GetStringFromObj (objv[6], NULL));
+    high = string_to_core_addr (Tcl_GetStringFromObj (objv[6], NULL));
 
 
   /* Setup the client_data structure, and call the driver function. */
@@ -1978,7 +1978,7 @@ gdbtk_load_asm (ClientData clientData, CORE_ADDR pc,
       Tcl_DStringSetLength (&client_data->pc_to_line_prefix, pc_to_line_len);      
       Tcl_DStringSetLength (&client_data->line_to_pc_prefix, line_to_pc_len);      
       
-      free(buffer);
+      xfree (buffer);
     }
   
   do_cleanups (old_chain);
