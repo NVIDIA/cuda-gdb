@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.106 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.107 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3217,12 +3217,6 @@ Similarly, for hardware breakpoints.
 @findex DISABLE_UNSETTABLE_BREAK
 If defined, this should evaluate to 1 if @var{addr} is in a shared
 library in which breakpoints cannot be set and so should be disabled.
-
-@item DO_REGISTERS_INFO
-@findex DO_REGISTERS_INFO
-If defined, use this to print the value of a register or all registers.
-
-This method is deprecated.
 
 @item PRINT_FLOAT_INFO()
 @findex PRINT_FLOAT_INFO
