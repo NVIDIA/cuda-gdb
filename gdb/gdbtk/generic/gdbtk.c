@@ -69,6 +69,7 @@ extern void _initialize_gdbtk (void);
 static sigset_t nullsigmask;
 static struct sigaction act1, act2;
 static struct itimerval it_on, it_off;
+static const struct interp_procs tk_procs;
 
 static void
 x_event_wrapper (int signo)
@@ -593,6 +594,7 @@ gdbtk_init (char *argv0)
   gdb_stdlog = gdbtk_fileopen ();
   gdb_stdtarg = gdbtk_fileopen ();
   uiout = cli_out_new (gdb_stdout);
+  interp_add (interp_new ("gdbtk", NULL, uiout, &tk_procs));
 
 #ifdef __CYGWIN32__
   (void) FreeConsole ();
@@ -749,22 +751,19 @@ gdbtk_command_loop (void *data)
 }
 
 /* Come here during initialize_all_files () */
+static const struct interp_procs tk_procs =
+{
+  tk_init,
+  gdbtk_resume,
+  gdbtk_suspend,
+  gdbtk_exec,
+  gdbtk_prompt_p,
+  gdbtk_command_loop,
+};
 
 void
 _initialize_gdbtk ()
 {
-  static const struct interp_procs tk_procs =
-  {
-    tk_init,
-    gdbtk_resume,
-    gdbtk_suspend,
-    gdbtk_exec,
-    gdbtk_prompt_p,
-    gdbtk_command_loop,
-  };
-
-  interp_add (interp_new ("gdbtk", NULL, NULL, &tk_procs));
-
   /* FIXME: cagney/2003-02-12: This is wrong.  The initialization
      should be done via the init function.  */
   if (use_windows)

@@ -1,3 +1,9 @@
+2003-02-17  Christopher Faylor  <cgf@redhat.com>
+
+	* gdbtk/gdbtk.c (tk_procs): Make file global.  Declare at top.
+	(_initialize_gdbtk): Move interp_add from here.
+	(gdb_tk): Call interp_add here.  Pass correct uiout to interp_new.
+
 2003-02-14  Keith Seitz  <keiths@redhat.com>
 
 	From Chris Faylor <cgf@redhat.com>:
