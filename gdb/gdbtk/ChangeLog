@@ -1,5 +1,10 @@
 2001-08-28  Keith Seitz  <keiths@redhat.com>
 
+	* library/srcpref.itb (build_win): Use iwidgets::spinint
+	instead of tixControl.
+
+2001-08-28  Keith Seitz  <keiths@redhat.com>
+
 	* library/process.ith (top): Remove unused protected variable.
 	Use GDBWin::_top instead.
 	(lb): Remove unused variable.

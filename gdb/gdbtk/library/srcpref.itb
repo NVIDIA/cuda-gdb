@@ -131,9 +131,11 @@ body SrcPref::build_win {} {
 
   frame $f.x
   # Tab size
-  tixControl $f.x.size -label "Tab Size" -integer true -max 16 -min 1 \
-    -variable [pref varname gdb/src/tab_size] \
-    -options { entry.width 2	entry.font src-font}
+  itk_component add size {
+    iwidgets::spinint $f.x.size -labeltext "Tab Size" -range {1 16} \
+      -step 1 -fixed 2 -width 2 -textvariable [pref varname gdb/src/tab_size] \
+      -wrap 0
+  }
 
   # Linenumbers
   # commented out because this option isn't really useful
