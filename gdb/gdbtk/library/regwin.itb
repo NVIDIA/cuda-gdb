@@ -98,26 +98,16 @@ body RegWin::build_win {} {
         set format r
         set reg_display($r,format) r
         set reg_display($r,typed) 1
+        set reg_display($r,editable) 0
       } else {
         set format $reg_display($r,format)
+        set reg_display($r,editable) 1
       }
       if {[catch {gdb_fetch_registers $format $r} values($r)]} {
         set values($r) ""
       } else {
         set values($r) [string trim $values($r) \ ]
       }
-    }
-
-    # Check if we can edit this value
-    if {[catch {gdb_cmd "set \$$reg_display($r,name)=$valtest"} rst]} {
-      set reg_display($r,editable) 0
-    } else {
-      set reg_display($r,editable) 1
-    }
-    catch {gdb_fetch_registers {} $r} valtest2
-    if {$valtest2 != $valtest} {
-      tk_messageBox -icon error -type ok -message "Register value clobbered!" \
-        -title "Internal Error" -parent [winfo toplevel $itk_interior]
     }
 
     set l [string length $values($r)]
@@ -628,27 +618,16 @@ body RegWin::update {} {
         set format r
         set reg_display($r,format) r
         set reg_display($r,typed) 1
+        set reg_display($r,editable) 0
       } else {
         set format $reg_display($r,format)
+        set reg_display($r,editable) 1
       }
       if {[catch {gdb_fetch_registers $format $r} values($r)]} {
         set values($r) ""
       } else {
         set values($r) [string trim $values($r) \ ]
       }
-    }
-
-    # Check if we can edit this value
-    if {[catch {gdb_cmd "set \$$reg_display($r,name)=$valtest"} rst]} {
-      set reg_display($r,editable) 0
-    } else {
-      set reg_display($r,editable) 1
-    }
-    # Make sure we did not changed the original value with the test above
-    catch {gdb_fetch_registers {} $r} valtest2
-    if {$valtest2 != $valtest} {
-      tk_messageBox -icon error -type ok -message "Register value clobbered!" \
-        -title "Internal Error" -parent [winfo toplevel $itk_interior]
     }
 
     set l [string length $values($r)]

@@ -1,3 +1,7 @@
+2000-05-04  Fernando Nasser  <fnasser@cygnus.com>
+
+	* regwin.itb (build_win, update): Safer test for editable.
+
 2000-05-01  Fernando Nasser  <fnasser@cygnus.com>
 
 	* regwin.itb (build_win): Adjust size of columns independently, force
