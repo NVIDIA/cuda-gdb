@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.107 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.108 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -2244,11 +2244,6 @@ If defined, this should be one or more tokens, such as
 of functions to indicate that they never return.  The default is already
 set correctly if compiling with GCC.  This will almost never need to be
 defined.
-
-@item USE_GENERIC_DUMMY_FRAMES
-@cindex generic dummy frames
-Define this to 1 if the target is using the generic inferior function
-call code.  See @code{blockframe.c} for more information.
 
 @item USE_MMALLOC
 @findex mmalloc
