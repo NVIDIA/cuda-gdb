@@ -2625,7 +2625,7 @@ gdb_update_mem (ClientData clientData, Tcl_Interp *interp,
   for (i = 0; i < nbytes; i += bpr)
     {
       char s[130];
-      sprintf (s, "0x%s", core_addr_to_string (addr + i));
+      sprintf (s, "%s", core_addr_to_string (addr + i));
       INDEX ((int) i/bpr, -1);
       Tcl_SetVar2 (interp, "data", index, s, 0);
 
