@@ -60,7 +60,9 @@ if {[info exists auto_path]} {
 foreach p {{Tcl 8.0} {Tk 8.0} {Itcl 3.0} {Itk 3.0} {Gdbtk 1.0} {combobox 1.0} {debug 1.0}} {
   if {[catch {package require [lindex $p 0] [lindex $p 1]} msg]} {
     if {![info exists ::env(GDBTK_TEST_RUNNING)] || $::env(GDBTK_TEST_RUNNING) == 0} {
-      puts stderr "Error: $msg"
+      if {$::tcl_platform(platform) != "windows"} {
+	puts stderr "Error: $msg"
+      }
       catch {tk_messageBox -title Error -message $msg -icon error -type ok}
     }
     exit -1
@@ -78,7 +80,9 @@ if {[info exists IWIDGETS_LIBRARY]} {
 }
 if {[catch {package require Iwidgets 3.0} msg]} {
   if {![info exists ::env(GDBTK_TEST_RUNNING)] || $::env(GDBTK_TEST_RUNNING) == 0} {
-    puts stderr "Error: $msg"
+    if {$::tcl_platform(platform) != "windows"} {
+      puts stderr "Error: $msg"
+    }
     catch {tk_messageBox -title Error -message $msg -icon error -type ok}
   }
   exit -1
