@@ -488,11 +488,11 @@ body TargetSelection::build_win {} {
   checkbutton $frame.load -text {Download Program} -variable $var
 
   set var [pref varname gdb/src/run_cont]
-  checkbutton $frame.cont -text {Continue from Last Stop} -variable $var \
+  radiobutton $frame.cont -text {Continue from Last Stop} -value 1 -variable $var \
     -command [code $this set_run run]
   
   set var [pref varname gdb/src/run_run]
-  checkbutton $frame.run -text {Run Program} -variable $var \
+  radiobutton $frame.run -text {Run Program} -value 1 -variable $var \
     -command [code $this set_run cont]
 
   # The after attaching command entry

@@ -1,3 +1,8 @@
+2000-10-26  Larry Smith  <lsmith@redhat.com>
+
+        * change targetselection.itb: Run Program and Continue From Last Stop
+        are now radio buttons rather than checkbuttons
+
 2000-10-26  Mo DeJong  <mdejong@redhat.com>
 
 	* attachdlg.itb (list_pids): Use "ps axw" to get pid list
