@@ -1,5 +1,9 @@
 2003-02-27  Martin M. Hunt  <hunt@redhat.com>
 
+	* c_variable.test: Major changes required because varobj_update
+	now returns "-1" if a variable is out of scope. This fixes a bunch 
+	of XFAILS.
+
 	* windows.test: Remove HtmlViewer from list of windows.
 
 	* srcwin.test: Use "list get" instead of "listget" to
