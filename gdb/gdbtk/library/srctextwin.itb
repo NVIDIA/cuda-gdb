@@ -901,12 +901,17 @@ body SrcTextWin::FillSource {w tagname filename funcname line addr pc_addr lib} 
       if {![LoadFile $w $filename $lib $mtime]} {
 	# failed to find source file
 	dbug W "Changing to ASSEMBLY"
+	
+	# We have to update this data here (it is also done by the caller)
+	# because we want to call mode, which calls mode_set, which calls
+	# location using these values.
 	set current(line) $line
 	set current(tag) $tagname
 	set current(addr) $addr
 	set current(funcname) $funcname
 	set current(filename) $filename
 	set current(lib) $lib
+	
 	set oldmode SOURCE
 	$parent mode "" ASSEMBLY
 	return
@@ -943,12 +948,17 @@ body SrcTextWin::FillSource {w tagname filename funcname line addr pc_addr lib} 
   }
   # no source; switch to assembly
 #  debug "no source file; switch to assembly"
+  
+  # We have to update this data here (it is also done by the caller)
+  # because we want to call mode, which calls mode_set, which calls
+  # location using these values.
   set current(line) $line
   set current(tag) $tagname
   set current(addr) $addr
   set current(funcname) $funcname
   set current(filename) $filename
   set current(lib) $lib
+
   set oldmode $current(mode)
   $parent mode "" ASSEMBLY
 }

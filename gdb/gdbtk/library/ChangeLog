@@ -1,5 +1,9 @@
 2000-08-08  Fernando Nasser  <fnasser@cygnus.com>
 
+	* srctxtwin.itb (FillSource): Add comments.
+
+2000-08-08  Fernando Nasser  <fnasser@cygnus.com>
+
 	* srctxtwin.itb (LoadFromCache): Do not cache if cannot stat the file.
 	This lead to problems trying to access a incomplete cache entry later.
 
