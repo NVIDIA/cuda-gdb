@@ -1,3 +1,10 @@
+2002-11-12  Andrew Cagney  <ac131313@redhat.com>
+
+	From 2002-11-11 David Carlton <carlton@math.stanford.edu>
+	* generic/gdbtk-stack.c (get_frame_name): Replace call to
+	frame_in_dummy with one to deprecated_frame_in_dummy.
+	* generic/gdbtk-cmds.c (gdb_loc): Ditto.
+
 2002-11-11  Martin M. Hunt  <hunt@redhat.com>	
 
 	* library/srctextwin.itb (do_key): Add arg to
