@@ -30,16 +30,13 @@
 /* This contains the previous values of the registers, since the last call to
    gdb_changed_register_list.  */
 
-static char *old_regs;
+static char *old_regs = NULL;
 
-static int gdb_changed_register_list (ClientData, Tcl_Interp *, int,
-				      Tcl_Obj * CONST[]);
-static int gdb_fetch_registers (ClientData, Tcl_Interp *, int,
-				Tcl_Obj * CONST[]);
-static int gdb_regnames (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int get_pc_register (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+static int gdb_register_info (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static void get_register (int, void *);
 static void get_register_name (int, void *);
+static void get_register_size (int regnum, void *arg);
 static int map_arg_registers (int, Tcl_Obj * CONST[],
 			      void (*)(int, void *), void *);
 static void register_changed_p (int, void *);
@@ -48,12 +45,8 @@ static void setup_architecture_data (void);
 int
 Gdbtk_Register_Init (Tcl_Interp *interp)
 {
-  Tcl_CreateObjCommand (interp, "gdb_changed_register_list", gdbtk_call_wrapper,
-			gdb_changed_register_list, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_fetch_registers", gdbtk_call_wrapper,
-			gdb_fetch_registers, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_regnames", gdbtk_call_wrapper, gdb_regnames,
-			NULL);
+  Tcl_CreateObjCommand (interp, "gdb_reginfo", gdbtk_call_wrapper,
+                        gdb_register_info, NULL);
   Tcl_CreateObjCommand (interp, "gdb_pc_reg", gdbtk_call_wrapper, get_pc_register,
 			NULL);
 
@@ -65,108 +58,125 @@ Gdbtk_Register_Init (Tcl_Interp *interp)
   return TCL_OK;
 }
 
-/* This implements the tcl command "gdb_changed_register_list"
- * It takes a list of registers, and returns a list of
- * the registers on that list that have changed since the last
- * time the proc was called.
+/* This implements the tcl command "gdb_reginfo".
+ * It returns the requested information about registers.
  *
  * Tcl Arguments:
- *    A list of registers.
- * Tcl Result:
- *    A list of changed registers.
- */
-static int
-gdb_changed_register_list (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  objc--;
-  objv++;
-
-  return map_arg_registers (objc, objv, register_changed_p, NULL);
-}
-
-/* This implements the tcl command gdb_fetch_registers
- * Pass it a list of register names, and it will
- * return their values as a list.
+ *    OPTION    - "changed", "name", "size", "value" (see below)
+ *    REGNUM(S) - the register(s) for which info is requested
  *
- * Tcl Arguments:
- *    format: The format string for printing the values
- *    args: the registers to look for
  * Tcl Result:
- *    A list of their values.
+ *    The requested information
+ *
+ * Options:
+ * changed
+ *    Returns a list of registers whose values have changed since the
+ *    last time the proc was called.
+ *
+ *    usage: gdb_reginfo changed [regnum0, ..., regnumN]
+ *
+ * name
+ *    Return a list containing the names of the registers whose numbers
+ *    are given by REGNUM ... .  If no register numbers are given, return
+ *    all the registers' names.
+ *
+ *    usage: gdb_reginfo name [-numbers] [regnum0, ..., regnumN]
+ *
+ *    Note that some processors have gaps in the register numberings:
+ *    even if there is no register numbered N, there may still be a
+ *    register numbered N+1.  So if you call gdb_regnames with no
+ *    arguments, you can't assume that the N'th element of the result is
+ *    register number N.
+ *
+ *    Given the -numbers option, gdb_regnames returns, not a list of names,
+ *    but a list of pairs {NAME NUMBER}, where NAME is the register name,
+ *    and NUMBER is its number.
+ *
+ * size
+ *    Returns the raw size of the register(s) in bytes.
+ *
+ *    usage: gdb_reginfo size [regnum0, ..., regnumN]
+ *
+ * value
+ *    Returns a list of register values.
+ *
+ *    usage: gdb_reginfo value format [regnum0, ..., regnumN]
+ *       format: The format string for printing the values, "N", "x", "d", etc
  */
 static int
-gdb_fetch_registers (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_register_info (ClientData clientData, Tcl_Interp *interp, int objc,
+                   Tcl_Obj *CONST objv[])
 {
-  int format, result;
+  int regnum, index, result;
+  void *argp;
+  void (*func)(int, void *);
+  static char *commands[] = {"changed", "name", "size", "value", NULL};
+  enum commands_enum { REGINFO_CHANGED, REGINFO_NAME, REGINFO_SIZE, REGINFO_VALUE };
 
   if (objc < 2)
     {
-      Tcl_WrongNumArgs (interp, 1, objv, "format ?register1 register2 ...?");
+      Tcl_WrongNumArgs (interp, 1, objv, "name|size|value [regnum1 ... regnumN]");
       return TCL_ERROR;
     }
-  objc -= 2;
-  objv++;
-  format = *(Tcl_GetStringFromObj (objv[0], NULL));
-  objv++;
 
-  if (objc != 1)
-    result_ptr->flags |= GDBTK_MAKES_LIST;    /* Output the results as a list */
-  result = map_arg_registers (objc, objv, get_register, (void *) format);
-  if (objc != 1)
-    result_ptr->flags &= ~GDBTK_MAKES_LIST;
-
-  return result;
-}
-
-/* This implements the TCL command `gdb_regnames'.  Its syntax is:
-
-   gdb_regnames [-numbers] [REGNUM ...]
-
-   Return a list containing the names of the registers whose numbers
-   are given by REGNUM ... .  If no register numbers are given, return
-   all the registers' names.
-
-   Note that some processors have gaps in the register numberings:
-   even if there is no register numbered N, there may still be a
-   register numbered N+1.  So if you call gdb_regnames with no
-   arguments, you can't assume that the N'th element of the result is
-   register number N.
-
-   Given the -numbers option, gdb_regnames returns, not a list of names,
-   but a list of pairs {NAME NUMBER}, where NAME is the register name,
-   and NUMBER is its number.  */
-static int
-gdb_regnames (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  int numbers = 0;
-
-  objc--;
-  objv++;
-
-  if (objc >= 1)
+  if (Tcl_GetIndexFromObj (interp, objv[1], commands, "options", 0,
+			   &index) != TCL_OK)
     {
-      char *s = Tcl_GetStringFromObj (objv[0], NULL);
-      if (STREQ (s, "-numbers"))
-	{
-	  numbers = 1;
-	  objc--;
-	  objv++;
-	}
+      return TCL_ERROR;
     }
 
-  return map_arg_registers (objc, objv, get_register_name, &numbers);
+  /* Skip the option */
+  objc -= 2;
+  objv += 2;
+
+  switch ((enum commands_enum) index)
+    {
+    case REGINFO_CHANGED:
+      func = register_changed_p;
+      argp = NULL;
+      break;
+
+    case REGINFO_NAME:
+      {
+	int len;
+	char *s = Tcl_GetStringFromObj (objv[0], &len);
+	if (objc != 0 && strncmp (s, "-numbers", len) == 0)
+	  {
+	    argp = (void *) 1;
+	    objc--;
+	    objv++;
+	  }
+	else
+	  argp = NULL;
+
+	func = get_register_name;
+      }
+      break;
+
+    case REGINFO_SIZE:
+      func = get_register_size;
+      argp = NULL;
+      break;
+
+    case REGINFO_VALUE:
+      func = get_register;
+      argp = (void *) (int) *(Tcl_GetStringFromObj (objv[0], NULL));
+      objc--;
+      objv++;
+      break;
+
+    default:
+      return TCL_ERROR;
+    }
+
+  return map_arg_registers (objc, objv, func, argp);
+}
+
+static void
+get_register_size (int regnum, void *arg)
+{
+  Tcl_ListObjAppendElement (gdbtk_interp, result_ptr->obj_ptr,
+			    Tcl_NewIntObj (REGISTER_RAW_SIZE (regnum)));
 }
 
 /* This implements the tcl command get_pc_reg
@@ -186,7 +196,7 @@ get_pc_register (clientData, interp, objc, objv)
 {
   char *buff;
 
-  xasprintf (&buff, "0x%llx", (long long) read_register (PC_REGNUM));
+  xasprintf (&buff, "0x%s", paddr_nz (read_register (PC_REGNUM)));
   Tcl_SetStringObj (result_ptr->obj_ptr, buff, -1);
   free(buff);
   return TCL_OK;
@@ -265,7 +275,7 @@ get_register_name (regnum, argp)
      void *argp;
 {
   /* Non-zero if the caller wants the register numbers, too.  */
-  int numbers = * (int *) argp;
+  int numbers = (int) argp;
   Tcl_Obj *name = Tcl_NewStringObj (REGISTER_NAME (regnum), -1);
   Tcl_Obj *elt;
 
@@ -303,7 +313,10 @@ map_arg_registers (objc, objv, func, argp)
      the particular processor being debugged.  */
 
   numregs = NUM_REGS + NUM_PSEUDO_REGS;
-  
+
+  if (objc == 0 || objc > 1)
+    result_ptr->flags |= GDBTK_MAKES_LIST;
+
   if (objc == 0)		/* No args, just do all the regs */
     {
       for (regnum = 0;
@@ -370,6 +383,9 @@ static void
 setup_architecture_data ()
 {
   /* don't trust REGISTER_BYTES to be zero. */
+  if (old_regs != NULL)
+    xfree (old_regs);
+
   old_regs = xmalloc (REGISTER_BYTES + 1);
   memset (old_regs, 0, REGISTER_BYTES + 1);
 }

@@ -1,5 +1,15 @@
 2001-08-13  Keith Seitz  <keiths@redhat.com>
 
+	* generic/gdbtk-register.c (gdb_register_info): New function.
+	Consolidates all register handling.
+	(get_register_size): New function.
+	(gdb_changed_register_list, gdb_fetch_registers,
+	gdb_regnames): Deprecate.
+	(setup_architecture_data): Free old register cache
+	when necessary.
+
+2001-08-13  Keith Seitz  <keiths@redhat.com>
+
 	* generic/gdbtk-hooks.c (gdbtk_add_hooks): Register
 	architecture_changed event handler.
 	(gdbtk_architecture_changed): New function.
