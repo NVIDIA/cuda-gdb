@@ -1,5 +1,5 @@
 /* Tcl/Tk command definitions for Insight - Registers
-   Copyright 2001, 2002 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2004 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -302,7 +302,7 @@ get_register (int regnum, void *arg)
     }
 
   /* Convert raw data to virtual format if necessary.  */
-  if (DEPRECATED_REGISTER_CONVERTIBLE (regnum))
+  if (DEPRECATED_REGISTER_CONVERTIBLE_P () && DEPRECATED_REGISTER_CONVERTIBLE (regnum))
     {
       DEPRECATED_REGISTER_CONVERT_TO_VIRTUAL (regnum, reg_vtype,
       				   raw_buffer, virtual_buffer);
@@ -425,9 +425,7 @@ map_arg_registers (Tcl_Interp *interp, int objc, Tcl_Obj **objv,
 	  return TCL_ERROR;
 	}
 
-      if (regnum >= 0  && regnum < numregs
-	  && REGISTER_NAME (regnum) != NULL
-	  && *REGISTER_NAME (regnum) != '\000')
+      if (regnum >= 0  && regnum < numregs)
 	func (regnum, argp);
       else
 	{

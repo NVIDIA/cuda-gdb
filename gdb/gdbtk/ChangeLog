@@ -1,8 +1,15 @@
+2004-03-29  Martin Hunt  <hunt@redhat.com>
+
+	* generic/gdbtk-register.c (map_arg_registers): If a specific
+	register was requested, just return it without validating it 
+	has a name.
+	(get_register): Check DEPRECATED_REGISTER_CONVERTIBLE_P ().
+
 2004-02-17  Martin Hunt  <hunt@redhat.com>
 
 	* generic/gdbtk-register.c (Gdbtk_Register_Init): Replace
 	calls to register_gdbarch_swap with deprecated_register_gdbarch_swap.
 
 	* library/srcwin.itb: Remove an apparently redundant call 
-	to gdbtk_locate_main and location. This actually broken
+	to gdbtk_locate_main and location. This actually broke in
 	situations where no source files were found.
