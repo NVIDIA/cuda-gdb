@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.138 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.139 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3673,11 +3673,6 @@ The number of the ``next program counter'' register, if defined.
 @findex PARM_BOUNDARY
 If non-zero, round arguments to a boundary of this many bits before
 pushing them on the stack.
-
-@item PRINT_TYPELESS_INTEGER
-@findex PRINT_TYPELESS_INTEGER
-This is an obscure substitute for @code{print_longest} that seems to
-have been defined for the Convex target.
 
 @item PROCESS_LINENUMBER_HOOK
 @findex PROCESS_LINENUMBER_HOOK
