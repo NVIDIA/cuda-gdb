@@ -1,3 +1,8 @@
+2000-12-07  Tom Tromey  <tromey@redhat.com>
+
+	* srcwin.itb (SrcWin::edit): Use uplevel, not eval, to evaluate
+	external editor expression.
+
 2000-12-06  Tom Tromey  <tromey@redhat.com>
 
 	* targetselection.itb (TargetSelection::build_win): Add option to

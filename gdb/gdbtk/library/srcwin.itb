@@ -663,7 +663,7 @@ body SrcWin::edit {} {
   
   
   if {[info exists enable_external_editor] && $enable_external_editor} {
-    if {[catch {eval $external_editor_command edit $loc_info} err]} {
+    if {[catch {uplevel \#0 "$external_editor_command edit $loc_info"} ]} {
       tk_dialog .warn-sn "Edit" $err error 0 Ok
     }
     return
