@@ -477,7 +477,7 @@ body SrcWin::location {tag linespec} {
   }
 
   # set address and line widgets
-  if {[string length $address] > 10} {
+  if {[string length $addr] > 10} {
     # 64-bit address plus "0x"
     set width 18
   } else {
