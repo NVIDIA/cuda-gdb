@@ -11,7 +11,6 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-
 # ------------------------------------------------------------------
 #  CONSTRUCTOR - create new register window
 # ------------------------------------------------------------------
@@ -46,6 +45,7 @@ body RegWin::constructor {args} {
 # ------------------------------------------------------------------
 body RegWin::destructor {} {
   debug "RegWin::destructor"
+  save_reg_display_vars
   remove_hook gdb_update_hook "$this update"
   remove_hook gdb_busy_hook [list $this busy]
   remove_hook gdb_idle_hook [list $this idle]
@@ -54,7 +54,6 @@ body RegWin::destructor {} {
   }
 }
   
-
 
 # ------------------------------------------------------------------
 #  METHOD:  build_win - build the main register window
@@ -160,7 +159,12 @@ body RegWin::build_win {} {
     $m add command -label "Remove from Display" -underline 0 -state disabled
     $m add separator
     $m add command -label "Display All Registers" -underline 0 -state disabled \
-      -command "$this display_all"
+			      -command "$this display_all"
+    set disp_all_menu_item [$m index last]
+
+    if {!$all_regs_shown} {
+      $m entryconfigure $disp_all_menu_item -state normal
+    }
   }
   
   set Menu [menu $ScrolledWin.pop -tearoff 0]
@@ -187,7 +191,9 @@ body RegWin::init_reg_display_vars {args} {
   set reg_display_list {}
   set regnames [gdb_regnames -numbers]
   set i 1
+  set x 0
   foreach r $regnames {
+    incr x
     set name [lindex $r 0]
     set rn   [lindex $r 1]
     set reg_display($rn,name) $name
@@ -195,6 +201,7 @@ body RegWin::init_reg_display_vars {args} {
     if {$format == ""} { set format x }
     set reg_display($rn,format) $format
     if {$args != "" && [pref getd gdb/reg/$name] == "no"} {
+      set all_regs_shown 0
       set reg_display($rn,line) 0
     } else {
       set reg_display($rn,line) $i
@@ -203,7 +210,7 @@ body RegWin::init_reg_display_vars {args} {
     }
   }
   set num_regs [expr {$i - 1}]
-  set max_regs $rn
+  set max_regs $x
   set reg_names_dirty 0
 }
 
@@ -224,8 +231,9 @@ body RegWin::disassembly_changed {} {
 # ------------------------------------------------------------------------------
 body RegWin::save_reg_display_vars {} {
   global reg_display max_regs
-  set rn 0
-  while {$rn < $max_regs} {
+  set regnames [gdb_regnames -numbers]
+  foreach r $regnames {
+    set rn   [lindex $r 1]
     set name $reg_display($rn,name)
     if {$reg_display($rn,line) == 0} {
       pref setd gdb/reg/$name no
@@ -237,7 +245,6 @@ body RegWin::save_reg_display_vars {} {
     } else {
       pref setd gdb/reg/$name-format {}
     }
-    incr rn
   }
   pref_save ""
 }
@@ -429,7 +436,8 @@ body RegWin::but3 {rn X Y} {
 # ------------------------------------------------------------------
 body RegWin::display_all {} {
   init_reg_display_vars
-  $itk_interior.m.reg entryconfigure 4 -state disabled
+  $itk_interior.m.reg entryconfigure $disp_all_menu_item -state disabled
+  set all_regs_shown 1
   reconfig
 }
 
@@ -441,20 +449,22 @@ body RegWin::delete_from_display_list {rn} {
   global reg_display max_regs
   set reg_display($rn,line) 0
   set reg_display_list {}
-  set rn 0
+  set regnames [gdb_regnames -numbers]
   set i 0
-  while {$rn < $max_regs} {
-    if {$reg_display($rn,line) > 0} {
-      lappend reg_display_list $rn
+  foreach r $regnames {
+    set rnx [lindex $r 1]
+    if {$reg_display($rnx,line) > 0} {
+      lappend reg_display_list $rnx
       incr i
-      set reg_display($rn,line) $i
+      set reg_display($rnx,line) $i
     }
-    incr rn
   }
   set num_regs $i
   reconfig
   $itk_interior.m.reg entryconfigure 4 -state normal
 }
+
+
 
 # ------------------------------------------------------------------
 #  PUBLIC METHOD:  edit - edit a cell

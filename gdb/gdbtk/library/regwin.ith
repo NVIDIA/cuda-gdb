@@ -17,6 +17,8 @@ class RegWin {
   
   private {
     variable reg_display_list {}
+    variable all_regs_shown    1
+    variable disp_all_menu_item
     variable num_regs 0
     variable nRows
     variable nCols

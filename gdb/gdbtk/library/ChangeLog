@@ -1,3 +1,17 @@
+2000-04-05  James Ingham  <jingham@leda.cygnus.com>
+
+	* regwin.itb (RegWin::build_win): Enable the "Display all
+	registers" menu at startup if any registers have been removed. 
+	(RegWin::save_reg_display_vars): Handle cases where the register
+	set is not contiguous.
+	(RegWin::destructor): Actually save away the removed registers.
+	The latter two are Steve Johnson's change.
+
+	* regwin.ith (RegWin): Added "all_regs_shown" and
+	"disp_all_menu_item" to handle tracking whether any registers have 
+	been removed from the display.
+	
+
 2000-04-03  Steve Johnson  <sbjohnson@ozemail.com.au>
 
 	* regwin.itb (dimensions): Use rows from preference file rather
