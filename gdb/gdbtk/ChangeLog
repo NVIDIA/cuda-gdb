@@ -1,3 +1,8 @@
+2005-02-07  Keith Seitz  <kseitz@sources.redhat.com>
+
+	* generic/gdbtk-cmds.c (gdb_eval): VALUE_EMBEDDED_OFFSET and
+	VALUE_CONTENTS are now functions.
+
 2005-01-19  Keith Seitz  <kseitz@sources.redhat.com>
 
 	* Makefile.in: Regenerate.

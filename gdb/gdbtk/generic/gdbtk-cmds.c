@@ -622,8 +622,8 @@ gdb_eval (ClientData clientData, Tcl_Interp *interp,
   /* "Print" the result of the expression evaluation. */
   stb = mem_fileopen ();
   make_cleanup_ui_file_delete (stb);
-  val_print (value_type (val), VALUE_CONTENTS (val),
-	     VALUE_EMBEDDED_OFFSET (val), VALUE_ADDRESS (val),
+  val_print (value_type (val), value_contents (val),
+	     value_embedded_offset (val), VALUE_ADDRESS (val),
 	     stb, format, 0, 0, 0);
   result = ui_file_xstrdup (stb, &dummy);
   Tcl_SetObjResult (interp, Tcl_NewStringObj (result, -1));
