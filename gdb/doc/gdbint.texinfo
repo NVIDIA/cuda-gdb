@@ -3,9 +3,7 @@
 @include gdb-cfg.texi
 @dircategory Programming & development tools.
 @direntry
-START-INFO-DIR-ENTRY
 * Gdb-Internals: (gdbint).	The GNU debugger's internals.
-END-INFO-DIR-ENTRY
 @end direntry
 
 @ifinfo
@@ -44,7 +42,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.33 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.34 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
