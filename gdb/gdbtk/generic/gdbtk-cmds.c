@@ -34,7 +34,6 @@
 #include "target.h"
 #include "gdbcore.h"
 #include "demangle.h"
-#include "regcache.h"
 #include "linespec.h"
 #include "tui/tui-file.h"
 

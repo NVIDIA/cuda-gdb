@@ -1,3 +1,8 @@
+2001-07-31  Elena Zannoni  <ezannoni@redhat.com>
+
+	* generic/gdbtk-cmds.c: Don't include regcache.h.
+	* generic/gdbtk-register.c: Include regcache.h.
+	
 2001-07-26  Jonathan Larmour  <jlarmour@redhat.com>
 
 	* library/prefs.tcl (pref_set_defaults): Add additional entry

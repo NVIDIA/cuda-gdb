@@ -20,6 +20,7 @@
 
 #include "defs.h"
 #include "frame.h"
+#include "regcache.h"
 #include "value.h"
 
 #include <tcl.h>
