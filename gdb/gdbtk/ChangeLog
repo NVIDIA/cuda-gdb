@@ -1,5 +1,52 @@
 2001-05-31  Keith Seitz  <keiths@redhat.com>
 
+	* library/interface.tcl (gdb_idle_hook): Mark as deprecated.
+	(gdbtk_idle): Dispatch an IdleEvent. gdb_idle_hook is gone.
+	* library/ehandler.ith (idle): New event handler.
+	* library/gdbevent.ith (IdleEvent): New event.
+	* library/console.ith (idle): Match event handler definition.
+	* library/console.itb (idle): Ditto.
+	(constructor): Remove gdb_idle_hook.
+	(destructor): Ditto.
+	* library/kod.ith (idle): Match event handler definition.
+	* library/kod.itb (idle): Ditto.
+	(constructor): Remove gdb_idle_hook.
+	(destructor): Ditto.
+	* library/memwin.ith (idle): Match event handler definition.
+	* library/memwin.itb (idle): Ditto.
+	(constructor): Remove gdb_idle_hook.
+	(destructor): Ditto.
+	* library/pluginwin.itcl (stopped): Rename to "idle" and
+	match event handler definition.
+	Fix misleading comments.
+	* library/process.ith (idle): Match event handler definition.
+	* library/process.itb (idle): Ditto.
+	(constructor): Remove gdb_idle_hook.
+	(destructor): Ditto.
+	* library/regwin.ith (idle): Match event handler definition.
+	* library/regwin.itb (idle): Ditto.
+	(constructor): Remove gdb_idle_hook.
+	(destructor): Ditto.
+	* library/srcbar.itcl (idle): New method.
+	(constructor): Remove gdb_idle_hook.
+	(destructor): Ditto.
+	* library/srcwin.ith (idle): Match event handler definition.
+	* library/srcwin.itb (idle): Ditto.
+	(constructor): Remove gdb_idle_hook.
+	(destructor): Ditto.
+	* library/stackwin.ith (idle): Match event handler definition.
+	* library/stackwin.itb (idle): Ditto.
+	(constructor): Remove gdb_idle_hook.
+	(destructor): Ditto.
+	* library/variables.tcl (idle): Match event handler definition.
+	(constructor): Remove gdb_idle_hook.
+	(destructor): Ditto.
+	* library/plugins/rhabout/rhabout.itcl (stopped): Rename
+	to "idle" and match new event handler definition.
+	* library/tclIndex: Regenerated.
+
+2001-05-31  Keith Seitz  <keiths@redhat.com>
+
 	* library/interface.tcl (gdb_busy_hook): Deprecate.
 	(gdbtk_busy): Create and dispatch a BusyEvent instead
 	of running hooks.
