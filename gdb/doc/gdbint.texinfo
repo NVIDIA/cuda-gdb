@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.103 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.104 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3068,13 +3068,6 @@ default value, for compatibility with older configurations.
 Return non-zero if register @var{regnum} can represent data values in a
 non-standard form.
 @xref{Target Architecture Definition, , Using Different Register and Memory Data Representations}.
-
-@item CPLUS_MARKER
-@findex CPLUS_MARKERz
-Define this to expand into the character that G@t{++} uses to distinguish
-compiler-generated identifiers from programmer-specified identifiers.
-By default, this expands into @code{'$'}.  Most System V targets should
-define this to @code{'.'}.
 
 @item DBX_PARM_SYMBOL_CLASS
 @findex DBX_PARM_SYMBOL_CLASS
