@@ -37,6 +37,7 @@
 #include "block.h"
 #include "dictionary.h"
 #include "filenames.h"
+#include "disasm.h"
 
 /* tcl header files includes varargs.h unless HAS_STDARG is defined,
    but gdb uses stdarg.h, so make sure HAS_STDARG is defined.  */
@@ -112,9 +113,9 @@ struct disassembly_client_data
   Tcl_CmdInfo cmd;
 };
 
-/* This variable determines where memory used for disassembly is read from.
- * See note in gdbtk.h for details.
- */
+/* This variable determines where memory used for disassembly is read
+   from.  See note in gdbtk.h for details.  */
+/* NOTE: cagney/2003-09-08: This variable is unused.  */
 int disassemble_from_exec = -1;
 
 extern int gdb_variable_init (Tcl_Interp * interp);
@@ -1847,6 +1848,7 @@ gdbtk_load_source (ClientData clientData, struct symtab *symtab,
 }
 
 
+/* FIXME: cagney/2003-09-08: "di" is not used and unneeded.  */
 static CORE_ADDR
 gdbtk_load_asm (ClientData clientData, CORE_ADDR pc, 
 		struct disassemble_info *di)
@@ -1885,7 +1887,8 @@ gdbtk_load_asm (ClientData clientData, CORE_ADDR pc,
   gdb_flush (gdb_stdout);
 
   result_ptr->obj_ptr = client_data->result_obj[2];
-  insn = TARGET_PRINT_INSN (pc, di);
+  /* FIXME: cagney/2003-09-08: This should use gdb_disassembly.  */
+  insn = gdb_print_insn (pc, gdb_stdout);
   gdb_flush (gdb_stdout);
 
   client_data->widget_line_no++;
@@ -1943,67 +1946,6 @@ gdb_disassemble_driver (CORE_ADDR low, CORE_ADDR high,
 			CORE_ADDR (*print_asm_fn) (ClientData, CORE_ADDR, struct disassemble_info *))
 {
   CORE_ADDR pc;
-  static disassemble_info di;
-  static int di_initialized;
-
-  if (! di_initialized)
-    {
-      INIT_DISASSEMBLE_INFO_NO_ARCH (di, gdb_stdout,
-                                     (fprintf_ftype) fprintf_unfiltered);
-      di.flavour = bfd_target_unknown_flavour;
-      /* NOTE: cagney/2003-04: This all goes away, along with this
-         function, when insight starts using the "disasm.h"
-         disassembler.  */
-      di.memory_error_func = deprecated_tm_print_insn_info.memory_error_func;
-      di.print_address_func = deprecated_tm_print_insn_info.print_address_func;
-      di_initialized = 1;
-    }
-
-  di.mach = deprecated_tm_print_insn_info.mach;
-  if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
-    di.endian = BFD_ENDIAN_BIG;
-  else
-    di.endian = BFD_ENDIAN_LITTLE;
-
-  /* Set the architecture for multi-arch configurations. */
-  if (TARGET_ARCHITECTURE != NULL)
-    di.mach = TARGET_ARCHITECTURE->mach;
-
-  /* If disassemble_from_exec == -1, then we use the following heuristic to
-     determine whether or not to do disassembly from target memory or from the
-     exec file:
-
-     If we're debugging a local process, read target memory, instead of the
-     exec file.  This makes disassembly of functions in shared libs work
-     correctly.  Also, read target memory if we are debugging native threads.
-
-     Else, we're debugging a remote process, and should disassemble from the
-     exec file for speed.  However, this is no good if the target modifies its
-     code (for relocation, or whatever).
-
-     As an aside, it is fairly bogus that there is not a better way to
-     determine where to disassemble from.  There should be a target vector
-     entry for this or something.
-     
-  */
-
-  if (disassemble_from_exec == -1)
-    {
-      if (strcmp (target_shortname, "child") == 0
-          || strcmp (target_shortname, "procfs") == 0
-          || strcmp (target_shortname, "vxprocess") == 0
-	  || strstr (target_shortname, "thread") != NULL)
-	/* It's a child process, read inferior mem */
-        disassemble_from_exec = 0; 
-      else
-	/* It's remote, read the exec file */
-        disassemble_from_exec = 1; 
-    }
-
-  if (disassemble_from_exec)
-    di.read_memory_func = gdbtk_dis_asm_read_memory;
-  else
-    di.read_memory_func = deprecated_tm_print_insn_info.read_memory_func;
 
   /* If just doing straight assembly, all we need to do is disassemble
      everything between low and high.  If doing mixed source/assembly, we've
@@ -2112,7 +2054,9 @@ gdb_disassemble_driver (CORE_ADDR low, CORE_ADDR high,
           for (pc = mle[i].start_pc; pc < mle[i].end_pc; )
             {
               QUIT;
-	      pc = print_asm_fn (clientData, pc, &di);
+	      /* FIXME: cagney/2003-09-08: This entire function should
+                 be replaced by gdb_disassembly.  */
+	      pc = print_asm_fn (clientData, pc, NULL);
             }
         }
     }
@@ -2122,7 +2066,9 @@ gdb_disassemble_driver (CORE_ADDR low, CORE_ADDR high,
       for (pc = low; pc < high; )
         {
           QUIT;
-	  pc = print_asm_fn (clientData, pc, &di);
+	  /* FIXME: cagney/2003-09-08: This entire function should be
+	     replaced by gdb_disassembly.  */
+	  pc = print_asm_fn (clientData, pc, NULL);
         }
     }
 

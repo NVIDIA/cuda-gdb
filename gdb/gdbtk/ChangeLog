@@ -1,3 +1,14 @@
+2003-09-08  Andrew Cagney  <cagney@redhat.com>
+
+	* generic/gdbtk-cmds.c: Include "disasm.h".
+	(gdbtk_load_asm): Use "gdb_print_insn" instead of
+	TARGET_PRINT_INSN .
+	(gdb_disassemble_driver): Delete code referencing
+	"deprecated_tm_print_insn_info".  Delete "di" and "di_initialized"
+	and any code initializing those variables.  Pass NULL as "di"
+	parameter to "print_asm_fn".
+	(disassemble_from_exec): Mention that it is unused.
+
 2003-08-05  Andrew Cagney  <cagney@redhat.com>
 
 	* generic/gdbtk-register.c (gdb_reggrouplist): Update, use
