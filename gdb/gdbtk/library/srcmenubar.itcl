@@ -126,6 +126,7 @@ class SrcMenuBar {
 	menubar_add_menu_command Other "$i $item" \
 	  [list session_load $item] \
 	  -underline 0
+	incr i
       }
     }
 

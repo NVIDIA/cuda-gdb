@@ -1,3 +1,8 @@
+2001-01-09  Fernando Nasser  <fnasser@redhat.com>
+
+	* library/srcmenubar.itcl (create_file_menu): Add missing incr for
+	session numbers.
+
 2001-01-04  Fernando Nasser  <fnasser@redhat.com>
 
 	The following changes fix the problem of having to click on a splash
