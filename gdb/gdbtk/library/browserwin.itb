@@ -17,7 +17,7 @@
 #
 # ----------------------------------------------------------------------
 
-option add *BrowserWin.textBackground  white
+option add *BrowserWin.textBackground  $::Colors(textbg)
 
 # ------------------------------------------------------------------
 #  CONSTRUCTOR - create new browser window

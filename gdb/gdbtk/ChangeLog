@@ -1,4 +1,8 @@
 2003-02-10  Martin M. Hunt  <hunt@redhat.com>
+	* library/browserwin.itb: Set textbackground option to
+	$::Colors(textbg) instead of "white".
+
+2003-02-10  Martin M. Hunt  <hunt@redhat.com>	
 
 	* library/interface.tcl (gdbtk_attach_native): Don't force the user
 	to choose an exec file when attaching.
