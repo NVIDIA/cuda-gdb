@@ -329,7 +329,8 @@ target_is_native (t)
 
   if (STREQ (name, "exec") || STREQ (name, "hpux-threads")
       || STREQ (name, "child") || STREQ (name, "procfs")
-      || STREQ (name, "solaris-threads") || STREQ (name, "linuxthreads"))
+      || STREQ (name, "solaris-threads") || STREQ (name, "linuxthreads")
+      || STREQ (name, "multi-thread"))
     return 1;
 
   return 0;

@@ -1,3 +1,7 @@
+2000-10-13  Fernando Nasser  <fnasser@totem.to.cygnus.com>
+
+	* gdbtk.c (target_is_native): The "multi-thread" target is native.
+
 2000-09-15  Fernando Nasser  <fnasser@totem.to.cygnus.com>
 
 	* gdbtk-varobj.c (variable_value): Send back the error text issued
