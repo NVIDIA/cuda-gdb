@@ -1,3 +1,11 @@
+2002-11-06  Martin M. Hunt  <hunt@redhat.com>
+
+	* generic/gdbtk-varobj.c: Remove FREEIF and replace with xfree.
+	Make format_string static.
+
+	(variable_update): Return an object
+	with "-1" in it on error.
+	
 2002-11-06  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-hooks.c (gdbtk_call_command): Make a null
