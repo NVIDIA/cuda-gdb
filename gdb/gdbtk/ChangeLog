@@ -1,5 +1,14 @@
 2002-11-06  Martin M. Hunt  <hunt@redhat.com>
 
+	* library/watch.tcl: Completely rewritten to use VarTree.
+	* library/locals.tcl: Completely rewritten to use VarTree.
+	* library/variables.tcl: Deleted.
+	* library/vartree.ith: New file.
+	* library/vartree.itb: New file. Implements a variable
+	tree.
+	* library/tclIndex: Rebuilt.
+	
+2002-11-06  Martin M. Hunt  <hunt@redhat.com>
 	* library/globalpref.itb (_build_win): Add radiobox
 	to select KDE/GNOME/default for pref gdb/compat. Remove
 	browser option. 
