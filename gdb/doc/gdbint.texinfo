@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.83 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.84 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3416,11 +3416,6 @@ This should only need to be defined if @code{TARGET_READ_PC} and
 @item NPC_REGNUM
 @findex NPC_REGNUM
 The number of the ``next program counter'' register, if defined.
-
-@item NNPC_REGNUM
-@findex NNPC_REGNUM
-The number of the ``next next program counter'' register, if defined.
-Currently, this is only defined for the Motorola 88K.
 
 @item PARM_BOUNDARY
 @findex PARM_BOUNDARY
