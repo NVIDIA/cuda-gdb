@@ -124,8 +124,8 @@ itcl::body SrcPref::_build_win {} {
   radiobutton $w.var_on -text "On " -variable [scope $var] -value 1
   radiobutton $w.var_off -text "Off" -variable [scope $var] -value 0
   pack $w.var_on $w.var_off -side top
-  grid $f.rmv.mode -sticky nsew -pady 5 -row 0 -col 0
-  grid $f.rmv.var -sticky nsew -pady 5 -row 0 -col 2
+  grid $f.rmv.mode -sticky nsew -pady 5 -row 0 -column 0
+  grid $f.rmv.var -sticky nsew -pady 5 -row 0 -column 2
   grid columnconfigure $f.rmv 0 -weight 1
   grid columnconfigure $f.rmv 1 -minsize 4
   grid columnconfigure $f.rmv 2 -weight 1
