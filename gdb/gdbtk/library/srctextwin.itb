@@ -349,19 +349,19 @@ body SrcTextWin::enable {on} {
     set status disabled
   }
 
-  bind $twin <B1-Motion> $bnd
-  bind $twin <Double-1> $bnd
-  bind $twin <Triple-1> $bnd
-  enable_disable_src_tags $twin $status
+  if {[winfo exists $twin]} {
+    bind $twin <B1-Motion> $bnd
+    bind $twin <Double-1> $bnd
+    bind $twin <Triple-1> $bnd
+    enable_disable_src_tags $twin $status
+    $twin configure -cursor $glyph
+  }
+
   if {$bwin != ""} {
     bind $bwin <B1-Motion> $bnd
     bind $bwin <Double-1> $bnd
     bind $bwin <Triple-1> $bnd
     enable_disable_src_tags $bwin $status
-  }
-
-  $twin configure -cursor $glyph
-  if {$bwin != ""} {
     $bwin configure -cursor $glyph
   }
 }
