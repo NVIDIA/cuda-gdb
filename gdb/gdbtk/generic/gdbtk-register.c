@@ -21,6 +21,7 @@
 #include "defs.h"
 #include "frame.h"
 #include "regcache.h"
+#include "reggroups.h"
 #include "value.h"
 #include "target.h"
 #include "gdb_string.h"
@@ -43,6 +44,9 @@ static int map_arg_registers (Tcl_Interp *, int, Tcl_Obj **,
 static void register_changed_p (int, void *);
 static void setup_architecture_data (void);
 static int gdb_regformat (ClientData, Tcl_Interp *, int, Tcl_Obj **);
+static int gdb_reggroup (ClientData, Tcl_Interp *, int, Tcl_Obj **);
+static int gdb_reggrouplist (ClientData, Tcl_Interp *, int, Tcl_Obj **);
+
 static void get_register_types (int regnum, void *arg);
 
 static char *old_regs = NULL;
@@ -117,13 +121,14 @@ gdb_register_info (ClientData clientData, Tcl_Interp *interp, int objc,
   int index;
   void *argp;
   void (*func)(int, void *);
-  static char *commands[] = {"changed", "name", "size", "value", "type", "format", NULL};
-  enum commands_enum { REGINFO_CHANGED, REGINFO_NAME, REGINFO_SIZE, 
-		       REGINFO_VALUE, REGINFO_TYPE, REGINFO_FORMAT };
+  static char *commands[] = {"changed", "name", "size", "value", "type", 
+			     "format", "group", "grouplist", NULL};
+  enum commands_enum { REGINFO_CHANGED, REGINFO_NAME, REGINFO_SIZE, REGINFO_VALUE, 
+		       REGINFO_TYPE, REGINFO_FORMAT, REGINFO_GROUP, REGINFO_GROUPLIST };
 
   if (objc < 2)
     {
-      Tcl_WrongNumArgs (interp, 1, objv, "name|size|value|type|format [regnum1 ... regnumN]");
+      Tcl_WrongNumArgs (interp, 1, objv, "name|size|value|type|format|groups [regnum1 ... regnumN]");
       return TCL_ERROR;
     }
 
@@ -179,6 +184,12 @@ gdb_register_info (ClientData clientData, Tcl_Interp *interp, int objc,
 
     case REGINFO_FORMAT:
       return gdb_regformat (clientData, interp, objc, objv);
+
+    case REGINFO_GROUP:
+      return gdb_reggroup (clientData, interp, objc, objv);
+
+    case REGINFO_GROUPLIST:
+      return gdb_reggrouplist (clientData, interp, objc, objv);
 
     default:
       return TCL_ERROR;
@@ -467,7 +478,7 @@ gdb_regformat (ClientData clientData, Tcl_Interp *interp,
 
   if (objc != 3)
     {
-      Tcl_WrongNumArgs (interp, 1, objv, "regno type format");
+      Tcl_WrongNumArgs (interp, 0, objv, "gdb_reginfo regno type format");
       return TCL_ERROR;
     }
 
@@ -488,3 +499,74 @@ gdb_regformat (ClientData clientData, Tcl_Interp *interp,
 
   return TCL_OK;
 }
+
+
+/* gdb_reggrouplist returns the names of the register groups */
+/* for the current architecture. */
+/* Usage: gdb_reginfo groups */
+
+static int
+gdb_reggrouplist (ClientData clientData, Tcl_Interp *interp,
+		  int objc, Tcl_Obj **objv)
+{
+  struct reggroup *const *groups;
+  int i = 0;
+
+  if (objc != 0)
+    {
+      Tcl_WrongNumArgs (interp, 0, objv, "gdb_reginfo grouplist");
+      return TCL_ERROR;
+    }
+
+  groups = reggroups (current_gdbarch);
+
+  while (groups[i] != NULL) {
+    if (reggroup_type (groups[i]) == USER_REGGROUP)
+      Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, Tcl_NewStringObj (reggroup_name(groups[i]), -1));
+    i++;
+  }
+  return TCL_OK;
+}
+
+
+/* gdb_reggroup returns the names of the registers in a group. */
+/* Usage: gdb_reginfo group groupname */
+
+static int
+gdb_reggroup (ClientData clientData, Tcl_Interp *interp,
+	      int objc, Tcl_Obj **objv)
+{
+  struct reggroup *const *group;
+  char *groupname;
+  int regnum;
+
+  if (objc != 1)
+    {
+      Tcl_WrongNumArgs (interp, 0, objv, "gdb_reginfo group groupname");
+      return TCL_ERROR;
+    }
+  
+  groupname = Tcl_GetStringFromObj (objv[0], NULL);
+  if (groupname == NULL)
+    {
+      gdbtk_set_result (interp, "could not read groupname");
+      return TCL_ERROR;
+    }
+
+  for (group = reggroups (current_gdbarch); *group != NULL; group++)
+    {
+      if (strcmp (groupname, reggroup_name (*group)) == 0)
+	break;
+    }
+
+  if (*group == NULL)
+    return TCL_ERROR;
+
+  for (regnum = 0; regnum < NUM_REGS + NUM_PSEUDO_REGS; regnum++)
+    {
+      if (gdbarch_register_reggroup_p (current_gdbarch, regnum, *group))
+	Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, Tcl_NewIntObj (regnum));
+    }
+  return TCL_OK;
+}
+

@@ -1,3 +1,27 @@
+2002-12-17  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/regwin.itb (_load_prefs): Get list of registers from
+	the group name.
+	(_build_win): Remove old menu system.  Replace with an optionmenu
+	that contains all the valid group names for this architecture.
+	(_layout_table): No need to update old menu.
+	(_but3): Add "Close" to popup menu.
+	(_delete_from_display): No need to update old menu.
+	(_display_all): Ditto.
+	(_post_menu): Deleted.
+	(_select_group): New method. Callback for group optionmenu.
+	
+	* library/regwin.ith: New private variable _group.
+	New private method _select_group.  Removed _post_menu.
+
+	* generic/gdbtk-register.c: Include reggroups.h.
+	(gdb_register_info): Add "group" and "grouplist".
+	(gdb_regformat): Fix Tcl_WrongNumArgs call so it doesn't crash.
+	(gdb_reggrouplist): New function. Returns the names of the
+	register groups.
+	(gdb_reggroup): New function. Returns the register numbers of the
+	registers in a group.
+
 2002-12-06  Andrew Cagney  <ac131313@redhat.com>
 
 	* generic/gdbtk-cmds.c (gdb_update_mem): Don't add a 0x prefix.

@@ -28,6 +28,9 @@ itcl::class RegWin {
     # Mapping of table cell index to register number
     variable _register
 
+    # the register group that is displayed
+    variable _group "all"
+
     # Mapping of register number to table cell index. "hidden" if
     # the register was "removed" from the display.
     variable _cell
@@ -74,7 +77,7 @@ itcl::class RegWin {
     method _edit {x y}
     method _move {direction}
     method _open_memory {rn}
-    method _post_menu {}
+    method _select_group {}
     method _select_cell {cell}
     method _unedit {}
 
