@@ -8,8 +8,8 @@
 
 /* -*-C-*-
  *
- * $Revision: 1.6 $
- *     $Date: 2000/01/06 14:01:53 $
+ * $Revision: 1.7 $
+ *     $Date: 2000/01/12 12:53:29 $
  *
  *
  * serdrv.c - Synchronous Serial Driver for Angel.
@@ -85,10 +85,10 @@ static struct writestate wstate;
  * The set of parameter options supported by the device
  */
 static unsigned int baud_options[] = {
-#ifdef B115200 || __hpux
+#if defined(B115200) || defined(__hpux)
     115200,
 #endif
-#ifdef B57600 || __hpux
+#if defined(B57600) || defined(__hpux)
     57600, 
 #endif
     38400, 19200, 9600

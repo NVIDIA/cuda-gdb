@@ -11,8 +11,8 @@
  * Angel Remote Debug Interface
  *
  *
- * $Revision: 1.6 $
- *     $Date: 2000/01/05 11:22:21 $
+ * $Revision: 1.7 $
+ *     $Date: 2000/01/12 17:26:37 $
  *
  * This file is based on /plg/pisd/rdi.c, but instead of using RDP it uses
  * ADP messages.
@@ -320,9 +320,12 @@ static AdpErrs negotiate_params( const ParameterOptions *user_options )
 
     time_t t;
 
-    static volatile NegotiateState    n_state = {
-        FALSE, FALSE, FALSE, &accepted_config };
-
+    static volatile NegotiateState    n_state;
+    n_state.negotiate_resp = FALSE;
+    n_state.negotiate_ack = FALSE;
+    n_state.link_check_resp = FALSE;
+    n_state.accepted_config = &accepted_config;
+    
 #ifdef DEBUG
     angel_DebugPrint( "negotiate_params\n" );
 #endif
