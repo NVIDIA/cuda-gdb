@@ -1,3 +1,13 @@
+2001-04-09  Martin M. Hunt  <hunt@redhat.com>
+
+	* srcwin1.test: Fix line numbers to correspond to
+	modified source files in gdb.base. Commented-out test 
+	case for moving up past main() because sometimes there
+	is a libc init function which makes the results
+	inconsistent.
+	* srcwin2.test: Ditto.
+	* srcwin3.test: Ditto.
+
 1999-09-17  Fernando Nasser  <fnasser@totem.to.cygnus.com>
 
 	* testsuite/gdb.gdbtk/cpp_variable.test: Add test (2.75) to verify

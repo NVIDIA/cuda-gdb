@@ -1,4 +1,4 @@
-#   Copyright (C) 1999 Cygnus Solutions
+#   Copyright (C) 1999, 2001 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -296,7 +296,7 @@ gdbtk_test srcwin-2.6 "goto function bar" {
     foreach {k v i} $z {
       if {$k == "tagon"} {
 	if {$v == "BROWSE_TAG"} {
-	  if {$i == "5.2"} {
+	  if {$i == "10.2"} {
 	    incr r
 	  } else {
 	    incr r 5
@@ -340,9 +340,9 @@ gdbtk_test srcwin-2.7 "goto function oof" {
     foreach {k v i} $z {
       if {$k == "tagon"} {
 	if {$v == "BROWSE_TAG"} {
-	  if {$i == "32.2"} {
+	  if {$i == "38.2"} {
 	    set line_number [$twin get "$i wordstart" "$i wordend"]
-	    if {$line_number == "32"} {
+	    if {$line_number == "38"} {
 	      incr r
 	    } else {
 	      incr r -100
@@ -475,7 +475,7 @@ gdbtk_test srcwin-2.10 "step" {
       foreach {k v i} $z {
 	if {$k == "tagon"} {
 	  if {$v == "PC_TAG"} {
-	    if {$i == "8.2"} {
+	    if {$i == "9.2"} {
 	      incr r
 	    } else {
 	      incr r 5
@@ -519,7 +519,7 @@ gdbtk_test srcwin-2.11 "set BP and continue" {
       foreach {k v i} $z {
 	if {$k == "tagon"} {
 	  if {$v == "PC_TAG"} {
-	    if {$i == "32.2"} {
+	    if {$i == "38.2"} {
 	      incr r
 	    } else {
 	      incr r 5
@@ -565,14 +565,16 @@ gdbtk_test srcwin-3.1 "stack up (1)" {
       foreach {k v i} $z {
 	if {$k == "tagon"} {
 	  if {$v == "PC_TAG"} {
-	    if {$i == "32.2"} {
+	    # return n + 1;
+	    if {$i == "38.2"} {
 	      incr r
 	    } else {
 	      incr r 5
 	    }
 	  }
 	  if {$v == "STACK_TAG"} {
-	    if {$i == "22.2"} {
+	    # oof (67);
+	    if {$i == "26.2"} {
 	      incr r
 	    } else {
 	      incr r 10
@@ -611,14 +613,16 @@ gdbtk_test srcwin-3.2 "stack up (2)" {
       foreach {k v i} $z {
 	if {$k == "tagon"} {
 	  if {$v == "PC_TAG"} {
-	    if {$i == "32.2"} {
+	    # return n + 1;
+	    if {$i == "38.2"} {
 	      incr r
 	    } else {
 	      incr r 5
 	    }
 	  }
 	  if {$v == "STACK_TAG"} {
-	    if {$i == "7.2"} {
+	    # long_line ();
+	    if {$i == "12.2"} {
 	      incr r
 	    } else {
 	      incr r 10
@@ -657,7 +661,7 @@ gdbtk_test srcwin-3.3 "stack up (3)" {
       foreach {k v i} $z {
 	if {$k == "tagon"} {
 	  if {$v == "STACK_TAG"} {
-	    if {$i == "8.2"} {
+	    if {$i == "9.2"} {
 	      incr r
 	    } else {
 	      incr r 5
@@ -714,45 +718,47 @@ gdbtk_test srcwin-3.4 "stack up (4)" {
   set r
 } {1}
 
+# Disabled for now because there are different correct results.
+# Test should be rewritten to include those.
 # Test: srcwin-3.5
 # Desc: "stack up" when we are at the top
-gdbtk_test srcwin-3.5 "stack up when at the top" {
-  $srcwin stack up
-  set r 0
-  set name [$statbar.name get]
-  set func [$statbar.func get]
-
+#gdbtk_test srcwin-3.5 "stack up when at the top" {
+#  $srcwin stack up
+#  set r 0
+#  set name [$statbar.name get]
+#  set func [$statbar.func get]
+#
   # check contents of name and function comboboxes
-  if {$name != "list0.c"} {set r -1}
-  if {$func != "main"} {set r -2}
+#  if {$name != "list0.c"} {set r -1}
+#  if {$func != "main"} {set r -2}
 
   # check that the correct file is displayed
-  set twin [$stw test_get twin]
-  set a [$twin get 1.0 end]
-  if {[string compare $file1(source) $a]} {set r -3}
+#  set twin [$stw test_get twin]
+#  set a [$twin get 1.0 end]
+#  if {[string compare $file1(source) $a]} {set r -3}
   
   # check for PC_TAG and STACK_TAG on correct lines
-  if {$r == 0} {
-    if {![catch {set z [$twin dump -tag 1.0 end]}]} {
-      foreach {k v i} $z {
-	if {$k == "tagon"} {
-	  if {$v == "STACK_TAG"} {
-	    if {$i == "12.2"} {
-	      incr r
-	    } else {
-	      incr r 5
-	    }
-	  }
-	  if {$v == "PC_TAG"} {incr r 10}
-	  if {$v == "BROWSE_TAG"} {incr r 100}
-	}
-      }
-    } else {
-      set r -4
-    }
-  }
-  set r
-} {1}
+#  if {$r == 0} {
+#    if {![catch {set z [$twin dump -tag 1.0 end]}]} {
+#      foreach {k v i} $z {
+#	if {$k == "tagon"} {
+#	  if {$v == "STACK_TAG"} {
+#	    if {$i == "12.2"} {
+#	      incr r
+#	    } else {
+#	      incr r 5
+#	    }
+#	  }
+#	  if {$v == "PC_TAG"} {incr r 10}
+#	  if {$v == "BROWSE_TAG"} {incr r 100}
+#	}
+#      }
+#    } else {
+#      set r -4
+#    }
+#  }
+#  set r
+#} {1}
 
 # Test: srcwin-3.6
 # Desc: "stack down"  test
@@ -777,7 +783,7 @@ gdbtk_test srcwin-3.6 "stack down" {
       foreach {k v i} $z {
 	if {$k == "tagon"} {
 	  if {$v == "STACK_TAG"} {
-	    if {$i == "8.2"} {
+	    if {$i == "9.2"} {
 	      incr r
 	    } else {
 	      incr r 5
@@ -817,7 +823,7 @@ gdbtk_test srcwin-3.7 "stack bottom" {
       foreach {k v i} $z {
 	if {$k == "tagon"} {
 	  if {$v == "PC_TAG"} {
-	    if {$i == "32.2"} {
+	    if {$i == "38.2"} {
 	      incr r
 	    } else {
 	      incr r 5
@@ -857,7 +863,7 @@ gdbtk_test srcwin-3.8 "stack down when at bottom" {
       foreach {k v i} $z {
 	if {$k == "tagon"} {
 	  if {$v == "PC_TAG"} {
-	    if {$i == "32.2"} {
+	    if {$i == "38.2"} {
 	      incr r
 	    } else {
 	      incr r 5
@@ -897,7 +903,7 @@ gdbtk_test srcwin-4.1 "set BP in another file" {
       foreach {k v i} $z {
 	if {$k == "tagon"} {
 	  if {$v == "BROWSE_TAG"} {
-	    if {$i == "8.2"} {
+	    if {$i == "9.2"} {
 	      incr r
 	    } else {
 	      incr r 5
@@ -906,7 +912,7 @@ gdbtk_test srcwin-4.1 "set BP in another file" {
 	  if {$v == "STACK_TAG"} {incr r 10}
 	  if {$v == "PC_TAG"} {incr r 100}
 	} elseif {$k == "image"} {
-	  if {$i == "8.0"} {
+	  if {$i == "9.0"} {
 	    incr r
 	  } else {
 	    set r -200
@@ -950,7 +956,7 @@ gdbtk_test srcwin-4.2 "temporary BP" {
       foreach {k v i} $z {
 	if {$k == "tagon"} {
 	  if {$v == "BROWSE_TAG"} {
-	    if {$i == "8.2"} {
+	    if {$i == "9.2"} {
 	      incr r
 	    } else {
 	      incr r 5
@@ -959,7 +965,7 @@ gdbtk_test srcwin-4.2 "temporary BP" {
 	  if {$v == "STACK_TAG"} {incr r 10}
 	  if {$v == "PC_TAG"} {incr r 100}
 	} elseif {$k == "image"} {
-	  if {$i == "8.0"} {
+	  if {$i == "9.0"} {
 	    incr r
 	  } else {
 	    set r -200
@@ -979,7 +985,7 @@ gdbtk_test srcwin-4.2 "temporary BP" {
       foreach {k v i} $z {
 	if {$k == "tagon"} {
 	  if {$v == "PC_TAG"} {
-	    if {$i == "8.2"} {
+	    if {$i == "9.2"} {
 	      incr r
 	    } else {
 	      incr r 5
@@ -1016,7 +1022,7 @@ gdbtk_test srcwin-4.3 "BP Balloons" {
       foreach {k v i} $z {
 	if {$k == "tagon"} {
 	  if {$v == "PC_TAG"} {
-	    if {$i == "8.2"} {
+	    if {$i == "9.2"} {
 	      incr r
 	    } else {
 	      incr r 5
@@ -1176,9 +1182,9 @@ gdbtk_test srcwin-5.1 "variable balloon test" {
   move_mouse_to $twin [$twin bbox 10.$index]
   sleep 1
   if {[winfo ismapped $balloon]} {
-    if {![string compare "x=6" [$balloon.label cget -text]]} {incr r}
+    if {![string compare "x=5" [$balloon.label cget -text]]} {incr r}
     gdb_immediate "continue" 1
-    if {![string compare "x=8" [$balloon.label cget -text]]} {incr r}
+    if {![string compare "x=7" [$balloon.label cget -text]]} {incr r}
   } else {
     set r -1
   }
