@@ -185,6 +185,8 @@ body RegWin::build_win {} {
       -command "$this update"
     $f add radio -label "Raw" -value r -underline 0 -state disabled \
       -command "$this update"
+    $f add radio -label "Floating Point" -value f -underline 0 -state disabled \
+      -command "$this update"
     $m add command -label "Remove from Display" -underline 0 -state disabled
     $m add separator
     $m add command -label "Add to Watch" -underline 7 -state disabled
@@ -365,7 +367,7 @@ body RegWin::reg_select { r } {
     set selected -1
     $itk_interior.m.reg entryconfigure 0 -state disabled
     $itk_interior.m.reg entryconfigure 2 -state disabled
-    for {set i 0} {$i < 6} {incr i} {
+    for {set i 0} {$i < 7} {incr i} {
       $itk_interior.m.reg.format entryconfigure $i -state disabled
     }
     return
@@ -388,7 +390,7 @@ body RegWin::reg_select { r } {
   } else {
     set state normal
   }
-  for {set i 0} {$i < 6} {incr i} {
+  for {set i 0} {$i < 7} {incr i} {
     debug "RegWin format $i $state"
     $itk_interior.m.reg.format entryconfigure $i -state $state \
       -variable reg_display($r,format)
@@ -470,6 +472,8 @@ body RegWin::but3 {rn X Y} {
         -value o -variable reg_display($rn,format)
       $Menu add radio -label "Raw" -command "$this update" \
         -value r -variable reg_display($rn,format)
+      $Menu add radio -label "Floating Point" -command "$this update" \
+        -value f -variable reg_display($rn,format)
       $Menu add separator
     }
     $Menu add command  -command "$this addToWatch $rn" \

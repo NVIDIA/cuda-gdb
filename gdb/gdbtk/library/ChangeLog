@@ -1,3 +1,8 @@
+2000-11-29  Larry Smith <lsmith@redhat.com>
+
+        * regwin.itb (build_win,but3): Added "Double" menu entry to
+        permit selection of "f" format for register display.
+
 2000-11-06  Fernando Nasser  <fnasser@cygnus.com>
 
 	* interface.tcl (show_warning): Add missing argument to ide_messageBox
