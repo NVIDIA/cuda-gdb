@@ -1,5 +1,12 @@
 2001-01-28  Fernando Nasser  <fnasser@redhat.com>
 
+	* library/main.tcl: Add plugin subdirectory, if existent, to auto_path.
+	* library/srcbar.itcl (create_plugin_menu): New method.  Create a pull
+	down menu for plugins if there are any for this target configuration.
+	(create_menu_items): Invoke the new method above.
+
+2001-01-28  Fernando Nasser  <fnasser@redhat.com>
+
 	* library/gdbmenubar.itcl (menubar_new_menu): Save lable of a menu to
 	use as index.
 	(menubar_delete_menu): New function.  Delete a menu.

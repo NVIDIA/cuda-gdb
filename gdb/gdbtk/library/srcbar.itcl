@@ -115,6 +115,8 @@ class SrcBar {
       create_trace_menu
     }
 
+    create_plugin_menu
+
     create_pref_menu
     
     create_help_menu
@@ -384,6 +386,25 @@ class SrcBar {
     $Menu menubar_add_menu_command Trace "Tfind Frame..." \
       "ManagedWin::open TfindArgs -Type FR" \
       -underline 6 -accelerator F
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  create_plugin_menu - Creates the optional plugin menu
+  # ------------------------------------------------------------------  
+  private method create_plugin_menu {} {
+    global gdb_plugins
+
+    if {$gdb_plugins != ""} {
+      $Menu menubar_new_menu plugin "PlugIn" 4
+      set plugins_available 0
+      source [file join $gdb_plugins plugins.tcl]
+      if {! $plugins_available} {
+        # No plugins are available for this configuration,
+        # so remove the menu
+        debug "No plugins configured, go remove the PlugIn menu..."
+        $Menu menubar_delete_menu plugin
+      }
+    }
   }
 
   # ------------------------------------------------------------------

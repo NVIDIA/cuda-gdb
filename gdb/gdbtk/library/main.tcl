@@ -28,12 +28,20 @@
 #set tcl_traceCompile 1
 
 # Add gdb's Tcl library directory to the end of the auto-load search path, if 
-# it isn't already on the path:
+# it isn't already on the path.
+# Also, add the plugins directory if it exists.
 # Note: GDBTK_LIBRARY will be set in tcl_findLibrary before main.tcl is called.
+
+set gdb_plugins ""
 
 if {[info exists auto_path]} {
   if {[lsearch -exact $auto_path $GDBTK_LIBRARY] < 0} {
     lappend auto_path $GDBTK_LIBRARY
+  }
+  # In any case, add the plugins directory if it exists
+  if {[file exists [file join $GDBTK_LIBRARY plugins]]} {
+    set gdb_plugins [file join $GDBTK_LIBRARY plugins]
+    lappend auto_path $gdb_plugins
   }
 }
 
