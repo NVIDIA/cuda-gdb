@@ -1,3 +1,20 @@
+2001-10-18  Martin M. Hunt  <hunt@redhat.com>
+	* library/globalpref.itb (GlobalPref::_init_var):
+	New method to initialize _saved and _new arrays.
+	(GlobalPref::constructor): Call _init_var.
+	(GlobalPref::_buildwin): Use _new array for prefs
+	variables. Font optimizations. Remove troublesome
+	fonts and sort the list.
+	(GlobalPref::toggle_tracing_mode): Removed.  Some
+	functionality moved to _apply and _cancel.
+	(GlobalPref::_apply): Set prefs with values from the
+	_new array.
+	(SrcPref::_cancel): Reset prefs with values from _saved.
+	* library/globalpref.ith: Changed private variables
+	and methods to start with underscore.
+	(tracing_cb): Removed.
+	(_init): Changed from proc to method.
+
 2001-11-01  Keith Seitz  <keiths@redhat.com>
 
 	* library/memwin.itb (update_addr): Evaluate the address
