@@ -170,6 +170,7 @@ class VariableWin {
 	remove_hook gdb_no_inferior_hook "$this no_inferior"
 	remove_hook gdb_idle_hook [list $this idle]
 	remove_hook gdb_clear_file_hook [code $this clear_file]
+	remove_hook file_changed_hook [code $this clear_file]
     }
 
     # ------------------------------------------------------------------

@@ -1,7 +1,11 @@
 2001-03-29  Fernando Nasser  <fnasser@redhat.com>
 
-	* gdbtk-varobj.c (variable_obj_command): Do not cache varobj handles as
-	they may change -- use varobj_get_handle() instead.
+	* library/variable.tcl (destructor): Remove file_changed_hook hook.
+
+2001-03-29  Fernando Nasser  <fnasser@redhat.com>
+
+	* generic/gdbtk-varobj.c (variable_obj_command): Do not cache varobj
+	handles as they may change -- use varobj_get_handle() instead.
 
 2001-03-15  Martin Hunt  <hunt@redhat.com>
 	* library/browserwin.itb: Change all references to freeze_me,
