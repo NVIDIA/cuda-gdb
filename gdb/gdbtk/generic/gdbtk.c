@@ -1,5 +1,5 @@
 /* Startup code for Insight
-   Copyright 1994, 1995, 1996, 1997, 1998, 2001, 2002, 2003
+   Copyright 1994, 1995, 1996, 1997, 1998, 2001, 2002, 2003, 2004
    Free Software Foundation, Inc.
 
    Written by Stu Grossman <grossman@cygnus.com> of Cygnus Support.
@@ -658,7 +658,7 @@ static void
 gdbtk_init_1 (char *arg0)
 {
   argv0 = arg0;
-  init_ui_hook = NULL;
+  deprecated_init_ui_hook = NULL;
 }
 
 /* gdbtk_test is used in main.c to validate the -tclcommand option to
@@ -684,7 +684,7 @@ _initialize_gdbtk ()
      if "interpreter_p" is set to "insight" to know if
      insight is GOING to run. */
   if (strcmp (interpreter_p, "insight") == 0)
-    init_ui_hook = gdbtk_init_1;
+    deprecated_init_ui_hook = gdbtk_init_1;
 #ifdef __CYGWIN__
   else
     {

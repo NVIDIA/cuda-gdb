@@ -1,6 +1,6 @@
 /* Startup code for Insight.
 
-   Copyright 1994, 1995, 1996, 1997, 1998, 2000, 200, 2002, 2003 Free
+   Copyright 1994, 1995, 1996, 1997, 1998, 2000, 200, 2002, 2003, 2004 Free
    Software Foundation, Inc.
 
    Written by Stu Grossman <grossman@cygnus.com> of Cygnus Support.
@@ -134,41 +134,41 @@ gdbtk_add_hooks (void)
   set_gdb_event_hooks (&handlers);
 
   /* Hooks */
-  call_command_hook = gdbtk_call_command;
-  set_hook = gdbtk_set_hook;
-  readline_begin_hook = gdbtk_readline_begin;
-  readline_hook = gdbtk_readline;
-  readline_end_hook = gdbtk_readline_end;
+  deprecated_call_command_hook = gdbtk_call_command;
+  deprecated_set_hook = gdbtk_set_hook;
+  deprecated_readline_begin_hook = gdbtk_readline_begin;
+  deprecated_readline_hook = gdbtk_readline;
+  deprecated_readline_end_hook = gdbtk_readline_end;
 
-  print_frame_info_listing_hook = gdbtk_print_frame_info;
-  query_hook = gdbtk_query;
-  warning_hook = gdbtk_warning;
+  deprecated_print_frame_info_listing_hook = gdbtk_print_frame_info;
+  deprecated_query_hook = gdbtk_query;
+  deprecated_warning_hook = gdbtk_warning;
 
-  interactive_hook = gdbtk_interactive;
-  target_wait_hook = gdbtk_wait;
-  ui_load_progress_hook = gdbtk_load_hash;
+  deprecated_interactive_hook = gdbtk_interactive;
+  deprecated_target_wait_hook = gdbtk_wait;
+  deprecated_ui_load_progress_hook = gdbtk_load_hash;
 
   ui_loop_hook = x_event;
   pre_add_symbol_hook = gdbtk_pre_add_symbol;
   post_add_symbol_hook = gdbtk_post_add_symbol;
-  file_changed_hook = gdbtk_file_changed;
+  deprecated_file_changed_hook = gdbtk_file_changed;
   specify_exec_file_hook (gdbtk_exec_file_display);
 
-  trace_find_hook = gdbtk_trace_find;
-  trace_start_stop_hook = gdbtk_trace_start_stop;
+  deprecated_trace_find_hook = gdbtk_trace_find;
+  deprecated_trace_start_stop_hook = gdbtk_trace_start_stop;
 
-  attach_hook            = gdbtk_attach;
-  detach_hook            = gdbtk_detach;
+  deprecated_attach_hook            = gdbtk_attach;
+  deprecated_detach_hook            = gdbtk_detach;
 
-  register_changed_hook = gdbtk_register_changed;
-  memory_changed_hook = gdbtk_memory_changed;
-  selected_frame_level_changed_hook = gdbtk_selected_frame_changed;
-  context_hook = gdbtk_context_change;
+  deprecated_register_changed_hook = gdbtk_register_changed;
+  deprecated_memory_changed_hook = gdbtk_memory_changed;
+  deprecated_selected_frame_level_changed_hook = gdbtk_selected_frame_changed;
+  deprecated_context_hook = gdbtk_context_change;
 
-  error_begin_hook = gdbtk_error_begin;
+  deprecated_error_begin_hook = gdbtk_error_begin;
 
-  annotate_signal_hook = gdbtk_annotate_signal;
-  annotate_signalled_hook = gdbtk_annotate_signal;
+  deprecated_annotate_signal_hook = gdbtk_annotate_signal;
+  deprecated_annotate_signalled_hook = gdbtk_annotate_signal;
 }
 
 /* These control where to put the gdb output which is created by

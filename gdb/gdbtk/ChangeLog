@@ -1,3 +1,10 @@
+2004-04-22  Keith Seitz  <kseitz@sources.redhat.com>
+
+	* generic/gdbtk-hooks.c (gdbtk_add_hooks): "Update" deprecated hooks.
+	"Houston... We have a problem."
+	* generic/gdbtk-interp.c (gdbtk_interpreter_resume): Likewise.
+ 	* generic/gdbtk.c (gdbtk_init_1): Likewise.
+	
 2004-04-19  Roland McGrath  <roland@redhat.com>
 
 	* generic/gdbtk-hooks.c: Update gdbtk_pre_add_symbol forward decl to
