@@ -1,3 +1,8 @@
+2000-06-06  Elena Zannoni  <ezannoni@kwikemart.cygnus.com>
+
+	* gdbtk.c: Remove CYGWIN32 conditional around timer machinery.
+  	Cygwin can handle timers fine now.	
+
 2000-04-17  Jonathan Larmour  <jlarmour@redhat.co.uk>
 
 	* ChangeLog-gdbtk: Renamed to ChangeLog

@@ -67,7 +67,6 @@
 
 extern void _initialize_gdbtk (void);
 
-#ifndef __CYGWIN32__
 /* For unix natives, we use a timer to periodically keep the gui alive.
    See comments before x_event. */
 static sigset_t nullsigmask;
@@ -81,7 +80,6 @@ x_event_wrapper (signo)
 {
   x_event (signo);
 }
-#endif
 
  /*
   * These two variables control the interaction with an external editor.
@@ -104,9 +102,7 @@ static void cleanup_init PARAMS ((int));
 
 static void tk_command PARAMS ((char *, int));
 
-#ifndef __CYGWIN32__
 static int target_should_use_timer PARAMS ((struct target_ops * t));
-#endif
 
 int target_is_native PARAMS ((struct target_ops *t));
 
@@ -115,9 +111,7 @@ int gdbtk_test PARAMS ((char *));
 /* Handle for TCL interpreter */
 Tcl_Interp *gdbtk_interp = NULL;
 
-#ifndef __CYGWIN32__
 static int gdbtk_timer_going = 0;
-#endif
 
 /* linked variable used to tell tcl what the current thread is */
 int gdb_context = 0;
@@ -266,7 +260,6 @@ gdbtk_interactive ()
 void
 gdbtk_start_timer ()
 {
-#ifndef __CYGWIN32__
   static int first = 1;
 
   if (first)
@@ -303,28 +296,22 @@ gdbtk_start_timer ()
 	  gdbtk_timer_going = 1;
 	}
     }
-#else /* __CYGWIN32__ */
   return;
-#endif
 }
 
 /* Stop the timer if it is running. */
 void
 gdbtk_stop_timer ()
 {
-#ifndef __CYGWIN32__
   if (gdbtk_timer_going)
     {
       gdbtk_timer_going = 0;
       setitimer (ITIMER_REAL, &it_off, NULL);
       sigaction (SIGALRM, &act2, NULL);
     }
-#else /* __CYGWIN32__ */
   return;
-#endif
 }
 
-#ifndef __CYGWIN32__
 /* Should this target use the timer? See comments before
    x_event for the logic behind all this. */
 static int
@@ -333,7 +320,6 @@ target_should_use_timer (t)
 {
   return target_is_native (t);
 }
-#endif /* !__CYGWIN32__ */
 
 /* Is T a native target? */
 int
