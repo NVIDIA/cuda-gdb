@@ -1,3 +1,15 @@
+2000-03-30  Fernando Nasser  <fnasser@totem.to.cygnus.com>
+
+	* variables.tcl (edit): Remove call to close, which caused editing
+	of variables to fail.
+	Note: I don't know why we would need to do this here as it seems
+	that the "delete entry" operation will do that.
+	Perhaps this was to account to some old widget bug.
+	But we cannot call close here because it calls UnEdit,
+	which unsets some of the edit state.
+        (open): Make sure to abort any ongoing edit.  This was causing problems
+	when someone tried to expand an structure while editing its pointer.
+
 2000-03-28  James Ingham  <jingham@leda.cygnus.com>
 
 	* managedwin.itb (ManagedWin::startup): Open the SrcWin, this does 

@@ -425,7 +425,6 @@ class VariableWin {
 	# Find out what the previous entry is
 	set previous [getPrevious $variable]
 
-	close $variable
 	$Hlist delete entry $variable
 
 	set cmd [format { \
@@ -643,6 +642,11 @@ class VariableWin {
 	global Update
 	# We must lookup all the variables for this struct
 	#    debug "VariableWin::open $path"
+
+	# Cancel any edits
+	if {[info exists EditEntry]} {
+	    UnEdit
+	}
 
 	if {!$Running} {
 	    # Do not open disabled paths
