@@ -1,3 +1,9 @@
+2002-09-24  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/srctextwin.itb (FillMixed): Fix debug
+	statement for 64-bit.
+	(_highlightAsmLine): Fix 64-bit arithmetic.
+
 2002-09-19  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/srctextwin.itb (FillAssembly): Fix debug

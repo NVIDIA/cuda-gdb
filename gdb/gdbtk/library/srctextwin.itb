@@ -1091,7 +1091,7 @@ body SrcTextWin::FillMixed {w tagname filename funcname line addr pc_addr lib} {
     set mode_changed 0
     set oldpane $pane
     if {[LoadFromCache $w $funcname M $lib]} {
-      # debug [format "Disassembling at %x" $addr]
+      # debug "Disassembling at $addr"
       if {[catch {gdb_load_disassembly $win source \
 			     [scope _map] $Cname $addr} mess] } {
 	# print some intelligent error message
@@ -1134,7 +1134,7 @@ body SrcTextWin::_highlightAsmLine {win addr pc_addr \
   if {[info exists _map($Cname,pc=$addr)]} {
     set current(asm_line) $_map($Cname,pc=$addr)
   } else {
-    set x [format "0x%x" [expr $current(addr)-2]]
+    set x [gdb_incr_addr $current(addr) -2]
     if {[info exists _map($Cname,pc=$x)]} {
       set current(asm_line) $_map($Cname,pc=$x)
     }
