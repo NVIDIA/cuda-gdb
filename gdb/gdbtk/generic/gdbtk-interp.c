@@ -56,13 +56,13 @@ hack_disable_interpreter_exec (char *args, int from_tty)
 static void *
 gdbtk_interpreter_init (void)
 {
-  gdbtk_init ();
-
   /* Disable interpreter-exec. It causes us big trouble right now. */
   struct cmd_list_element *cmd = NULL;
   struct cmd_list_element *alias = NULL;
   struct cmd_list_element *prefix = NULL;
   struct cmd_list_element *c;
+
+  gdbtk_init ();
 
   if (lookup_cmd_composition ("interpreter-exec", &alias, &prefix, &cmd))
     {
