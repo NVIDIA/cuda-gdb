@@ -22,11 +22,6 @@ itcl::body SrcWin::constructor {args} {
 
   _update_title ""
 
-  # On Windows, create a sizebox.
-  if {$::tcl_platform(platform) == "windows"} {
-#    ide_sizebox $itk_interior.sizebox
-  }
-
   set Tracing [pref get gdb/mode]
   set current(filename) ""
 

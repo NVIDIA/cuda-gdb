@@ -1,3 +1,16 @@
+2003-03-18  Keith Seitz  <keiths@redhat.com>
+
+	From Nick Kelsey <nickk@ubicom.com>:
+	* process.itb (build_win): Removed ide_sizebox instantiation that is
+	no longer required and is causing errors for win hosts.
+	* tdump.tcl (build_win): Ditto.
+	* locals.tcl (build_win): Removed ide_sizebox instantiation that is
+	no longer required and already commented out.
+	* regwin.itb (build_win): Ditto.
+	* srcwin.itb (constructor): Ditto.
+	* stackwin.itb (constructor): Ditto.
+	* watch.tcl (constructor): Ditto.
+
 2003-03-24  Martin M. Hunt  <hunt@redhat.com>
 
 	* generic/gdbtk-register.c (get_register_types): Use 
