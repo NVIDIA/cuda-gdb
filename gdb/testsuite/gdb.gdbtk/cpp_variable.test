@@ -185,7 +185,8 @@ gdbtk_test cpp_variable-1.6 {format of v} {
   $var(v) format
 } {natural}
 
-set value [$var(v) value]
+set value {}
+catch {$var(v) value} value
 
 # Step over "V *v = new V;"
 gdb_cmd "next"
