@@ -1,5 +1,24 @@
 2002-11-06  Martin M. Hunt  <hunt@redhat.com>
 
+	* library/globalpref.itb (_build_win): Add radiobox
+	to select KDE/GNOME/default for pref gdb/compat. Remove
+	browser option. 
+
+	* library/regwin.itb (build_win): Colors(hbg) has been 
+	removed so use Colors(bg) instead.
+
+	* library/prefs.tcl (pref_set_defaults): Add a new
+	preference "gdb/compat" which can be set to KDE, GNOME, 
+	Windows or default. This allows us to change Insight's
+	behavior based on windowing system.
+	(pref_set_colors): Attempt to read in .gtkrc files.
+	Do different things for KDE vs GNOME.
+	(pref_load_default): New function. Load default colors.
+	(pref_load_gnome): New function. Find and open GNOME file.	
+	(load_gnome_file): New function. Loads GNOME file.		
+	(pref_set_option_db): New function.  Set option database.
+
+2002-11-06  Martin M. Hunt  <hunt@redhat.com>	
 	* generic/gdbtk-varobj.c: Remove FREEIF and replace with xfree.
 	Make format_string static.
 

@@ -223,7 +223,7 @@ itcl::body RegWin::_build_win {} {
   $itk_component(table) tag configure normal  \
     -state disabled -bg $::Colors(textbg) -fg $::Colors(textfg)
   $itk_component(table) tag configure sel -bg $::Colors(sbg) -fg $::Colors(sfg)
-  $itk_component(table) tag configure highlight -bg $::Colors(hbg)
+  $itk_component(table) tag configure highlight -bg $::Colors(bg)
   $itk_component(table) tag raise highlight
   $itk_component(table) tag configure header \
     -anchor w -state disabled -relief raised
