@@ -1,7 +1,14 @@
+2005-02-16  Martin Hunt  <hunt@redhat.com>
+
+	* generic/gdbtk-stack.c (get_frame_name): Replace
+	print_address_numeric with deprecated_print_address_numeric.
+	* generic/gdbtk-cmds.c (gdbtk_load_asm): Ditto.
+
 2005-02-07  Keith Seitz  <kseitz@sources.redhat.com>
 
 	* generic/gdbtk-cmds.c (gdb_eval): VALUE_EMBEDDED_OFFSET and
 	VALUE_CONTENTS are now functions.
+
 
 2005-01-19  Keith Seitz  <kseitz@sources.redhat.com>
 

@@ -591,7 +591,7 @@ get_frame_name (Tcl_Interp *interp, Tcl_Obj *list, struct frame_info *fi)
       /* we have no convenient way to deal with this yet... */
       if (fi->pc != sal.pc || !sal.symtab)
 	{
-	  print_address_numeric (fi->pc, 1, gdb_stdout);
+	  deprecated_print_address_numeric (fi->pc, 1, gdb_stdout);
 	  printf_filtered (" in ");
 	}
       printf_symbol_filtered (gdb_stdout, funname ? funname : "??", funlang,

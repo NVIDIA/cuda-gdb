@@ -1880,7 +1880,7 @@ gdbtk_load_asm (ClientData clientData, CORE_ADDR pc,
   for (i = 0; i < 3; i++)
     Tcl_SetObjLength (client_data->result_obj[i], 0);
 
-  print_address_numeric (pc, 1, gdb_stdout);
+  deprecated_print_address_numeric (pc, 1, gdb_stdout);
   gdb_flush (gdb_stdout);
 
   result_ptr->obj_ptr = client_data->result_obj[1];
