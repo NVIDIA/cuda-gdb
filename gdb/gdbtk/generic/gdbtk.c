@@ -196,7 +196,7 @@ void
 TclDebug (char level, const char *fmt,...)
 {
   va_list args;
-  char buf[10000], *v[3], *merge, *priority;
+  char *buf, *v[3], *merge, *priority;
 
   switch (level)
     {
@@ -215,17 +215,19 @@ TclDebug (char level, const char *fmt,...)
 
   va_start (args, fmt);
 
+
+  xvasprintf (&buf, fmt, args);
+  va_end (args);
+
   v[0] = "dbug";
   v[1] = priority;
   v[2] = buf;
-
-  vsprintf (buf, fmt, args);
-  va_end (args);
 
   merge = Tcl_Merge (3, v);
   if (Tcl_Eval (gdbtk_interp, merge) != TCL_OK)
     Tcl_BackgroundError (gdbtk_interp);
   Tcl_Free (merge);
+  free(buf);
 }
 
 
@@ -359,7 +361,7 @@ gdbtk_init (argv0)
 {
   struct cleanup *old_chain;
   int found_main;
-  char s[5];
+  char *s;
   Tcl_Obj *auto_path_elem, *auto_path_name;
 
   /* If there is no DISPLAY environment variable, Tk_Init below will fail,
@@ -389,8 +391,10 @@ gdbtk_init (argv0)
 
   /* Set up some globals used by gdb to pass info to gdbtk
      for start up options and the like */
-  sprintf (s, "%d", inhibit_gdbinit);
+  xasprintf (&s, "%d", inhibit_gdbinit);
   Tcl_SetVar2 (gdbtk_interp, "GDBStartup", "inhibit_prefs", s, TCL_GLOBAL_ONLY);
+  free(s);
+   
   /* Note: Tcl_SetVar2() treats the value as read-only (making a
      copy).  Unfortunatly it does not mark the parameter as
      ``const''. */

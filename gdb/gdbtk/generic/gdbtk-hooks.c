@@ -292,10 +292,12 @@ gdbtk_warning (warning, args)
      const char *warning;
      va_list args;
 {
-  char buf[200];
+  char *buf;
 
-  vsprintf (buf, warning, args);
+  xvasprintf (&buf, warning, args);
   gdbtk_two_elem_cmd ("gdbtk_tcl_warning", buf);
+
+  free(buf);
 }
 
 
@@ -325,10 +327,11 @@ gdbtk_ignorable_warning (class, warning)
      const char *class;
      const char *warning;
 {
-  char buf[512];
-  sprintf (buf, "gdbtk_tcl_ignorable_warning {%s} {%s}", class, warning);
+  char *buf;
+  xasprintf (&buf, "gdbtk_tcl_ignorable_warning {%s} {%s}", class, warning);
   if (Tcl_Eval (gdbtk_interp, buf) != TCL_OK)
     report_error ();
+  free(buf); 
 }
 
 static void
@@ -469,11 +472,12 @@ static void
 gdbtk_readline_begin (char *format,...)
 {
   va_list args;
-  char buf[200];
+  char *buf;
 
   va_start (args, format);
-  vsprintf (buf, format, args);
+  xvasprintf (&buf, format, args);
   gdbtk_two_elem_cmd ("gdbtk_tcl_readline_begin", buf);
+  free(buf);
 }
 
 static char *
@@ -538,7 +542,7 @@ gdbtk_set_hook (struct cmd_list_element *cmdblk)
 {
   Tcl_DString cmd;
   char *p;
-  char buffer[30];
+  char *buffer = NULL;
 
   Tcl_DStringInit (&cmd);
   Tcl_DStringAppendElement (&cmd, "run_hooks");
@@ -550,7 +554,7 @@ gdbtk_set_hook (struct cmd_list_element *cmdblk)
   while (p && *p)
     {
       char *q = strchr (p, ' ');
-      char save;
+      char save = '\0';
       if (q)
 	{
 	  save = *q;
@@ -581,12 +585,12 @@ gdbtk_set_hook (struct cmd_list_element *cmdblk)
 
     case var_uinteger:
     case var_zinteger:
-      sprintf (buffer, "%u", *(unsigned int *) cmdblk->var);
+      xasprintf (&buffer, "%u", *(unsigned int *) cmdblk->var);
       Tcl_DStringAppendElement (&cmd, buffer);
       break;
 
     case var_integer:
-      sprintf (buffer, "%d", *(int *) cmdblk->var);
+      xasprintf (&buffer, "%d", *(int *) cmdblk->var);
       Tcl_DStringAppendElement (&cmd, buffer);
       break;
 
@@ -600,6 +604,11 @@ gdbtk_set_hook (struct cmd_list_element *cmdblk)
     report_error ();
 
   Tcl_DStringFree (&cmd);
+   
+  if (buffer != NULL)
+    {
+       free(buffer);
+    }
 }
 
 /* The next three functions use breakpoint_notify to allow the GUI 
@@ -640,7 +649,7 @@ breakpoint_notify (b, action)
      struct breakpoint *b;
      const char *action;
 {
-  char buf[256];
+  char *buf;
   int v;
   struct symtab_and_line sal;
   char *filename;
@@ -655,21 +664,24 @@ breakpoint_notify (b, action)
   if (filename == NULL)
     filename = "";
 
-  sprintf (buf, "gdbtk_tcl_breakpoint %s %d 0x%lx %d {%s} {%s} %d %d",
+  xasprintf (&buf, "gdbtk_tcl_breakpoint %s %d 0x%lx %d {%s} {%s} %d %d",
 	   action, b->number, (long) b->address, b->line_number, filename,
 	   bpdisp[b->disposition], b->enable, b->thread);
 
   if (Tcl_Eval (gdbtk_interp, buf) != TCL_OK)
     report_error ();
+  free(buf); 
 }
 
 int
 gdbtk_load_hash (const char *section, unsigned long num)
 {
-  char buf[128];
-  sprintf (buf, "Download::download_hash %s %ld", section, num);
+  char *buf;
+  xasprintf (&buf, "Download::download_hash %s %ld", section, num);
   if (Tcl_Eval (gdbtk_interp, buf) != TCL_OK)
     report_error ();
+  free(buf); 
+   
   return atoi (gdbtk_interp->result);
 }
 
@@ -721,11 +733,12 @@ gdbtk_query (query, args)
      const char *query;
      va_list args;
 {
-  char buf[200];
+  char *buf;
   long val;
 
-  vsprintf (buf, query, args);
+  xvasprintf (&buf, query, args);
   gdbtk_two_elem_cmd ("gdbtk_tcl_query", buf);
+  free(buf);
 
   val = atol (gdbtk_interp->result);
   return val;
@@ -769,7 +782,7 @@ tracepoint_notify (tp, action)
      struct tracepoint *tp;
      const char *action;
 {
-  char buf[256];
+  char *buf;
   int v;
   struct symtab_and_line sal;
   char *filename;
@@ -781,11 +794,12 @@ tracepoint_notify (tp, action)
   filename = symtab_to_filename (sal.symtab);
   if (filename == NULL)
     filename = "N/A";
-  sprintf (buf, "gdbtk_tcl_tracepoint %s %d 0x%lx %d {%s} %d", action, tp->number,
+  xasprintf (&buf, "gdbtk_tcl_tracepoint %s %d 0x%lx %d {%s} %d", action, tp->number,
 	   (long) tp->address, sal.line, filename, tp->pass_count);
 
   if (Tcl_Eval (gdbtk_interp, buf) != TCL_OK)
     report_error ();
+  free(buf); 
 }
 
 /*
@@ -886,7 +900,7 @@ gdbtk_error_begin ()
 static void
 gdbtk_annotate_signal ()
 {
-  char buf[128];
+  char *buf;
 
   /* Inform gui that the target has stopped. This is
      a necessary stop button evil. We don't want signal notification
@@ -894,10 +908,11 @@ gdbtk_annotate_signal ()
      timeout. */
   Tcl_Eval (gdbtk_interp, "gdbtk_stop_idle_callback");
 
-  sprintf (buf, "gdbtk_signal %s {%s}", target_signal_to_name (stop_signal),
+  xasprintf (&buf, "gdbtk_signal %s {%s}", target_signal_to_name (stop_signal),
 	   target_signal_to_string (stop_signal));
   if (Tcl_Eval (gdbtk_interp, buf) != TCL_OK)
     report_error ();
+  free(buf);  
 }
 
 static void

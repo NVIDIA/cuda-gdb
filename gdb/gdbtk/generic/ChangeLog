@@ -1,3 +1,24 @@
+2000-10-23  Fernando Nasser  <fnasser@redhat.com>
+
+	From 2000-10-19  Steven Johnson  <sbjohnson@ozemail.com.au>
+        Note: The original patch used asprintf/vasprintf.  I changed it to
+	use the new xasprintf/xvasprintf gdb functions.
+        * gdbtk.c (TclDebug, gdbtk_init): Replaced the vast majority of
+	sprintf/vsprintf calls with asprintf and vasprintf respectively.
+	Should prevent any possible buffer overruns possible with
+	fixed size sprintf buffers. Specifically fixes a problem with long
+	filenames and clearing breakpoints overflowing their buffers when
+	using sprintf, causing a segfault. Generically should also prevent
+	any other similar problems from occuring.
+        * gdbtk-cmds.c (sprintf_append_element_to_obj, get_pc_register,
+	gdb_get_tracepoint_info, gdb_load_disassembly, gdbtk_load_source,
+	gdbtk_load_asm, gdb_set_bp, gdb_set_bp_addr, gdb_get_breakpoint_info,
+	gdb_selected_frame, gdb_selected_block, gdb_get_blocks): Ditto.
+        * gdbtk-hooks.c (gdbtk_warning, gdbtk_ignorable_warning,
+	gdbtk_readline_begin, gdbtk_set_hook, breakpoint_notify,
+	gdbtk_query, tracepoint_notify, gdbtk_error_begin,
+	gdbtk_annotate_signal): Ditto.
+
 2000-10-23  Fernando Nasser  <fnasser@totem.to.cygnus.com>
 
 	* gdbtk-hooks.c (x_event): Only process events if the target is

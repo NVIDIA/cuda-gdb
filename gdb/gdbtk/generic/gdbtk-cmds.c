@@ -545,13 +545,14 @@ static void
 sprintf_append_element_to_obj (Tcl_Obj * objp, char *format,...)
 {
   va_list args;
-  char buf[1024];
+  char *buf;
 
   va_start (args, format);
 
-  vsprintf (buf, format, args);
+  xvasprintf (&buf, format, args);
 
   Tcl_ListObjAppendElement (NULL, objp, Tcl_NewStringObj (buf, -1));
+  free(buf);
 }
 
 /*
@@ -2008,10 +2009,11 @@ get_pc_register (clientData, interp, objc, objv)
      int objc;
      Tcl_Obj *CONST objv[];
 {
-  char buff[64];
+  char *buff;
 
-  sprintf (buff, "0x%llx", (long long) read_register (PC_REGNUM));
+  xasprintf (&buff, "0x%llx", (long long) read_register (PC_REGNUM));
   Tcl_SetStringObj (result_ptr->obj_ptr, buff, -1);
+  free(buff);
   return TCL_OK;
 }
 
@@ -2180,9 +2182,10 @@ gdb_get_tracepoint_info (clientData, interp, objc, objv)
 
   if (tp == NULL)
     {
-      char buff[64];
-      sprintf (buff, "Tracepoint #%d does not exist", tpnum);
+      char *buff;
+      xasprintf (&buff, "Tracepoint #%d does not exist", tpnum);
       Tcl_SetStringObj (result_ptr->obj_ptr, buff, -1);
+      free(buff);
       return TCL_ERROR;
     }
 
@@ -2202,7 +2205,7 @@ gdb_get_tracepoint_info (clientData, interp, objc, objv)
 			    Tcl_NewIntObj (sal.line));
   {
     char *tmp;
-    asprintf (&tmp, "0x%s", paddr_nz (tp->address));
+    xasprintf (&tmp, "0x%s", paddr_nz (tp->address));
     Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
 			      Tcl_NewStringObj (tmp, -1));
     free (tmp);
@@ -2597,14 +2600,16 @@ gdb_load_disassembly (clientData, interp, objc, objv)
      into the Tcl result. */
 
   if (ret_val == TCL_OK) {
-    char buffer[256];
+    char *buffer;
     Tcl_Obj *limits_obj[2];
 
-    sprintf (buffer, "0x%s", paddr_nz (low));
+    xasprintf (&buffer, "0x%s", paddr_nz (low));
     limits_obj[0] = Tcl_NewStringObj (buffer, -1);
+    free(buffer);
     
-    sprintf (buffer, "0x%s", paddr_nz (high));
+    xasprintf (&buffer, "0x%s", paddr_nz (high));
     limits_obj[1] = Tcl_NewStringObj (buffer, -1);
+    free(buffer);
 
     Tcl_DecrRefCount (result_ptr->obj_ptr);
     result_ptr->obj_ptr = Tcl_NewListObj (2, limits_obj);
@@ -2620,7 +2625,7 @@ gdbtk_load_source (ClientData clientData, struct symtab *symtab, int
 {
   struct disassembly_client_data *client_data =
     (struct disassembly_client_data *) clientData;
-  char buffer[18];
+  char *buffer;
   int index_len;
 
   index_len = Tcl_DStringLength (&client_data->src_to_line_prefix);
@@ -2695,11 +2700,12 @@ gdbtk_load_source (ClientData clientData, struct symtab *symtab, int
 	      /* FIXME: Convert to Tcl_SetVar2Ex when we move to 8.2.  This
 		 will allow us avoid converting widget_line_no into a string. */
 	      
-	      sprintf (buffer, "%d", client_data->widget_line_no);
+            xasprintf (&buffer, "%d", client_data->widget_line_no);
 	      
 	      Tcl_SetVar2 (client_data->interp, client_data->map_arr,
 			   Tcl_DStringValue (&client_data->src_to_line_prefix),
 			   buffer, 0);
+            free(buffer);
 	      
 	      Tcl_DStringSetLength (&client_data->src_to_line_prefix, index_len);
 	    }
@@ -2801,7 +2807,7 @@ gdbtk_load_asm (clientData, pc, di)
 
   if (*client_data->map_arr != '\0')
     {
-      char buffer[16];
+      char *buffer;
       
       /* Run the command, then add an entry to the map array in
 	 the caller's scope. */
@@ -2811,7 +2817,7 @@ gdbtk_load_asm (clientData, pc, di)
       /* FIXME: Convert to Tcl_SetVar2Ex when we move to 8.2.  This
 	 will allow us avoid converting widget_line_no into a string. */
       
-      sprintf (buffer, "%d", client_data->widget_line_no);
+      xasprintf (&buffer, "%d", client_data->widget_line_no);
       
       Tcl_SetVar2 (client_data->interp, client_data->map_arr,
 		   Tcl_DStringValue (&client_data->pc_to_line_prefix),
@@ -2828,6 +2834,7 @@ gdbtk_load_asm (clientData, pc, di)
       Tcl_DStringSetLength (&client_data->pc_to_line_prefix, pc_to_line_len);      
       Tcl_DStringSetLength (&client_data->line_to_pc_prefix, line_to_pc_len);      
       
+      free(buffer);
     }
   
   do_cleanups (old_chain);
@@ -3684,7 +3691,7 @@ gdb_set_bp (clientData, interp, objc, objv)
   struct symtab_and_line sal;
   int line, ret, thread = -1;
   struct breakpoint *b;
-  char buf[64], *typestr;
+  char *buf, *typestr;
   Tcl_DString cmd;
   enum bpdisp disp;
 
@@ -3744,27 +3751,31 @@ gdb_set_bp (clientData, interp, objc, objv)
   b->thread = thread;
 
   /* FIXME: this won't work for duplicate basenames! */
-  sprintf (buf, "%s:%d", basename (Tcl_GetStringFromObj (objv[1], NULL)),
+  xasprintf (&buf, "%s:%d", basename (Tcl_GetStringFromObj (objv[1], NULL)),
 	   line);
   b->addr_string = strsave (buf);
+  free(buf);
 
   /* now send notification command back to GUI */
 
   Tcl_DStringInit (&cmd);
 
   Tcl_DStringAppend (&cmd, "gdbtk_tcl_breakpoint create ", -1);
-  sprintf (buf, "%d", b->number);
+  xasprintf (&buf, "%d", b->number);
   Tcl_DStringAppendElement (&cmd, buf);
-  sprintf (buf, "0x%lx", (long) sal.pc);
+  free(buf);
+  xasprintf (&buf, "0x%lx", (long) sal.pc);
   Tcl_DStringAppendElement (&cmd, buf);
   Tcl_DStringAppendElement (&cmd, Tcl_GetStringFromObj (objv[2], NULL));
   Tcl_DStringAppendElement (&cmd, Tcl_GetStringFromObj (objv[1], NULL));
   Tcl_DStringAppendElement (&cmd, bpdisp[b->disposition]);
-  sprintf (buf, "%d", b->enable);
+  free(buf);
+  xasprintf (&buf, "%d", b->enable);
   Tcl_DStringAppendElement (&cmd, buf);
-  sprintf (buf, "%d", b->thread);
+  free(buf);
+  xasprintf (&buf, "%d", b->thread);
   Tcl_DStringAppendElement (&cmd, buf);
-
+  free(buf);
 
   ret = Tcl_Eval (interp, Tcl_DStringValue (&cmd));
   Tcl_DStringFree (&cmd);
@@ -3796,7 +3807,7 @@ gdb_set_bp_addr (clientData, interp, objc, objv)
   int line, ret, thread = -1;
   long addr;
   struct breakpoint *b;
-  char *filename, *typestr, buf[64];
+  char *filename, *typestr, *buf;
   Tcl_DString cmd;
   enum bpdisp disp;
 
@@ -3848,7 +3859,7 @@ gdb_set_bp_addr (clientData, interp, objc, objv)
   b->disposition = disp;
   b->thread = thread;
 
-  sprintf (buf, "*(0x%lx)", addr);
+  xasprintf (&buf, "*(0x%lx)", addr);
   b->addr_string = strsave (buf);
 
   /* now send notification command back to GUI */
@@ -3856,11 +3867,14 @@ gdb_set_bp_addr (clientData, interp, objc, objv)
   Tcl_DStringInit (&cmd);
 
   Tcl_DStringAppend (&cmd, "gdbtk_tcl_breakpoint create ", -1);
-  sprintf (buf, "%d", b->number);
+  free(buf);
+  xasprintf (&buf, "%d", b->number);
   Tcl_DStringAppendElement (&cmd, buf);
-  sprintf (buf, "0x%lx", addr);
+  free(buf);
+  xasprintf (&buf, "0x%lx", addr);
   Tcl_DStringAppendElement (&cmd, buf);
-  sprintf (buf, "%d", b->line_number);
+  free(buf);
+  xasprintf (&buf, "%d", b->line_number);
   Tcl_DStringAppendElement (&cmd, buf);
 
   filename = symtab_to_filename (sal.symtab);
@@ -3868,13 +3882,16 @@ gdb_set_bp_addr (clientData, interp, objc, objv)
     filename = "";
   Tcl_DStringAppendElement (&cmd, filename);
   Tcl_DStringAppendElement (&cmd, bpdisp[b->disposition]);
-  sprintf (buf, "%d", b->enable);
+  free(buf);
+  xasprintf (&buf, "%d", b->enable);
   Tcl_DStringAppendElement (&cmd, buf);
-  sprintf (buf, "%d", b->thread);
+  free(buf);
+  xasprintf (&buf, "%d", b->thread);
   Tcl_DStringAppendElement (&cmd, buf);
 
   ret = Tcl_Eval (interp, Tcl_DStringValue (&cmd));
   Tcl_DStringFree (&cmd);
+  free(buf);
   return ret;
 }
 
@@ -4013,9 +4030,10 @@ gdb_get_breakpoint_info (clientData, interp, objc, objv)
 
   if (!b || b->type != bp_breakpoint)
     {
-      char err_buf[64];
-      sprintf (err_buf, "Breakpoint #%d does not exist.", bpnum);
+      char *err_buf;
+      xasprintf (&err_buf, "Breakpoint #%d does not exist.", bpnum);
       Tcl_SetStringObj (result_ptr->obj_ptr, err_buf, -1);
+      free(err_buf);
       return TCL_ERROR;
     }
 
@@ -4308,15 +4326,16 @@ gdb_selected_frame (clientData, interp, objc, objv)
      int objc;
      Tcl_Obj *CONST objv[];
 {
-  char frame[32];
+  char *frame;
 
   if (selected_frame == NULL)
-    strcpy (frame, "");
+    xasprintf (&frame, "%s","");
   else
-    sprintf (frame, "0x%s", paddr_nz (FRAME_FP (selected_frame)));
+    xasprintf (&frame, "0x%s", paddr_nz (FRAME_FP (selected_frame)));
 
   Tcl_SetStringObj (result_ptr->obj_ptr, frame, -1);
 
+  free(frame);
   return TCL_OK;
 }
 
@@ -4338,20 +4357,20 @@ gdb_selected_block (clientData, interp, objc, objv)
      int objc;
      Tcl_Obj *CONST objv[];
 {
-  char start[32];
-  char end[32];
+  char *start = NULL;
+  char *end   = NULL;
 
   if (selected_frame == NULL)
     {
-      strcpy (start, "");
-      strcpy (end, "");
+      xasprintf (&start, "%s", "");
+      xasprintf (&end, "%s", "");
     }
   else
     {
       struct block *block;
       block = get_frame_block (selected_frame);
-      sprintf (start, "0x%s", paddr_nz (BLOCK_START (block)));
-      sprintf (end, "0x%s", paddr_nz (BLOCK_END (block)));
+      xasprintf (&start, "0x%s", paddr_nz (BLOCK_START (block)));
+      xasprintf (&end, "0x%s", paddr_nz (BLOCK_END (block)));
     }
 
   Tcl_SetListObj (result_ptr->obj_ptr, 0, NULL);
@@ -4360,6 +4379,8 @@ gdb_selected_block (clientData, interp, objc, objv)
   Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
 			    Tcl_NewStringObj (end, -1));
 
+  free(start);
+  free(end);
   return TCL_OK;
 }
 
@@ -4435,16 +4456,18 @@ gdb_get_blocks (clientData, interp, objc, objv)
 	  
 	  if (!junk && pc < BLOCK_END (block))
 	    {
-	      char addr[32];
+            char *addr;
 
 	      Tcl_Obj *elt = Tcl_NewListObj (0, NULL);
-	      sprintf (addr, "0x%s", paddr_nz (BLOCK_START (block)));
+            xasprintf (&addr, "0x%s", paddr_nz (BLOCK_START (block)));
 	      Tcl_ListObjAppendElement (interp, elt,
 					Tcl_NewStringObj (addr, -1));
-	      sprintf (addr, "0x%s", paddr_nz (BLOCK_END (block)));
+            free(addr);
+            xasprintf (&addr, "0x%s", paddr_nz (BLOCK_END (block)));
 	      Tcl_ListObjAppendElement (interp, elt,
 					Tcl_NewStringObj (addr, -1));
 	      Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr, elt);
+            free(addr);
 	    }
 
 	  if (BLOCK_FUNCTION (block))
