@@ -53,34 +53,37 @@ if {[info exists auto_path]} {
   }
 }
 
+
 # Require the packages we need.  Most are loaded already, but this will catch 
 # any odd errors... :
-package require Tcl 8.0
-package require Tk 8.0
-package require Itcl 3.0
-package require Itk 3.0
-package require Gdbtk 1.0
-package require combobox 1.0
+
+foreach p {{Tcl 8.0} {Tk 8.0} {Itcl 3.0} {Itk 3.0} {Gdbtk 1.0} {combobox 1.0} {debug 1.0}} {
+  if {[catch {package require [lindex $p 0] [lindex $p 1]} msg]} {
+    if {![info exists ::env(GDBTK_TEST_RUNNING)] || $::env(GDBTK_TEST_RUNNING) == 0} {
+      puts stderr "Error: $msg"
+      catch {tk_messageBox -title Error -message $msg -icon error -type ok}
+    }
+    exit -1
+  } else {
+    #puts "Loaded [lindex $p 0] $msg"
+  }
+}
 
 namespace import itcl::*
-
 namespace import debug::*
 
-# Setup iwidgets path, if needed
+# Finally, load Iwidgets
 if {[info exists IWIDGETS_LIBRARY]} {
   lappend auto_path $IWIDGETS_LIBRARY
 }
-
-if {[catch {package require Iwidgets 3.0} errMsg]} {
-  set msg "Could not find the Iwidgets libraries.\n\nGot nameofexec: [info nameofexecutable]\nError(s) were: \n$errMsg"
-
+if {[catch {package require Iwidgets 3.0} msg]} {
   if {![info exists ::env(GDBTK_TEST_RUNNING)] || $::env(GDBTK_TEST_RUNNING) == 0} {
-    puts stderr $msg
-  } else {
-    tk_messageBox -title Error -message $msg -icon error -type ok
+    puts stderr "Error: $msg"
+    catch {tk_messageBox -title Error -message $msg -icon error -type ok}
   }
-  exit
+  exit -1
 }
+
 
 # Environment variables controlling debugging:
 # GDBTK_TRACE
