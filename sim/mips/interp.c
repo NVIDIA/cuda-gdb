@@ -13,8 +13,8 @@
    THIS SOFTWARE INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
    MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
 
-   $Revision: 1.188 $
-   $Date: 1999/11/29 14:48:10 $             
+   $Revision: 1.189 $
+   $Date: 2000/02/09 02:37:56 $             
 
 NOTEs:
 
@@ -2078,6 +2078,9 @@ store_fpr (SIM_DESC sd,
 	fmt = fmt_uninterpreted;
       case fmt_single :
       case fmt_word :
+       if (STATE_VERBOSE_P(SD))
+         sim_io_eprintf (SD, "Warning: PC 0x%s: interp.c store_fpr DEADCODE\n",
+	   pr_addr(cia));
        FGR[fpr] = (((uword64)0xDEADC0DE << 32) | (value & 0xFFFFFFFF));
        FPR_STATE[fpr] = fmt;
        break;
@@ -3225,6 +3228,10 @@ decode_coproc (SIM_DESC sd,
 		/* 28 = TagLo              R4000   VR4100  VR4300 */
 		/* 29 = TagHi              R4000   VR4100  VR4300 */
 		/* 30 = ErrorEPC           R4000   VR4100  VR4300 */
+		if (STATE_VERBOSE_P(SD))
+		  sim_io_eprintf (SD, 
+		    "Warning: PC 0x%s:interp.c decode_coproc DEADC0DE\n",
+		      (unsigned)cia);
 		GPR[rt] = 0xDEADC0DE; /* CPR[0,rd] */
 		/* CPR[0,rd] = GPR[rt]; */
 	      default:
