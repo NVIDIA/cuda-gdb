@@ -386,7 +386,8 @@ gdbtk_init (argv0)
   gdb_stderr = gdbtk_fileopen ();
   gdb_stdlog = gdbtk_fileopen ();
   gdb_stdtarg = gdbtk_fileopen ();
-  
+  uiout = cli_out_new (gdb_stdout);
+
   /* First init tcl and tk. */
   Tcl_FindExecutable (argv0);
   gdbtk_interp = Tcl_CreateInterp ();

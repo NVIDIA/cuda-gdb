@@ -1,3 +1,7 @@
+2001-04-18  Martin M. Hunt  <hunt@redhat.com>
+	
+	* generic/gdbtk.c (gdbtk_init): Initialize uiout.
+
 2001-04-18  Tom Tromey  <tromey@redhat.com>
 
 	* library/interface.tcl (run_executable): Use
