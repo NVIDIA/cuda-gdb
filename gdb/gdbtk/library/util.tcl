@@ -244,6 +244,13 @@ proc find_iwidgets_library {} {
 
     set exec_name [info nameofexecutable]
     set curdir [pwd] 
+    if {[string compare [file type $exec_name] "link"] == 0} {
+      set exec_name [file readlink $exec_name]
+      if {[string compare [file pathtype $exec_name] "relative"] == 0} {
+	set exec_name [file join [pwd] $exec_name]
+      }
+    }
+    
     cd [file dirname $exec_name]
     set exec_name [pwd]
     cd $curdir
