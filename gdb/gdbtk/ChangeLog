@@ -1,3 +1,8 @@
+2002-03-06  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/bpwin.itb: Left-justify the labels in
+	the table.
+
 2002-03-06  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-cmds.c: Include "ctype.h" if available.

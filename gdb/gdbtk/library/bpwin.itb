@@ -238,9 +238,9 @@ body BpWin::bp_add {bp_event {tracepoint 0}} {
   }
 
   if {$tracepoints} {
-    label $twin.num$i -text "$number " -relief flat -anchor e -font global/fixed -bg $bg1
+    label $twin.num$i -text "$number " -relief flat -anchor w -font global/fixed -bg $bg1
   }
-  label $twin.addr$i -text "[$bp_event get address] " -relief flat -anchor e -font global/fixed -bg $bg1
+  label $twin.addr$i -text "[$bp_event get address] " -relief flat -anchor w -font global/fixed -bg $bg1
   if {[info exists _files(short,$file)]} {
     set file $_files(short,$file)
   } else {
@@ -249,13 +249,13 @@ body BpWin::bp_add {bp_event {tracepoint 0}} {
   }
   if {$show_threads} {
     if {$thread == "-1"} {set thread "ALL"}
-    label $twin.thread$i -text "$thread " -relief flat -anchor e -font global/fixed -bg $bg1
+    label $twin.thread$i -text "$thread " -relief flat -anchor w -font global/fixed -bg $bg1
   }
-  label $twin.file$i -text "$file " -relief flat -anchor e -font global/fixed -bg $bg1
-  label $twin.line$i -text "[$bp_event get line] " -relief flat -anchor e -font global/fixed -bg $bg1
-  label $twin.func$i -text "[$bp_event get function] " -relief flat -anchor e -font global/fixed -bg $bg1
+  label $twin.file$i -text "$file " -relief flat -anchor w -font global/fixed -bg $bg1 
+  label $twin.line$i -text "[$bp_event get line] " -relief flat -anchor w -font global/fixed -bg $bg1
+  label $twin.func$i -text "[$bp_event get function] " -relief flat -anchor w -font global/fixed -bg $bg1 
   if {$tracepoints} {
-    label $twin.pass$i -text "[$bp_event get pass_count] " -relief flat -anchor e -font global/fixed -bg $bg1
+    label $twin.pass$i -text "[$bp_event get pass_count] " -relief flat -anchor w -font global/fixed -bg $bg1
   }
 
   if {$mbar} {
