@@ -1,5 +1,11 @@
 2000-10-04  Fernando Nasser  <fnasser@totem.to.cygnus.com>
 
+	* download.itb (download_it): Fix previous changes for non-windows
+	hosts.
+	* srctextwin.itb (LoadFromCache): Ditto.
+
+2000-10-04  Fernando Nasser  <fnasser@totem.to.cygnus.com>
+
 	* download.itb (download_it): Convert filename to native before
 	passing it to a Tcl command.
 	* srctextwin.itb (_mtime_changed): Ditto.

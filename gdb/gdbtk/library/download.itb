@@ -188,6 +188,8 @@ body Download::download_it { } {
   
   if {[string compare $tcl_platform(platform) "windows"] == 0} {
     set f [ide_cygwin_path to_win32 $gdb_exe_name]
+  } else {
+    set f $gdb_exe_name
   }
   if {! [file exists $f]} {
     tk_messageBox -icon error -title GDB -type ok -modal task\

@@ -2570,6 +2570,8 @@ body SrcTextWin::LoadFromCache {w name asm lib} {
     if {$loadingSource} {
       if {[string compare $tcl_platform(platform) "windows"] == 0} {
         set f [ide_cygwin_path to_win32 $name]
+      } else {
+        set f $name
       }
       if {[catch {file mtime $f} file_time]} {
 	debug "Could not stat file \"$f\" - \"$file_time\""
