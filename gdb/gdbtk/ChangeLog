@@ -1,3 +1,22 @@
+2001-08-03  Keith Seitz  <keiths@redhat.com>
+
+	* library/srcbar.itcl (_post): New method.
+	(_update_file_menu): New method.
+	(create_file_menu): Move the guts to _update_file_menu.
+	Add a post command to the menu.
+	* library/interface.tcl (gdbtk_tcl_file_changed): Catch the
+	call to run_hooks.
+	(gdbtk_tcl_exec_file_display): Save the new session, too.
+	(set_exe_name): Don't bother saving the session here.
+	(_close_file): Save the session here, too.
+	(gdbtk_clear_file): Catch the call to run_hooks, too.
+	* library/gdbmenubar.itcl (menubar_new_menu): Allow caller
+	to specify optional arguments to be passed to Tk when
+	creating the menu.
+	Tk's "menu add" command returns an empty string. Save the
+	menu's index in the parent instead. This is what all
+	the menu subcommands want.
+
 2001-08-02  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-bp.c (gdb_get_breakpoint_info): Update

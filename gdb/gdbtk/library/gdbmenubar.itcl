@@ -137,13 +137,16 @@ class GDBMenuBar {
   #  underline - the index of the underlined character for this menu item.
   #
   # ------------------------------------------------------------------
-  private method menubar_new_menu {name label underline} {
-    set current_menu $Menu.$name
-    set menu_list($name) [$Menu add cascade -menu  $current_menu \
-			     -label $label -underline $underline]
-    menu $current_menu -tearoff 0
-    set menu_list($name,label) $label
+  private method menubar_new_menu {name label underline args} {
 
+    set current_menu $Menu.$name
+    $Menu add cascade -menu  $current_menu -label $label \
+      -underline $underline
+    eval menu $current_menu -tearoff 0 $args
+
+    # Save the index number of this menu. It is always the last one.
+    set menu_list($name) [$Menu index end]
+    set menu_list($name,label) $label
     set item_number -1
   }
 

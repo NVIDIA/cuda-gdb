@@ -84,6 +84,24 @@ class SrcBar {
 
     #destroy $this
   }
+
+  # ------------------------------------------------------------------
+  #  NAME:         private method SrcBar::_post
+  #  DESCRIPTION:  Post the given menu
+  #
+  #  ARGUMENTS:
+  #                what  - which menu to post
+  #  RETURNS:      Nothing
+  # ------------------------------------------------------------------
+  private method _post {what} {
+
+    switch $what {
+      file {
+	_update_file_menu
+      }
+    }
+  }
+
 
   ####################################################################
   # The next set of functions create the common menu groupings that
@@ -122,13 +140,14 @@ class SrcBar {
   }
 
   # ------------------------------------------------------------------
-  #  METHOD:  create_file_menu - Creates the standard file menu. 
+  #  PRIVATE METHOD:  _update_file_menu - update the file menu
+  #                    Used really only to update the session list.
   # ------------------------------------------------------------------
-  
-  private method create_file_menu {} {
-    global enable_external_editor tcl_platform
+  private method _update_file_menu {} {
+    global enable_external_editor tcl_platform gdb_exe_name
 
-    $Menu add menubutton file "File" 0
+    # Clear the File menu
+    $Menu clear file
 
     if {[info exists enable_external_editor] && $enable_external_editor} {
       $Menu add command None "Edit Source" \
@@ -138,8 +157,13 @@ class SrcBar {
     $Menu add command Other "Open..."  \
       "_open_file" -underline 0 -accelerator "Ctrl+O"
 
+    if {$gdb_exe_name == ""} {
+      set state disabled
+    } else {
+      set state normal
+    }
     $Menu add command Other "Close" \
-      "_close_file" -underline 0 -accelerator "Ctrl+W"
+      "_close_file" -underline 0 -accelerator "Ctrl+W" -state $state
 
     $Menu add command Other "Source..." \
       "source_file" -underline 0
@@ -179,6 +203,16 @@ class SrcBar {
     $Menu add separator
 
     $Menu add command None "Exit" gdbtk_quit -underline 1
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  create_file_menu - Creates the standard file menu. 
+  # ------------------------------------------------------------------
+  
+  private method create_file_menu {} {
+
+    $Menu add menubutton file "File" 0 -postcommand [code $this _post file]
+    _update_file_menu
   }
 
   # ------------------------------------------------------------------

@@ -712,7 +712,7 @@ proc gdbtk_tcl_file_changed {filename} {
 
   if {$filename == ""} {
     gdb_clear_file
-    run_hooks gdb_clear_file_hook
+    catch {run_hooks gdb_clear_file_hook}
     set ::gdb_exe_name ""
     set ::gdb_loaded 0
     set ::gdb_running 0
@@ -756,6 +756,9 @@ proc gdbtk_tcl_exec_file_display {filename} {
   }
   set_exe_name $filename
   set gdb_exe_changed 0
+
+  # Add this new session to the session list
+  session_save
 
   SrcWin::point_to_main
 }
@@ -815,10 +818,6 @@ proc gdbtk_locate_main {} {
 proc set_exe_name {exe} {
   global gdb_exe_name gdb_exe_changed
   #debug "exe=$exe  gdb_exe_name=$gdb_exe_name"
-
-  if {$gdb_exe_name != ""} then {
-    session_save
-  }
 
   set gdb_exe_name $exe
   set gdb_exe_changed 1    
@@ -934,7 +933,7 @@ proc _open_file {{file ""}} {
     gdbtk_idle
     return 0
   }
-  
+
   return 1
 }
 
@@ -958,6 +957,7 @@ proc _close_file {} {
   }
 
   if {$okay} {
+    session_save
     gdb_clear_file
     gdbtk_tcl_file_changed ""
 
@@ -1669,7 +1669,7 @@ proc gdbtk_clear_file {} {
 
   debug
   # Give widgets a chance to clean up
-  run_hooks gdb_clear_file_hook
+  catch {run_hooks gdb_clear_file_hook}
 
   # Save the target name in case the user has already selected a
   # target. No need to force the user to select it again.
