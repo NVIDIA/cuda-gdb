@@ -1498,9 +1498,8 @@ gdb_listfuncs (clientData, interp, objc, objv)
       /* Skip the sort if this block is always sorted.  */
       if (!BLOCK_SHOULD_SORT (b))
 	sort_block_syms (b);
-      for (j = 0; j < BLOCK_NSYMS (b); j++)
+      ALL_BLOCK_SYMBOLS (b, j, sym)
 	{
-	  sym = BLOCK_SYM (b, j);
 	  if (SYMBOL_CLASS (sym) == LOC_BLOCK)
 	    {
 

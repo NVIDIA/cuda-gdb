@@ -19,6 +19,7 @@
    Boston, MA 02111-1307, USA.  */
 
 #include "defs.h"
+#include "symtab.h"
 #include "frame.h"
 #include "value.h"
 #include "target.h"
@@ -93,7 +94,7 @@ gdb_block_vars (clientData, interp, objc, objv)
      Tcl_Obj *CONST objv[];
 {
   struct block *block;
-  int nsyms, i;
+  int i;
   struct symbol *sym;
   CORE_ADDR start, end;
 
@@ -117,10 +118,8 @@ gdb_block_vars (clientData, interp, objc, objv)
     {
       if (BLOCK_START (block) == start && BLOCK_END (block) == end)
 	{
-	  nsyms = BLOCK_NSYMS (block);
-	  for (i = 0; i < nsyms; i++)
+	  ALL_BLOCK_SYMBOLS (block, i, sym)
 	    {
-	      sym = BLOCK_SYM (block, i);
 	      switch (SYMBOL_CLASS (sym))
 		{
 		case LOC_ARG:		  /* argument              */
@@ -172,7 +171,7 @@ gdb_get_blocks (clientData, interp, objc, objv)
      Tcl_Obj *CONST objv[];
 {
   struct block *block;
-  int nsyms, i, junk;
+  int i, junk;
   struct symbol *sym;
   CORE_ADDR pc;
 
@@ -184,11 +183,9 @@ gdb_get_blocks (clientData, interp, objc, objv)
       pc = get_frame_pc (selected_frame);
       while (block != 0)
 	{
-	  nsyms = BLOCK_NSYMS (block);
 	  junk = 0;
-	  for (i = 0; i < nsyms; i++)
+	  ALL_BLOCK_SYMBOLS (block, i, sym)
 	    {
-	      sym = BLOCK_SYM (block, i);
 	      switch (SYMBOL_CLASS (sym))
 		{
 		default:
@@ -301,7 +298,7 @@ gdb_get_vars_command (clientData, interp, objc, objv)
   struct symbol *sym;
   struct block *block;
   char **canonical, *args;
-  int i, nsyms, arguments;
+  int i, arguments;
 
   if (objc > 2)
     {
@@ -344,10 +341,8 @@ gdb_get_vars_command (clientData, interp, objc, objv)
 
   while (block != 0)
     {
-      nsyms = BLOCK_NSYMS (block);
-      for (i = 0; i < nsyms; i++)
+      ALL_BLOCK_SYMBOLS (block, i, sym)
 	{
-	  sym = BLOCK_SYM (block, i);
 	  switch (SYMBOL_CLASS (sym))
 	    {
 	    default:

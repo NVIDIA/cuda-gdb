@@ -1,3 +1,10 @@
+2001-10-12  Daniel Jacobowitz  <drow@mvista.com>
+
+	* generic/gdbtk-cmds.c (gdb_listfuncs): Use ALL_BLOCK_SYMBOLS.
+	* generic/gdbtk-stack.c (gdb_block_vars): Likewise.
+	(gdb_get_blocks): Likewise.
+	(gdb_get_vars_command): Likewise.
+
 2001-10-10  Ian Roxborough  <irox@redhat.com>
 
 	* library/gdbtoolbar.itcl (GDBToolBar::add): Add option
