@@ -1,5 +1,9 @@
 2003-03-06  Martin M. Hunt  <hunt@redhat.com>
 
+	* generic/gdbtk-bp.c (gdb_get_tracepoint_info): Return CORE_ADDR.
+
+2003-03-06  Martin M. Hunt  <hunt@redhat.com>
+	
 	* generic/gdbtk-cmds.c (gdb_disassemble): Deleted.
 	(sprintf_append_element_to_obj): Deleted.
 

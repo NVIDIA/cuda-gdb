@@ -835,13 +835,8 @@ gdb_get_tracepoint_info (ClientData clientData, Tcl_Interp *interp,
 
   Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
 			    Tcl_NewIntObj (sal.line));
-  {
-    char *tmp;
-    xasprintf (&tmp, "0x%s", paddr_nz (tp->address));
-    Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-			      Tcl_NewStringObj (tmp, -1));
-    free (tmp);
-  }
+  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
+			    Tcl_NewStringObj (core_addr_to_string (tp->address), -1));
   Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
 			    Tcl_NewIntObj (tp->enabled_p));
   Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
