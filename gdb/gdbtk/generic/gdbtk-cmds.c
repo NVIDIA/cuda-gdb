@@ -53,6 +53,10 @@
 #include "dis-asm.h"
 #include "gdbcmd.h"
 
+#ifdef HAVE_CTYPE_H
+#include <ctype.h>		/* for isprint() */
+#endif
+
 /* Various globals we reference.  */
 extern char *source_path;
 
@@ -136,7 +140,7 @@ static int gdb_get_function_command (ClientData, Tcl_Interp *, int,
 				     Tcl_Obj * CONST objv[]);
 static int gdb_get_line_command (ClientData, Tcl_Interp *, int,
 				 Tcl_Obj * CONST objv[]);
-static int gdb_get_mem (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+static int gdb_update_mem (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_set_mem (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_immediate_command (ClientData, Tcl_Interp *, int,
 				  Tcl_Obj * CONST[]);
@@ -221,7 +225,7 @@ Gdbtk_Init (Tcl_Interp *interp)
 			NULL);
   Tcl_CreateObjCommand (interp, "gdb_entry_point", gdbtk_call_wrapper,
 			gdb_entry_point, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_get_mem", gdbtk_call_wrapper, gdb_get_mem,
+  Tcl_CreateObjCommand (interp, "gdb_update_mem", gdbtk_call_wrapper, gdb_update_mem,
 			NULL);
   Tcl_CreateObjCommand (interp, "gdb_set_mem", gdbtk_call_wrapper, gdb_set_mem,
 			NULL);
@@ -612,6 +616,8 @@ gdb_eval (ClientData clientData, Tcl_Interp *interp,
   struct cleanup *old_chain = NULL;
   int format = 0;
   value_ptr val;
+  struct ui_file *stb;
+  long dummy;
 
   if (objc != 2 && objc != 3)
     {
@@ -626,15 +632,13 @@ gdb_eval (ClientData clientData, Tcl_Interp *interp,
   old_chain = make_cleanup (free_current_contents, &expr);
   val = evaluate_expression (expr);
 
-  /*
-   * Print the result of the expression evaluation.  This will go to
-   * eventually go to gdbtk_fputs, and from there be collected into
-   * the Tcl result.
-   */
-
+  /* "Print" the result of the expression evaluation. */
+  stb = mem_fileopen ();
   val_print (VALUE_TYPE (val), VALUE_CONTENTS (val),
 	     VALUE_EMBEDDED_OFFSET (val), VALUE_ADDRESS (val),
-	     gdb_stdout, format, 0, 0, 0);
+	     stb, format, 0, 0, 0);
+  Tcl_SetObjResult (interp, Tcl_NewStringObj (ui_file_xstrdup (stb, &dummy), -1));
+  result_ptr->flags |= GDBTK_IN_TCL_RESULT;
 
   do_cleanups (old_chain);
   return TCL_OK;
@@ -2467,75 +2471,97 @@ gdb_set_mem (ClientData clientData, Tcl_Interp *interp,
   return TCL_OK;
 }
 
-/* This implements the Tcl command 'gdb_get_mem', which 
- * dumps a block of memory 
- * Arguments:
- *   gdb_get_mem addr form size nbytes bpr aschar
+/* This implements the Tcl command 'gdb_update_mem', which 
+ * updates a block of memory in the memory window
  *
- *   addr: address of data to dump
- *   form: a char indicating format
- *   size: size of each element; 1,2,4, or 8 bytes
- *   nbytes: the number of bytes to read 
- *   bpr: bytes per row
- *   aschar: if present, an ASCII dump of the row is included.  ASCHAR
- *   used for unprintable characters.
+ * Arguments:
+ *   gdb_update_mem data addr form size nbytes bpr aschar
+ *
+ *   1 data: variable that holds table's data
+ *   2 addr: address of data to dump
+ *   3 mform: a char indicating format
+ *   4 size: size of each element; 1,2,4, or 8 bytes
+ *   5 nbytes: the number of bytes to read 
+ *   6 bpr: bytes per row
+ *   7 aschar: if present, an ASCII dump of the row is included.  ASCHAR
+ *              used for unprintable characters.
  * 
  * Return:
- * a list of elements followed by an optional ASCII dump */
+ * a list of three integers: {border_col_width data_col_width ascii_col_width}
+ * which can be used to set the table's column widths. */
 
 static int
-gdb_get_mem (ClientData clientData, Tcl_Interp *interp,
-	     int objc, Tcl_Obj *CONST objv[])
+gdb_update_mem (ClientData clientData, Tcl_Interp *interp,
+		int objc, Tcl_Obj *CONST objv[])
 {
-  int size, asize, i, j, bc;
+  long dummy;
+  char index[20];
   CORE_ADDR addr;
   int nbytes, rnum, bpr;
-  char format, buff[128], aschar, *mbuf, *mptr, *cptr, *bptr;
+  int size, asize, i, j, bc;
+  int max_ascii_len, max_val_len, max_label_len;
+  char format, aschar;
+  char *data, *tmp;
+  char buff[128], *mbuf, *mptr, *cptr, *bptr;
+  struct ui_file *stb;
   struct type *val_type;
+  struct cleanup *old_chain;
+  Tcl_Obj *result;
 
-  if (objc < 6 || objc > 7)
+  if (objc < 7 || objc > 8)
     {
-      Tcl_WrongNumArgs (interp, 1, objv, "addr format size bytes bytes_per_row ?ascii_char?");
+      Tcl_WrongNumArgs (interp, 1, objv, "data addr format size bytes bytes_per_row ?ascii_char?");
       return TCL_ERROR;
     }
 
-  if (Tcl_GetIntFromObj (interp, objv[3], &size) != TCL_OK)
+  /* Get table data and link to a local variable */
+  data = Tcl_GetStringFromObj (objv[1], NULL);
+  if (data == NULL)
     {
-      result_ptr->flags |= GDBTK_IN_TCL_RESULT;
+      gdbtk_set_result (interp, "could not get data variable");
       return TCL_ERROR;
     }
+
+  if (Tcl_UpVar (interp, "1", data, "data", 0) != TCL_OK)
+    {
+      gdbtk_set_result (interp, "could not link table data");
+      return TCL_ERROR;
+    }
+
+  if (Tcl_GetIntFromObj (interp, objv[4], &size) != TCL_OK)
+    return TCL_ERROR;
   else if (size <= 0)
     {
       gdbtk_set_result (interp, "Invalid size, must be > 0");
       return TCL_ERROR;
     }
 
-  if (Tcl_GetIntFromObj (interp, objv[4], &nbytes) != TCL_OK)
-    {
-      result_ptr->flags |= GDBTK_IN_TCL_RESULT;
-      return TCL_ERROR;
-    }
+  if (Tcl_GetIntFromObj (interp, objv[5], &nbytes) != TCL_OK)
+    return TCL_ERROR;
   else if (nbytes <= 0)
     {
       gdbtk_set_result (interp, "Invalid number of bytes, must be > 0");
       return TCL_ERROR;
     }
 
-  if (Tcl_GetIntFromObj (interp, objv[5], &bpr) != TCL_OK)
-    {
-      result_ptr->flags |= GDBTK_IN_TCL_RESULT;
-      return TCL_ERROR;
-    }
+  if (Tcl_GetIntFromObj (interp, objv[6], &bpr) != TCL_OK)
+    return TCL_ERROR;
   else if (bpr <= 0)
     {
       gdbtk_set_result (interp, "Invalid bytes per row, must be > 0");
       return TCL_ERROR;
     }
 
-  addr = string_to_core_addr (Tcl_GetStringFromObj (objv[1], NULL));
+  tmp = Tcl_GetStringFromObj (objv[2], NULL);
+  if (tmp == NULL)
+    {
+      gdbtk_set_result (interp, "could not get address");
+      return TCL_ERROR;
+    }
+  addr = string_to_core_addr (tmp);
 
-  format = *(Tcl_GetStringFromObj (objv[2], NULL));
-  mbuf = (char *) malloc (nbytes + 32);
+  format = *(Tcl_GetStringFromObj (objv[3], NULL));
+  mbuf = (char *) xmalloc (nbytes + 32);
   if (!mbuf)
     {
       gdbtk_set_result (interp, "Out of memory.");
@@ -2556,8 +2582,8 @@ gdb_get_mem (ClientData clientData, Tcl_Interp *interp,
       rnum += num;
     }
 
-  if (objc == 7)
-    aschar = *(Tcl_GetStringFromObj (objv[6], NULL));
+  if (objc == 8)
+    aschar = *(Tcl_GetStringFromObj (objv[7], NULL));
   else
     aschar = 0;
 
@@ -2587,35 +2613,80 @@ gdb_get_mem (ClientData clientData, Tcl_Interp *interp,
   bc = 0;			/* count of bytes in a row */
   bptr = &buff[0];		/* pointer for ascii dump */
 
-  /* Build up the result as a list... */
+  /* Open a memory ui_file that we can use to print memory values */
+  stb = mem_fileopen ();
+  old_chain = make_cleanup_ui_file_delete (stb);
   
-  result_ptr->flags |= GDBTK_MAKES_LIST;	
+  /* A little macro to do column indices. As a rule, given the current
+     byte, i, of a total nbytes and the bytes per row, bpr, and the size of
+     each cell, size, the row and column will be given by:
 
+     row = i/bpr
+     col = (i%bpr)/size
+  */
+#define INDEX(row,col) sprintf (index, "%d,%d",(row),(col))
+
+  /* Fill in address labels */
+  max_label_len = 0;
+  for (i = 0; i < nbytes; i += bpr)
+    {
+      char s[130];
+      sprintf (s, "0x%s", core_addr_to_string (addr + i));
+      INDEX ((int) i/bpr, -1);
+      Tcl_SetVar2 (interp, "data", index, s, 0);
+
+      /* The tcl code in MemWin::update_addr used to track the size
+	 of each cell. I don't see how these could change for any given
+	 update, so we don't loop over all cells. We just note the first
+	 size. */
+      if (max_label_len == 0)
+	max_label_len = strlen (s);
+    }
+
+  /* Fill in memory */
+  max_val_len   = 0;		/* Ditto the above comments about max_label_len */
+  max_ascii_len = 0;
   for (i = 0; i < nbytes; i += size)
     {
+      INDEX ((int) i/bpr, (int) (i%bpr)/size);
+
       if (i >= rnum)
 	{
-	  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-				    Tcl_NewStringObj ("N/A", 3));
+	  /* Read fewer bytes than requested */
+	  tmp = "N/A";
+
 	  if (aschar)
-	    for (j = 0; j < size; j++)
-	      *bptr++ = 'X';
+	    {
+	      for (j = 0; j < size; j++)
+		*bptr++ = 'X';
+	    }
 	}
       else
 	{
-	  print_scalar_formatted (mptr, val_type, format, asize, gdb_stdout);
+	  /* print memory to our uiout file and set the table's variable */
+	  ui_file_rewind (stb);
+	  print_scalar_formatted (mptr, val_type, format, asize, stb);
+	  tmp = ui_file_xstrdup (stb, &dummy);
+
+	  /* See comments above on max_*_len */
+	  if (max_val_len == 0)
+	    max_val_len = strlen (tmp);
 
 	  if (aschar)
 	    {
 	      for (j = 0; j < size; j++)
 		{
-		  *bptr = *cptr++;
-		  if (*bptr < 32 || *bptr > 126)
-		    *bptr = aschar;
-		  bptr++;
+		  if (isprint (*cptr))
+		    *bptr++ = *cptr++;
+		  else
+		    {
+		      *bptr++ = aschar;
+		      cptr++;;
+		    }
 		}
 	    }
 	}
+      Tcl_SetVar2 (interp, "data", index, tmp, 0);
 
       mptr += size;
       bc += size;
@@ -2623,17 +2694,30 @@ gdb_get_mem (ClientData clientData, Tcl_Interp *interp,
       if (aschar && (bc >= bpr))
 	{
 	  /* end of row. Add it to the result and reset variables */
-	  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-				    Tcl_NewStringObj (buff, bc));
+	  *bptr = '\000';
+	  INDEX (i/bpr, bpr/size);
+	  Tcl_SetVar2 (interp, "data", index, buff, 0);
+
+	  /* See comments above on max_*_len */
+	  if (max_ascii_len == 0)
+	    max_ascii_len = strlen (buff);
+
 	  bc = 0;
 	  bptr = &buff[0];
 	}
     }
 
-  result_ptr->flags &= ~GDBTK_MAKES_LIST;
+  /* return max_*_len so that column widths can be set */
+  result = Tcl_NewListObj (0, NULL);
+  Tcl_ListObjAppendElement (interp, result, Tcl_NewIntObj (max_label_len + 1));
+  Tcl_ListObjAppendElement (interp, result, Tcl_NewIntObj (max_val_len + 1));
+  Tcl_ListObjAppendElement (interp, result, Tcl_NewIntObj (max_ascii_len + 1));
+  result_ptr->flags |= GDBTK_IN_TCL_RESULT;
 
-  free (mbuf);
+  do_cleanups (old_chain);
+  xfree (mbuf);
   return TCL_OK;
+#undef INDEX
 }
 
 

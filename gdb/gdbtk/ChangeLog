@@ -1,3 +1,24 @@
+2002-03-06  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-cmds.c: Include "ctype.h" if available.
+        (gdb_get_mem): Renamed to gdb_update_mem.
+        (gdb_update_mem): Take array as first tcl argument. This
+        array will hold the data for the table, which is now stuffed
+        in C instead of tcl.
+        (gdb_eval): Use our own ui-file instead of gdb_stdout.
+	* library/memwin.ith (_update_address): New method.
+	(update_address): Address expression is no longer optional.
+	* library/memwin.itb (build_win): Use _update_address instead of
+	update_address.
+	(toggle_enabled): Ditto.
+	(newsize): Use _update_address instead of update_addr.
+	(update_address_cb): Use _update_address instead of update_address.
+	(do_popup): Likewise.
+	(goto): Likewise.
+	(incr_addr): Use _update_address instead of update_addr.
+	(edit): Use gdb_update_mem instead of gdb_get_mem.
+	(update_addr): use gdb_update_mem to do all the window updating.
+
 2002-03-06  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/srcwin.itb: Don't try to set balloon help

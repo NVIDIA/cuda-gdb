@@ -79,7 +79,7 @@ body MemWin::build_win {} {
     $m add check -label " Auto Update" -variable _mem($this,enabled) \
       -underline 1 -command "after idle $this toggle_enabled"
     $m add command -label " Update Now" -underline 1 \
-      -command "$this update_address" -accelerator {Ctrl+U}
+      -command [code $this _update_address 1] -accelerator {Ctrl+U}
     $m add separator
     $m add command -label " Preferences..." -underline 1 \
       -command "$this create_prefs"
@@ -141,7 +141,7 @@ body MemWin::build_win {} {
   bind $itk_interior.t <<Paste>> [format {after idle %s paste %s %s} $this %x %y]
 
   menu $itk_interior.t.menu -tearoff 0
-  bind_plain_key $top Control-u "$this update_address"
+  bind_plain_key $top Control-u [code $this _update_address 1]
 
   # bind resize events
   bind $itk_interior <Configure> "$this newsize %h"
@@ -164,7 +164,7 @@ body MemWin::build_win {} {
     "Scroll Down (Increment Address)"
 
   if {!$mbar} {
-    button $itk_interior.f.upd -command "$this update_address" \
+    button $itk_interior.f.upd -command [code $this _update_address 1] \
       -image [image create photo -file [::file join $gdb_ImageDir check.gif]]
     balloon register $itk_interior.f.upd "Update Now"
     checkbutton $itk_interior.cb -variable _mem($this,enabled) -command "$this toggle_enabled"
@@ -188,7 +188,7 @@ body MemWin::build_win {} {
 
   # fill initial display
   if {$nb} {
-    update_address
+    _update_address 0
   }
 
   if {!$mbar} {
@@ -298,18 +298,7 @@ body MemWin::edit { cell } {
     set addr $start_addr
     set nextval 0
     # now read back the data and update the widget
-    catch {gdb_get_mem $addr $format $size $nb $bytes_per_row $ascii_char} vals
-    for {set n 0} {$n < $nb} {incr n $bytes_per_row} {
-      set ${this}_memval($row,-1) [format "0x%x" $addr]
-      for { set col 0 } { $col < [expr {$bytes_per_row / $size}] } { incr col } {
-	set ${this}_memval($row,$col) [lindex $vals $nextval]
-	incr nextval
-      }
-      set ${this}_memval($row,$col) [lindex $vals $nextval]
-      incr nextval
-      set addr [gdb_incr_addr $addr $bytes_per_row]
-      incr row
-    }
+    catch {gdb_update_mem ${this}_memval $addr $format $size $nb $bytes_per_row $ascii_char} vals
     return
   }
 
@@ -340,7 +329,7 @@ body MemWin::edit { cell } {
   # line out.  It will only matter if the write did not succeed, and this was
   # not a very good way to tell the user about that anyway...
   #
-  # catch {gdb_get_mem $addr $format $size $size $size ""} val
+  # catch {gdb_update_mem $addr $format $size $size $size ""} val
   # delete whitespace in response
   set val [string trimright $val]
   set val [string trimleft $val]
@@ -356,7 +345,7 @@ body MemWin::toggle_enabled {} {
 
   if {$Running} { return }
   if {$_mem($this,enabled)} {
-    update_address
+    _update_address 1
     set bg white
     set state normal
   } else {
@@ -372,7 +361,7 @@ body MemWin::toggle_enabled {} {
 body MemWin::update {event} {
   global _mem
   if {$_mem($this,enabled)} {
-    update_address
+    _update_address 0
   }
 }
 
@@ -451,7 +440,17 @@ body MemWin::newsize {height} {
     set theight [winfo height $itk_interior.t]
     set Numrows [expr {$theight / $rheight}]
     $itk_interior.t configure -rows $Numrows
-    update_addr
+    _update_address 1
+  }
+}
+
+body MemWin::_update_address {make_busy} {
+  if {$make_busy} {
+    gdbtk_busy
+  }
+  update_address [string trimleft [$itk_interior.f.cntl get]]
+  if {$make_busy} {
+    gdbtk_idle
   }
 }
 
@@ -460,19 +459,13 @@ body MemWin::newsize {height} {
 # ------------------------------------------------------------------
 body MemWin::update_address_cb {} {
   set new_entry 1
-  update_address [$itk_interior.f.cntl get]
+  _update_address 1
 }
 
 # ------------------------------------------------------------------
 #  METHOD: update_address - update address and data displayed
 # ------------------------------------------------------------------
-body MemWin::update_address { {ae ""} } {
-  debug $ae
-  if {$ae == ""} {
-    set addr_exp [string trimleft [$itk_interior.f.cntl get]]
-  } else {
-    set addr_exp $ae
-  }
+body MemWin::update_address {addr_exp} {
 
   set bad_expr 0
   set saved_addr $current_addr
@@ -508,8 +501,8 @@ body MemWin::update_address { {ae ""} } {
     BadExpr "Can't Evaluate \"$addr_exp\""
     return
   }
-  
-  # Check for spaces
+
+  # Check for spaces - this can happen with gdb_eval and $pc, for example.
   set index [string first \  $current_addr]
   if {$index != -1} {
     incr index -1
@@ -557,9 +550,9 @@ body MemWin::incr_addr {num} {
     return
   }
   $itk_interior.t config -background white -state normal
-  update_addr
   $itk_interior.f.cntl clear
   $itk_interior.f.cntl insert 0 [format "0x%x" $current_addr]
+  _update_address 1
 }
 
 
@@ -570,71 +563,36 @@ body MemWin::incr_addr {num} {
 body MemWin::update_addr {} {
   global _mem ${this}_memval
 
-  if {$bad_expr} {
-    return
-  }
-
-  gdbtk_busy
-  set addr $current_addr
-  set row 0
+    set row 0
 
   if {$numbytes == 0} {
     set nb [expr {$Numrows * $bytes_per_row}]
   } else {
     set nb $numbytes
   }
-  set nextval 0
-  set num [expr {$bytes_per_row / $size}]
   if {$ascii} {
-    set asc $ascii_char
+    set retVal [catch {gdb_update_mem ${this}_memval $current_addr $format $size $nb $bytes_per_row $ascii_char} vals]
+
   } else {
-    set asc ""
+    set retVal [catch {gdb_update_mem ${this}_memval $current_addr $format $size $nb $bytes_per_row} vals]
   }
 
-  #debug "get_mem $addr $format $size $nb $bytes_per_row $asc"
-  set retVal [catch {gdb_get_mem $addr $format \
-		       $size $nb $bytes_per_row $asc} vals]
-  #debug "retVal=$retVal vals=$vals"
-  if {$retVal || [llength $vals] == 0}  {
-    # FIXME gdb_get_mem does not always return an error when addr is invalid.
+
+  if {$retVal || [llength $vals] != 3}  {
     BadExpr "Couldn't get memory at address: \"$addr\""
-    gdbtk_idle 
-    dbug W "gdb_get_mem returned return code: $retVal and value: \"$vals\""
-    return
-  }
-  
-  set mlen 0
-  for {set n 0} {$n < $nb} {incr n $bytes_per_row} {
-    set x $addr
-    if {[string length $x] > $mlen} {
-      set mlen [string length $x]
-    }
-    set ${this}_memval($row,-1) $x
-    for { set col 0 } { $col < $num } { incr col } {
-      set x [lindex $vals $nextval]
-      if {[string length $x] > $maxlen} {set maxlen [string length $x]}
-      set ${this}_memval($row,$col) $x
-      incr nextval
-    }
-    if {$ascii} {
-      set x [lindex $vals $nextval]
-      if {[string length $x] > $maxalen} {set maxalen [string length $x]}
-      set ${this}_memval($row,$col) $x
-      incr nextval
-    }
-    set addr [gdb_incr_addr $addr $bytes_per_row]
-    incr row
+      debug "gdb_update_mem returned return code: $retVal and value: \"$vals\""
+    return    
   }
   # set default column width to the max in the data columns
-  $itk_interior.t configure -colwidth [expr {$maxlen + 1}]
-  # set border column width
-  $itk_interior.t width -1 [expr {$mlen + 1}]
-  if {$ascii} {
-    # set ascii column width
-    $itk_interior.t width $Numcols [expr {$maxalen + 1}]
-  }
+  $itk_interior.t configure -colwidth [lindex $vals 1]
 
-  gdbtk_idle
+  # set border column width
+  $itk_interior.t width -1 [lindex $vals 0]
+
+  # set ascii column width
+  if {$ascii} {
+    $itk_interior.t width $Numcols [lindex $vals 2]
+  }
 }
 
 # ------------------------------------------------------------------
@@ -695,7 +653,7 @@ body MemWin::do_popup {X Y} {
   $itk_interior.t.menu add check -label "Auto Update" -variable _mem($this,enabled) \
     -underline 0 -command "$this toggle_enabled"
   $itk_interior.t.menu add command -label "Update Now" -underline 0 \
-    -command "$this update_address"
+    -command [code $this _update_address 1]
   $itk_interior.t.menu add command -label "Go To [$itk_interior.t curvalue]" -underline 0 \
     -command "$this goto [$itk_interior.t curvalue]"
   $itk_interior.t.menu add command -label "Open New Window at [$itk_interior.t curvalue]" -underline 0 \
@@ -713,7 +671,7 @@ body MemWin::goto { addr } {
   set current_addr $addr
   $itk_interior.f.cntl delete 0 end
   $itk_interior.f.cntl insert end $addr
-  update_address
+  _update_address
 }
 
 # ------------------------------------------------------------------
