@@ -19,9 +19,6 @@
    Boston, MA 02111-1307, USA.  */
 
 #include "defs.h"
-#include "symtab.h"
-#include "frame.h"
-#include "value.h"
 #include "target.h"
 #include "breakpoint.h"
 #include "linespec.h"

@@ -22,45 +22,37 @@
    Boston, MA 02111-1307, USA.  */
 
 #include "defs.h"
-#include "symtab.h"
 #include "inferior.h"
-#include "command.h"
-#include "bfd.h"
 #include "symfile.h"
 #include "objfiles.h"
-#include "target.h"
 #include "gdbcore.h"
 #include "tracepoint.h"
 #include "demangle.h"
 #include "version.h"
 #include "cli-out.h"
+#include "top.h"
+#include "annotate.h"
 
 #if defined(_WIN32) || defined(__CYGWIN__)
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #endif
 
-#include <sys/stat.h>
-
-#include <tcl.h>
-#include <tk.h>
-#include <itcl.h>
 #include <tix.h>
+#include <itcl.h>
 #include <itk.h>
 #include "guitcl.h"
 #include "gdbtk.h"
 
-#include <signal.h>
 #include <fcntl.h>
-#include "top.h"
+#include <sys/stat.h>
 #include <sys/ioctl.h>
+#include <sys/time.h>
+#include <signal.h>
+
 #include "gdb_string.h"
 #include "dis-asm.h"
-#include <stdio.h>
 #include "gdbcmd.h"
-
-#include "annotate.h"
-#include <sys/time.h>
 
 #ifdef __CYGWIN32__
 #include <sys/cygwin.h>		/* for cygwin32_attach_handle_to_fd */

@@ -1,3 +1,8 @@
+2002-02-07  Martin M. Hunt  <hunt@redhat.com>
+
+	* generic/gdbtk.c, generic/gdbtk-bp.c, generic/gdbtk-cmds.c,
+	generic/gdbtk-hooks.c, generic/gdbtk-stack.c: Cleanup includes.
+
 2002-02-06  Martin M. Hunt  <hunt@redhat.com>
 
 	* generic/gdbtk.c, generic/gdbtk-bp.c, generic/gdbtk-cmds.c,

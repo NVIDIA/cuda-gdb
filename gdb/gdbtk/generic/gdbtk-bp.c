@@ -24,7 +24,6 @@
 #include "linespec.h"
 #include "breakpoint.h"
 #include "tracepoint.h"
-#include "gdb-events.h"
 
 #include <tcl.h>
 #include "gdbtk.h"

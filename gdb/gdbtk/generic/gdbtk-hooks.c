@@ -22,44 +22,35 @@
    Boston, MA 02111-1307, USA.  */
 
 #include "defs.h"
-#include "symtab.h"
 #include "inferior.h"
-#include "command.h"
-#include "bfd.h"
 #include "symfile.h"
 #include "objfiles.h"
-#include "target.h"
 #include "gdbcore.h"
 #include "tracepoint.h"
 #include "demangle.h"
 #include "gdb-events.h"
+#include "top.h"
+#include "annotate.h"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #endif
 
-#include <sys/stat.h>
-
-#include <tcl.h>
-#include <tk.h>
 #include <itcl.h>
 #include <tix.h>
 #include "guitcl.h"
 #include "gdbtk.h"
 
-#include <stdarg.h>
 #include <signal.h>
 #include <fcntl.h>
-#include "top.h"
 #include <sys/ioctl.h>
+#include <sys/time.h>
+
 #include "gdb_string.h"
 #include "dis-asm.h"
-#include <stdio.h>
 #include "gdbcmd.h"
 
-#include "annotate.h"
-#include <sys/time.h>
 
 volatile int in_fputs = 0;
 

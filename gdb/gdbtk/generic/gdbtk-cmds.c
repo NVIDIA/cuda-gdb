@@ -24,25 +24,20 @@
    Boston, MA 02111-1307, USA.  */
 
 #include "defs.h"
-#include "symtab.h"
 #include "inferior.h"
-#include "command.h"
 #include "source.h"
-#include "bfd.h"
 #include "symfile.h"
 #include "objfiles.h"
-#include "target.h"
 #include "gdbcore.h"
 #include "demangle.h"
 #include "linespec.h"
 #include "tui/tui-file.h"
+#include "top.h"
+#include "annotate.h"
 
-#include <sys/stat.h>
-
-#include <tcl.h>
-#include <tk.h>
-#include <itcl.h>
 #include <tix.h>
+#include <itcl.h>
+
 #include "guitcl.h"
 #include "gdbtk.h"
 #include "gdbtk-wrapper.h"
@@ -50,15 +45,13 @@
 
 #include <signal.h>
 #include <fcntl.h>
-#include "top.h"
 #include <sys/ioctl.h>
+#include <sys/time.h>
+#include <sys/stat.h>
+
 #include "gdb_string.h"
 #include "dis-asm.h"
-#include <stdio.h>
 #include "gdbcmd.h"
-
-#include "annotate.h"
-#include <sys/time.h>
 
 /* Various globals we reference.  */
 extern char *source_path;
