@@ -60,6 +60,12 @@
 #include "annotate.h"
 #include <sys/time.h>
 
+/* Various globals we reference.  */
+extern char *source_path;
+/* FIXME: this must be `extern'.  But to do that we need a patch to
+   infcmd.c.  */
+static char *inferior_args = "";
+
 static void setup_architecture_data (void);
 static int tracepoint_exists (char *args);
 
@@ -417,6 +423,28 @@ Gdbtk_Init (interp)
   Tcl_LinkVar (interp, "gdb_context_id",
 	       (char *) &gdb_context,
 	       TCL_LINK_INT | TCL_LINK_READ_ONLY);
+
+  /* Make gdb's notion of the pwd visible.  This is read-only because
+     (1) it doesn't make sense to change it directly and (2) it is
+     allocated using xmalloc and not Tcl_Alloc.  You might think we
+     could just use the Tcl `pwd' command.  However, Tcl (erroneously,
+     imho) maintains a cache of the current directory name, and
+     doesn't provide a way for gdb to invalidate the cache.  */
+  Tcl_LinkVar (interp, "gdb_current_directory",
+	       (char *) &current_directory,
+	       TCL_LINK_STRING | TCL_LINK_READ_ONLY);
+
+  /* Current gdb source file search path.  This is read-only for
+     reasons similar to those for gdb_current_directory.  */
+  Tcl_LinkVar (interp, "gdb_source_path",
+	       (char *) &source_path,
+	       TCL_LINK_STRING | TCL_LINK_READ_ONLY);
+
+  /* Current inferior command-line arguments.  This is read-only for
+     reasons similar to those for gdb_current_directory.  */
+  Tcl_LinkVar (interp, "gdb_inferior_args",
+	       (char *) &inferior_args,
+	       TCL_LINK_STRING | TCL_LINK_READ_ONLY);
 
   /* Init variable interface... */
   if (gdb_variable_init (interp) != TCL_OK)

@@ -1,5 +1,10 @@
 2000-11-29  Tom Tromey  <tromey@cygnus.com>
 
+	* gdbtk-cmds.c (Gdbtk_Init): Create gdb_current_directory,
+	gdb_inferior_args, and gdb_source_path variables.
+
+2000-11-29  Tom Tromey  <tromey@cygnus.com>
+
 	* gdbtk-cmds.c (call_wrapper): Don't reset result if wrapped
 	command returned error.
 
