@@ -1,3 +1,8 @@
+2002-04-08  Andrew Cagney  <ac131313@redhat.com>
+
+	* generic/gdbtk-wrapper.c (wrap_get_frame_block): Add missing NULL
+	parameter.  Match recent get_frame_block changes.
+
 2002-04-05  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-stack.c (gdb_block_vars): Update get_frame_block to

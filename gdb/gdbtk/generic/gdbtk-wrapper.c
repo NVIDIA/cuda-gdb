@@ -668,7 +668,7 @@ wrap_get_frame_block (char *opaque_arg)
   struct frame_info *fi;
 
   fi = (struct frame_info *) (*args)->args[0];
-  (*args)->result = (char *) get_frame_block (fi);
+  (*args)->result = (char *) get_frame_block (fi, NULL);
 
   return 1;
 }
