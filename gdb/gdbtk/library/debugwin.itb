@@ -103,8 +103,7 @@ itcl::body DebugWin::build_win {} {
   $menu add cascade -menu $menu.help -label "Help" -underline 0
   set m [menu $menu.help]
   $m add command -label "Debugging Functions" -underline 0 \
-    -command {ManagedWin::open HtmlViewer -force -file debug.html \
-		-topics {{{"Debug Functions" debug.html}}}}
+    -command {open_help debug.html}
 
   $top configure -menu $menu
   

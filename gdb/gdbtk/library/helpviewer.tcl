@@ -36,8 +36,7 @@ proc open_help {hfile} {
   # set list of viewer apps to try
   switch [pref get gdb/compat] {
     "KDE" {
-      #	set apps {htmlview khelpcenter mozilla}
-      set apps {xhtmlview xkhelpcenter xmozilla}
+      set apps {htmlview khelpcenter mozilla}
     }
     "GNOME" {
       set apps {htmlview mozilla gnome-help khelpcenter}
