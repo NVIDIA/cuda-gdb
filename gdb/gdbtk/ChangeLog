@@ -1,3 +1,8 @@
+2002-11-08  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/prefs.tcl (pref_save): Fix GDBtkInitVersion.
+	(pref_save): Check that value is not null before writing.
+
 2002-11-07  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/util.tcl (CygScrolledListbox): Delete.

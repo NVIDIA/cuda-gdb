@@ -160,7 +160,7 @@ proc pref_save {{win {}}} {
     }
     
     puts $fd "\# GDBtk Init file"
-    puts $fd "{# GDBtkInitVersion: 1}"
+    puts $fd {# GDBtkInitVersion: 1}
 
     set plist [pref list]
     # write out global options
@@ -188,8 +188,8 @@ proc pref_save {{win {}}} {
       if {[lindex $t 0] == "gdb"
 	  && [string compare [join [lreplace $t 0 1] /] ""] == 0} {
 	set x [lindex $t 1]
-	if {$x != ""} {
-	  set v [escape_value [pref get $var]]
+	set v [escape_value [pref get $var]]
+	if {$x != "" && $v != ""} {
 	  puts $fd "\t$x=$v"
 	}
       }
