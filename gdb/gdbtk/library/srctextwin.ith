@@ -127,6 +127,7 @@ class SrcTextWin {
     method _mtime_changed {filename}
     method _initialize_srctextwin {}
     method _clear_cache {}
+    method _highlightAsmLine {win addr pc_addr tagname} {}
 
     proc makeBreakDot {size colorList {image {}}}
   }

@@ -1006,24 +1006,8 @@ body SrcTextWin::FillAssembly {w tagname filename funcname line addr pc_addr lib
   }
   
   # highlight proper line number
-  if {[info exists _map($Cname,pc=$addr)]} {
-    # if current file has PC, highlight that too
-    if {$gdb_running && $tagname != "PC_TAG" && $pc(filename) == $filename
-	&& $pc(func) == $funcname} {
-      set pc(asm_line) $_map($Cname,pc=$pc_addr)
-      $win tag add PC_TAG $pc(asm_line).2 $pc(asm_line).end
-    }
-    set current(asm_line) $_map($Cname,pc=$addr)
-    # don't set browse tag if it is at PC
-    if {$pc_addr != $addr || $tagname == "PC_TAG"} {
-      # HACK.  In STACK mode we usually want the previous instruction
-      # but not when we are browsing a trace experiment.
-      if {[string compare $tagname "STACK_TAG"] == 0 && !$Browsing} {
-	incr current(asm_line) -1
-      }
-      $win tag add $tagname $current(asm_line).2 $current(asm_line).end
-    }
-  }
+  _highlightAsmLine $win $addr $pc_addr $tagname
+
   display_line $win $current(asm_line)
 }
 
@@ -1079,25 +1063,46 @@ body SrcTextWin::FillMixed {w tagname filename funcname line addr pc_addr lib} {
     # now set the breakpoints
     set do_display_breaks 1
   }
+
   # highlight proper line number
+  _highlightAsmLine $win $addr $pc_addr $tagname
+  display_line $win $current(asm_line)
+}
+
+# ------------------------------------------------------------------
+# METHOD: _highlightAsmLine - highlight the current execution line
+#         in one of the assembly modes
+# ------------------------------------------------------------------
+body SrcTextWin::_highlightAsmLine {win addr pc_addr tagname} {
+  global gdb_running
+
+  # Some architectures allow multiple instructions in each asm source
+  # line...
   if {[info exists _map($Cname,pc=$addr)]} {
-    # if current file has PC, highlight that too
-    if {$gdb_running && $tagname != "PC_TAG" && $pc(filename) == $filename
-	&& $pc(func) == $funcname} {
-      set pc(asm_line) $_map($Cname,pc=$pc_addr)
-      $win tag add PC_TAG $pc(asm_line).2 $pc(asm_line).end
-    }
     set current(asm_line) $_map($Cname,pc=$addr)
-#    debug "current(asm_line) = $current(asm_line)"
-    if {$pc_addr != $addr || $tagname == "PC_TAG"} {
-      # HACK.  In STACK mode we usually want the previous instruction
-      if {$tagname == "STACK_TAG"} {
-	incr current(asm_line) -1
-      }
-      $win tag add $tagname $current(asm_line).2 $current(asm_line).end
+  } else {
+    set x [format "0x%x" [expr $current(addr)-2]]
+    if {[info exists _map($Cname,pc=$x)]} {
+      set current(asm_line) $_map($Cname,pc=$x)
     }
   }
-  display_line $win $current(asm_line)
+
+  # if current file has PC, highlight that too
+  if {$gdb_running && $tagname != "PC_TAG" && $pc(filename) == $filename
+      && $pc(func) == $funcname} {
+    set pc(asm_line) $_map($Cname,pc=$pc_addr)
+    $win tag add PC_TAG $pc(asm_line).2 $pc(asm_line).end
+  }
+
+  # don't set browse tag if it is at PC
+  if {$pc_addr != $addr || $tagname == "PC_TAG"} {
+    # HACK.  In STACK mode we usually want the previous instruction
+    # but not when we are browsing a trace experiment.
+    if {[string compare $tagname "STACK_TAG"] == 0 && !$Browsing} {
+      incr current(asm_line) -1
+    }
+    $win tag add $tagname $current(asm_line).2 $current(asm_line).end
+  }
 }
 
 # ------------------------------------------------------------------
