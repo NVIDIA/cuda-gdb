@@ -16,7 +16,7 @@
 # Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
 
 # Please email any bugs, comments, and/or additions to this file to:
-# bug-gdb@prep.ai.mit.edu
+# insight@sources.redhat.com
 
 # This file was written by Keith Seitz (keiths@cygnus.com)
 
@@ -37,7 +37,6 @@ if {[catch {gdbtk_test_file $program} t]} {
 # The variables that are created are stored in an array called "var".
 
 # proc to tell us which of the variables are changed/out of scope
-# FIXME: ALWAYS returning out={}
 proc check_update {} {
   global var
 
@@ -51,7 +50,6 @@ proc check_update {} {
         lappend changed $ret
     }
   }
-
   return [list $changed $out]
 }
 
@@ -2068,3 +2066,6 @@ gdbtk_test c_variable-7.81 {create variables in different scopes} {
 #  Exit
 #
 gdbtk_test_done
+
+#Local Variables:
+#mode: tcl
