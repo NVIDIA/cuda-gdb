@@ -1,5 +1,11 @@
 2003-02-03  Martin M. Hunt  <hunt@redhat.com>
 
+	* library/targetselection.itb (TargetSelection::port_list): Keep
+	checking ports on Windows until we can open no more. Replaces
+	fixed limit of 9.
+
+2003-02-03  Martin M. Hunt  <hunt@redhat.com>
+	
 	* library/session.tcl (_recreate_bps): Catch errors.
 
 2003-02-03  Martin M. Hunt  <hunt@redhat.com>
