@@ -260,6 +260,9 @@ get_register_types (int regnum, void *arg)
 static void
 get_register (int regnum, void *arg)
 {
+  int realnum;
+  CORE_ADDR addr;
+  enum lval_type lval;
   struct type *reg_vtype;
   char *raw_buffer = alloca (MAX_REGISTER_RAW_SIZE);
   char *virtual_buffer = alloca (MAX_REGISTER_VIRTUAL_SIZE);
@@ -287,8 +290,9 @@ get_register (int regnum, void *arg)
       return;
     }
 
-  get_saved_register (raw_buffer, &optim, (CORE_ADDR *) NULL, deprecated_selected_frame,
-		      regnum, (enum lval_type *) NULL);
+  frame_register (get_selected_frame (), regnum, &optim, &lval, 
+		  &addr, &realnum, raw_buffer);
+
   if (optim)
     {
       Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,

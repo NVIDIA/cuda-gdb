@@ -1,3 +1,8 @@
+2003-03-17  Keith R Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-register.c (get_register): Use frame_register
+	instead of get_saved_register (which was deleted from gdb).
+
 2003-03-06  Martin M. Hunt  <hunt@redhat.com>
 
 	* generic/gdbtk-interp.c (gdbtk_interpreter_init): Remove
