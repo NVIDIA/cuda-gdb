@@ -1,3 +1,8 @@
+2002-08-06  Keith Seitz  <keiths@redhat.com>
+
+	* library/srcwin.itb (_build_win): Anchor status label so that
+	text appears at left instead of centered.
+
 2002-08-03  Andrew Cagney  <ac131313@redhat.com>
 
 	* generic/gdbtk-bp.c: Include "gdb_string.h".
