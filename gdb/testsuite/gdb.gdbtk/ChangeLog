@@ -1,3 +1,12 @@
+2001-08-16  Keith Seitz  <keiths@redhat.com>
+
+	* cpp_variable.test (2.29, 2.30, 2.43, 2.63, 2.72): Char
+	pointers can now be dereferenced. Update test to reflect
+	this change in varobj.
+	* c_variable.test (4.9, 4.10, 4.47, 4.48, 5.1, 5.2, 5.3,
+	5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 5.17, 5.18, 5.43, 5.44, 5.47,
+	5.48, 5.49, 5.50, 5.51, 5.53, 6.30): Likewise.
+
 2001-08-13  Jeff Holcomb  <jeffh@redhat.com>
 
 	* cpp_variable.test: Use gdbtk_test_run to start the test

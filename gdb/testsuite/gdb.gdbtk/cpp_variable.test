@@ -352,13 +352,13 @@ gdbtk_test cpp_variable-2.28 {change value of v.v_priv_charp (hexadecimal)} {
 # Desc: number of children of v_priv_charp
 gdbtk_test cpp_variable-2.29 {number of children of v_priv_charp} {
   $var(v.private.v_priv_charp) numChildren
-} {0}
+} {1}
 
 # Test: cpp_variable-2.30
 # Desc: children of v.v_priv_charp
 gdbtk_test cpp_variable-2.30 {children of v.v_priv_charp} {
   get_children v.private.v_priv_charp
-} {}
+} {*v_priv_charp}
 
 # Test: cpp_variable-2.31
 # Desc: v.v_priv_int editable
@@ -382,7 +382,7 @@ gdbtk_test cpp_variable-2.42 {format of v.VA} {
 # Desc: value of v.VA changed
 gdbtk_test cpp_variable-2.43 {value of v.VA changed} {
   check_update
-} {{} {v.private.v_priv_charp v.VB v.private.v_priv_int v.VC v.public.v_pub_charp v v.public.v_pub_int v.private v.public v.VA} {}}
+} {{} {v.private.v_priv_charp v.VB v.private.v_priv_int v.VC v.public.v_pub_charp v v.private.v_priv_charp.*v_priv_charp v.public.v_pub_int v.private v.public v.VA} {}}
 
 # Test: cpp_variable-2.44
 # Desc: value of v.VA
@@ -455,7 +455,7 @@ gdbtk_test cpp_variable-2.62 {format of v.VB} {
 # Desc: value of v.VB changed
 gdbtk_test cpp_variable-2.63 {value of v.VB changed} {
   check_update
-} {{} {v.VA.protected v.VA.private v.VA.public.va_pub_int v.private.v_priv_int v v.public.v_pub_int v.VA.public.va_pub_charp v.private.v_priv_charp v.VA.public v.public.v_pub_charp v.VA.private.va_priv_int v.VA v.public v.VB v.VC v.VA.protected.bar v.VA.private.va_priv_charp v.private} {}}
+} {{} {v.VA.protected v.private.v_priv_charp.*v_priv_charp v.VA.private v.VA.public.va_pub_int v.private.v_priv_int v v.public.v_pub_int v.VA.public.va_pub_charp v.private.v_priv_charp v.VA.public v.public.v_pub_charp v.VA.private.va_priv_int v.VA v.public v.VB v.VC v.VA.protected.bar v.VA.private.va_priv_charp v.private} {}}
 
 # Test: cpp_variable-2.64
  # Desc: value of v.VB
@@ -526,7 +526,7 @@ gdb_cmd "set variable v.vb_pub_int=2112"
 # Desc: value of v.vb_pub_int changed
 gdbtk_test cpp_variable-2.72 {value of v.vb_pub_int changed} {
   check_update
-} {v.VB.public.vb_pub_int {v.VB.public v.VA.protected v.VA.private v.VB.private.vb_priv_int v.VB.private v.VA.public.va_pub_int v.private.v_priv_int v v.public.v_pub_int v.VB.private.vb_priv_charp v.VA.public.va_pub_charp v.private.v_priv_charp v.VA.public v.public.v_pub_charp v.VA.private.va_priv_int v.VA v.public v.VB v.VC v.VA.protected.bar v.VA.private.va_priv_charp v.private} {}}
+} {v.VB.public.vb_pub_int {v.VB.public v.VA.protected v.private.v_priv_charp.*v_priv_charp v.VA.private v.VB.private.vb_priv_int v.VB.private v.VA.public.va_pub_int v.private.v_priv_int v v.public.v_pub_int v.VB.private.vb_priv_charp v.VA.public.va_pub_charp v.private.v_priv_charp v.VA.public v.public.v_pub_charp v.VA.private.va_priv_int v.VA v.public v.VB v.VC v.VA.protected.bar v.VA.private.va_priv_charp v.private} {}}
 
 # Test: cpp_variable-2.73
 # Desc: value of v.VB.vb_pub_int
