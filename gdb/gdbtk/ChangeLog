@@ -1,3 +1,11 @@
+2002-12-18  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/regwin.itb (RegWin::update): When updating, check
+	that a cell still exists before checking its value.
+	(RegWin::_select_group): Clear cells with changed values before
+	changing group.  After new group is selected, highlight any changed
+	values still visible.
+
 2002-12-17  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/interface.tcl (gdbtk_tcl_fputs_target_err):

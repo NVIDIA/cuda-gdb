@@ -901,14 +901,30 @@ itcl::body RegWin::_update_register {rn} {
 # ------------------------------------------------------------------
 itcl::body RegWin::_select_group {} {
   set gr [$itk_component(frame).opt get]
+  debug $gr
   if {$gr == ""} {
     return
   }
+
+  # Change anything on the old change list back to normal
+  foreach r $_change_list {
+    if {[info exists _cell($r)] && $_cell($r) != "hidden"} {
+      $itk_component(table) tag cell normal $_cell($r)
+    }
+  }
+
   set _group $gr
+  _layout_table
+
+  # highlight changed registers if they still exist in the new group
+  foreach r $_change_list {
+    if {[info exists _cell($r)] && $_cell($r) != "hidden" && $_data($_cell($r)) != ""} {
+      $itk_component(table) tag cell highlight $_cell($r)
+    }
+  }
+
   # Clear gdb's change list
   catch {gdb_reginfo changed}
-  update ""
-  _layout_table
 }
 
 
@@ -999,7 +1015,7 @@ itcl::body RegWin::update {event} {
 
   # Change anything on the old change list back to normal
   foreach r $_change_list {
-    if {$_cell($r) != "hidden"} {
+    if {[info exists _cell($r)] && $_cell($r) != "hidden"} {
       $itk_component(table) tag cell normal $_cell($r)
     }
   }
