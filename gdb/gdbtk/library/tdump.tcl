@@ -1,5 +1,5 @@
 # Trace dump window for Insight
-# Copyright 1998, 1999, 2001 Red Hat, Inc.
+# Copyright 1998, 1999, 2001, 2002 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -57,7 +57,7 @@ class TdumpWin {
 
     itk_component add stext {
       iwidgets::scrolledtext $itk_interior.stext -hscrollmode $mode \
-	-vscrollmode $mode -textfont src-font \
+	-vscrollmode $mode -textfont global/fixed \
 	-background [pref get gdb/font/normal_bg]
     } {}
     [$itk_component(stext) component text] configure \

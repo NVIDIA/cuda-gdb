@@ -1,3 +1,35 @@
+2002-03-05  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/prefs.tcl (pref_read): If a preference specifies
+	"src-font", substitute "global/fixed".
+	(pref_set_defaults): Change defaults from "src-font" to 
+	"global/fixed". Do not create font object "src-font". Do
+	not add hook to trace its changes.
+	(pref_src-font_trace): Remove.
+
+	* library/console.itb (Console::_update_option): Remove 
+	font update because this happens automatically.
+
+	* library/globalpref.itb: No need to set
+	changed flag for fonts; updates happen automatically
+	when prefs are updated.
+
+	* library/bpwin.itb: Replaced src-font with global/fixed.
+	* library/browserwin.itb: Ditto.
+	* library/mempref.itb: Ditto.
+	* library/memwin.itb: Ditto.
+	* library/process.itb: Ditto.
+	* library/regwin.itb: Ditto.
+	* library/srcbar.itcl: Ditto.
+	* library/srcpref.itb: Ditto.
+	* library/srctextwin.itb: Ditto.
+	* library/srcwin.itb: Ditto.
+	* library/stackwin.itb: Ditto.
+	* library/tdump.tcl: Ditto.
+	* library/tracedlg.tcl: Ditto.
+	* library/variables.tcl: Ditto.
+	* library/watch.tcl: Ditto.
+	
 2002-03-01  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-register.c (register_changed_p): Don't use REGISTER_BYTES.

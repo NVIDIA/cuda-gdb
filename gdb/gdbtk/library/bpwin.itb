@@ -1,5 +1,5 @@
-# Breakpoint window for GDBtk.
-# Copyright 1997, 1998, 1999, 2001 Red Hat, Inc.
+# Breakpoint window for Insight.
+# Copyright 1997, 1998, 1999, 2001, 2002 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -64,22 +64,22 @@ body BpWin::build_win {} {
   # write header
   if {$tracepoints} {
     label $twin.num0 -text "Num" -relief raised -bd 2 -anchor center \
-      -font src-font
+      -font global/fixed
   } 
   label $twin.thread0 -text "Thread" -relief raised -bd 2 -anchor center \
-    -font src-font
+    -font global/fixed
   label $twin.addr0 -text "Address" -relief raised -bd 2 -anchor center \
-    -font src-font
+    -font global/fixed
   label $twin.file0 -text "File" -relief raised -bd 2 -anchor center \
-    -font src-font
+    -font global/fixed
   label $twin.line0 -text "Line" -relief raised -bd 2 -anchor center \
-    -font src-font
+    -font global/fixed
   label $twin.func0 -text "Function" -relief raised -bd 2 -anchor center \
-    -font src-font
+    -font global/fixed
 
   if {$tracepoints} {
     label $twin.pass0 -text "PassCount" -relief raised -borderwidth 2 \
-      -anchor center -font src-font
+      -anchor center -font global/fixed
     grid x $twin.num0 $twin.addr0 $twin.file0 $twin.line0 $twin.func0 $twin.pass0 \
       -sticky new
   } else {
@@ -238,9 +238,9 @@ body BpWin::bp_add {bp_event {tracepoint 0}} {
   }
 
   if {$tracepoints} {
-    label $twin.num$i -text "$number " -relief flat -anchor e -font src-font -bg $bg1
+    label $twin.num$i -text "$number " -relief flat -anchor e -font global/fixed -bg $bg1
   }
-  label $twin.addr$i -text "[$bp_event get address] " -relief flat -anchor e -font src-font -bg $bg1
+  label $twin.addr$i -text "[$bp_event get address] " -relief flat -anchor e -font global/fixed -bg $bg1
   if {[info exists _files(short,$file)]} {
     set file $_files(short,$file)
   } else {
@@ -249,13 +249,13 @@ body BpWin::bp_add {bp_event {tracepoint 0}} {
   }
   if {$show_threads} {
     if {$thread == "-1"} {set thread "ALL"}
-    label $twin.thread$i -text "$thread " -relief flat -anchor e -font src-font -bg $bg1
+    label $twin.thread$i -text "$thread " -relief flat -anchor e -font global/fixed -bg $bg1
   }
-  label $twin.file$i -text "$file " -relief flat -anchor e -font src-font -bg $bg1
-  label $twin.line$i -text "[$bp_event get line] " -relief flat -anchor e -font src-font -bg $bg1
-  label $twin.func$i -text "[$bp_event get function] " -relief flat -anchor e -font src-font -bg $bg1
+  label $twin.file$i -text "$file " -relief flat -anchor e -font global/fixed -bg $bg1
+  label $twin.line$i -text "[$bp_event get line] " -relief flat -anchor e -font global/fixed -bg $bg1
+  label $twin.func$i -text "[$bp_event get function] " -relief flat -anchor e -font global/fixed -bg $bg1
   if {$tracepoints} {
-    label $twin.pass$i -text "[$bp_event get pass_count] " -relief flat -anchor e -font src-font -bg $bg1
+    label $twin.pass$i -text "[$bp_event get pass_count] " -relief flat -anchor e -font global/fixed -bg $bg1
   }
 
   if {$mbar} {

@@ -1,5 +1,5 @@
 # Browswer window for Insight.
-# Copyright 1998, 1999, 2001 Red Hat
+# Copyright 1998, 1999, 2001, 2002 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -89,14 +89,14 @@ body BrowserWin::_build_win {} {
 
   itk_component add filt_label {
     label [$itk_component(filter) childsite].lbl -text {Show if function } \
-      -font src-font
+      -font global/fixed
   }
 
   itk_component add filt_type {
     combobox::combobox [$itk_component(filter) childsite].type -height 4 \
       -width 15 -editable 0 \
       -command [code $this _set_filter_mode] \
-      -font src-font
+      -font global/fixed
   } { }
 
   # Fill the filter mode combo-box
@@ -112,7 +112,7 @@ body BrowserWin::_build_win {} {
   $itk_component(filt_type) entryset $cur_filter_mode
 
   itk_component add filt_entry {
-    entry [$itk_component(filter) childsite].ent -font src-font \
+    entry [$itk_component(filter) childsite].ent -font global/fixed \
       -textvariable [pref varname gdb/search/last_symbol] -background white
   } {
     usual Entry
@@ -280,13 +280,12 @@ body BrowserWin::_build_win {} {
   }
 
   itk_component add view_name {
-    label $itk_component(view_hidden).name -font src-font
+    label $itk_component(view_hidden).name -font global/fixed
   }
 
   itk_component add view_func {
     combobox::combobox $itk_component(view_bottom).combo -maxheight 15 \
-      -font src-font \
-      -command [code $this _goto_func]
+      -font global/fixed -command [code $this _goto_func]
   } {
     # Should be able to do this, but can't cause the combobox doesn't
     # fake up a MegaWidget well enough
@@ -295,16 +294,14 @@ body BrowserWin::_build_win {} {
   
   itk_component add view_mode {
     combobox::combobox $itk_component(view_bottom).mode -width 9 \
-      -font src-font \
-      -command [code $this mode]
+      -font global/fixed -command [code $this mode]
   } {
     #rename -background -textbackground textBackground Background
   }
 
   itk_component add view_search {
     entry $itk_component(view_bottom).search -borderwidth 2 \
-      -font src-font -width 10 \
-      -background white
+      -font global/fixed -width 10 -background white
   } {
     rename -background -textbackground textBackground Background
   }

@@ -1,5 +1,5 @@
-# Source preferences dialog for GDBtk.
-# Copyright 1998, 1999 Cygnus Solutions
+# Source preferences dialog for Insight.
+# Copyright 1998, 1999, 2002 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -158,8 +158,8 @@ body SrcPref::_build_win {} {
     set have_disassembly_flavor 1
     frame $f.dis
     label $f.dis.l -text "Disassembly Flavor: "
-    combobox::combobox $f.dis.combo -maxheight 15 -width 15 -font src-font -editable 0 \
-      -command [code $this _set_flavor]
+    combobox::combobox $f.dis.combo -maxheight 15 -width 15 \
+      -font global/fixed -editable 0 -command [code $this _set_flavor]
     
     foreach elem $vals {
       $f.dis.combo list insert end $elem

@@ -406,7 +406,7 @@ body SrcTextWin::makeBreakDot {size colorList {image {}}} {
 # METHOD: setTabs - set the tabs for the assembly/src windows
 # ------------------------------------------------------------------
 body SrcTextWin::setTabs {win {asm S}} {
-  set fsize [font measure src-font "W"]
+  set fsize [font measure [pref get gdb/src/font] "W"]
   set tsize [pref get gdb/src/tab_size]
   set rest ""
   
@@ -753,7 +753,7 @@ body SrcTextWin::reconfig {} {
 #  debug
   
   # Make sure we redo the break images when we reconfigure
-  set size [font measure src-font "W"]
+  set size [font measure [pref get gdb/src/font] "W"]
   makeBreakDot $size [pref get gdb/src/bp_fg] $break_images(bp)
   makeBreakDot $size [pref get gdb/src/temp_bp_fg] $break_images(temp_bp)
   makeBreakDot $size [pref get gdb/src/disabled_fg] $break_images(disabled_bp)

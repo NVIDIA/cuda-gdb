@@ -20,17 +20,18 @@ body Console::constructor {args} {
   _build_win
   eval itk_initialize $args
   add_hook gdb_no_inferior_hook [list $this idle dummy]
-
-  # Right now the preferences window directly uses preference
-  # variables.  This means that if we track the preference changes
-  # here, things will appear weird to the user -- the console window
-  # will change before the user chooses Accpet in the prefs window.
-  # Until the preference window is fixed we can't enable this
-  # dynamic tracking.  FIXME.
-  # foreach option {gdb/console/wrap gdb/console/prompt_fg \
-  #		    gdb/console/error_fg gdb/console/font} {
-  #  pref add_hook $option [code $this _update_option]
-  # }
+  
+  # There are a bunch of console prefs that have no UI
+  # for the user to modify them.  In the event that the user
+  # really wants to change them, they will have to be modified
+  # in prefs.tcl or by editing .gdbtkinit.  When these prefs
+  # gain a prefs UI, the user may change them dynamically
+  # and the console window will need notification that they
+  # have changed.  Add them to the following list and
+  # Console::_update_option.
+  foreach option {gdb/console/wrap} {
+    pref add_hook $option [code $this _update_option]
+  }
 
   set gdbtk_state(console) $this
 }
@@ -39,11 +40,6 @@ body Console::destructor {} {
   global gdbtk_state
   set gdbtk_state(console) ""
   remove_hook gdb_no_inferior_hook [list $this idle dummy]
-
-  # foreach option {gdb/console/wrap gdb/console/prompt_fg \
-  # 		    gdb/console/error_fg gdb/console/font} {
-  #   pref remove_hook $option [code $this _update_option]
-  # }
 }
 
 body Console::_build_win {} {
@@ -680,10 +676,6 @@ body Console::_update_option {name value} {
 
     gdb/console/error_fg {
       $_twin tag configure err_tag -foreground $value
-    }
-
-    gdb/console/font {
-      $_twin configure -font $value
     }
   }
 }

@@ -1,5 +1,5 @@
-# Local preferences functions for GDBtk.
-# Copyright 1997, 1998, 1999 Cygnus Solutions
+# Local preferences functions for Insight.
+# Copyright 1997, 1998, 1999, 2002 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -117,6 +117,8 @@ proc pref_read {} {
 	    } elseif {$section == "global"} {
 	      pref setd $section/$name $val
 	    } else {
+	      # backwards compatibility. recognize old src-font name
+	      if {$val == "src-font"} {set val "global/fixed"}
 	      pref setd gdb/$section/$name $val
 	    }
 	  }
@@ -320,7 +322,7 @@ proc pref_set_defaults {} {
   pref define gdb/console/error_fg        red
   pref define gdb/console/log_fg          green 
   pref define gdb/console/target_fg       blue
-  pref define gdb/console/font            src-font
+  pref define gdb/console/font            global/fixed
 
   # Source window defaults
   pref define gdb/src/PC_TAG              green
@@ -330,7 +332,7 @@ proc pref_set_defaults {} {
   pref define gdb/src/bp_fg               red
   pref define gdb/src/temp_bp_fg          orange
   pref define gdb/src/disabled_fg         black
-  pref define gdb/src/font                src-font
+  pref define gdb/src/font                global/fixed
   pref define gdb/src/break_fg            black
   pref define gdb/src/source2_fg          navy
   pref define gdb/src/variableBalloons    1
@@ -353,19 +355,12 @@ proc pref_set_defaults {} {
 
   pref define gdb/src/disassembly-flavor  ""
 
-  # set up src-font
-  set val [pref get global/font/fixed]
-  eval font create src-font $val
-
-  # Trace the global/font/fixed preference
-  pref add_hook global/font/fixed pref_src-font_trace
-
   # Variable Window defaults
-  pref define gdb/variable/font           src-font
+  pref define gdb/variable/font           global/fixed
   pref define gdb/variable/disabled_fg    gray
 
   # Stack Window
-  pref define gdb/stack/font              src-font
+  pref define gdb/stack/font              global/fixed
 
   # Register Window
   pref define gdb/reg/rows                16
@@ -414,8 +409,3 @@ proc pref_set_defaults {} {
   pref define gdb/editor ""
 }
 
-# This traces the global/fixed font and forces src-font to
-# to be the same.
-proc pref_src-font_trace {varname val} {
-  eval font configure src-font $val
-}

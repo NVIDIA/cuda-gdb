@@ -1,5 +1,5 @@
 # Trace configuration dialog for Insight
-# Copyright 1997, 1998, 1999, 2001 Red Hat, Inc.
+# Copyright 1997, 1998, 1999, 2001, 2002 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -313,8 +313,8 @@ class TraceDlg {
     pack $act_frame.lb -side bottom -fill both -expand 1 -padx 5 -pady 5
 
     # New actions
-    combobox::combobox $new_frame.combo -maxheight 15 -editable 0 -font src-font \
-      -command [code $this set_action_type]
+    combobox::combobox $new_frame.combo -maxheight 15 -editable 0 \
+      -font global/fixed -command [code $this set_action_type]
     $new_frame.combo list insert end collect while-stepping
     $new_frame.combo entryset collect
 

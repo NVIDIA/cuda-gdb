@@ -1,5 +1,5 @@
 # Watch window for Insight.
-# Copyright 1997, 1998, 1999, 2001 Red Hat
+# Copyright 1997, 1998, 1999, 2001, 2002 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -51,7 +51,7 @@ class WatchWin {
     set treeFrame  [frame $f.top]
     set entryFrame [frame $f.expr]
     VariableWin::build_win $treeFrame
-    set Entry [entry $entryFrame.ent -font src-font]
+    set Entry [entry $entryFrame.ent -font global/fixed]
     button $entryFrame.but -text "Add Watch" -command [code $this validateEntry]
     pack $f -fill both -expand yes
     grid $entryFrame.ent -row 0 -column 0 -sticky news -padx 2

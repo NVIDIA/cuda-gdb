@@ -104,7 +104,7 @@ body MemWin::build_win {} {
 
   table $itk_interior.t -titlerows 1 -titlecols 1 -variable ${this}_memval \
     -roworigin -1 -colorigin -1 -bg $bg \
-    -browsecmd "$this changed_cell %s %S" -font src-font\
+    -browsecmd "$this changed_cell %s %S" -font global/fixed\
     -colstretch unset -rowstretch unset -selectmode single \
     -xscrollcommand "$itk_interior.sx set" -resizeborders none \
     -cols $numcols -rows $numrows -autoclear 1

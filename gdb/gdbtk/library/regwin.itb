@@ -1,5 +1,5 @@
 # Register display window for Insight.
-# Copyright 1998, 1999, 2001 Red Hat, Inc.
+# Copyright 1998, 1999, 2001, 2002 Red Hat, Inc.
 #
 # Written by Keith Seitz (keiths@redhat.com)
 # based on work by Martin Hunt (hunt@redhat.com)
@@ -92,7 +92,7 @@ body RegWin::_build_win {} {
   itk_component add table {
     ::table $itk_interior.tbl -variable [scope _data] \
       -bg [pref get gdb/font/normal_bg] -fg [pref get gdb/font/normal_fg] \
-      -browsecmd [code $this _select_cell %S] -font src-font \
+      -browsecmd [code $this _select_cell %S] -font global/fixed \
       -colstretch unset -rowstretch unset -selectmode single \
       -resizeborders none -multiline false -colwidth 18 \
       -autoclear 0 -bg [pref get gdb/font/normal_bg] \

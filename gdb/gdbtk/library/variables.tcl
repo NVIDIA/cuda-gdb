@@ -1,5 +1,5 @@
 # Variable display window for Insight.
-# Copyright 1997, 1998, 1999, 2001 Red Hat
+# Copyright 1997, 1998, 1999, 2001, 2002 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -48,7 +48,7 @@ class VariableWin {
     method build_win {f} {
 	global tixOption tcl_platform Display
 	#    debug
-	set width [font measure src-font "W"]
+	set width [font measure global/fixed "W"]
 	# Choose the default width to be...
 	set width [expr {40 * $width}]
 	if {$tcl_platform(platform) == "windows"} {
@@ -84,21 +84,21 @@ class VariableWin {
 	set sbg [$Hlist cget -bg]
 	set fg [$Hlist cget -fg]
 	set bg $tixOption(input1_bg)
-	set width [font measure src-font $LengthString]
+	set width [font measure global/fixed $LengthString]
 	$Hlist configure -indent $width -bg $bg \
 	    -selectforeground $fg -selectbackground $sbg \
-	    -selectborderwidth 0 -separator . -font src-font
+	    -selectborderwidth 0 -separator . -font global/fixed
 
 	# Get display styles
 	set normal_fg    [$Hlist cget -fg]
 	set highlight_fg [pref get gdb/font/highlight_fg]
 	set disabled_fg  [pref get gdb/variable/disabled_fg]
 	set NormalTextStyle [tixDisplayStyle text -refwindow $Hlist \
-				 -bg $bg -fg $normal_fg -font src-font]
+				 -bg $bg -fg $normal_fg -font global/fixed]
 	set HighlightTextStyle [tixDisplayStyle text -refwindow $Hlist \
-				    -bg $bg -fg $highlight_fg -font src-font]
+				    -bg $bg -fg $highlight_fg -font global/fixed]
 	set DisabledTextStyle [tixDisplayStyle text -refwindow $Hlist \
-				   -bg $bg -fg $disabled_fg -font src-font]
+				   -bg $bg -fg $disabled_fg -font global/fixed]
 
 	if {[catch {gdb_cmd "show output-radix"} msg]} {
 	    set Radix 10
@@ -403,8 +403,8 @@ class VariableWin {
 	if {$Editing == ""} {
 	    # Must create the frame
 	    set Editing [frame $Hlist.frame -bg $bg -bd 0 -relief flat]
-	    set lbl [::label $Editing.lbl -fg $fg -bg $bg -font src-font]
-	    set ent [entry $Editing.ent -bg $tixOption(bg) -font src-font]
+	    set lbl [::label $Editing.lbl -fg $fg -bg $bg -font global/fixed]
+	    set ent [entry $Editing.ent -bg $tixOption(bg) -font global/fixed]
 	    pack $lbl $ent -side left
 	}
 
