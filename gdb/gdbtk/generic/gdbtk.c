@@ -33,6 +33,7 @@
 #include "tracepoint.h"
 #include "demangle.h"
 #include "version.h"
+#include "cli-out.h"
 
 #if defined(_WIN32) || defined(__CYGWIN__)
 #define WIN32_LEAN_AND_MEAN
@@ -546,7 +547,7 @@ gdbtk_find_main";
 #ifdef _WIN32
 	MessageBox (NULL, msg, NULL, MB_OK | MB_ICONERROR | MB_TASKMODAL);
 #else
-	fputs_unfiltered (msg, gdb_stderr);
+	fprintf (stderr,msg);
 #endif
 
 	error ("");

@@ -1,3 +1,20 @@
+2001-05-10  Keith Seitz  <keiths@cygnus.com>
+
+	* generic/gdbtk-cmds.c: Put on diet. All breakpoint-,
+	tracepoint-, register-, and stack-related functions moved
+	into separate files.
+	(call_wrapper): Renamed to "gdbtk_call_wrapper" and export.
+	Update all callers.
+	* generic/gdbtk.h: Move all breakpoint-related stuff into
+	gdbtk-bp.c.
+	Remove declaration for "call_wrapper". Now in gdbtk-cmds.h
+	(and called "gdbtk_call_wrapper").
+	* generic/gdbtk-varobj.c: Include "gdbtk-cmds.h".
+	* generic/gdbtk-cmds.h: New file.
+	* generic/gdbtk-bp.c: New file.
+	* generic/gdbtk-register.c: New file.
+	* generic/gdbtk-stack.c: New file.
+
 2001-05-09  Keith Seitz  <keiths@cygnus.com>
 
 	* library/interface.tcl (gdb_quit_hook): Remove. It's unused.

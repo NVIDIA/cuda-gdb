@@ -24,7 +24,7 @@
 
 #include <tcl.h>
 #include "gdbtk.h"
-
+#include "gdbtk-cmds.h"
 
 /*
  * Public functions defined in this file
@@ -89,7 +89,7 @@ gdb_variable_init (interp)
 
   if (!initialized)
     {
-      result = Tcl_CreateObjCommand (interp, "gdb_variable", call_wrapper,
+      result = Tcl_CreateObjCommand (interp, "gdb_variable", gdbtk_call_wrapper,
 				   (ClientData) gdb_variable_command, NULL);
       if (result == NULL)
 	return TCL_ERROR;

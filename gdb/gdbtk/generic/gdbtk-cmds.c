@@ -33,9 +33,7 @@
 #include "objfiles.h"
 #include "target.h"
 #include "gdbcore.h"
-#include "tracepoint.h"
 #include "demangle.h"
-#include "frame.h"
 #include "regcache.h"
 #include "linespec.h"
 #include "tui/tui-file.h"
@@ -49,6 +47,7 @@
 #include "guitcl.h"
 #include "gdbtk.h"
 #include "gdbtk-wrapper.h"
+#include "gdbtk-cmds.h"
 
 #include <signal.h>
 #include <fcntl.h>
@@ -64,24 +63,6 @@
 
 /* Various globals we reference.  */
 extern char *source_path;
-extern void *gdbtk_deleted_bp;
-
-static void setup_architecture_data (void);
-static int tracepoint_exists (char *args);
-
-/* This structure filled in call_wrapper and passed to
-   the wrapped call function.
-   It stores the command pointer and arguments 
-   run in the wrapper function. */
-
-struct wrapped_call_args
-  {
-    Tcl_Interp *interp;
-    Tcl_ObjCmdProc *func;
-    int objc;
-    Tcl_Obj *CONST * objv;
-    int val;
-  };
 
 /* These two objects hold boolean true and false,
    and are shared by all the list objects that gdb_listfuncs
@@ -94,16 +75,6 @@ static Tcl_Obj *mangled, *not_mangled;
 
 int No_Update = 0;
 int load_in_progress = 0;
-
-/*
- * This is used in the register fetching routines
- */
-
-#ifndef INVALID_FLOAT
-#define INVALID_FLOAT(x, y) (0 != 0)
-#endif
-
-
 
 /* This Structure is used in gdb_disassemble.
    We need a different sort of line table from the normal one cuz we can't
@@ -136,37 +107,6 @@ struct disassembly_client_data {
   Tcl_CmdInfo cmd;
 };
 
-/* This contains the previous values of the registers, since the last call to
-   gdb_changed_register_list.  */
-
-static char *old_regs;
-
-/* These two lookup tables are used to translate the type & disposition fields
-   of the breakpoint structure (respectively) into something gdbtk understands.
-   They are also used in gdbtk-hooks.c */
-
-char *bptypes[] =
-{"none", "breakpoint", "hw breakpoint", "until",
- "finish", "watchpoint", "hw watchpoint",
- "read watchpoint", "acc watchpoint",
- "longjmp", "longjmp resume", "step resume",
- "sigtramp", "watchpoint scope",
- "call dummy", "shlib events", "catch load",
- "catch unload", "catch fork", "catch vfork",
- "catch exec", "catch catch", "catch throw"
-};
-char *bpdisp[] =
-{"delete", "delstop", "disable", "donttouch"};
-
-/*
- * These are routines we need from breakpoint.c.
- * at some point make these static in breakpoint.c and move GUI code there
- */
-
-extern struct breakpoint *set_raw_breakpoint (struct symtab_and_line sal);
-extern void set_breakpoint_count (int);
-extern int breakpoint_count;
-
 /* This variable determines where memory used for disassembly is read from.
  * See note in gdbtk.h for details.
  */
@@ -179,7 +119,6 @@ extern int gdb_variable_init (Tcl_Interp * interp);
  */
 
 int Gdbtk_Init (Tcl_Interp * interp);
-int call_wrapper (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 
 /*
  * Declarations for routines used only in this file.
@@ -187,10 +126,6 @@ int call_wrapper (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 
 static int compare_lines (const PTR, const PTR);
 static int comp_files (const void *, const void *);
-static int gdb_actions_command (ClientData, Tcl_Interp *, int,
-				Tcl_Obj * CONST objv[]);
-static int gdb_changed_register_list (ClientData, Tcl_Interp *, int,
-				      Tcl_Obj * CONST[]);
 static int gdb_clear_file (ClientData, Tcl_Interp * interp, int,
 			   Tcl_Obj * CONST[]);
 static int gdb_cmd (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
@@ -199,33 +134,16 @@ static int gdb_confirm_quit (ClientData, Tcl_Interp *, int,
 static int gdb_disassemble (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_entry_point (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_eval (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
-static int gdb_fetch_registers (ClientData, Tcl_Interp *, int,
-				Tcl_Obj * CONST[]);
 static int gdb_find_file_command (ClientData, Tcl_Interp *, int,
 				  Tcl_Obj * CONST objv[]);
 static int gdb_force_quit (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
-static struct symtab *full_lookup_symtab (char *file);
-static int gdb_get_args_command (ClientData, Tcl_Interp *, int,
-				 Tcl_Obj * CONST objv[]);
-static int gdb_get_breakpoint_info (ClientData, Tcl_Interp *, int,
-				    Tcl_Obj * CONST[]);
-static int gdb_get_breakpoint_list (ClientData, Tcl_Interp *, int,
-				    Tcl_Obj * CONST[]);
 static int gdb_get_file_command (ClientData, Tcl_Interp *, int,
 				 Tcl_Obj * CONST objv[]);
 static int gdb_get_function_command (ClientData, Tcl_Interp *, int,
 				     Tcl_Obj * CONST objv[]);
 static int gdb_get_line_command (ClientData, Tcl_Interp *, int,
 				 Tcl_Obj * CONST objv[]);
-static int gdb_get_locals_command (ClientData, Tcl_Interp *, int,
-				   Tcl_Obj * CONST objv[]);
 static int gdb_get_mem (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
-static int gdb_get_trace_frame_num (ClientData, Tcl_Interp *, int,
-				    Tcl_Obj * CONST objv[]);
-static int gdb_get_tracepoint_list (ClientData, Tcl_Interp *, int,
-				    Tcl_Obj * CONST objv[]);
-static int gdb_get_vars_command (ClientData, Tcl_Interp *, int,
-				 Tcl_Obj * CONST objv[]);
 static int gdb_immediate_command (ClientData, Tcl_Interp *, int,
 				  Tcl_Obj * CONST[]);
 static int gdb_listfiles (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
@@ -246,27 +164,13 @@ static int gdb_loc (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_path_conv (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_prompt_command (ClientData, Tcl_Interp *, int,
 			       Tcl_Obj * CONST objv[]);
-static int gdb_regnames (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_restore_fputs (ClientData, Tcl_Interp *, int,
 			      Tcl_Obj * CONST[]);
 static int gdb_search (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST objv[]);
-static int gdb_set_bp (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST objv[]);
-static int gdb_set_bp_addr (ClientData, Tcl_Interp *, int,
-			    Tcl_Obj * CONST objv[]);
-static int gdb_find_bp_at_line (ClientData, Tcl_Interp *, int,
-				Tcl_Obj * CONST objv[]);
-static int gdb_find_bp_at_addr (ClientData, Tcl_Interp *, int,
-				Tcl_Obj * CONST objv[]);
 static int gdb_stop (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_target_has_execution_command (ClientData,
 					     Tcl_Interp *, int,
 					     Tcl_Obj * CONST[]);
-static int gdb_trace_status (ClientData, Tcl_Interp *, int,
-			     Tcl_Obj * CONST[]);
-static int gdb_tracepoint_exists_command (ClientData, Tcl_Interp *,
-					  int, Tcl_Obj * CONST objv[]);
-static int gdb_get_tracepoint_info (ClientData, Tcl_Interp *, int,
-				    Tcl_Obj * CONST objv[]);
 static int gdbtk_dis_asm_read_memory (bfd_vma, bfd_byte *, unsigned int,
 				      disassemble_info *);
 static void gdbtk_load_source (ClientData clientData,
@@ -290,31 +194,9 @@ static int gdb_disassemble_driver (CORE_ADDR low, CORE_ADDR high,
 							      struct
 							      disassemble_info
 							      *));
-static int get_pc_register (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
-static int gdb_stack (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
-static int gdb_selected_frame (ClientData clientData,
-			       Tcl_Interp * interp, int argc,
-			       Tcl_Obj * CONST objv[]);
-static int gdb_selected_block (ClientData clientData,
-			       Tcl_Interp * interp, int argc,
-			       Tcl_Obj * CONST objv[]);
-static int gdb_get_blocks (ClientData clientData,
-			   Tcl_Interp * interp, int objc,
-			   Tcl_Obj * CONST objv[]);
-static int gdb_block_vars (ClientData clientData,
-			   Tcl_Interp * interp, int objc,
-			   Tcl_Obj * CONST objv[]);
 char *get_prompt (void);
-static void get_register (int, void *);
-static void get_register_name (int, void *);
-static int map_arg_registers (int, Tcl_Obj * CONST[],
-			      void (*)(int, void *), void *);
 static int perror_with_name_wrapper (PTR args);
-static void register_changed_p (int, void *);
 static int wrapped_call (PTR opaque_args);
-static void get_frame_name (Tcl_Interp * interp, Tcl_Obj * list,
-			    struct frame_info *fi);
-char *pc_function_name (CORE_ADDR pc);
 
 
 /* Gdbtk_Init
@@ -331,106 +213,57 @@ int
 Gdbtk_Init (interp)
      Tcl_Interp *interp;
 {
-  Tcl_CreateObjCommand (interp, "gdb_cmd", call_wrapper, gdb_cmd, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_immediate", call_wrapper,
+  Tcl_CreateObjCommand (interp, "gdb_cmd", gdbtk_call_wrapper, gdb_cmd, NULL);
+  Tcl_CreateObjCommand (interp, "gdb_immediate", gdbtk_call_wrapper,
 			gdb_immediate_command, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_loc", call_wrapper, gdb_loc, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_path_conv", call_wrapper, gdb_path_conv,
+  Tcl_CreateObjCommand (interp, "gdb_loc", gdbtk_call_wrapper, gdb_loc, NULL);
+  Tcl_CreateObjCommand (interp, "gdb_path_conv", gdbtk_call_wrapper, gdb_path_conv,
 			NULL);
-  Tcl_CreateObjCommand (interp, "gdb_listfiles", call_wrapper, gdb_listfiles,
+  Tcl_CreateObjCommand (interp, "gdb_listfiles", gdbtk_call_wrapper, gdb_listfiles,
 			NULL);
-  Tcl_CreateObjCommand (interp, "gdb_listfuncs", call_wrapper, gdb_listfuncs,
+  Tcl_CreateObjCommand (interp, "gdb_listfuncs", gdbtk_call_wrapper, gdb_listfuncs,
 			NULL);
-  Tcl_CreateObjCommand (interp, "gdb_entry_point", call_wrapper,
+  Tcl_CreateObjCommand (interp, "gdb_entry_point", gdbtk_call_wrapper,
 			gdb_entry_point, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_get_mem", call_wrapper, gdb_get_mem,
+  Tcl_CreateObjCommand (interp, "gdb_get_mem", gdbtk_call_wrapper, gdb_get_mem,
 			NULL);
-  Tcl_CreateObjCommand (interp, "gdb_stop", call_wrapper, gdb_stop, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_regnames", call_wrapper, gdb_regnames,
+  Tcl_CreateObjCommand (interp, "gdb_stop", gdbtk_call_wrapper, gdb_stop, NULL);
+  Tcl_CreateObjCommand (interp, "gdb_restore_fputs", gdbtk_call_wrapper, gdb_restore_fputs,
 			NULL);
-  Tcl_CreateObjCommand (interp, "gdb_restore_fputs", call_wrapper, gdb_restore_fputs,
-			NULL);
-  Tcl_CreateObjCommand (interp, "gdb_fetch_registers", call_wrapper,
-			gdb_fetch_registers, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_changed_register_list", call_wrapper,
-			gdb_changed_register_list, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_disassemble", call_wrapper,
+  Tcl_CreateObjCommand (interp, "gdb_disassemble", gdbtk_call_wrapper,
 			gdb_disassemble, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_eval", call_wrapper, gdb_eval, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_get_breakpoint_list", call_wrapper,
-			gdb_get_breakpoint_list, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_get_breakpoint_info", call_wrapper,
-			gdb_get_breakpoint_info, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_clear_file", call_wrapper,
+  Tcl_CreateObjCommand (interp, "gdb_eval", gdbtk_call_wrapper, gdb_eval, NULL);
+  Tcl_CreateObjCommand (interp, "gdb_clear_file", gdbtk_call_wrapper,
 			gdb_clear_file, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_confirm_quit", call_wrapper,
+  Tcl_CreateObjCommand (interp, "gdb_confirm_quit", gdbtk_call_wrapper,
 			gdb_confirm_quit, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_force_quit", call_wrapper,
+  Tcl_CreateObjCommand (interp, "gdb_force_quit", gdbtk_call_wrapper,
 			gdb_force_quit, NULL);
   Tcl_CreateObjCommand (interp, "gdb_target_has_execution",
-			call_wrapper,
+			gdbtk_call_wrapper,
 			gdb_target_has_execution_command, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_is_tracing",
-			call_wrapper, gdb_trace_status,
+  Tcl_CreateObjCommand (interp, "gdb_load_info", gdbtk_call_wrapper, gdb_load_info,
 			NULL);
-  Tcl_CreateObjCommand (interp, "gdb_load_info", call_wrapper, gdb_load_info,
-			NULL);
-  Tcl_CreateObjCommand (interp, "gdb_get_locals", call_wrapper,
-			gdb_get_locals_command, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_get_args", call_wrapper,
-			gdb_get_args_command, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_get_function", call_wrapper,
+  Tcl_CreateObjCommand (interp, "gdb_get_function", gdbtk_call_wrapper,
 			gdb_get_function_command, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_get_line", call_wrapper,
+  Tcl_CreateObjCommand (interp, "gdb_get_line", gdbtk_call_wrapper,
 			gdb_get_line_command, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_get_file", call_wrapper,
+  Tcl_CreateObjCommand (interp, "gdb_get_file", gdbtk_call_wrapper,
 			gdb_get_file_command, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_tracepoint_exists",
-			call_wrapper, gdb_tracepoint_exists_command, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_get_tracepoint_info",
-			call_wrapper, gdb_get_tracepoint_info, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_actions",
-			call_wrapper, gdb_actions_command, NULL);
   Tcl_CreateObjCommand (interp, "gdb_prompt",
-			call_wrapper, gdb_prompt_command, NULL);
+			gdbtk_call_wrapper, gdb_prompt_command, NULL);
   Tcl_CreateObjCommand (interp, "gdb_find_file",
-			call_wrapper, gdb_find_file_command, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_get_tracepoint_list",
-			call_wrapper, gdb_get_tracepoint_list, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_pc_reg", call_wrapper, get_pc_register,
+			gdbtk_call_wrapper, gdb_find_file_command, NULL);
+  Tcl_CreateObjCommand (interp, "gdb_loadfile", gdbtk_call_wrapper, gdb_loadfile,
 			NULL);
-  Tcl_CreateObjCommand (interp, "gdb_loadfile", call_wrapper, gdb_loadfile,
-			NULL);
-  Tcl_CreateObjCommand (interp, "gdb_load_disassembly", call_wrapper,
+  Tcl_CreateObjCommand (interp, "gdb_load_disassembly", gdbtk_call_wrapper,
 			gdb_load_disassembly,  NULL);
-  Tcl_CreateObjCommand (gdbtk_interp, "gdb_search", call_wrapper,
+  Tcl_CreateObjCommand (gdbtk_interp, "gdb_search", gdbtk_call_wrapper,
 			gdb_search, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_set_bp", call_wrapper, gdb_set_bp, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_set_bp_addr", call_wrapper,
-			gdb_set_bp_addr, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_find_bp_at_line", call_wrapper,
-			gdb_find_bp_at_line, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_find_bp_at_addr", call_wrapper,
-			gdb_find_bp_at_addr, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_get_trace_frame_num",
-			call_wrapper, gdb_get_trace_frame_num, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_stack", call_wrapper, gdb_stack, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_selected_frame", call_wrapper,
-			gdb_selected_frame, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_selected_block", call_wrapper,
-			gdb_selected_block, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_get_blocks", call_wrapper,
-			gdb_get_blocks, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_block_variables", call_wrapper,
-			gdb_block_vars, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_get_inferior_args", call_wrapper,
+  Tcl_CreateObjCommand (interp, "gdb_get_inferior_args", gdbtk_call_wrapper,
 			gdb_get_inferior_args, NULL);
-  Tcl_CreateObjCommand (interp, "gdb_set_inferior_args", call_wrapper,
+  Tcl_CreateObjCommand (interp, "gdb_set_inferior_args", gdbtk_call_wrapper,
 			gdb_set_inferior_args, NULL);
-
-  Tcl_LinkVar (interp, "gdb_selected_frame_level",
-	       (char *) &selected_frame_level,
-	       TCL_LINK_INT | TCL_LINK_READ_ONLY);
 
   /* gdb_context is used for debugging multiple threads or tasks */
   Tcl_LinkVar (interp, "gdb_context_id",
@@ -456,11 +289,18 @@ Gdbtk_Init (interp)
   /* Init variable interface... */
   if (gdb_variable_init (interp) != TCL_OK)
     return TCL_ERROR;
-  
-  /* Register/initialize any architecture specific data */
-  setup_architecture_data ();
-  register_gdbarch_swap (&old_regs, sizeof (old_regs), NULL);
-  register_gdbarch_swap (NULL, 0, setup_architecture_data);
+
+  /* Init breakpoint module */
+  if (Gdbtk_Breakpoint_Init (interp) != TCL_OK)
+    return TCL_ERROR;
+
+  /* Init stack module */
+  if (Gdbtk_Stack_Init (interp) != TCL_OK)
+    return TCL_ERROR;
+
+  /* Init register module */
+  if (Gdbtk_Register_Init (interp) != TCL_OK)
+    return TCL_ERROR;
 
   /* Determine where to disassemble from */
   Tcl_LinkVar (gdbtk_interp, "disassemble-from-exec",
@@ -480,7 +320,7 @@ Gdbtk_Init (interp)
    necessary. */
 
 int
-call_wrapper (clientData, interp, objc, objv)
+gdbtk_call_wrapper (clientData, interp, objc, objv)
      ClientData clientData;
      Tcl_Interp *interp;
      int objc;
@@ -579,7 +419,7 @@ wrapped_call (opaque_args)
  * new element in a Tcl list object.
  */
 
-static void
+void
 sprintf_append_element_to_obj (Tcl_Obj * objp, char *format,...)
 {
   va_list args;
@@ -1113,151 +953,6 @@ gdb_load_info (clientData, interp, objc, objv)
   return TCL_OK;
 }
 
-
-/* gdb_get_locals -
- * This and gdb_get_locals just call gdb_get_vars_command with the right
- * value of clientData.  We can't use the client data in the definition
- * of the command, because the call wrapper uses this instead...
- */
-
-static int
-gdb_get_locals_command (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-
-  return gdb_get_vars_command ((ClientData) 0, interp, objc, objv);
-
-}
-
-static int
-gdb_get_args_command (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-
-  return gdb_get_vars_command ((ClientData) 1, interp, objc, objv);
-
-}
-
-/* This implements the tcl commands "gdb_get_locals" and "gdb_get_args"
-
- * This function sets the Tcl interpreter's result to a list of variable names
- * depending on clientData. If clientData is one, the result is a list of
- * arguments; zero returns a list of locals -- all relative to the block
- * specified as an argument to the command. Valid commands include
- * anything decode_line_1 can handle (like "main.c:2", "*0x02020202",
- * and "main").
- *
- * Tcl Arguments:
- *   linespec - the linespec defining the scope of the lookup. Empty string
- *              to use the current block in the innermost frame.
- * Tcl Result:
- *   A list of the locals or args
- */
-
-static int
-gdb_get_vars_command (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  struct symtabs_and_lines sals;
-  struct symbol *sym;
-  struct block *block;
-  char **canonical, *args;
-  int i, nsyms, arguments;
-
-  if (objc > 2)
-    {
-      Tcl_WrongNumArgs (interp, 1, objv,
-			"[function:line|function|line|*addr]");
-      return TCL_ERROR;
-    }
-
-  arguments = (int) clientData;
-
-  /* Initialize the result pointer to an empty list. */
-
-  Tcl_SetListObj (result_ptr->obj_ptr, 0, NULL);
-
-  if (objc == 2)
-    {
-      args = Tcl_GetStringFromObj (objv[1], NULL);
-      sals = decode_line_1 (&args, 1, NULL, 0, &canonical);
-      if (sals.nelts == 0)
-	{
-	  Tcl_SetStringObj (result_ptr->obj_ptr,
-			    "error decoding line", -1);
-	  return TCL_ERROR;
-	}
-
-      /* Resolve all line numbers to PC's */
-      for (i = 0; i < sals.nelts; i++)
-	resolve_sal_pc (&sals.sals[i]);
-
-      block = block_for_pc (sals.sals[0].pc);
-    }
-  else
-    {
-      /* Specified currently selected frame */
-      if (selected_frame == NULL)
-	return TCL_OK;
-
-      block = get_frame_block (selected_frame);
-    }
-
-  while (block != 0)
-    {
-      nsyms = BLOCK_NSYMS (block);
-      for (i = 0; i < nsyms; i++)
-	{
-	  sym = BLOCK_SYM (block, i);
-	  switch (SYMBOL_CLASS (sym))
-	    {
-	    default:
-	    case LOC_UNDEF:	/* catches errors        */
-	    case LOC_CONST:	/* constant              */
-	    case LOC_TYPEDEF:	/* local typedef         */
-	    case LOC_LABEL:	/* local label           */
-	    case LOC_BLOCK:	/* local function        */
-	    case LOC_CONST_BYTES:	/* loc. byte seq.        */
-	    case LOC_UNRESOLVED:	/* unresolved static     */
-	    case LOC_OPTIMIZED_OUT:	/* optimized out         */
-	      break;
-	    case LOC_ARG:	/* argument              */
-	    case LOC_REF_ARG:	/* reference arg         */
-	    case LOC_REGPARM:	/* register arg          */
-	    case LOC_REGPARM_ADDR:	/* indirect register arg */
-	    case LOC_LOCAL_ARG:	/* stack arg             */
-	    case LOC_BASEREG_ARG:	/* basereg arg           */
-	      if (arguments)
-		Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-				  Tcl_NewStringObj (SYMBOL_NAME (sym), -1));
-	      break;
-	    case LOC_LOCAL:	/* stack local           */
-	    case LOC_BASEREG:	/* basereg local         */
-	    case LOC_STATIC:	/* static                */
-	    case LOC_REGISTER:	/* register              */
-	      if (!arguments)
-		Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-				  Tcl_NewStringObj (SYMBOL_NAME (sym), -1));
-	      break;
-	    }
-	}
-      if (BLOCK_FUNCTION (block))
-	break;
-      else
-	block = BLOCK_SUPERBLOCK (block);
-    }
-
-  return TCL_OK;
-}
 
 /* This implements the tcl command "gdb_get_line"
 
@@ -1839,70 +1534,6 @@ gdb_listfuncs (clientData, interp, objc, objv)
   return TCL_OK;
 }
 
-
-/*
- * This section contains all the commands that act on the registers:
- */
-
-/* This is a sort of mapcar function for operations on registers */
-
-static int
-map_arg_registers (objc, objv, func, argp)
-     int objc;
-     Tcl_Obj *CONST objv[];
-     void (*func) (int regnum, void *argp);
-     void *argp;
-{
-  int regnum, numregs;
-
-  /* Note that the test for a valid register must include checking the
-     REGISTER_NAME because NUM_REGS may be allocated for the union of
-     the register sets within a family of related processors.  In this
-     case, some entries of REGISTER_NAME will change depending upon
-     the particular processor being debugged.  */
-
-  numregs = NUM_REGS + NUM_PSEUDO_REGS;
-  
-  if (objc == 0)		/* No args, just do all the regs */
-    {
-      for (regnum = 0;
-	   regnum < numregs;
-	   regnum++)
-	{
-	  if (REGISTER_NAME (regnum) == NULL
-	      || *(REGISTER_NAME (regnum)) == '\0')
-	    continue;
-	  
-	  func (regnum, argp);
-	}
-      
-      return TCL_OK;
-    }
-
-  /* Else, list of register #s, just do listed regs */
-  for (; objc > 0; objc--, objv++)
-    {
-      if (Tcl_GetIntFromObj (NULL, *objv, &regnum) != TCL_OK)
-	{
-	  result_ptr->flags |= GDBTK_IN_TCL_RESULT;
-	  return TCL_ERROR;
-	}
-
-      if (regnum >= 0
-	  && regnum < numregs
-	  && REGISTER_NAME (regnum) != NULL
-	  && *REGISTER_NAME (regnum) != '\000')
-	func (regnum, argp);
-      else
-	{
-	  Tcl_SetStringObj (result_ptr->obj_ptr, "bad register number", -1);
-	  return TCL_ERROR;
-	}
-    }
-
-  return TCL_OK;
-}
-
 /* This implements the TCL command `gdb_restore_fputs'
    It sets the fputs_unfiltered hook back to gdbtk_fputs.
    Its sole reason for being is that sometimes we move the
@@ -1919,539 +1550,6 @@ gdb_restore_fputs (clientData, interp, objc, objv)
      Tcl_Obj *CONST objv[];
 {
   gdbtk_disable_fputs = 0;
-  return TCL_OK;
-}
-
-/* This implements the TCL command `gdb_regnames'.  Its syntax is:
-
-   gdb_regnames [-numbers] [REGNUM ...]
-
-   Return a list containing the names of the registers whose numbers
-   are given by REGNUM ... .  If no register numbers are given, return
-   all the registers' names.
-
-   Note that some processors have gaps in the register numberings:
-   even if there is no register numbered N, there may still be a
-   register numbered N+1.  So if you call gdb_regnames with no
-   arguments, you can't assume that the N'th element of the result is
-   register number N.
-
-   Given the -numbers option, gdb_regnames returns, not a list of names,
-   but a list of pairs {NAME NUMBER}, where NAME is the register name,
-   and NUMBER is its number.  */
-
-static int
-gdb_regnames (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  int numbers = 0;
-
-  objc--;
-  objv++;
-
-  if (objc >= 1)
-    {
-      char *s = Tcl_GetStringFromObj (objv[0], NULL);
-      if (STREQ (s, "-numbers"))
-	numbers = 1;
-      objc--;
-      objv++;
-    }
-
-  return map_arg_registers (objc, objv, get_register_name, &numbers);
-}
-
-static void
-get_register_name (regnum, argp)
-     int regnum;
-     void *argp;
-{
-  /* Non-zero if the caller wants the register numbers, too.  */
-  int numbers = * (int *) argp;
-  Tcl_Obj *name = Tcl_NewStringObj (REGISTER_NAME (regnum), -1);
-  Tcl_Obj *elt;
-
-  if (numbers)
-    {
-      /* Build a tuple of the form "{REGNAME NUMBER}", and append it to
-	 our result.  */
-      Tcl_Obj *array[2];
-
-      array[0] = name;
-      array[1] = Tcl_NewIntObj (regnum);
-      elt = Tcl_NewListObj (2, array);
-    }
-  else
-    elt = name;
-
-  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, elt);
-}
-
-/* This implements the tcl command gdb_fetch_registers
- * Pass it a list of register names, and it will
- * return their values as a list.
- *
- * Tcl Arguments:
- *    format: The format string for printing the values
- *    args: the registers to look for
- * Tcl Result:
- *    A list of their values.
- */
-
-static int
-gdb_fetch_registers (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  int format, result;
-
-  if (objc < 2)
-    {
-      Tcl_WrongNumArgs (interp, 1, objv, "format ?register1 register2 ...?");
-      return TCL_ERROR;
-    }
-  objc -= 2;
-  objv++;
-  format = *(Tcl_GetStringFromObj (objv[0], NULL));
-  objv++;
-
-  if (objc != 1)
-    result_ptr->flags |= GDBTK_MAKES_LIST;    /* Output the results as a list */
-  result = map_arg_registers (objc, objv, get_register, (void *) format);
-  if (objc != 1)
-    result_ptr->flags &= ~GDBTK_MAKES_LIST;
-
-  return result;
-}
-
-static void
-get_register (regnum, fp)
-     int regnum;
-     void *fp;
-{
-  struct type *reg_vtype;
-  char raw_buffer[MAX_REGISTER_RAW_SIZE];
-  char virtual_buffer[MAX_REGISTER_VIRTUAL_SIZE];
-  int format = (int) fp;
-  int optim;
-
-  if (format == 'N')
-    format = 0;
-
-  /* read_relative_register_raw_bytes returns a virtual frame pointer
-     (FRAME_FP (selected_frame)) if regnum == FP_REGNUM instead
-     of the real contents of the register. To get around this,
-     use get_saved_register instead. */
-  get_saved_register (raw_buffer, &optim, (CORE_ADDR *) NULL, selected_frame,
-		      regnum, (enum lval_type *) NULL);
-  if (optim)
-    {
-      Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-				Tcl_NewStringObj ("Optimized out", -1));
-      return;
-    }
-
-  /* Convert raw data to virtual format if necessary.  */
-
-  reg_vtype = REGISTER_VIRTUAL_TYPE (regnum);
-  if (REGISTER_CONVERTIBLE (regnum))
-    {
-      REGISTER_CONVERT_TO_VIRTUAL (regnum, reg_vtype,
-      				   raw_buffer, virtual_buffer);
-    }
-  else
-    memcpy (virtual_buffer, raw_buffer, REGISTER_VIRTUAL_SIZE (regnum));
-
-  if (format == 'r')
-    {
-      int j;
-      char *ptr, buf[1024];
-
-      strcpy (buf, "0x");
-      ptr = buf + 2;
-      for (j = 0; j < REGISTER_RAW_SIZE (regnum); j++)
-	{
-	  register int idx = TARGET_BYTE_ORDER == BIG_ENDIAN ? j
-	  : REGISTER_RAW_SIZE (regnum) - 1 - j;
-	  sprintf (ptr, "%02x", (unsigned char) raw_buffer[idx]);
-	  ptr += 2;
-	}
-      fputs_filtered (buf, gdb_stdout);
-    }
-  else
-    if ((TYPE_CODE (reg_vtype) == TYPE_CODE_UNION)
-        && (strcmp (FIELD_NAME (TYPE_FIELD (reg_vtype, 0)), REGISTER_NAME (regnum)) == 0))
-      {
-        val_print (FIELD_TYPE (TYPE_FIELD (reg_vtype, 0)), virtual_buffer, 0, 0,
-	           gdb_stdout, format, 1, 0, Val_pretty_default);
-      }
-    else
-      val_print (REGISTER_VIRTUAL_TYPE (regnum), virtual_buffer, 0, 0,
-	         gdb_stdout, format, 1, 0, Val_pretty_default);
-
-}
-
-/* This implements the tcl command get_pc_reg
- * It returns the value of the PC register
- *
- * Tcl Arguments:
- *    None
- * Tcl Result:
- *    The value of the pc register.
- */
-
-static int
-get_pc_register (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  char *buff;
-
-  xasprintf (&buff, "0x%llx", (long long) read_register (PC_REGNUM));
-  Tcl_SetStringObj (result_ptr->obj_ptr, buff, -1);
-  free(buff);
-  return TCL_OK;
-}
-
-/* This implements the tcl command "gdb_changed_register_list"
- * It takes a list of registers, and returns a list of
- * the registers on that list that have changed since the last
- * time the proc was called.
- *
- * Tcl Arguments:
- *    A list of registers.
- * Tcl Result:
- *    A list of changed registers.
- */
-
-static int
-gdb_changed_register_list (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  objc--;
-  objv++;
-
-  return map_arg_registers (objc, objv, register_changed_p, NULL);
-}
-
-static void
-register_changed_p (regnum, argp)
-     int regnum;
-     void *argp;		/* Ignored */
-{
-  char raw_buffer[MAX_REGISTER_RAW_SIZE];
-
-  if (read_relative_register_raw_bytes (regnum, raw_buffer))
-    return;
-
-  if (memcmp (&old_regs[REGISTER_BYTE (regnum)], raw_buffer,
-	      REGISTER_RAW_SIZE (regnum)) == 0)
-    return;
-
-  /* Found a changed register.  Save new value and return its number. */
-
-  memcpy (&old_regs[REGISTER_BYTE (regnum)], raw_buffer,
-	  REGISTER_RAW_SIZE (regnum));
-
-  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, Tcl_NewIntObj (regnum));
-}
-
-/*
- * This section contains the commands that deal with tracepoints:
- */
-
-/* return a list of all tracepoint numbers in interpreter */
-static int
-gdb_get_tracepoint_list (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  struct tracepoint *tp;
-
-  Tcl_SetListObj (result_ptr->obj_ptr, 0, NULL);
-
-  ALL_TRACEPOINTS (tp)
-    Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-			      Tcl_NewIntObj (tp->number));
-
-  return TCL_OK;
-}
-
-/* returns -1 if not found, tracepoint # if found */
-static int
-tracepoint_exists (char *args)
-{
-  struct tracepoint *tp;
-  char **canonical;
-  struct symtabs_and_lines sals;
-  char *file = NULL;
-  int result = -1;
-
-  sals = decode_line_1 (&args, 1, NULL, 0, &canonical);
-  if (sals.nelts == 1)
-    {
-      resolve_sal_pc (&sals.sals[0]);
-      file = xmalloc (strlen (sals.sals[0].symtab->dirname)
-		      + strlen (sals.sals[0].symtab->filename) + 1);
-      if (file != NULL)
-	{
-	  strcpy (file, sals.sals[0].symtab->dirname);
-	  strcat (file, sals.sals[0].symtab->filename);
-
-	  ALL_TRACEPOINTS (tp)
-	  {
-	    if (tp->address == sals.sals[0].pc)
-	      result = tp->number;
-#if 0
-	    /* Why is this here? This messes up assembly traces */
-	    else if (tp->source_file != NULL
-		     && strcmp (tp->source_file, file) == 0
-		     && sals.sals[0].line == tp->line_number)
-	      result = tp->number;
-#endif
-	  }
-	}
-    }
-  if (file != NULL)
-    free (file);
-  return result;
-}
-
-static int
-gdb_tracepoint_exists_command (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  char *args;
-
-  if (objc != 2)
-    {
-      Tcl_WrongNumArgs (interp, 1, objv,
-			"function:line|function|line|*addr");
-      return TCL_ERROR;
-    }
-
-  args = Tcl_GetStringFromObj (objv[1], NULL);
-
-  Tcl_SetIntObj (result_ptr->obj_ptr, tracepoint_exists (args));
-  return TCL_OK;
-}
-
-static int
-gdb_get_tracepoint_info (ClientData clientData, Tcl_Interp *interp,
-			 int objc, Tcl_Obj *CONST objv[])
-{
-  struct symtab_and_line sal;
-  int tpnum;
-  struct tracepoint *tp;
-  struct action_line *al;
-  Tcl_Obj *action_list;
-  char *filename, *funcname;
-
-  if (objc != 2)
-    {
-      Tcl_WrongNumArgs (interp, 1, objv, "tpnum");
-      return TCL_ERROR;
-    }
-
-  if (Tcl_GetIntFromObj (NULL, objv[1], &tpnum) != TCL_OK)
-    {
-      result_ptr->flags |= GDBTK_IN_TCL_RESULT;
-      return TCL_ERROR;
-    }
-
-  ALL_TRACEPOINTS (tp)
-    if (tp->number == tpnum)
-    break;
-
-  if (tp == NULL)
-    {
-      /* Hack. Check if this TP is being deleted. See comments
-	 around the definition of gdbtk_deleted_bp in
-	 gdbtk-hooks.c. */
-      struct tracepoint *dtp = (struct tracepoint *) gdbtk_deleted_bp;
-      if (dtp != NULL && dtp->number == tpnum)
-	tp = dtp;
-      else {
-	char *buff;
-	xasprintf (&buff, "Tracepoint #%d does not exist", tpnum);
-	Tcl_SetStringObj (result_ptr->obj_ptr, buff, -1);
-	free(buff);
-	return TCL_ERROR;
-      }
-    }
-
-  Tcl_SetListObj (result_ptr->obj_ptr, 0, NULL);
-  sal = find_pc_line (tp->address, 0);
-  filename = symtab_to_filename (sal.symtab);
-  if (filename == NULL)
-    filename = "N/A";
-  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-			    Tcl_NewStringObj (filename, -1));
-
-  funcname = pc_function_name (tp->address);
-  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr, Tcl_NewStringObj
-			    (funcname, -1));
-
-  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-			    Tcl_NewIntObj (sal.line));
-  {
-    char *tmp;
-    xasprintf (&tmp, "0x%s", paddr_nz (tp->address));
-    Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-			      Tcl_NewStringObj (tmp, -1));
-    free (tmp);
-  }
-  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-			    Tcl_NewIntObj (tp->enabled));
-  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-			    Tcl_NewIntObj (tp->pass_count));
-  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-			    Tcl_NewIntObj (tp->step_count));
-  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-			    Tcl_NewIntObj (tp->thread));
-  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-			    Tcl_NewIntObj (tp->hit_count));
-
-  /* Append a list of actions */
-  action_list = Tcl_NewObj ();
-  for (al = tp->actions; al != NULL; al = al->next)
-    {
-      Tcl_ListObjAppendElement (interp, action_list,
-				Tcl_NewStringObj (al->action, -1));
-    }
-  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr, action_list);
-
-  return TCL_OK;
-}
-
-
-static int
-gdb_trace_status (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  int result = 0;
-
-  if (trace_running_p)
-    result = 1;
-
-  Tcl_SetIntObj (result_ptr->obj_ptr, result);
-  return TCL_OK;
-}
-
-
-
-static int
-gdb_get_trace_frame_num (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  if (objc != 1)
-    {
-      Tcl_WrongNumArgs (interp, 1, objv, "linespec");
-      return TCL_ERROR;
-    }
-
-  Tcl_SetIntObj (result_ptr->obj_ptr, get_traceframe_number ());
-  return TCL_OK;
-
-}
-
-/* This implements the tcl command gdb_actions
- * It sets actions for a given tracepoint.
- *
- * Tcl Arguments:
- *    number: the tracepoint in question
- *    actions: the actions to add to this tracepoint
- * Tcl Result:
- *    None.
- */
-
-static int
-gdb_actions_command (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  struct tracepoint *tp;
-  Tcl_Obj **actions;
-  int nactions, i, len;
-  char *number, *args, *action;
-  long step_count;
-  struct action_line *next = NULL, *temp;
-  enum actionline_type linetype;
-
-  if (objc != 3)
-    {
-      Tcl_WrongNumArgs (interp, 1, objv, "number actions");
-      return TCL_ERROR;
-    }
-
-  args = number = Tcl_GetStringFromObj (objv[1], NULL);
-  tp = get_tracepoint_by_number (&args, 0, 0);
-  if (tp == NULL)
-    {
-      Tcl_AppendStringsToObj (result_ptr->obj_ptr, "Tracepoint \"",
-			      number, "\" does not exist", NULL);
-      return TCL_ERROR;
-    }
-
-  /* Free any existing actions */
-  if (tp->actions != NULL)
-    free_actions (tp);
-
-  step_count = 0;
-
-  Tcl_ListObjGetElements (interp, objv[2], &nactions, &actions);
-
-  /* Add the actions to the tracepoint */
-  for (i = 0; i < nactions; i++)
-    {
-      temp = xmalloc (sizeof (struct action_line));
-      temp->next = NULL;
-      action = Tcl_GetStringFromObj (actions[i], &len);
-      temp->action = savestring (action, len);
-
-      linetype = validate_actionline (&(temp->action), tp);
-
-      if (linetype == BADLINE)
-	{
-	  free (temp);
-	  continue;
-	}
-
-      if (next == NULL)
-	{
-	  tp->actions = temp;
-	  next = temp;
-	}
-      else
-	{
-	  next->next = temp;
-	  next = temp;
-	}
-    }
-
   return TCL_OK;
 }
 
@@ -3759,867 +2857,6 @@ gdb_loadfile (ClientData clientData, Tcl_Interp *interp, int objc,
 }
 
 /*
- *  This section contains commands for manipulation of breakpoints.
- */
-
-
-/* set a breakpoint by source file and line number */
-/* flags are as follows: */
-/* least significant 2 bits are disposition, rest is */
-/* type (normally 0).
-
-   enum bptype {
-   bp_breakpoint,                Normal breakpoint 
-   bp_hardware_breakpoint,      Hardware assisted breakpoint
-   }
-
-   Disposition of breakpoint.  Ie: what to do after hitting it.
-   enum bpdisp {
-   del,                         Delete it
-   del_at_next_stop,            Delete at next stop, whether hit or not
-   disable,                     Disable it 
-   donttouch                    Leave it alone 
-   };
- */
-
-/* This implements the tcl command "gdb_set_bp"
- * It sets breakpoints, and notifies the GUI.
- *
- * Tcl Arguments:
- *    filename: the file in which to set the breakpoint
- *    line:     the line number for the breakpoint
- *    type:     the type of the breakpoint
- *    thread:   optional thread number
- * Tcl Result:
- *    The return value of the call to gdbtk_tcl_breakpoint.
- */
-
-static int
-gdb_set_bp (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  struct symtab_and_line sal;
-  int line, thread = -1;
-  struct breakpoint *b;
-  char *buf, *typestr;
-  Tcl_DString cmd;
-  enum bpdisp disp;
-
-  if (objc != 4 && objc != 5)
-    {
-      Tcl_WrongNumArgs (interp, 1, objv, "filename line type ?thread?");
-      return TCL_ERROR;
-    }
-
-  sal.symtab = full_lookup_symtab (Tcl_GetStringFromObj (objv[1], NULL));
-  if (sal.symtab == NULL)
-    return TCL_ERROR;
-
-  if (Tcl_GetIntFromObj (interp, objv[2], &line) == TCL_ERROR)
-    {
-      result_ptr->flags = GDBTK_IN_TCL_RESULT;
-      return TCL_ERROR;
-    }
-
-  typestr = Tcl_GetStringFromObj (objv[3], NULL);
-  if (typestr == NULL)
-    {
-      result_ptr->flags = GDBTK_IN_TCL_RESULT;
-      return TCL_ERROR;
-    }
-  if (strncmp (typestr, "temp", 4) == 0)
-    disp = del;
-  else if (strncmp (typestr, "normal", 6) == 0)
-    disp = donttouch;
-  else
-    {
-      Tcl_SetStringObj (result_ptr->obj_ptr,
-			"type must be \"temp\" or \"normal\"", -1);
-      return TCL_ERROR;
-    }
-
-  if (objc == 5)
-    {
-      if (Tcl_GetIntFromObj (interp, objv[4], &thread) == TCL_ERROR)
-	{
-	  result_ptr->flags = GDBTK_IN_TCL_RESULT;
-	  return TCL_ERROR;
-	}
-    }
-
-  sal.line = line;
-  if (!find_line_pc (sal.symtab, sal.line, &sal.pc))
-    return TCL_ERROR;
-
-  sal.section = find_pc_overlay (sal.pc);
-  b = set_raw_breakpoint (sal);
-  set_breakpoint_count (breakpoint_count + 1);
-  b->number = breakpoint_count;
-  b->type = bp_breakpoint;
-  b->disposition = disp;
-  b->thread = thread;
-
-  /* FIXME: this won't work for duplicate basenames! */
-  xasprintf (&buf, "%s:%d", basename (Tcl_GetStringFromObj (objv[1], NULL)),
-	   line);
-  b->addr_string = xstrdup (buf);
-  free(buf);
-
-  /* now send notification command back to GUI */
-  create_breakpoint_hook (b);
-  return TCL_OK;
-}
-
-/* This implements the tcl command "gdb_set_bp_addr"
- * It sets breakpoints, and notifies the GUI.
- *
- * Tcl Arguments:
- *    addr: the address at which to set the breakpoint
- *    type:     the type of the breakpoint
- *    thread:   optional thread number
- * Tcl Result:
- *    The return value of the call to gdbtk_tcl_breakpoint.
- */
-
-static int
-gdb_set_bp_addr (ClientData clientData, Tcl_Interp *interp, int objc,
-		 Tcl_Obj *CONST objv[])
-     
-{
-  struct symtab_and_line sal;
-  int thread = -1;
-  long addr;
-  struct breakpoint *b;
-  char *filename, *typestr, *buf;
-  Tcl_DString cmd;
-  enum bpdisp disp;
-
-  if (objc != 3 && objc != 4)
-    {
-      Tcl_WrongNumArgs (interp, 1, objv, "address type ?thread?");
-      return TCL_ERROR;
-    }
-
-  if (Tcl_GetLongFromObj (interp, objv[1], &addr) == TCL_ERROR)
-    {
-      result_ptr->flags = GDBTK_IN_TCL_RESULT;
-      return TCL_ERROR;
-    }
-
-  typestr = Tcl_GetStringFromObj (objv[2], NULL);
-  if (typestr == NULL)
-    {
-      result_ptr->flags = GDBTK_IN_TCL_RESULT;
-      return TCL_ERROR;
-    }
-  if (strncmp (typestr, "temp", 4) == 0)
-    disp = del;
-  else if (strncmp (typestr, "normal", 6) == 0)
-    disp = donttouch;
-  else
-    {
-      Tcl_SetStringObj (result_ptr->obj_ptr,
-			"type must be \"temp\" or \"normal\"", -1);
-      return TCL_ERROR;
-    }
-
-  if (objc == 4)
-    {
-      if (Tcl_GetIntFromObj (interp, objv[3], &thread) == TCL_ERROR)
-	{
-	  result_ptr->flags = GDBTK_IN_TCL_RESULT;
-	  return TCL_ERROR;
-	}
-    }
-
-  sal = find_pc_line (addr, 0);
-  sal.pc = addr;
-  b = set_raw_breakpoint (sal);
-  set_breakpoint_count (breakpoint_count + 1);
-  b->number = breakpoint_count;
-  b->type = bp_breakpoint;
-  b->disposition = disp;
-  b->thread = thread;
-
-  xasprintf (&buf, "*(0x%lx)", addr);
-  b->addr_string = xstrdup (buf);
-
-  /* now send notification command back to GUI */
-  create_breakpoint_hook (b);
-  return TCL_OK;
-}
-
-/* This implements the tcl command "gdb_find_bp_at_line"
-
- * Tcl Arguments:
- *    filename: the file in which to find the breakpoint
- *    line:     the line number for the breakpoint
- * Tcl Result:
- *    It returns a list of breakpoint numbers
- */
-
-static int
-gdb_find_bp_at_line (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-
-{
-  struct symtab *s;
-  int line;
-  struct breakpoint *b;
-  extern struct breakpoint *breakpoint_chain;
-
-  if (objc != 3)
-    {
-      Tcl_WrongNumArgs (interp, 1, objv, "filename line");
-      return TCL_ERROR;
-    }
-
-  s = full_lookup_symtab (Tcl_GetStringFromObj (objv[1], NULL));
-  if (s == NULL)
-    return TCL_ERROR;
-
-  if (Tcl_GetIntFromObj (interp, objv[2], &line) == TCL_ERROR)
-    {
-      result_ptr->flags = GDBTK_IN_TCL_RESULT;
-      return TCL_ERROR;
-    }
-
-  Tcl_SetListObj (result_ptr->obj_ptr, 0, NULL);
-  for (b = breakpoint_chain; b; b = b->next)
-    if (b->line_number == line && !strcmp (b->source_file, s->filename))
-      Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-				Tcl_NewIntObj (b->number));
-
-  return TCL_OK;
-}
-
-
-/* This implements the tcl command "gdb_find_bp_at_addr"
-
- * Tcl Arguments:
- *    addr:     address
- * Tcl Result:
- *    It returns a list of breakpoint numbers
- */
-
-static int
-gdb_find_bp_at_addr (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-
-{
-  long addr;
-  struct breakpoint *b;
-  extern struct breakpoint *breakpoint_chain;
-
-  if (objc != 2)
-    {
-      Tcl_WrongNumArgs (interp, 1, objv, "address");
-      return TCL_ERROR;
-    }
-
-  if (Tcl_GetLongFromObj (interp, objv[1], &addr) == TCL_ERROR)
-    {
-      result_ptr->flags = GDBTK_IN_TCL_RESULT;
-      return TCL_ERROR;
-    }
-
-  Tcl_SetListObj (result_ptr->obj_ptr, 0, NULL);
-  for (b = breakpoint_chain; b; b = b->next)
-    if (b->address == (CORE_ADDR) addr)
-      Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-				Tcl_NewIntObj (b->number));
-
-  return TCL_OK;
-}
-
-/* This implements the tcl command gdb_get_breakpoint_info
-
-
- * Tcl Arguments:
- *   breakpoint_number
- * Tcl Result:
- *   A list with {file, function, line_number, address, type, enabled?,
- *                disposition, ignore_count, {list_of_commands},
- *                condition, thread, hit_count}
- */
-
-static int
-gdb_get_breakpoint_info (ClientData clientData, Tcl_Interp *interp, int objc,
-			 Tcl_Obj *CONST objv[])
-{
-  struct symtab_and_line sal;
-  struct command_line *cmd;
-  int bpnum;
-  struct breakpoint *b;
-  extern struct breakpoint *breakpoint_chain;
-  char *funcname, *filename;
-
-  Tcl_Obj *new_obj;
-
-  if (objc != 2)
-    {
-      Tcl_WrongNumArgs (interp, 1, objv, "breakpoint");
-      return TCL_ERROR;
-    }
-
-  if (Tcl_GetIntFromObj (NULL, objv[1], &bpnum) != TCL_OK)
-    {
-      result_ptr->flags = GDBTK_IN_TCL_RESULT;
-      return TCL_ERROR;
-    }
-
-  for (b = breakpoint_chain; b; b = b->next)
-    if (b->number == bpnum)
-      break;
-
-  if (!b || b->type != bp_breakpoint)
-    {
-      /* Hack. Check if this BP is being deleted. See comments
-	 around the definition of gdbtk_deleted_bp in
-	 gdbtk-hooks.c. */
-      struct breakpoint *dbp = (struct breakpoint *) gdbtk_deleted_bp;
-      if (dbp && dbp->number == bpnum)
-	b = dbp;
-      else
-	{
-	  char *err_buf;
-	  xasprintf (&err_buf, "Breakpoint #%d does not exist.", bpnum);
-	  Tcl_SetStringObj (result_ptr->obj_ptr, err_buf, -1);
-	  free(err_buf);
-	  return TCL_ERROR;
-	}
-    }
-
-  sal = find_pc_line (b->address, 0);
-
-  filename = symtab_to_filename (sal.symtab);
-  if (filename == NULL)
-    filename = "";
-
-  Tcl_SetListObj (result_ptr->obj_ptr, 0, NULL);
-  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-			    Tcl_NewStringObj (filename, -1));
-
-  funcname = pc_function_name (b->address);
-  new_obj = Tcl_NewStringObj (funcname, -1);
-  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, new_obj);
-
-  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-			    Tcl_NewIntObj (b->line_number));
-  sprintf_append_element_to_obj (result_ptr->obj_ptr, "0x%s",
-				 paddr_nz (b->address));
-  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-			    Tcl_NewStringObj (bptypes[b->type], -1));
-  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-			    Tcl_NewBooleanObj (b->enable == enabled));
-  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-			    Tcl_NewStringObj (bpdisp[b->disposition], -1));
-  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-			    Tcl_NewIntObj (b->ignore_count));
-
-  new_obj = Tcl_NewObj ();
-  for (cmd = b->commands; cmd; cmd = cmd->next)
-    Tcl_ListObjAppendElement (NULL, new_obj,
-			      Tcl_NewStringObj (cmd->line, -1));
-  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, new_obj);
-
-  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-			    Tcl_NewStringObj (b->cond_string, -1));
-
-  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-			    Tcl_NewIntObj (b->thread));
-  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-			    Tcl_NewIntObj (b->hit_count));
-
-  return TCL_OK;
-}
-
-
-/* This implements the tcl command gdb_get_breakpoint_list
- * It builds up a list of the current breakpoints.
- *
- * Tcl Arguments:
- *    None.
- * Tcl Result:
- *    A list of breakpoint numbers.
- */
-
-static int
-gdb_get_breakpoint_list (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  struct breakpoint *b;
-  extern struct breakpoint *breakpoint_chain;
-  Tcl_Obj *new_obj;
-
-  if (objc != 1)
-    {
-      Tcl_WrongNumArgs (interp, 1, objv, NULL);
-      return TCL_ERROR;
-    }
-
-  for (b = breakpoint_chain; b; b = b->next)
-    if (b->type == bp_breakpoint)
-      {
-	new_obj = Tcl_NewIntObj (b->number);
-	Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, new_obj);
-      }
-
-  return TCL_OK;
-}
-
-/* The functions in this section deal with stacks and backtraces. */
-
-/* This implements the tcl command gdb_stack.
- * It builds up a list of stack frames.
- *
- * Tcl Arguments:
- *    start  - starting stack frame
- *    count - number of frames to inspect
- * Tcl Result:
- *    A list of function names
- */
-
-static int
-gdb_stack (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  int start, count;
-
-  if (objc < 3)
-    {
-      Tcl_WrongNumArgs (interp, 1, objv, "start count");
-      result_ptr->flags |= GDBTK_IN_TCL_RESULT;
-      return TCL_ERROR;
-    }
-
-  if (Tcl_GetIntFromObj (NULL, objv[1], &start))
-    {
-      result_ptr->flags |= GDBTK_IN_TCL_RESULT;
-      return TCL_ERROR;
-    }
-  if (Tcl_GetIntFromObj (NULL, objv[2], &count))
-    {
-      result_ptr->flags |= GDBTK_IN_TCL_RESULT;
-      return TCL_ERROR;
-    }
-
-  if (target_has_stack)
-    {
-      gdb_result r;
-      struct frame_info *top;
-      struct frame_info *fi;
-
-      /* Find the outermost frame */
-      r  = GDB_get_current_frame (&fi);
-      if (r != GDB_OK)
-	return TCL_OK;
-
-      while (fi != NULL)
-        {
-          top = fi;
-	  r = GDB_get_prev_frame (fi, &fi);
-	  if (r != GDB_OK)
-	    fi = NULL;
-        }
-
-      /* top now points to the top (outermost frame) of the
-         stack, so point it to the requested start */
-      start = -start;
-      r = GDB_find_relative_frame (top, &start, &top);
-      
-      result_ptr->obj_ptr = Tcl_NewListObj (0, NULL);
-      if (r != GDB_OK)
-	return TCL_OK;
-
-      /* If start != 0, then we have asked to start outputting
-         frames beyond the innermost stack frame */
-      if (start == 0)
-        {
-          fi = top; 
-          while (fi && count--)
-            {
-              get_frame_name (interp, result_ptr->obj_ptr, fi);
-              r = GDB_get_next_frame (fi, &fi);
-	      if (r != GDB_OK)
-		break;
-            }
-        }
-    }
-
-  return TCL_OK;
-}
-
-/* A helper function for get_stack which adds information about
- * the stack frame FI to the caller's LIST.
- *
- * This is stolen from print_frame_info in stack.c.
- */
-static void
-get_frame_name (Tcl_Interp *interp, Tcl_Obj *list, struct frame_info *fi)
-{
-  struct symtab_and_line sal;
-  struct symbol *func = NULL;
-  register char *funname = 0;
-  enum language funlang = language_unknown;
-  Tcl_Obj *objv[1];
-
-  if (frame_in_dummy (fi))
-    {
-      objv[0] = Tcl_NewStringObj ("<function called from gdb>\n", -1);
-      Tcl_ListObjAppendElement (interp, list, objv[0]);
-      return;
-    }
-  if (fi->signal_handler_caller)
-    {
-      objv[0] = Tcl_NewStringObj ("<signal handler called>\n", -1);
-      Tcl_ListObjAppendElement (interp, list, objv[0]);
-      return;
-    }
-
-  sal =
-    find_pc_line (fi->pc,
-		  fi->next != NULL
-		  && !fi->next->signal_handler_caller
-		  && !frame_in_dummy (fi->next));
-
-  func = find_pc_function (fi->pc);
-  if (func)
-    {
-      struct minimal_symbol *msymbol = lookup_minimal_symbol_by_pc (fi->pc);
-      if (msymbol != NULL
-	  && (SYMBOL_VALUE_ADDRESS (msymbol)
-	      > BLOCK_START (SYMBOL_BLOCK_VALUE (func))))
-	{
-	  func = 0;
-	  funname = GDBTK_SYMBOL_SOURCE_NAME (msymbol);
-	  funlang = SYMBOL_LANGUAGE (msymbol);
-	}
-      else
-	{
-	  funname = GDBTK_SYMBOL_SOURCE_NAME (func);
-	  funlang = SYMBOL_LANGUAGE (func);
-	}
-    }
-  else
-    {
-      struct minimal_symbol *msymbol = lookup_minimal_symbol_by_pc (fi->pc);
-      if (msymbol != NULL)
-	{
-	  funname = GDBTK_SYMBOL_SOURCE_NAME (msymbol);
-	  funlang = SYMBOL_LANGUAGE (msymbol);
-	}
-    }
-
-  if (sal.symtab)
-    {
-      objv[0] = Tcl_NewStringObj (funname, -1);
-      Tcl_ListObjAppendElement (interp, list, objv[0]);
-    }
-  else
-    {
-#if 0
-      /* we have no convenient way to deal with this yet... */
-      if (fi->pc != sal.pc || !sal.symtab)
-	{
-	  print_address_numeric (fi->pc, 1, gdb_stdout);
-	  printf_filtered (" in ");
-	}
-      printf_symbol_filtered (gdb_stdout, funname ? funname : "??", funlang,
-			      DMGL_ANSI);
-#endif
-      objv[0] = Tcl_NewStringObj (funname != NULL ? funname : "??", -1);
-#ifdef PC_LOAD_SEGMENT
-      /* If we couldn't print out function name but if can figure out what
-         load segment this pc value is from, at least print out some info
-         about its load segment. */
-      if (!funname)
-	{
-	  Tcl_AppendStringsToObj (objv[0], " from ", PC_LOAD_SEGMENT (fi->pc),
-				  (char *) NULL);
-	}
-#endif
-#ifdef PC_SOLIB
-      if (!funname)
-	{
-	  char *lib = PC_SOLIB (fi->pc);
-	  if (lib)
-	    {
-	      Tcl_AppendStringsToObj (objv[0], " from ", lib, (char *) NULL);
-	    }
-	}
-#endif
-      Tcl_ListObjAppendElement (interp, list, objv[0]);
-    }
-}
-
-/* This implements the tcl command gdb_selected_frame
-
- * Returns the address of the selected frame
- * frame.
- *
- * Arguments:
- *    None
- * Tcl Result:
- *    The currently selected frame's address
- */
-
-static int
-gdb_selected_frame (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  char *frame;
-
-  if (selected_frame == NULL)
-    xasprintf (&frame, "%s","");
-  else
-    xasprintf (&frame, "0x%s", paddr_nz (FRAME_FP (selected_frame)));
-
-  Tcl_SetStringObj (result_ptr->obj_ptr, frame, -1);
-
-  free(frame);
-  return TCL_OK;
-}
-
-/* This implements the tcl command gdb_selected_block
- *
- * Returns the start and end addresses of the innermost
- * block in the selected frame.
- *
- * Arguments:
- *    None
- * Tcl Result:
- *    The currently selected block's start and end addresses
- */
-
-static int
-gdb_selected_block (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  char *start = NULL;
-  char *end   = NULL;
-
-  if (selected_frame == NULL)
-    {
-      xasprintf (&start, "%s", "");
-      xasprintf (&end, "%s", "");
-    }
-  else
-    {
-      struct block *block;
-      block = get_frame_block (selected_frame);
-      xasprintf (&start, "0x%s", paddr_nz (BLOCK_START (block)));
-      xasprintf (&end, "0x%s", paddr_nz (BLOCK_END (block)));
-    }
-
-  Tcl_SetListObj (result_ptr->obj_ptr, 0, NULL);
-  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-			    Tcl_NewStringObj (start, -1));
-  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-			    Tcl_NewStringObj (end, -1));
-
-  free(start);
-  free(end);
-  return TCL_OK;
-}
-
-/* This implements the tcl command gdb_get_blocks
- *
- * Returns the start and end addresses for all blocks in
- * the selected frame.
- *
- * Arguments:
- *    None
- * Tcl Result:
- *    A list of all valid blocks in the selected_frame.
- */
-
-static int
-gdb_get_blocks (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  struct block *block;
-  int nsyms, i, junk;
-  struct symbol *sym;
-  CORE_ADDR pc;
-
-  Tcl_SetListObj (result_ptr->obj_ptr, 0, NULL);
-  
-  if (selected_frame != NULL)
-    {
-      block = get_frame_block (selected_frame);
-      pc = get_frame_pc (selected_frame);
-      while (block != 0)
-	{
-	  nsyms = BLOCK_NSYMS (block);
-	  junk = 0;
-	  for (i = 0; i < nsyms; i++)
-	    {
-	      sym = BLOCK_SYM (block, i);
-	      switch (SYMBOL_CLASS (sym))
-		{
-		default:
-		case LOC_UNDEF:		  /* catches errors        */
-		case LOC_CONST:           /* constant              */
-		case LOC_TYPEDEF:	  /* local typedef         */
-		case LOC_LABEL:	          /* local label           */
-		case LOC_BLOCK:	          /* local function        */
-		case LOC_CONST_BYTES:	  /* loc. byte seq.        */
-		case LOC_UNRESOLVED:      /* unresolved static     */
-		case LOC_OPTIMIZED_OUT:   /* optimized out         */
-		  junk = 1;
-		  break;
-
-		case LOC_ARG:		  /* argument              */
-		case LOC_REF_ARG:	  /* reference arg         */
-		case LOC_REGPARM:	  /* register arg          */
-		case LOC_REGPARM_ADDR:    /* indirect register arg */
-		case LOC_LOCAL_ARG:	  /* stack arg             */
-		case LOC_BASEREG_ARG:	  /* basereg arg           */
-
-		case LOC_LOCAL:	          /* stack local           */
-		case LOC_BASEREG:	  /* basereg local         */
-		case LOC_STATIC:	  /* static                */
-		case LOC_REGISTER:        /* register              */
-		  junk = 0;
-		  break;
-		}
-	    }
-
-	  /* If we found a block with locals in it, add it to the list. 
-	     Note that the ranges of start and end address for blocks
-	     are exclusive, so double-check against the PC */
-	  
-	  if (!junk && pc < BLOCK_END (block))
-	    {
-            char *addr;
-
-	      Tcl_Obj *elt = Tcl_NewListObj (0, NULL);
-            xasprintf (&addr, "0x%s", paddr_nz (BLOCK_START (block)));
-	      Tcl_ListObjAppendElement (interp, elt,
-					Tcl_NewStringObj (addr, -1));
-            free(addr);
-            xasprintf (&addr, "0x%s", paddr_nz (BLOCK_END (block)));
-	      Tcl_ListObjAppendElement (interp, elt,
-					Tcl_NewStringObj (addr, -1));
-	      Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr, elt);
-            free(addr);
-	    }
-
-	  if (BLOCK_FUNCTION (block))
-	    break;
-	  else
-	    block = BLOCK_SUPERBLOCK (block);
-	}
-    }
-
-  return TCL_OK;
-}
-
-/* This implements the tcl command gdb_block_vars.
- *
- * Returns all variables valid in the specified block.
- *
- * Arguments:
- *    The start and end addresses which identify the block.
- * Tcl Result:
- *    All variables defined in the given block.
- */
-
-static int
-gdb_block_vars (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-{
-  struct block *block;
-  int nsyms, i;
-  struct symbol *sym;
-  CORE_ADDR start, end;
-
-  if (objc < 3)
-    {
-      Tcl_WrongNumArgs (interp, 1, objv, "startAddr endAddr");
-      result_ptr->flags |= GDBTK_IN_TCL_RESULT;
-      return TCL_ERROR;
-    }
-
-  Tcl_SetListObj (result_ptr->obj_ptr, 0, NULL);
-  if (selected_frame == NULL)
-    return TCL_OK;
-
-  start = parse_and_eval_address (Tcl_GetStringFromObj (objv[1], NULL));
-  end   = parse_and_eval_address (Tcl_GetStringFromObj (objv[2], NULL));
-  
-  block = get_frame_block (selected_frame);
-
-  while (block != 0)
-    {
-      if (BLOCK_START (block) == start && BLOCK_END (block) == end)
-	{
-	  nsyms = BLOCK_NSYMS (block);
-	  for (i = 0; i < nsyms; i++)
-	    {
-	      sym = BLOCK_SYM (block, i);
-	      switch (SYMBOL_CLASS (sym))
-		{
-		case LOC_ARG:		  /* argument              */
-		case LOC_REF_ARG:	  /* reference arg         */
-		case LOC_REGPARM:	  /* register arg          */
-		case LOC_REGPARM_ADDR:    /* indirect register arg */
-		case LOC_LOCAL_ARG:	  /* stack arg             */
-		case LOC_BASEREG_ARG:	  /* basereg arg           */
-		case LOC_LOCAL:	          /* stack local           */
-		case LOC_BASEREG:	  /* basereg local         */
-		case LOC_STATIC:	  /* static                */
-		case LOC_REGISTER:        /* register              */
-		  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-					    Tcl_NewStringObj (SYMBOL_NAME (sym),
-							      -1));
-		  break;
-
-		default:
-		  break;
-		}
-	    }
-
-	  return TCL_OK;
-	}
-      else if (BLOCK_FUNCTION (block))
-	break;
-      else
-	block = BLOCK_SUPERBLOCK (block);
-    }
-
-  return TCL_OK;
-}
-
-/*
  * This section contains a bunch of miscellaneous utility commands
  */
 
@@ -4686,7 +2923,7 @@ perror_with_name_wrapper (args)
 /* the first one instead of the correct one. */
 /* symtab->fullname will be NULL if the file is not available. */
 
-static struct symtab *
+struct symtab *
 full_lookup_symtab (file)
      char *file;
 {
@@ -4773,12 +3010,3 @@ pc_function_name (pc)
 
   return funcname;
 }
-
-static void
-setup_architecture_data ()
-{
-  /* don't trust REGISTER_BYTES to be zero. */
-  old_regs = xmalloc (REGISTER_BYTES + 1);
-  memset (old_regs, 0, REGISTER_BYTES + 1);
-}
-
