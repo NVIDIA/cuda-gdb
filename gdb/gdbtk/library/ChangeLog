@@ -1,3 +1,9 @@
+2000-10-11  Fernando Nasser  <fnasser@cygnus.com>
+
+	* srctextwin.itb (build_popups): Fix typos that caused duplicate
+	"Jump to Here" menu entries in the breakpoint-set right-click pop-up
+	menu.
+
 2000-10-04  Fernando Nasser  <fnasser@totem.to.cygnus.com>
 
 	* download.itb (download_it): Fix previous changes for non-windows

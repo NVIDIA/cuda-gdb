@@ -239,7 +239,7 @@ body SrcTextWin::build_popups {} {
     if {[pref get gdb/control_target]} {
       
       addPopup tp "Continue to Here" "$this continue_to_here" green 0 0
-      addPopup bp "Jump to Here" "$this jump_to_here" {} 0 0
+      addPopup tp "Jump to Here" "$this jump_to_here" {} 0 0
       #	$popups(tp) add separator    
 
       # Currently you cannot set a tracepoint and a breakpoint at the same line...
@@ -272,7 +272,7 @@ body SrcTextWin::build_popups {} {
     if {!$Browsing && [pref get gdb/control_target]} {
       addPopup bp_and_tp "Continue to Here" "$this continue_to_here" \
 	green 0 0
-      addPopup bp "Jump to Here" "$this jump_to_here" \
+      addPopup bp_and_tp "Jump to Here" "$this jump_to_here" \
 	green 0 0
       $popups(bp_and_tp) add separator    
     }
