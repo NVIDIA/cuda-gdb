@@ -38,7 +38,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.163 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.164 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3482,6 +3482,11 @@ method like @code{INTEGER_TO_ADDRESS} certainly makes it possible for
 
 @xref{Target Architecture Definition, , Pointers Are Not Always
 Addresses}.
+
+@item NEED_TEXT_START_END
+@findex NEED_TEXT_START_END
+Define this if @value{GDBN} should determine the start and end addresses of the
+text section.  (Seems dubious.)
 
 @item NO_HIF_SUPPORT
 @findex NO_HIF_SUPPORT
