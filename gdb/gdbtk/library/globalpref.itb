@@ -20,7 +20,7 @@
 # ------------------------------------------------------------------
 #  METHOD:  _init - set up the tracing labels info
 # ------------------------------------------------------------------
-body GlobalPref::_init {} {
+itcl::body GlobalPref::_init {} {
   if {$inited} {
     return
   }
@@ -43,7 +43,7 @@ body GlobalPref::_init {} {
 # ------------------------------------------------------------------
 #  METHOD:  init_var - initialize preference variables
 # ------------------------------------------------------------------
-body GlobalPref::_init_var {} {
+itcl::body GlobalPref::_init_var {} {
   set vlist {gdb/ImageDir gdb/console/wrap gdb/mode
     gdb/help/browser gdb/use_icons}
 
@@ -56,7 +56,7 @@ body GlobalPref::_init_var {} {
 # ------------------------------------------------------------------
 #  METHOD:  constructor - create the Global Preferences object
 # ------------------------------------------------------------------
-body GlobalPref::constructor {args} {    
+itcl::body GlobalPref::constructor {args} {    
   window_name "Global Preferences"
   _init
   _init_var
@@ -67,7 +67,7 @@ body GlobalPref::constructor {args} {
 # ------------------------------------------------------------------
 #  METHOD:  destructor - destroy the Global Preferences object
 # ------------------------------------------------------------------
-body GlobalPref::destructor {} {
+itcl::body GlobalPref::destructor {} {
   foreach thunk $_fonts {
     font delete test-$thunk-font
   }
@@ -76,7 +76,7 @@ body GlobalPref::destructor {} {
 # ------------------------------------------------------------------
 #  METHOD:  _build_win - build the dialog
 # ------------------------------------------------------------------
-body GlobalPref::_build_win {} {
+itcl::body GlobalPref::_build_win {} {
   global tcl_platform GDBTK_LIBRARY
   debug
   frame $itk_interior.f
@@ -262,7 +262,7 @@ body GlobalPref::_build_win {} {
 # ------------------------------------------------------------------
 #  PRIVATE METHOD:  _make_font_item
 # ------------------------------------------------------------------
-body GlobalPref::_make_font_item {f name label font_list} {
+itcl::body GlobalPref::_make_font_item {f name label font_list} {
   
   # create ComboBox with font name
   lappend _fonts $name
@@ -297,7 +297,7 @@ body GlobalPref::_make_font_item {f name label font_list} {
 # ------------------------------------------------------------------
 #  PRIVATE METHOD:  _resize_font_item_height
 # ------------------------------------------------------------------
-body GlobalPref::_resize_font_item_height {} {
+itcl::body GlobalPref::_resize_font_item_height {} {
   foreach font $_fonts {
     set master [$itk_interior.f.d get_frame]
     set row [gridCGet $master.${font}l -row]
@@ -308,7 +308,7 @@ body GlobalPref::_resize_font_item_height {} {
 # ------------------------------------------------------------------
 #  PRIVATE METHOD:  _change_icons
 # ------------------------------------------------------------------
-body GlobalPref::_change_icons {w args} {
+itcl::body GlobalPref::_change_icons {w args} {
   debug
   set index [$w list curselection]
   if {$index != ""} {
@@ -330,7 +330,7 @@ body GlobalPref::_change_icons {w args} {
 #  NOTES:        The combobox has a really non-standard callback
 #                mechanism: it always adds two args to the callback.
 # ------------------------------------------------------------------
-body GlobalPref::_change_font {font stupid implementation} {
+itcl::body GlobalPref::_change_font {font stupid implementation} {
   font configure test-$font-font -family $implementation
 }
 
@@ -345,7 +345,7 @@ body GlobalPref::_change_font {font stupid implementation} {
 #
 #  NOTES:        See comments for purpose of "direction". Sigh.
 # ------------------------------------------------------------------
-body GlobalPref::_change_size {direction font} {
+itcl::body GlobalPref::_change_size {direction font} {
 
   # Almost as stupid as the comobox, the iwidgets::spinint class
   # will not treat its -increment and -decrement commands
@@ -356,7 +356,7 @@ body GlobalPref::_change_size {direction font} {
 }
 
 
-body GlobalPref::_toggle_tracing {win} {
+itcl::body GlobalPref::_toggle_tracing {win} {
   debug
   $win configure -text $tracing_labels($_new(gdb/mode))
 }
@@ -364,14 +364,14 @@ body GlobalPref::_toggle_tracing {win} {
 # ------------------------------------------------------------------
 #  METHOD:  _ok - called to accept settings and close dialog
 # ------------------------------------------------------------------
-body GlobalPref::_ok {} {
+itcl::body GlobalPref::_ok {} {
   _apply 1
 }
 
 # ------------------------------------------------------------------
 #  METHOD:  _apply - apply current settings to the screen
 # ------------------------------------------------------------------
-body GlobalPref::_apply {{deleteMe 0}} {
+itcl::body GlobalPref::_apply {{deleteMe 0}} {
   debug
   set changed_something 0
 
@@ -425,7 +425,7 @@ body GlobalPref::_apply {{deleteMe 0}} {
 #  METHOD:  _cancel - forget current settings -- reset to original
 #                    state and close preferences
 # ------------------------------------------------------------------
-body GlobalPref::_cancel {} {
+itcl::body GlobalPref::_cancel {} {
   debug
   set changed_something 0
 
@@ -465,7 +465,7 @@ body GlobalPref::_cancel {} {
 #                    The cancel method is actually called when
 #		     the window is closed. Name needs fixed.
 # ------------------------------------------------------------------
-body GlobalPref::cancel {} {
+itcl::body GlobalPref::cancel {} {
   # when the window is closed, we want the preferences selected to
   # be applied.
   _apply 1

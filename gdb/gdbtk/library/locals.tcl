@@ -12,7 +12,7 @@
 # GNU General Public License for more details.
 
 
-class LocalsWin {
+itcl::class LocalsWin {
     inherit VariableWin
 
     # ------------------------------------------------------------------

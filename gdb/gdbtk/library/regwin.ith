@@ -15,7 +15,7 @@
 # GNU General Public License for more details.
 
 
-class RegWin {
+itcl::class RegWin {
   inherit EmbeddedWin GDBWin
   
   private {

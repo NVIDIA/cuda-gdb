@@ -28,7 +28,7 @@
 #
 # ----------------------------------------------------------------------
 
-class PluginWindow {
+itcl::class PluginWindow {
   inherit ManagedWin GDBEventHandler
 
   # ------------------------------------------------------------------

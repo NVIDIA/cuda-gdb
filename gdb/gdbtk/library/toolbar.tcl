@@ -20,7 +20,7 @@
 # and button sets.  It does not actually add any buttons or
 # menus on its own, however.
 
-class oldGDBToolBar {
+itcl::class oldGDBToolBar {
   inherit itk::Widget
 
   # ------------------------------------------------------------------

@@ -26,7 +26,7 @@
 # either one if a tracepoint was set/edited successfully or zero if 
 # the user bails out (cancel or destroy buttons).
 
-class TraceDlg {
+itcl::class TraceDlg {
   inherit ManagedWin
 
   # ------------------------------------------------------------------

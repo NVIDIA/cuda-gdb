@@ -14,7 +14,7 @@
 # ------------------------------------------------------------------
 #  METHOD:  constructor - build the dialog
 # ------------------------------------------------------------------
-body MemWin::constructor {args} {
+itcl::body MemWin::constructor {args} {
   global _mem
   debug $args
   eval itk_initialize $args
@@ -52,7 +52,7 @@ body MemWin::constructor {args} {
 # ------------------------------------------------------------------
 #  METHOD:  destructor - destroy the dialog
 # ------------------------------------------------------------------
-body MemWin::destructor {} {
+itcl::body MemWin::destructor {} {
   if {[winfo exists $prefs_win]} {
     $prefs_win cancel
   }
@@ -62,7 +62,7 @@ body MemWin::destructor {} {
 # ------------------------------------------------------------------
 #  METHOD:  build_win - build the main memory window
 # ------------------------------------------------------------------
-body MemWin::build_win {} {
+itcl::body MemWin::build_win {} {
   global tcl_platform gdb_ImageDir _mem ${this}_memval
 
   set maxlen 0
@@ -214,21 +214,21 @@ body MemWin::build_win {} {
 # ------------------------------------------------------------------
 #  METHOD:  paste - paste callback. Update cell contents after paste
 # ------------------------------------------------------------------
-body MemWin::paste {x y} {
+itcl::body MemWin::paste {x y} {
   edit [$itk_component(table) index @$x,$y]
 }
 
 # ------------------------------------------------------------------
 #  METHOD:  validate - because the control widget wants this
 # ------------------------------------------------------------------
-body MemWin::validate {val} {
+itcl::body MemWin::validate {val} {
   return $val
 }
 
 # ------------------------------------------------------------------
 #  METHOD:  create_prefs - create memory preferences dialog
 # ------------------------------------------------------------------
-body MemWin::create_prefs {} {
+itcl::body MemWin::create_prefs {} {
   if {$Running} { return }
 
   # make sure row height is set
@@ -246,7 +246,7 @@ body MemWin::create_prefs {} {
 # ------------------------------------------------------------------
 #  METHOD:  changed_cell - called when moving from one cell to another
 # ------------------------------------------------------------------
-body MemWin::changed_cell {from to} {
+itcl::body MemWin::changed_cell {from to} {
   #debug "moved from $from to $to"
   #debug "value = [$itk_component(table) get $from]"
   if {$saved_value != ""} {
@@ -260,7 +260,7 @@ body MemWin::changed_cell {from to} {
 # ------------------------------------------------------------------
 #  METHOD:  edit - edit a cell
 # ------------------------------------------------------------------
-body MemWin::edit { cell } {
+itcl::body MemWin::edit { cell } {
   global _mem ${this}_memval
 
   #debug "edit $cell"
@@ -344,7 +344,7 @@ body MemWin::edit { cell } {
 # ------------------------------------------------------------------
 #  METHOD:  toggle_enabled - called when enable is toggled
 # ------------------------------------------------------------------
-body MemWin::toggle_enabled {} {
+itcl::body MemWin::toggle_enabled {} {
   global _mem
 
   if {$Running} { return }
@@ -362,7 +362,7 @@ body MemWin::toggle_enabled {} {
 # ------------------------------------------------------------------
 #  METHOD:  update - update widget after every PC change
 # ------------------------------------------------------------------
-body MemWin::update {event} {
+itcl::body MemWin::update {event} {
   global _mem
   if {$_mem($this,enabled)} {
     _update_address 0
@@ -372,7 +372,7 @@ body MemWin::update {event} {
 # ------------------------------------------------------------------
 #  METHOD:  idle - memory window is idle, so enable menus
 # ------------------------------------------------------------------
-body MemWin::idle {event} {
+itcl::body MemWin::idle {event} {
   # Fencepost
   set Running 0
 
@@ -399,7 +399,7 @@ body MemWin::idle {event} {
 #  METHOD: busy - BusyEvent handler
 #                 Disable menus 'cause we're busy updating things.
 # ------------------------------------------------------------------
-body MemWin::busy {event} {
+itcl::body MemWin::busy {event} {
   # Fencepost
   set Running 1
 
@@ -426,7 +426,7 @@ body MemWin::busy {event} {
 #  METHOD: newsize - calculate how many rows to display when the
 #  window is resized.
 # ------------------------------------------------------------------
-body MemWin::newsize {height} {
+itcl::body MemWin::newsize {height} {
 
   if {$dont_size || $Running} {
     return 
@@ -448,7 +448,7 @@ body MemWin::newsize {height} {
   }
 }
 
-body MemWin::_update_address {make_busy} {
+itcl::body MemWin::_update_address {make_busy} {
   if {$make_busy} {
     gdbtk_busy
   }
@@ -461,7 +461,7 @@ body MemWin::_update_address {make_busy} {
 # ------------------------------------------------------------------
 #  METHOD: update_address_cb - address entry widget callback
 # ------------------------------------------------------------------
-body MemWin::update_address_cb {} {
+itcl::body MemWin::update_address_cb {} {
   set new_entry 1
   _update_address 1
 }
@@ -469,7 +469,7 @@ body MemWin::update_address_cb {} {
 # ------------------------------------------------------------------
 #  METHOD: update_address - update address and data displayed
 # ------------------------------------------------------------------
-body MemWin::update_address {addr_exp} {
+itcl::body MemWin::update_address {addr_exp} {
 
   set bad_expr 0
   set saved_addr $current_addr
@@ -521,7 +521,7 @@ body MemWin::update_address {addr_exp} {
 # ------------------------------------------------------------------
 #  METHOD:  BadExpr - handle a bad expression
 # ------------------------------------------------------------------
-body MemWin::BadExpr {errTxt} {
+itcl::body MemWin::BadExpr {errTxt} {
   if {$new_entry} {
     tk_messageBox -type ok -icon error -message $errTxt
     set new_entry 0
@@ -537,7 +537,7 @@ body MemWin::BadExpr {errTxt} {
 #  METHOD:  incr_addr - callback from control widget to increment
 #  the current address.
 # ------------------------------------------------------------------
-body MemWin::incr_addr {num} {
+itcl::body MemWin::incr_addr {num} {
   if {$current_addr == ""} {
     return
   }
@@ -564,7 +564,7 @@ body MemWin::incr_addr {num} {
 #  METHOD:  update_addr - read in data starting at $current_addr
 #  This is just a helper function for update_address. 
 # ------------------------------------------------------------------
-body MemWin::update_addr {} {
+itcl::body MemWin::update_addr {} {
   global _mem ${this}_memval
 
     set row 0
@@ -602,7 +602,7 @@ body MemWin::update_addr {} {
 # ------------------------------------------------------------------
 #  METHOD:  hidemb - hide the menubar.  NOT CURRENTLY USED
 # ------------------------------------------------------------------
-body MemWin::hidemb {} {
+itcl::body MemWin::hidemb {} {
   set mbar 0
   reconfig
 }
@@ -610,7 +610,7 @@ body MemWin::hidemb {} {
 # ------------------------------------------------------------------
 #  METHOD:  reconfig - used when preferences change
 # ------------------------------------------------------------------
-body MemWin::reconfig {} {
+itcl::body MemWin::reconfig {} {
   debug
   set addr_exp [string trimright [string trimleft $addr_exp]]
   set wh [winfo height $top]
@@ -651,7 +651,7 @@ body MemWin::reconfig {} {
 # ------------------------------------------------------------------
 #  METHOD:  do_popup - Display popup menu
 # ------------------------------------------------------------------
-body MemWin::do_popup {X Y} {
+itcl::body MemWin::do_popup {X Y} {
   if {$Running} { return }
   $itk_component(table).menu delete 0 end
   $itk_component(table).menu add check -label "Auto Update" -variable _mem($this,enabled) \
@@ -671,7 +671,7 @@ body MemWin::do_popup {X Y} {
 # ------------------------------------------------------------------
 #  METHOD:  goto - change the address of the current memory window
 # ------------------------------------------------------------------
-body MemWin::goto { addr } {
+itcl::body MemWin::goto { addr } {
   set current_addr $addr
   $itk_interior.f.cntl delete 0 end
   $itk_interior.f.cntl insert end $addr
@@ -683,7 +683,7 @@ body MemWin::goto { addr } {
 #  On startup, if the public variable "addr_exp" was not set,
 #  then set it to the start of ".data" if found, otherwise "$pc"
 # ------------------------------------------------------------------
-body MemWin::init_addr_exp {} {
+itcl::body MemWin::init_addr_exp {} {
   if {$addr_exp == ""} {
     set err [catch {gdb_cmd "info file"} result]
     if {!$err} {
@@ -705,7 +705,7 @@ body MemWin::init_addr_exp {} {
 # ------------------------------------------------------------------
 #  METHOD:  cursor - set the cursor
 # ------------------------------------------------------------------
-body MemWin::cursor {glyph} {
+itcl::body MemWin::cursor {glyph} {
   # Set cursor for all labels
   # for {set i 0} {$i < $bytes_per_row} {incr i $size} {
   #   $itk_component(table).h.$i configure -cursor $glyph
@@ -726,7 +726,7 @@ body MemWin::cursor {glyph} {
 # x - +1 to move down one cell, -1 to move up one cell.
 # y - +1 to move right one cell, -1 to move left one cell.
 
-body MemWin::memMoveCell {w x y} {
+itcl::body MemWin::memMoveCell {w x y} {
   if {[catch {$w index active row} r]} return
   set c [$w index active col]
   if {$ascii && ($c == $Numcols)} {
@@ -766,7 +766,7 @@ body MemWin::memMoveCell {w x y} {
 #        type     - The dialog type (tk_messageBox).
 #                    Default: ok
 # ------------------------------------------------------------
-body MemWin::error_dialog {msg {modality task} {type ok}} {
+itcl::body MemWin::error_dialog {msg {modality task} {type ok}} {
   set parent [winfo toplevel [namespace tail $this]]
   tk_messageBox -icon error -title Error -type $type \
     -message $msg -parent $parent

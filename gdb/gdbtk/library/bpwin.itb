@@ -15,7 +15,7 @@
 # ------------------------------------------------------------------
 #  CONSTRUCTOR:  create the main breakpoint window
 # ------------------------------------------------------------------
-body BpWin::constructor {args} {
+itcl::body BpWin::constructor {args} {
   window_name "Breakpoints" "BPs"
   
   if {[pref getd gdb/bp/menu] != ""} {
@@ -37,13 +37,13 @@ body BpWin::constructor {args} {
 # ------------------------------------------------------------------
 #  DESTRUCTOR:  destroy the breakpoint window
 # ------------------------------------------------------------------
-body BpWin::destructor {} {}
+itcl::body BpWin::destructor {} {}
 
 
 # ------------------------------------------------------------------
 #  METHOD:  build_win - build the main breakpoint window
 # ------------------------------------------------------------------
-body BpWin::build_win {} {
+itcl::body BpWin::build_win {} {
   global _bp_en _bp_disp tcl_platform
   set bg1 $::Colors(bg)
 
@@ -201,7 +201,7 @@ body BpWin::build_win {} {
 # ------------------------------------------------------------------
 #  METHOD:  bp_add - add a breakpoint entry
 # ------------------------------------------------------------------
-body BpWin::bp_add {bp_event {tracepoint 0}} {
+itcl::body BpWin::bp_add {bp_event {tracepoint 0}} {
   global _bp_en _bp_disp tcl_platform _files
 
   set number [$bp_event get number]
@@ -303,7 +303,7 @@ body BpWin::bp_add {bp_event {tracepoint 0}} {
 #  METHOD:  bp_store - stores away the breakpoints in a file of gdb
 #                      commands
 # ------------------------------------------------------------------
-body BpWin::bp_store {} {
+itcl::body BpWin::bp_store {} {
   set out_file [tk_getSaveFile]
   if {$out_file == ""} {
     return
@@ -350,7 +350,7 @@ body BpWin::bp_store {} {
 #  METHOD:  bp_restore - restore the breakpoints from a file of gdb
 #                      commands
 # ------------------------------------------------------------------
-body BpWin::bp_restore {} {
+itcl::body BpWin::bp_restore {} {
   set inH [tk_getOpenFile]
   if {$inH == ""} {
     return
@@ -364,7 +364,7 @@ body BpWin::bp_restore {} {
 # ------------------------------------------------------------------
 #  METHOD:  bp_select - select a row in the grid
 # ------------------------------------------------------------------
-body BpWin::bp_select { r } {
+itcl::body BpWin::bp_select { r } {
   global _bp_en _bp_disp
 
   set zz [list addr file func line]
@@ -435,7 +435,7 @@ body BpWin::bp_select { r } {
 #  ARGUMENTS:    None
 #  RETURNS:      Nothing
 # ------------------------------------------------------------------
-body BpWin::_select_and_popup {bp X Y} {
+itcl::body BpWin::_select_and_popup {bp X Y} {
   if {$selected != $bp} {
     bp_select $bp
   }
@@ -445,7 +445,7 @@ body BpWin::_select_and_popup {bp X Y} {
 # ------------------------------------------------------------------
 #  METHOD:  bp_modify - modify a breakpoint entry
 # ------------------------------------------------------------------
-body BpWin::bp_modify {bp_event {tracepoint 0}} {
+itcl::body BpWin::bp_modify {bp_event {tracepoint 0}} {
   global _bp_en _bp_disp tcl_platform _files
 
   set number [$bp_event get number]
@@ -523,7 +523,7 @@ body BpWin::bp_modify {bp_event {tracepoint 0}} {
 # ------------------------------------------------------------------
 #  METHOD:  bp_able - enable/disable a breakpoint
 # ------------------------------------------------------------------
-body BpWin::bp_able { i } {
+itcl::body BpWin::bp_able { i } {
   global _bp_en
   
   bp_select $i
@@ -546,7 +546,7 @@ body BpWin::bp_able { i } {
 # ------------------------------------------------------------------
 #  METHOD:  bp_remove - remove a breakpoint
 # ------------------------------------------------------------------
-body BpWin::bp_remove { i } {
+itcl::body BpWin::bp_remove { i } {
 
   bp_select $i
 
@@ -561,7 +561,7 @@ body BpWin::bp_remove { i } {
 # ------------------------------------------------------------------
 #  METHOD:  bp_type - change the breakpoint type (disposition)
 # ------------------------------------------------------------------
-body BpWin::bp_type { i } {
+itcl::body BpWin::bp_type { i } {
   
   if {$Index_to_bptype($i) != "breakpoint"} {
     return
@@ -589,7 +589,7 @@ body BpWin::bp_type { i } {
 # ------------------------------------------------------------------
 #  METHOD:  bp_delete - delete a breakpoint
 # ------------------------------------------------------------------
-body BpWin::bp_delete {bp_event} {
+itcl::body BpWin::bp_delete {bp_event} {
   set number [$bp_event get number]
   for {set i 1} {$i < $next_row} {incr i} {
     if { $number == $index_to_bpnum($i) } {
@@ -618,7 +618,7 @@ body BpWin::bp_delete {bp_event} {
 #  PUBLIC METHOD:  breakpoint - Update widget when a breakpoint
 #                   event is received from the backend.
 # ------------------------------------------------------------------
-body BpWin::breakpoint {bp_event} {
+itcl::body BpWin::breakpoint {bp_event} {
 
   set action [$bp_event get action]
   #debug "bp update $action [$bp_event get number] [$bp_event get type]"
@@ -635,7 +635,7 @@ body BpWin::breakpoint {bp_event} {
 #  METHOD:  tracepoint - Update widget when a tracepoint event
 #            is received from the backend.
 # ------------------------------------------------------------------
-body BpWin::tracepoint {tp_event} {
+itcl::body BpWin::tracepoint {tp_event} {
 
   set action [$tp_event get action]
   #debug "tp update $action [$tp_event get number]"
@@ -651,7 +651,7 @@ body BpWin::tracepoint {tp_event} {
 # ------------------------------------------------------------------
 #  METHOD:  bp_all - perform a command on all breakpoints
 # ------------------------------------------------------------------
-body BpWin::bp_all { command } {
+itcl::body BpWin::bp_all { command } {
 
   if {!$tracepoints} {
     # Do all breakpoints
@@ -690,7 +690,7 @@ body BpWin::bp_all { command } {
 #  METHOD:  get_actions - pops up the add trace dialog on a selected 
 #                         tracepoint
 # ------------------------------------------------------------------
-body BpWin::get_actions {bpnum} {
+itcl::body BpWin::get_actions {bpnum} {
   set bpnum $index_to_bpnum($bpnum)
   set bpinfo [gdb_get_tracepoint_info $bpnum]
   lassign $bpinfo file func line pc enabled pass_count \
@@ -703,7 +703,7 @@ body BpWin::get_actions {bpnum} {
 # ------------------------------------------------------------------
 #  METHOD:  toggle_threads - callback when show_threads is toggled
 # ------------------------------------------------------------------
-body BpWin::toggle_threads {} {
+itcl::body BpWin::toggle_threads {} {
   set show_threads [pref get gdb/bp/show_threads]
   reconfig
 }
@@ -711,7 +711,7 @@ body BpWin::toggle_threads {} {
 # ------------------------------------------------------------------
 #  METHOD:  reconfig - used when preferences change
 # ------------------------------------------------------------------
-body BpWin::reconfig {} {
+itcl::body BpWin::reconfig {} {
   if {[winfo exists $itk_interior.f]} { destroy $itk_interior.f }
   if {[winfo exists $itk_interior.m]} { destroy $itk_interior.m }
   if {[winfo exists $itk_interior.sbox]} { destroy $itk_interior.sbox }
@@ -723,7 +723,7 @@ body BpWin::reconfig {} {
 # ------------------------------------------------------------------
 #  METHOD:  goto_bp - show bp in source window
 # ------------------------------------------------------------------
-body BpWin::goto_bp {r} {
+itcl::body BpWin::goto_bp {r} {
   set bpnum $index_to_bpnum($r)
   if {$tracepoints} {
     set bpinfo [gdb_get_tracepoint_info $bpnum]

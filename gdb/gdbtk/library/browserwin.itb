@@ -23,7 +23,7 @@
 
 option add *BrowserWin.textBackground  white
 
-body BrowserWin::constructor {args} {
+itcl::body BrowserWin::constructor {args} {
   #eval itk_initialize $args 
   window_name "Function Browser"
 
@@ -42,7 +42,7 @@ body BrowserWin::constructor {args} {
 # ------------------------------------------------------------------
 #  DESTRUCTOR - destroy window containing widget
 # ------------------------------------------------------------------
-body BrowserWin::destructor {} {
+itcl::body BrowserWin::destructor {} {
 
   if {$resize_after != ""} {
     after cancel $resize_after
@@ -65,7 +65,7 @@ body BrowserWin::destructor {} {
 # ------------------------------------------------------------------
 #  METHOD:  _build_win - build the main browser window
 # ------------------------------------------------------------------
-body BrowserWin::_build_win {} {
+itcl::body BrowserWin::_build_win {} {
   global PREFS_state gdb_ImageDir
 
   # Three frames: regexp, listboxes, and drop-down pane
@@ -380,7 +380,7 @@ body BrowserWin::_build_win {} {
 #           box.  The actual filtering is done in an after to avoid
 #           flashing too much if the user is typing quickly.
 # ------------------------------------------------------------------
-body BrowserWin::_filter_trace_proc {v1 v2 mode} {
+itcl::body BrowserWin::_filter_trace_proc {v1 v2 mode} {
   if {$filter_trace_after != ""} {
     after cancel $filter_trace_after
   }
@@ -391,7 +391,7 @@ body BrowserWin::_filter_trace_proc {v1 v2 mode} {
 #  METHOD:  _filter_trace_after
 #           This is a wrapper around search, needed to pass to trace
 # ------------------------------------------------------------------
-body BrowserWin::_filter_trace_after {} {
+itcl::body BrowserWin::_filter_trace_after {} {
   set filter_trace_after ""
   search
 }
@@ -401,7 +401,7 @@ body BrowserWin::_filter_trace_after {} {
 #           Search for text or jump to a specific line
 #           in source window, going in the specified DIRECTION.
 # ------------------------------------------------------------------
-body BrowserWin::_search_src {direction} {
+itcl::body BrowserWin::_search_src {direction} {
   set exp [$itk_component(view_search) get]
   $itk_component(view_src) search $exp $direction
 }
@@ -411,7 +411,7 @@ body BrowserWin::_search_src {direction} {
 #           Search for functions matching regexp/pattern
 #           in specified files
 # ------------------------------------------------------------------
-body BrowserWin::search {} {
+itcl::body BrowserWin::search {} {
 
   set files [$itk_component(file_box) getcurselection]
 
@@ -454,7 +454,7 @@ body BrowserWin::search {} {
 #  METHOD:  _toggle_more
 #           Toggle display of source listing
 # ------------------------------------------------------------------   
-body BrowserWin::_toggle_more {{in_constructor 0}} {
+itcl::body BrowserWin::_toggle_more {{in_constructor 0}} {
 
   debug "Running toggle_more with MoreVisible: $MoreVisible"
   # Temporarily disable the resize bindings before opening the window.
@@ -565,7 +565,7 @@ body BrowserWin::_toggle_more {{in_constructor 0}} {
 #  METHOD:  _bind_toplevel
 #            Setup the bindings for the toplevel.
 # ------------------------------------------------------------------
-body BrowserWin::_bind_toplevel {install} {
+itcl::body BrowserWin::_bind_toplevel {install} {
 
   set bindings [bindtags $_top]
   if {$install} {
@@ -580,7 +580,7 @@ body BrowserWin::_bind_toplevel {install} {
 #  METHOD:  _do_resize
 #            Does the actual work of the resize.
 # ------------------------------------------------------------------
-body BrowserWin::_do_resize {} {
+itcl::body BrowserWin::_do_resize {} {
 
   update idletasks
   debug "Running _do_resize"
@@ -613,7 +613,7 @@ body BrowserWin::_do_resize {} {
 #  METHOD:  _resize
 #            Resize "itk_component(view_hidden)" after all configure events
 # ------------------------------------------------------------------
-body BrowserWin::_resize {} {
+itcl::body BrowserWin::_resize {} {
 
   pack propagate $_top 0
 
@@ -638,7 +638,7 @@ body BrowserWin::_resize {} {
 #            This fills the func combo, and the more window if it
 #            is currently open with the hit in the File combobox.
 # ------------------------------------------------------------------
-body BrowserWin::_process_file_selection {y} {
+itcl::body BrowserWin::_process_file_selection {y} {
 
   set curIndex [$itk_component(file_box) nearest $y]
   set curSelection [$itk_component(file_box) curselection]
@@ -668,7 +668,7 @@ body BrowserWin::_process_file_selection {y} {
 #            This points the  more window to the hit in the Func combobox
 #            if it is currently open.
 # ------------------------------------------------------------------
-body BrowserWin::_process_func_selection {y} {
+itcl::body BrowserWin::_process_func_selection {y} {
 
   set curIndex [$itk_component(func_box) nearest $y]
   set curSelection [$itk_component(func_box) curselection]
@@ -687,7 +687,7 @@ body BrowserWin::_process_func_selection {y} {
 #  METHOD:  do_all_bp
 #           Toggle a bp at every selected function in FuncLB
 # ------------------------------------------------------------------
-body BrowserWin::do_all_bp {onp} {
+itcl::body BrowserWin::do_all_bp {onp} {
 
   set funcs [$itk_component(func_box) getcurselection]
   _freeze_me
@@ -716,7 +716,7 @@ body BrowserWin::do_all_bp {onp} {
 #           Toggle bp at function specified by the given Y
 #           coordinate in the listbox
 # ------------------------------------------------------------------
-body BrowserWin::_toggle_bp {y} {
+itcl::body BrowserWin::_toggle_bp {y} {
 
   set f [$itk_component(func_box) get [$itk_component(func_box) nearest $y]]
   if {$f != ""} {
@@ -739,7 +739,7 @@ body BrowserWin::_toggle_bp {y} {
 #  METHOD:  _select
 #           (Un/Highlight all files in the files list
 # ------------------------------------------------------------------  
-body BrowserWin::_select {highlight} {
+itcl::body BrowserWin::_select {highlight} {
   if {$highlight} {
     $itk_component(file_box) selection set 0 end
   } else {
@@ -752,7 +752,7 @@ body BrowserWin::_select {highlight} {
 #  METHOD:  _set_filter_mode
 #           React to changes in the filter mode
 # ------------------------------------------------------------------  
-body BrowserWin::_set_filter_mode {w mode} {
+itcl::body BrowserWin::_set_filter_mode {w mode} {
   if {[string compare $mode $cur_filter_mode] != 0} {
     set cur_filter_mode $mode
     pref set gdb/search/filter_mode $mode
@@ -764,7 +764,7 @@ body BrowserWin::_set_filter_mode {w mode} {
 #  METHOD:  _file_hide_h
 #           Run when the "Hide .h files" preference is chosen.
 # ------------------------------------------------------------------
-body BrowserWin::_file_hide_h {} {
+itcl::body BrowserWin::_file_hide_h {} {
 
   _fill_file_box
   search
@@ -776,7 +776,7 @@ body BrowserWin::_file_hide_h {} {
 #           Helper function to fill the srctextwin
 #           when needed.
 # ------------------------------------------------------------------
-body BrowserWin::_fill_source {f {funcp 1} {filename ""}} {
+itcl::body BrowserWin::_fill_source {f {funcp 1} {filename ""}} {
 
   if {!$MoreVisible } {
     return
@@ -830,7 +830,7 @@ body BrowserWin::_fill_source {f {funcp 1} {filename ""}} {
 #           Function called by srctextwin when the display
 #           mode changes
 # ------------------------------------------------------------------
-body BrowserWin::mode {w {mode ""} {go 1}} {
+itcl::body BrowserWin::mode {w {mode ""} {go 1}} {
   if {$mode != ""} {
     $itk_component(view_src) mode_set $mode $go
     $itk_component(view_mode) entryset $mode
@@ -842,7 +842,7 @@ body BrowserWin::mode {w {mode ""} {go 1}} {
 #          Callback for the function combo box which
 #          sets the srctextwin looking at the given function (VAL)
 # ------------------------------------------------------------------
-body BrowserWin::_goto_func {w {val ""}} {
+itcl::body BrowserWin::_goto_func {w {val ""}} {
   if {$val != ""} {
     set mang 0
     if {[info exists _mangled_func($val)]} {
@@ -868,7 +868,7 @@ body BrowserWin::_goto_func {w {val ""}} {
 #  METHOD:  _fill_file_box
 #           This private method fills the file listbox
 # ------------------------------------------------------------------
-body BrowserWin::_fill_file_box {} {
+itcl::body BrowserWin::_fill_file_box {} {
   # It would be cool if gdb_listfiles took a regexp to match,
   # but it doesn't...
 
@@ -893,7 +893,7 @@ body BrowserWin::_fill_file_box {} {
 #           This private method fills the functions combo box
 #           with all the functions in NAME.
 # ------------------------------------------------------------------
-body BrowserWin::_fill_funcs_combo {name} {
+itcl::body BrowserWin::_fill_funcs_combo {name} {
 
   $itk_component(view_func) list delete 0 end
   if {$name != ""} {

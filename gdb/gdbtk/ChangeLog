@@ -1,3 +1,13 @@
+2002-10-15  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/* : auto_mkindex cannot rebuild
+	tclIndex because it does not recognize the namespace
+	import in main.tcl.  To get it to work again, rename the
+	following:
+		body -> itcl::body
+		configbody -> itcl::configbody
+		class -> itcl::class
+
 2002-10-10  Martin M. Hunt  <hunt@redhat.com>
 
 	* generic/gdbtk-cmds.c (gdb_update_mem): No results

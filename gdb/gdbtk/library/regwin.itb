@@ -38,7 +38,7 @@
 #  ARGUMENTS:    None
 #  RETURNS:      Nothing
 # ------------------------------------------------------------------
-body RegWin::constructor {args} {
+itcl::body RegWin::constructor {args} {
 
   eval itk_initialize $args    
 
@@ -61,7 +61,7 @@ body RegWin::constructor {args} {
 #  ARGUMENTS:    None
 #  RETURNS:      Nothing
 # ------------------------------------------------------------------
-body RegWin::destructor {} {
+itcl::body RegWin::destructor {} {
   debug
 }
 
@@ -72,7 +72,7 @@ body RegWin::destructor {} {
 #  ARGUMENTS:    None
 #  RETURNS:      Nothing
 # ------------------------------------------------------------------
-body RegWin::_load_prefs {} {
+itcl::body RegWin::_load_prefs {} {
   debug
 
   # Find out largest register name length.
@@ -155,7 +155,7 @@ body RegWin::_load_prefs {} {
 #                each RegWin. To change the layout of the table
 #                in the window, use RegWin::_layout_table.
 # ------------------------------------------------------------------
-body RegWin::_build_win {} {
+itcl::body RegWin::_build_win {} {
  
   # Create scrollbars and table
   itk_component add vscroll {
@@ -312,7 +312,7 @@ body RegWin::_build_win {} {
 #  NOTES:        Uses preferences to determine if/how a register
 #                is displayed
 # ------------------------------------------------------------------
-body RegWin::_layout_table {} {
+itcl::body RegWin::_layout_table {} {
   debug
 
   if {[info exists _cell]} {
@@ -425,7 +425,7 @@ body RegWin::_layout_table {} {
 #  NOTES:        See _size_column for the reasoning for the "down"
 #                option.
 # ------------------------------------------------------------------
-body RegWin::_size_cell_column {cell down} {
+itcl::body RegWin::_size_cell_column {cell down} {
 
   set col [string trim [lindex [split $cell ,] 1] ()]
   _size_column $col $down
@@ -450,7 +450,7 @@ body RegWin::_size_cell_column {cell down} {
 #                should not downsize. This helps mitigate the
 #                annoyance.
 # ------------------------------------------------------------------
-body RegWin::_size_column {col down} {
+itcl::body RegWin::_size_column {col down} {
 
   set max 0
   foreach cell [array names _data *,$col] {
@@ -481,7 +481,7 @@ body RegWin::_size_column {col down} {
 #
 #  NOTES:        Callback from pref system
 # ------------------------------------------------------------------
-body RegWin::_prefs_changed {pref value} {
+itcl::body RegWin::_prefs_changed {pref value} {
   debug "$pref $value"
   # do nothing for now.  With proper iwidgets this would not
   # be required anyway.
@@ -502,7 +502,7 @@ body RegWin::_prefs_changed {pref value} {
 #  NOTES:        Event handler for <Enter> and <KP_Enter>
 #                in table
 # ------------------------------------------------------------------
-body RegWin::_accept_edit {} {
+itcl::body RegWin::_accept_edit {} {
   debug
   set cell [$itk_component(table) tag cell edit]
   if {[llength $cell] == 1 && [info exists _register($cell)]} {
@@ -541,7 +541,7 @@ body RegWin::_accept_edit {} {
 #
 #  NOTES:        Only works with one WatchWin...
 # ------------------------------------------------------------------
-body RegWin::_add_to_watch {rn} {
+itcl::body RegWin::_add_to_watch {rn} {
   [ManagedWin::open WatchWin] add "\$[gdb_reginfo name $rn]"
 }
 
@@ -554,7 +554,7 @@ body RegWin::_add_to_watch {rn} {
 #
 #  NOTES:        Only works with one WatchWin...
 # ------------------------------------------------------------------
-body RegWin::_open_memory {rn} {
+itcl::body RegWin::_open_memory {rn} {
   ManagedWin::open MemWin -force -addr_exp $_data($_cell($rn))
 }
 
@@ -568,7 +568,7 @@ body RegWin::_open_memory {rn} {
 #                Y  - y-root coordinate
 #  RETURNS:      Nothing
 # ------------------------------------------------------------------
-body RegWin::_but3 {x y X Y} {
+itcl::body RegWin::_but3 {x y X Y} {
 
   # Only post the menu when we're not executing the inferior,
   # the inferior is in a runnable state, and we're not in a disabled
@@ -650,7 +650,7 @@ body RegWin::_but3 {x y X Y} {
 #  ARGUMENTS:    rn  - the register number to remove
 #  RETURNS:      Nothing
 # ------------------------------------------------------------------
-body RegWin::_delete_from_display {rn} {
+itcl::body RegWin::_delete_from_display {rn} {
 
   # Mark the cell as hidden
   set index [lsearch $_reg_display_list $rn]
@@ -673,7 +673,7 @@ body RegWin::_delete_from_display {rn} {
 #  ARGUMENTS:    None
 #  RETURNS:      Nothing
 # ------------------------------------------------------------------
-body RegWin::_display_all {} {
+itcl::body RegWin::_display_all {} {
 
   $itk_component(reg_menu) entryconfigure $_menuitems(display_all_registers) \
     -state disabled
@@ -709,7 +709,7 @@ body RegWin::_display_all {} {
 #  NOTES:        Event handler for <1> in table.
 #                
 # ------------------------------------------------------------------
-body RegWin::_edit {x y} {
+itcl::body RegWin::_edit {x y} {
   _select_cell [$itk_component(table) index @$x,$y]
 }
 
@@ -729,7 +729,7 @@ body RegWin::_edit {x y} {
 #                we're not editing, or it will move the icursor
 #                if we are editing.
 # ------------------------------------------------------------------
-body RegWin::_move {direction} {
+itcl::body RegWin::_move {direction} {
 
   debug $direction
 
@@ -823,7 +823,7 @@ body RegWin::_move {direction} {
 #  ARGUMENTS:    None
 #  RETURNS:      Nothing
 # ------------------------------------------------------------------
-body RegWin::_post_menu {} {
+itcl::body RegWin::_post_menu {} {
   global gdb_running
 
   # Configure the menu for the active cell
@@ -901,7 +901,7 @@ body RegWin::_post_menu {} {
 #  NOTES:        Adjusts the cell index so that it always
 #                selects the value cell for a register
 # ------------------------------------------------------------------
-body RegWin::_select_cell {cell} {
+itcl::body RegWin::_select_cell {cell} {
 
   # Abort an edit
   _unedit
@@ -941,7 +941,7 @@ body RegWin::_select_cell {cell} {
 #  ARGUMENTS:    None
 #  RETURNS:      Nothing
 # ------------------------------------------------------------------
-body RegWin::_unedit {} {
+itcl::body RegWin::_unedit {} {
 
   # clear the tag
   set cell [$itk_component(table) tag cell edit]
@@ -967,7 +967,7 @@ body RegWin::_unedit {} {
 #
 #  NOTES:        
 # ------------------------------------------------------------------
-body RegWin::_get_value {rn} {
+itcl::body RegWin::_get_value {rn} {
   if {[catch {gdb_reginfo value $rn} value]} {
     dbug W "\"gdb_reginfo value $rn\" returned $value"
     set value ""
@@ -988,7 +988,7 @@ body RegWin::_get_value {rn} {
 #
 #  NOTES:        
 # ------------------------------------------------------------------
-body RegWin::_change_format {rn {newtype {}}} {
+itcl::body RegWin::_change_format {rn {newtype {}}} {
 
   set name [gdb_reginfo name $rn]
 
@@ -1019,7 +1019,7 @@ body RegWin::_change_format {rn {newtype {}}} {
 #                rn  - the register number to update
 #  RETURNS:      Nothing
 # ------------------------------------------------------------------
-body RegWin::_update_register {rn} {
+itcl::body RegWin::_update_register {rn} {
   set _data($_cell($rn)) [_get_value $rn]
 }
 
@@ -1035,7 +1035,7 @@ body RegWin::_update_register {rn} {
 #  ARGUMENTS:    event  - the ArchChangedEvent (not used)
 #  RETURNS:      Nothing
 # ------------------------------------------------------------------
-body RegWin::arch_changed {event} {
+itcl::body RegWin::arch_changed {event} {
 
   # When the arch changes, gdb will callback into gdbtk-register.c
   # to swap out the old register set, so we need only redraw the
@@ -1053,7 +1053,7 @@ body RegWin::arch_changed {event} {
 #  ARGUMENTS:    event  - the BusyEvent (not used)
 #  RETURNS:      Nothing
 # ------------------------------------------------------------------
-body RegWin::busy {event} {
+itcl::body RegWin::busy {event} {
 
   # Abort any edit. Need to check if the table is constructed,
   # since we call gdbtk_busy when we're created...
@@ -1075,7 +1075,7 @@ body RegWin::busy {event} {
 #  ARGUMENTS:    event  - the IdleEvent (not used)
 #  RETURNS:      Nothing
 # ------------------------------------------------------------------
-body RegWin::idle {event} {
+itcl::body RegWin::idle {event} {
 
   # Clear fencepost
   set _running 0
@@ -1091,7 +1091,7 @@ body RegWin::idle {event} {
 #  ARGUMENTS:    None
 #  RETURNS:      Nothing
 # ------------------------------------------------------------------
-body RegWin::set_variable {event} {
+itcl::body RegWin::set_variable {event} {
   switch [$event get variable] {
     disassembly-flavor {
       _layout_table
@@ -1106,7 +1106,7 @@ body RegWin::set_variable {event} {
 #  ARGUMENTS:    event  - the UpdateEvent (not used)
 #  RETURNS:      Nothing
 # ------------------------------------------------------------------
-body RegWin::update {event} {
+itcl::body RegWin::update {event} {
 
   dbug I "START REGISTER UPDATE CALLBACK"
 

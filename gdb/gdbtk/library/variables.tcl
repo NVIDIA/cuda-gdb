@@ -18,7 +18,7 @@
 # 'getVariablesBlankPath' and a few other things...
 # ----------------------------------------------------------------------
 
-class VariableWin {
+itcl::class VariableWin {
     inherit EmbeddedWin GDBWin
     protected variable Sizebox 1
 
@@ -815,16 +815,16 @@ class VariableWin {
     # OVERRIDE THIS METHOD and call it from there
     # ------------------------------------------------------------------
     method update {event} {
-	global Update
-	debug
+      global Update
+      debug
 
-	# First, reset color on label to normal
-	foreach w $ChangeList {
-	    catch {
-		$Hlist entryconfigure $w -style $NormalTextStyle
-	    }
+      # First, reset color on label to normal
+      foreach w $ChangeList {
+	catch {
+	  $Hlist entryconfigure $w -style $NormalTextStyle
 	}
-
+      }
+      
 	# Tell toplevel variables to update themselves. This will
 	# give us a list of all the variables in the table that
 	# have changed values.

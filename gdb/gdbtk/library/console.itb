@@ -12,7 +12,7 @@
 # GNU General Public License for more details.
 
 
-body Console::constructor {args} {
+itcl::body Console::constructor {args} {
   global gdbtk_state
   window_name "Console Window"
 
@@ -36,13 +36,13 @@ body Console::constructor {args} {
   set gdbtk_state(console) $this
 }
 
-body Console::destructor {} {
+itcl::body Console::destructor {} {
   global gdbtk_state
   set gdbtk_state(console) ""
   remove_hook gdb_no_inferior_hook [list $this idle dummy]
 }
 
-body Console::_build_win {} {
+itcl::body Console::_build_win {} {
   iwidgets::scrolledtext $itk_interior.stext \
     -vscrollmode dynamic -textbackground white
 
@@ -202,7 +202,7 @@ body Console::_build_win {} {
 
 }
 
-body Console::idle {event} {
+itcl::body Console::idle {event} {
   set _running 0
   $_top configure -cursor {}
 }
@@ -210,7 +210,7 @@ body Console::idle {event} {
 # ------------------------------------------------------------------
 #  METHOD: busy - busy event handler
 # ------------------------------------------------------------------
-body Console::busy {event} {
+itcl::body Console::busy {event} {
   set _running 1
   $_top configure -cursor watch
 }
@@ -218,7 +218,7 @@ body Console::busy {event} {
 # ------------------------------------------------------------------
 #  METHOD:  insert - insert new text in the text widget
 # ------------------------------------------------------------------
-body Console::insert {line {tag ""}} {
+itcl::body Console::insert {line {tag ""}} {
   if {$_needNL} {
     $_twin insert {insert linestart} "\n"
   }
@@ -247,7 +247,7 @@ body Console::insert {line {tag ""}} {
 #  ARGUMENTS:    None
 #  RETURNS:      Nothing
 # ------------------------------------------------------------------
-body Console::_operate_and_get_next {} {
+itcl::body Console::_operate_and_get_next {} {
   if {$_histElement >= 0} {
     # _pendingHistElement will be used after the new history element
     # is pushed.  So we must increment it.
@@ -259,7 +259,7 @@ body Console::_operate_and_get_next {} {
 #-------------------------------------------------------------------
 #  METHOD:  _previous - recall the previous command
 # ------------------------------------------------------------------
-body Console::_previous {} {
+itcl::body Console::_previous {} {
   if {$_histElement == -1} {
     # Save partial command.
     set _partialCommand [$_twin get {cmdmark + 1 char} {cmdmark lineend}]
@@ -279,7 +279,7 @@ body Console::_previous {} {
 #-------------------------------------------------------------------
 #  METHOD:  _search_history - search history for match
 # ------------------------------------------------------------------
-body Console::_search_history {} {
+itcl::body Console::_search_history {} {
   set str [$_twin get {cmdmark + 1 char} {cmdmark lineend}]
 
   if {$_histElement == -1} {
@@ -304,7 +304,7 @@ body Console::_search_history {} {
 #-------------------------------------------------------------------
 #  METHOD:  _rsearch_history - search history in reverse for match
 # ------------------------------------------------------------------
-body Console::_rsearch_history {} {
+itcl::body Console::_rsearch_history {} {
   if {$_histElement != -1} {
     set str $_partialCommand
     set num [expr $_histElement - 1]
@@ -332,7 +332,7 @@ body Console::_rsearch_history {} {
 #-------------------------------------------------------------------
 #  METHOD:  _next - recall the next command (scroll forward)
 # ------------------------------------------------------------------
-body Console::_next {} {
+itcl::body Console::_next {} {
   if {$_histElement == -1} {
     # FIXME flash window.
     return
@@ -350,7 +350,7 @@ body Console::_next {} {
 #-------------------------------------------------------------------
 #  METHOD:  _last - get the last history element
 # ------------------------------------------------------------------
-body Console::_last {} {
+itcl::body Console::_last {} {
   set _histElement 0
   _next
 }
@@ -358,7 +358,7 @@ body Console::_last {} {
 #-------------------------------------------------------------------
 #  METHOD:  _first - get the first (earliest) history element
 # ------------------------------------------------------------------
-body Console::_first {} {
+itcl::body Console::_first {} {
   set _histElement [expr {[llength $_history] - 1}]
   _previous
 }
@@ -368,7 +368,7 @@ body Console::_first {} {
 #-------------------------------------------------------------------
 #  METHOD:  _setprompt - put a prompt at the beginning of a line
 # ------------------------------------------------------------------
-body Console::_setprompt {{prompt {}}} {
+itcl::body Console::_setprompt {{prompt {}}} {
   if {$_invoking} {
     set prompt ""
   } elseif {"$prompt" != ""} {
@@ -392,7 +392,7 @@ body Console::_setprompt {{prompt {}}} {
 #-------------------------------------------------------------------
 #  METHOD:  activate - run this after a command is run
 # ------------------------------------------------------------------
-body Console::activate {{prompt {}}} {
+itcl::body Console::activate {{prompt {}}} {
   if {$_invoking > 0} {
     incr _invoking -1
     _setprompt $prompt
@@ -402,7 +402,7 @@ body Console::activate {{prompt {}}} {
 #-------------------------------------------------------------------
 #  METHOD:  invoke - invoke a command
 # ------------------------------------------------------------------
-body Console::invoke {} {
+itcl::body Console::invoke {} {
   global gdbtk_state
 
   set text [$_twin get {cmdmark + 1 char} end ]
@@ -482,7 +482,7 @@ body Console::invoke {} {
 #-------------------------------------------------------------------
 #  PRIVATE METHOD:  _delete - Handle a Delete of some sort.
 # ------------------------------------------------------------------
-body Console::_delete {{right 0}} {
+itcl::body Console::_delete {{right 0}} {
 
   # If we are deleting to the right, and we have this turned off,
   # delete to the right.
@@ -520,7 +520,7 @@ body Console::_delete {{right 0}} {
 #-------------------------------------------------------------------
 #  PRIVATE METHOD:  _insertion - Set or get saved insertion point
 # ------------------------------------------------------------------
-body Console::_insertion {args} {
+itcl::body Console::_insertion {args} {
   if {! [llength $args]} {
     return $_saved_insertion
   } else {
@@ -531,7 +531,7 @@ body Console::_insertion {args} {
 # ------------------------------------------------------------------
 #  METHOD:  _paste - paste the selection into the console window
 # ------------------------------------------------------------------
-body Console::_paste {{check_primary 1}} {
+itcl::body Console::_paste {{check_primary 1}} {
   set sel {}
 
   if {!$check_primary || [catch {selection get} sel] || $sel == ""} {
@@ -555,7 +555,7 @@ body Console::_paste {{check_primary 1}} {
 #  METHOD:  _find_lcp - Return the longest common prefix in SLIST.
 #              Can be empty string.
 # ------------------------------------------------------------------
-body Console::_find_lcp {slist} {
+itcl::body Console::_find_lcp {slist} {
   # Handle trivial cases where list is empty or length 1
   if {[llength $slist] <= 1} {return [lindex $slist 0]}
 
@@ -578,7 +578,7 @@ body Console::_find_lcp {slist} {
 #  METHOD:  _find_completion - Look through COMPLETIONS to generate
 #             the suffix needed to do command
 # ------------------------------------------------------------------
-body Console::_find_completion {cmd completions} {
+itcl::body Console::_find_completion {cmd completions} {
   # Get longest common prefix
   set lcp [_find_lcp $completions]
   set cmd_len [string length $cmd]
@@ -589,7 +589,7 @@ body Console::_find_completion {cmd completions} {
 # ------------------------------------------------------------------
 #  METHOD: _complete - Command line completion
 # ------------------------------------------------------------------
-body Console::_complete {} {
+itcl::body Console::_complete {} {
 
   set command_line [$_twin get {cmdmark + 1 char} {cmdmark lineend}]
   set choices [gdb_cmd "complete $command_line" 1]
@@ -642,7 +642,7 @@ body Console::_complete {} {
 #  METHOD:  _reset_tab - Helper method for tab completion. Used
 #             to reset the tab when a key is pressed.
 # ------------------------------------------------------------------
-body Console::_reset_tab {} {
+itcl::body Console::_reset_tab {} {
   bind $_twin <KeyPress> {}
   set _saw_tab 0
 }
@@ -651,7 +651,7 @@ body Console::_reset_tab {} {
 # ------------------------------------------------------------------
 #  METHOD:  _set_wrap - Set wrap mode
 # ------------------------------------------------------------------
-body Console::_set_wrap {wrap} {
+itcl::body Console::_set_wrap {wrap} {
   if { $wrap } {
     set hsm none
     set wv char
@@ -667,7 +667,7 @@ body Console::_set_wrap {wrap} {
 # ------------------------------------------------------------------
 #  METHOD:  _update_option - Update in response to preference change
 # ------------------------------------------------------------------
-body Console::_update_option {name value} {
+itcl::body Console::_update_option {name value} {
   switch -- $name {
     gdb/console/wrap {
       _set_wrap $value
@@ -693,7 +693,7 @@ body Console::_update_option {name value} {
 #  NOTES:        This will only run if env(GDBTK_TEST_RUNNING)==1.
 #                FOR TESTING ONLY
 # ------------------------------------------------------------------
-body Console::test {args} {
+itcl::body Console::test {args} {
   global env
 
   if {[info exists env(GDBTK_TEST_RUNNING)] && $env(GDBTK_TEST_RUNNING) == 1} {

@@ -14,18 +14,18 @@
 # ------------------------------------------------------------------
 #                             Stack
 # ------------------------------------------------------------------
-body Stack::constructor {} {
+itcl::body Stack::constructor {} {
   set _stack {}
 }
 
-body Stack::push {args} {
+itcl::body Stack::push {args} {
   set _stack [concat $_stack $args]
 }
 
-body Stack::destructor {} {
+itcl::body Stack::destructor {} {
 }
 
-body Stack::pop {} {
+itcl::body Stack::pop {} {
   set thing [lindex $_stack end]
   set _stack [lreplace $_stack end end]
   return $thing
@@ -34,13 +34,13 @@ body Stack::pop {} {
 # ------------------------------------------------------------------
 #                             Queue
 # ------------------------------------------------------------------
-body Queue::constructor {} {
+itcl::body Queue::constructor {} {
 }
 
-body Queue::destructor {} {
+itcl::body Queue::destructor {} {
 }
 
-body Queue::pop {} {
+itcl::body Queue::pop {} {
   set thing [lindex $_stack 0]
   set _stack [lreplace $_stack 0 0]
   return $thing

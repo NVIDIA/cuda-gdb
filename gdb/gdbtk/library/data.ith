@@ -12,7 +12,7 @@
 # GNU General Public License for more details.
 
 # Generic Stack
-class Stack {
+itcl::class Stack {
 
   public {
     method constructor {}
@@ -29,7 +29,7 @@ class Stack {
 }
 
 # Generic Queue
-class Queue {
+itcl::class Queue {
   inherit Stack
 
   public {

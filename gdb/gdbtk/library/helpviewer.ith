@@ -25,7 +25,7 @@
 #	Currently used as a help window.
 #
 # -----------------------------------------------------------------------------
-class HtmlViewer {
+itcl::class HtmlViewer {
   inherit EmbeddedWin
   
   public {
@@ -80,7 +80,7 @@ class HtmlViewer {
 #	Currently used by the HtmlViewer class.
 #
 # -----------------------------------------------------------------------------
-class PageStack {
+itcl::class PageStack {
   private {
     variable _ptr -1
     variable _max -1

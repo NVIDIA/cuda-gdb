@@ -15,7 +15,7 @@
 # ------------------------------------------------------------------
 #  CONSTRUCTOR - create new stack window
 # ------------------------------------------------------------------
-body StackWin::constructor {args} {    
+itcl::body StackWin::constructor {args} {    
   gdbtk_busy
   build_win
   gdbtk_idle
@@ -26,14 +26,14 @@ body StackWin::constructor {args} {
 # ------------------------------------------------------------------
 #  DESTRUCTOR - destroy window containing widget
 # ------------------------------------------------------------------
-body StackWin::destructor {} {
+itcl::body StackWin::destructor {} {
   remove_hook gdb_no_inferior_hook [code $this no_inferior]
 }
 
 # ------------------------------------------------------------------
 #  METHOD:  build_win - build the main register window
 # ------------------------------------------------------------------
-body StackWin::build_win {} {
+itcl::body StackWin::build_win {} {
   global tcl_platform
 
   itk_component add slb {
@@ -63,7 +63,7 @@ body StackWin::build_win {} {
 # ------------------------------------------------------------------
 #  METHOD:  update - update widget when PC changes
 # ------------------------------------------------------------------
-body StackWin::update {event} {
+itcl::body StackWin::update {event} {
   global gdb_selected_frame_level
 
   if {!$protect_me} {
@@ -102,16 +102,16 @@ body StackWin::update {event} {
   }
 }
 
-body StackWin::idle {event} {
+itcl::body StackWin::idle {event} {
   set Running 0
   cursor {}
 }
 
 # ------------------------------------------------------------------
 #  METHOD:  change_frame - change the current frame
-#        This body StackWin::is currently ONLY called from the mouse binding
+#        This method is currently ONLY called from the mouse binding
 # ------------------------------------------------------------------
-body StackWin::change_frame {} {
+itcl::body StackWin::change_frame {} {
 
   if {!$Running && [$itk_component(slb) size] != 0} {
     gdbtk_busy
@@ -131,7 +131,7 @@ body StackWin::change_frame {} {
 # ------------------------------------------------------------------
 #  METHOD:  reconfig - used when preferences change
 # ------------------------------------------------------------------
-body StackWin::reconfig {} {
+itcl::body StackWin::reconfig {} {
   destroy $itk_interior.s
   if {[winfo exists $itk_interior.sbox]} { destroy $itk_interior.sbox }
   build_win
@@ -142,7 +142,7 @@ body StackWin::reconfig {} {
 #                  This method should cause blocking of clicks in
 #                  the window and change mouse pointer.
 # ------------------------------------------------------------------
-body StackWin::busy {event} {
+itcl::body StackWin::busy {event} {
   set Running 1
   cursor watch
 }
@@ -150,17 +150,17 @@ body StackWin::busy {event} {
 # ------------------------------------------------------------------
 #  METHOD:  no_inferior - gdb_no_inferior_hook
 # ------------------------------------------------------------------
-body StackWin::no_inferior {} {
+itcl::body StackWin::no_inferior {} {
   set Running 0
   cursor {}
 }
 
 # ------------------------------------------------------------------
 #  METHOD:  cursor - set the window cursor
-#        This is a convenience body StackWin::which simply sets the mouse
+#        This is a convenience method which simply sets the mouse
 #        pointer to the given glyph.
 # ------------------------------------------------------------------
-body StackWin::cursor {glyph} {
+itcl::body StackWin::cursor {glyph} {
   set top [winfo toplevel $itk_interior]
   $top configure -cursor $glyph
 }

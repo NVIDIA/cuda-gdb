@@ -22,7 +22,7 @@
 # DESC:	
 #	Creates the Help Viewer window.
 # -----------------------------------------------------------------------------
-body HtmlViewer::constructor {args} {
+itcl::body HtmlViewer::constructor {args} {
   window_name "Help"
   eval itk_initialize $args
   _buildwin
@@ -42,7 +42,7 @@ body HtmlViewer::constructor {args} {
 #	Finally it loads help/index.html.  This last step should change if
 #	this widget is ever used for anything but help.
 # -----------------------------------------------------------------------------
-body HtmlViewer::_buildwin {} {
+itcl::body HtmlViewer::_buildwin {} {
   global GDBTK_LIBRARY gdb_ImageDir
 
   set _links [PageStack \#auto]
@@ -92,7 +92,7 @@ body HtmlViewer::_buildwin {} {
 # SYNOPSIS:	push val
 # DESC:		Pushes a value onto the stack.
 # -----------------------------------------------------------------------------
-body PageStack::push {val} {
+itcl::body PageStack::push {val} {
   incr _ptr
   incr _max
   if {$_ptr < $_max} {
@@ -107,7 +107,7 @@ body PageStack::push {val} {
 # DESC:		Moves the stack pointer back by one.
 # RETURNS:	Returns the value on the stack, or 0 on error.
 # -----------------------------------------------------------------------------
-body PageStack::back {} {
+itcl::body PageStack::back {} {
   if {$_ptr > 0} {
     incr _ptr -1
     return $_stack($_ptr)
@@ -121,7 +121,7 @@ body PageStack::back {} {
 # DESC:		Moves the stack pointer forward by one.
 # RETURNS:	Returns the value on the stack, or 0 on error.
 # -----------------------------------------------------------------------------
-body PageStack::next {} {
+itcl::body PageStack::next {} {
   if {$_ptr < $_max} {
     incr _ptr
     return $_stack($_ptr)
@@ -135,7 +135,7 @@ body PageStack::next {} {
 # DESC:		Indicates if the stack pointer is not at the top.
 # RETURNS:	Returns 1 if PageStack::next will suceed, 0 otherwise.
 # -----------------------------------------------------------------------------
-body PageStack::more {} {
+itcl::body PageStack::more {} {
   if {$_ptr < $_max} {
     return 1
   }
@@ -148,7 +148,7 @@ body PageStack::more {} {
 # DESC:		Indicates if the stack pointer is not at the bottom of stack.
 # RETURNS:	Returns 1 if PageStack::back will suceed, 0 otherwise.
 # -----------------------------------------------------------------------------
-body PageStack::less {} {
+itcl::body PageStack::less {} {
   if {$_ptr > 0} {
     return 1
   }
@@ -160,7 +160,7 @@ body PageStack::less {} {
 # SYNOPSIS:	current
 # RETURNS:	Returns the current value on the stack.
 # -----------------------------------------------------------------------------
-body PageStack::current {} {
+itcl::body PageStack::current {} {
   if {$_ptr > 0} {
     return $_stack($_ptr)
   }
@@ -183,7 +183,7 @@ body PageStack::current {} {
 #	"fore", and "home"
 #
 # ------------------------------------------------------------------------------
-body HtmlViewer::_enable { on args } {
+itcl::body HtmlViewer::_enable { on args } {
   if {$on} {
     set state normal
   } else {
@@ -216,7 +216,7 @@ body HtmlViewer::_enable { on args } {
 # SYNOPSIS:	back
 # DESC:		Moves to the previous page
 # ------------------------------------------------------------------------------
-body HtmlViewer::back {} {
+itcl::body HtmlViewer::back {} {
   set res [$_links back]
   if {$res != 0} {
     load $res
@@ -231,7 +231,7 @@ body HtmlViewer::back {} {
 # SYNOPSIS:	forward
 # DESC:		Moves to the next page
 # ------------------------------------------------------------------------------
-body HtmlViewer::forward {} {
+itcl::body HtmlViewer::forward {} {
   set res [$_links next]
   if {$res != 0} {
     load $res
@@ -247,7 +247,7 @@ body HtmlViewer::forward {} {
 # ARDS:		page - link to the page to load
 # DESC:		Saves the page on the stack and calls the "load" method
 # ------------------------------------------------------------------------------
-body HtmlViewer::link {page} {
+itcl::body HtmlViewer::link {page} {
   if {$page != [$_links current]} {
     $_links push $page
     load $page
@@ -264,7 +264,7 @@ body HtmlViewer::link {page} {
 #		the html widget, then resets cursor and enables the menus 
 #		and buttons
 # ------------------------------------------------------------------------------
-body HtmlViewer::load {link} {
+itcl::body HtmlViewer::load {link} {
   _enable 0 back fore home
   $itk_interior configure -cursor watch
   $_html import -link $link
@@ -278,7 +278,7 @@ body HtmlViewer::load {link} {
 # DESC:		If the prefs are set to use a browser, attempts
 #		to do so. Otherwise, uses builtin HtmlViewer class.
 # ------------------------------------------------------------------------------
-body HtmlViewer::open_help {hfile} {
+itcl::body HtmlViewer::open_help {hfile} {
   set link file://[file join $::GDBTK_LIBRARY help $hfile]
   if {![pref get gdb/help/browser] || ![::open_url $link]} {
     ManagedWin::open HtmlViewer -file $hfile
