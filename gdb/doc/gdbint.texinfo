@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.74 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.75 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -2934,12 +2934,6 @@ See @file{stack.c}.
 @item FRAME_CHAIN(@var{frame})
 @findex FRAME_CHAIN
 Given @var{frame}, return a pointer to the calling frame.
-
-@item FRAME_CHAIN_COMBINE(@var{chain}, @var{frame})
-@findex FRAME_CHAIN_COMBINE
-Define this to take the frame chain pointer and the frame's nominal
-address and produce the nominal address of the caller's frame.
-Presently only defined for HP PA.
 
 @item FRAME_CHAIN_VALID(@var{chain}, @var{thisframe})
 @findex FRAME_CHAIN_VALID
