@@ -2751,6 +2751,7 @@ gdbtk_load_source (ClientData clientData, struct symtab *symtab, int
 
 }
 
+
 static CORE_ADDR
 gdbtk_load_asm (clientData, pc, di)
      ClientData clientData;
@@ -2761,7 +2762,8 @@ gdbtk_load_asm (clientData, pc, di)
     = (struct disassembly_client_data *) clientData;
   char **text_argv;
   int i, pc_to_line_len, line_to_pc_len;
-  gdbtk_result new_result, *old_result_ptr;
+  gdbtk_result new_result;
+  struct cleanup *old_chain = NULL;
 
   pc_to_line_len = Tcl_DStringLength (&client_data->pc_to_line_prefix);
   line_to_pc_len = Tcl_DStringLength (&client_data->line_to_pc_prefix);
@@ -2771,7 +2773,7 @@ gdbtk_load_asm (clientData, pc, di)
   /* Preserve the current Tcl result object, print out what we need, and then
      suck it out of the result, and replace... */
 
-  old_result_ptr = result_ptr;
+  old_chain = make_cleanup (gdbtk_restore_result_ptr, (void *) result_ptr);
   result_ptr = &new_result;
   result_ptr->obj_ptr = client_data->result_obj[0];
   result_ptr->flags = GDBTK_TO_RESULT;
@@ -2833,7 +2835,7 @@ gdbtk_load_asm (clientData, pc, di)
       
     }
   
-  result_ptr = old_result_ptr;
+  do_cleanups (old_chain);
     
   return pc;
 }

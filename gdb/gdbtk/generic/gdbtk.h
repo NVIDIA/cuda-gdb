@@ -133,6 +133,11 @@ struct target_ops;
 
 extern gdbtk_result *result_ptr;
 
+/* If you want to restore an old value of result_ptr whenever cleanups
+   are run, pass this function to make_cleanup, along with the value
+   of result_ptr you'd like to reinstate.  */
+extern void gdbtk_restore_result_ptr (void *);
+
 /* GDB context identifier */
 extern int gdb_context;
 

@@ -183,6 +183,16 @@ gdbtk_add_hooks (void)
  */
 
 gdbtk_result *result_ptr = NULL;
+
+/* If you want to restore an old value of result_ptr whenever cleanups
+   are run, pass this function to make_cleanup, along with the value
+   of result_ptr you'd like to reinstate.  */
+void
+gdbtk_restore_result_ptr (void *old_result_ptr)
+{
+  result_ptr = (gdbtk_result *) old_result_ptr;
+}
+
 
 
 /* This allows you to Tcl_Eval a tcl command which takes
