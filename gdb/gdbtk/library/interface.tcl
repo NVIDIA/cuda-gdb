@@ -1591,7 +1591,7 @@ proc gdbtk_attach_native {} {
     if {[AttachDlg::last_button]} {
 	set pid [AttachDlg::pid]
 	set symbol_file [AttachDlg::symbol_file]
-	if {![_open_file $symbol_file]} {
+	if {$symbol_file != "" && ![_open_file $symbol_file]} {
 	    ManagedWin::open WarningDlg -transient \
 		    -message "Could not load symbols from $symbol_file."
 	    return

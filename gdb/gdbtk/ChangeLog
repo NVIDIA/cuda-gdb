@@ -1,5 +1,12 @@
 2003-02-10  Martin M. Hunt  <hunt@redhat.com>
 
+	* library/interface.tcl (gdbtk_attach_native): Don't force the user
+	to choose an exec file when attaching.
+
+	* library/attachdlg.itb: Some fixes to work with latest iwidgets.
+
+2003-02-10  Martin M. Hunt  <hunt@redhat.com>
+	
 	* library/prefs.tcl (pref_set_defaults): Remove prefs
 	gdb/browser/width, gdb/browser/top_height, gdb/browser/view_height,
 	gdb/browser/view_is_open. Add gdb/browser/layout.
