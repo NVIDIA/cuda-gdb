@@ -864,9 +864,6 @@ proc set_exe {} {
       tk_messageBox -icon error -default ok \
 	-title "GDB" -type ok -modal system \
 	-message "This executable has no debugging information."
-      set gdb_exe_name {}
-      set file_done 0
-      return
     }
 
     # force new target command

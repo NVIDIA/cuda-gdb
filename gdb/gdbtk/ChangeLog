@@ -1,5 +1,10 @@
 2002-01-02  Keith Seitz  <keiths@redhat.com>
 
+	* library/interface.tcl (set_exe): Allow users to debug
+	executables with no debug information.
+
+2002-01-02  Keith Seitz  <keiths@redhat.com>
+
 	* library/console.ith (insert): Add tag parameter.
 	(einsert): Delete.
 	* library/console.itb: (insert): Add tag parameter.
