@@ -122,6 +122,8 @@ gdb_block_vars (ClientData clientData, Tcl_Interp *interp,
 		case LOC_BASEREG:	  /* basereg local         */
 		case LOC_STATIC:	  /* static                */
 		case LOC_REGISTER:        /* register              */
+		case LOC_COMPUTED:	  /* computed location     */
+		case LOC_COMPUTED_ARG:	  /* computed location arg */
 		  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
 					    Tcl_NewStringObj (SYMBOL_NAME (sym),
 							      -1));
@@ -193,11 +195,13 @@ gdb_get_blocks (ClientData clientData, Tcl_Interp *interp,
 		case LOC_REGPARM_ADDR:    /* indirect register arg */
 		case LOC_LOCAL_ARG:	  /* stack arg             */
 		case LOC_BASEREG_ARG:	  /* basereg arg           */
+		case LOC_COMPUTED_ARG:	  /* computed location arg */
 
 		case LOC_LOCAL:	          /* stack local           */
 		case LOC_BASEREG:	  /* basereg local         */
 		case LOC_STATIC:	  /* static                */
 		case LOC_REGISTER:        /* register              */
+		case LOC_COMPUTED:	  /* computed location     */
 		  junk = 0;
 		  break;
 		}
@@ -338,6 +342,7 @@ gdb_get_vars_command (ClientData clientData, Tcl_Interp *interp,
 	    case LOC_REGPARM_ADDR:	/* indirect register arg */
 	    case LOC_LOCAL_ARG:	/* stack arg             */
 	    case LOC_BASEREG_ARG:	/* basereg arg           */
+	    case LOC_COMPUTED_ARG:	/* computed location arg */
 	      if (arguments)
 		Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
 					  Tcl_NewStringObj (SYMBOL_NAME (sym), -1));
@@ -346,6 +351,7 @@ gdb_get_vars_command (ClientData clientData, Tcl_Interp *interp,
 	    case LOC_BASEREG:	/* basereg local         */
 	    case LOC_STATIC:	/* static                */
 	    case LOC_REGISTER:	/* register              */
+	    case LOC_COMPUTED:	/* computed location     */
 	      if (!arguments)
 		Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
 					  Tcl_NewStringObj (SYMBOL_NAME (sym), -1));

@@ -1,3 +1,8 @@
+2003-02-21  Daniel Jacobowitz  <drow@mvista.com>
+
+	* generic/gdbtk-stack.c (gdb_get_blocks, gdb_block_vars)
+	(gdb_get_vars_command): Handle LOC_COMPUTED and LOC_COMPUTED_ARG.
+
 2003-02-20  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-cmds.c (gdb_search): Change SYMBOL_SOURCE_NAME
