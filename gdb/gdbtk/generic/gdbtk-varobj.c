@@ -201,8 +201,16 @@ variable_obj_command (clientData, interp, objc, objv)
     "update",
     NULL
   };
-  struct varobj *var = (struct varobj *) clientData;
+  struct varobj *var;
+  char *varobj_name;
   int index, result;
+  
+  /* Get the current handle for this variable token (name). */
+  varobj_name = Tcl_GetStringFromObj (objv[0], NULL);
+  if (varobj_name == NULL)
+    return TCL_ERROR;
+  var = varobj_get_handle (varobj_name);
+  
 
   if (objc < 2)
     {
