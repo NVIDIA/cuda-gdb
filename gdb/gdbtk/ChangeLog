@@ -1,3 +1,9 @@
+2001-07-05  Keith Seitz  <keiths@redhat.com>
+
+	* library/managedwin.itb (_create): Don't pass "-over"
+	to center_window unless we really are asked to put the
+	window over another!
+
 2001-06-18  Keith Seitz  <keiths@redhat.com>
 
 	* library/managedwin.itb (_create): When creating a

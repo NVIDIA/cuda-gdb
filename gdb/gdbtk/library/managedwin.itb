@@ -244,11 +244,13 @@ body ManagedWin::_create { class args } {
   wm minsize $top 20 20
   update idletasks
 
-  if {$over != "" || $center} {
+  if {$over != ""} {
     # center new window
     center_window $top -over [winfo toplevel [namespace tail $over]]
+  } elseif {$center} {
+    center_window $top
   }
-  
+
   if {$transient} {
     wm resizable $top 0 0
     wm transient $top .
