@@ -1,3 +1,10 @@
+2001-02-04  Fernando Nasser  <fnasser@redhat.com>
+
+	* library/plugins/plugins.tcl: Fix typos and remove "-transient"
+	parameter from open command.
+	* library/plugins/HOW-TO: New file.  Describes how to add a plug-in
+	window to Insight.
+
 2001-02-01  Fernando Nasser  <fnasser@redhat.com>
 
 	* library/images/insight.gif: New splash screen/about graphics.
