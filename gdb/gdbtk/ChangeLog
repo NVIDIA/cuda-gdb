@@ -1,3 +1,11 @@
+2001-04-17  Tom Tromey  <tromey@redhat.com>
+
+	* library/session.tcl (session_save): Use gdb_get_inferior_args.
+	* generic/gdbtk-cmds.c (inferior_args): Removed.
+	(Gdbtk_Init): Don't register gdb_inferior_args variable.  Do
+	register gdb_get_inferior_args function.
+	(gdb_get_inferior_args): New function.
+
 2001-04-17  Fernando Nasser  <fnasser@redhat.com>
 
 	* library/variables.tcl (update): Temporary fix to the detection of

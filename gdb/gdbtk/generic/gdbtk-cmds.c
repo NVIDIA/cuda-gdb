@@ -64,9 +64,6 @@
 
 /* Various globals we reference.  */
 extern char *source_path;
-/* FIXME: this must be `extern'.  But to do that we need a patch to
-   infcmd.c.  */
-static char *inferior_args = "";
 
 static void setup_architecture_data (void);
 static int tracepoint_exists (char *args);
@@ -236,6 +233,9 @@ static int gdb_loadfile (ClientData, Tcl_Interp *, int,
 			 Tcl_Obj * CONST objv[]);
 static int gdb_load_disassembly (ClientData clientData, Tcl_Interp
 				 * interp, int objc, Tcl_Obj * CONST objv[]);
+static int gdb_get_inferior_args (ClientData clientData,
+				  Tcl_Interp *interp,
+				  int objc, Tcl_Obj * CONST objv[]);
 static int gdb_load_info (ClientData, Tcl_Interp *, int,
 			  Tcl_Obj * CONST objv[]);
 static int gdb_loc (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
@@ -419,6 +419,8 @@ Gdbtk_Init (interp)
 			gdb_get_blocks, NULL);
   Tcl_CreateObjCommand (interp, "gdb_block_variables", call_wrapper,
 			gdb_block_vars, NULL);
+  Tcl_CreateObjCommand (interp, "gdb_get_inferior_args", call_wrapper,
+			gdb_get_inferior_args, NULL);
 
   Tcl_LinkVar (interp, "gdb_selected_frame_level",
 	       (char *) &selected_frame_level,
@@ -443,12 +445,6 @@ Gdbtk_Init (interp)
      reasons similar to those for gdb_current_directory.  */
   Tcl_LinkVar (interp, "gdb_source_path",
 	       (char *) &source_path,
-	       TCL_LINK_STRING | TCL_LINK_READ_ONLY);
-
-  /* Current inferior command-line arguments.  This is read-only for
-     reasons similar to those for gdb_current_directory.  */
-  Tcl_LinkVar (interp, "gdb_inferior_args",
-	       (char *) &inferior_args,
 	       TCL_LINK_STRING | TCL_LINK_READ_ONLY);
 
   /* Init variable interface... */
@@ -983,6 +979,33 @@ gdb_target_has_execution_command (clientData, interp, objc, objv)
     result = 1;
 
   Tcl_SetBooleanObj (result_ptr->obj_ptr, result);
+  return TCL_OK;
+}
+
+/* This implements the tcl command "gdb_get_inferior_args"
+
+ * Returns inferior command line arguments as a string
+ *
+ * Tcl Arguments:
+ *    None
+ * Tcl Result:
+ *    A string containing the inferior command line arguments
+ */
+
+static int
+gdb_get_inferior_args (clientData, interp, objc, objv)
+     ClientData clientData;
+     Tcl_Interp *interp;
+     int objc;
+     Tcl_Obj *CONST objv[];
+{
+  if (objc != 1)
+    {
+      Tcl_WrongNumArgs (interp, 1, objv, NULL);
+      return TCL_ERROR;
+    }
+
+  Tcl_SetStringObj (result_ptr->obj_ptr, get_inferior_args (), -1);
   return TCL_OK;
 }
 

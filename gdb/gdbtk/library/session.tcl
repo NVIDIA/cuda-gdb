@@ -21,7 +21,7 @@
 #
 proc session_save {} {
   global gdb_exe_name gdb_target_name
-  global gdb_current_directory gdb_source_path gdb_inferior_args
+  global gdb_current_directory gdb_source_path
 
   # gdb sessions are named after the executable.
   set name $gdb_exe_name
@@ -34,7 +34,7 @@ proc session_save {} {
   set values(executable) $gdb_exe_name
 
   # Some simple state the user wants.
-  set values(args) $gdb_inferior_args
+  set values(args) [gdb_get_inferior_args]
   set values(dirs) $gdb_source_path
   set values(pwd) $gdb_current_directory
   set values(target) $gdb_target_name
