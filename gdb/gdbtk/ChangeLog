@@ -1,3 +1,10 @@
+2002-04-22  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-stack.c (Gdbtk_Stack_Init): Don't link
+	selected_frame_level directly.
+	* generic/gdbtk-hooks.c (gdbtk_selected_frame_changed): Set
+	the global "gdb_selected_frame_level" directly.
+
 2002-04-21  Andrew Cagney  <ac131313@redhat.com>
 
 	* generic/gdbtk-wrapper.c (GDB_find_frame_addr_in_frame_chain):

@@ -67,10 +67,6 @@ Gdbtk_Stack_Init (Tcl_Interp *interp)
 			gdb_selected_frame, NULL);
   Tcl_CreateObjCommand (interp, "gdb_stack", gdbtk_call_wrapper, gdb_stack, NULL);
 
-  Tcl_LinkVar (interp, "gdb_selected_frame_level",
-	       (char *) &selected_frame_level,
-	       TCL_LINK_INT | TCL_LINK_READ_ONLY);
-
   return TCL_OK;
 }
 
