@@ -1,5 +1,8 @@
 2001-07-20  Martin M. Hunt  <hunt@redhat.com>
 
+	* library/memwin.itb: Fix syntax to open a new window
+	using the "-force" flag.
+
 	* generic/gdbtk-register.c (gdb_regnames): Fix 'if'
 	statement so count is decremented only if "-numbers"
 	is the first arg.

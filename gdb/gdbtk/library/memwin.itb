@@ -686,7 +686,7 @@ body MemWin::do_popup {X Y} {
   $itk_interior.t.menu add command -label "Go To [$itk_interior.t curvalue]" -underline 0 \
     -command "$this goto [$itk_interior.t curvalue]"
   $itk_interior.t.menu add command -label "Open New Window at [$itk_interior.t curvalue]" -underline 0 \
-    -command [list ManagedWin::open -force MemWin -addr_exp [$itk_interior.t curvalue]]
+    -command [list ManagedWin::open MemWin -force -addr_exp [$itk_interior.t curvalue]]
   $itk_interior.t.menu add separator
   $itk_interior.t.menu add command -label "Preferences..." -underline 0 \
     -command "$this create_prefs"
