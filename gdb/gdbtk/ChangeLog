@@ -1,3 +1,8 @@
+2001-12-07  Keith Seitz  <keiths@redhat.com>
+
+	* library/managedwin.itb (shutdown): Don't save geometry for
+	plugins, either.
+
 2001-12-05  Keith Seitz  <keiths@redhat.com>
 
 	* library/console.itb (busy): Set the cursor to the watch.
