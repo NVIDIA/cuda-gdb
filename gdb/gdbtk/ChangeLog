@@ -1,3 +1,8 @@
+2002-09-26  Andrew Cagney  <ac131313@redhat.com>
+
+	From Grace Sainsbury <graces@redhat.com>:
+	* generic/gdbtk-main.c: New file.
+
 2002-09-24  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/srctextwin.itb (FillMixed): Fix debug
