@@ -1955,10 +1955,11 @@ gdb_fetch_registers (clientData, interp, objc, objv)
   format = *(Tcl_GetStringFromObj (objv[0], NULL));
   objv++;
 
-
-  result_ptr->flags |= GDBTK_MAKES_LIST;    /* Output the results as a list */
+  if (objc != 1)
+    result_ptr->flags |= GDBTK_MAKES_LIST;    /* Output the results as a list */
   result = map_arg_registers (objc, objv, get_register, (void *) format);
-  result_ptr->flags &= ~GDBTK_MAKES_LIST;
+  if (objc != 1)
+    result_ptr->flags &= ~GDBTK_MAKES_LIST;
 
   return result;
 }
