@@ -53,6 +53,7 @@ class BpWin {
     method bp_add {bp_event {tracepoint 0}}
     method bp_modify {bp_event {tracepoint 0}} 
     method bp_delete {bp_event}
+    method _select_and_popup {bp X Y}
   }
 
 }

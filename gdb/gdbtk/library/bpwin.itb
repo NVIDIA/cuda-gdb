@@ -265,6 +265,7 @@ body BpWin::bp_add {bp_event {tracepoint 0}} {
     foreach thing $zz {
       bind $twin.${thing}${i} <1> "$this bp_select $i"
       bind $twin.${thing}${i} <Double-1> "$this goto_bp $i"
+      bind $twin.${thing}${i} <3> [code $this _select_and_popup $i %X %Y]
     }
   }
 
@@ -368,7 +369,6 @@ body BpWin::bp_select { r } {
     
     foreach thing $zz {
       $twin.${thing}${i}  configure -fg [pref get gdb/font/select_fg] -bg $bg1
-      bind $twin.${thing}${i} <3> break
     }
   }
 
@@ -386,17 +386,12 @@ body BpWin::bp_select { r } {
     $itk_interior.m.bp entryconfigure "Disabled" -state disabled
     $itk_interior.m.bp entryconfigure "Remove" -state disabled
     
-    foreach thing $zz {
-      bind $twin.${thing}${r} <3> break
-    }
-
     return
   }
 
   foreach thing $zz {
     $twin.${thing}${r} configure -fg [pref get gdb/font/select_fg] \
       -bg [pref get gdb/font/select_bg]
-    bind $twin.${thing}${r}  <3> "tk_popup $Menu %X %Y"
   }
   
   if {$tracepoints == 0} {
@@ -424,6 +419,21 @@ body BpWin::bp_select { r } {
   $Menu entryconfigure "Remove" -command "$this bp_remove $r" -state normal
   
   set selected $r
+}
+
+# ------------------------------------------------------------------
+#  NAME:         private method BpWin::_select_and_popup
+#  DESCRIPTION:  Select the given breakpoint and popup the options
+#                menu at the given location.
+#
+#  ARGUMENTS:    None
+#  RETURNS:      Nothing
+# ------------------------------------------------------------------
+body BpWin::_select_and_popup {bp X Y} {
+  if {$selected != $bp} {
+    bp_select $bp
+  }
+  tk_popup $Menu $X $Y
 }
 
 # ------------------------------------------------------------------

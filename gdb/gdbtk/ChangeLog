@@ -1,3 +1,10 @@
+2001-12-21  Keith Seitz  <keiths@redhat.com>
+
+	* library/bpwin.ith (_select_and_popup): New private method.
+	* library/bpwin.itb (bp_select): Don't bind to Button-3.
+	(build_win): Bind Button-3 to _select_and_popup.
+	(_select_and_popup): New private method.
+
 2001-12-18  Keith Seitz  <keiths@redhat.com>
 
 	* library/memwin.itb (incr_addr): Fix typo.
