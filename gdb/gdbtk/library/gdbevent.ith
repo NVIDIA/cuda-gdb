@@ -159,3 +159,15 @@ class BusyEvent {
 
   public method handler {} { return "busy" }
 }
+
+# IDLE EVENT
+#
+# This event is created/dispatched whenever the GUI and GDB is not
+# "busy". Receipt of this event means that the GUI should be put into
+# a state to accept input by the user.
+
+class IdleEvent {
+  inherit GDBEvent
+
+  public method handler {} { return "idle" }
+}

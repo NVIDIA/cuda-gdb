@@ -28,7 +28,6 @@ class ProcessWin {
     method cursor {glyph}
     method change_frame {y}
     method update {}
-    method idle {}
   }
 
   public {
@@ -40,5 +39,6 @@ class ProcessWin {
     # Event
     #
     method busy {event}    
+    method idle {event}
   }
 }

@@ -36,7 +36,6 @@ class VariableWin {
 
 	add_hook gdb_update_hook "$this update"
 	add_hook gdb_no_inferior_hook "$this no_inferior"
-	add_hook gdb_idle_hook [list $this idle]
 	add_hook gdb_clear_file_hook [code $this clear_file]
         # FIXME: This is too harsh.  We must add to varobj a method
         # to re-parse the expressions and compute new types so we can
@@ -166,7 +165,6 @@ class VariableWin {
 	# Remove this window and all hooks
 	remove_hook gdb_update_hook "$this update"
 	remove_hook gdb_no_inferior_hook "$this no_inferior"
-	remove_hook gdb_idle_hook [list $this idle]
 	remove_hook gdb_clear_file_hook [code $this clear_file]
 	remove_hook file_changed_hook [code $this clear_file]
     }
@@ -865,7 +863,7 @@ class VariableWin {
 	}
     }
 
-    method idle {} {
+    method idle {event} {
 	# Re-enable the UI
 	enable_ui
     }

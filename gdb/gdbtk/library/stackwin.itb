@@ -22,7 +22,6 @@ body StackWin::constructor {args} {
   
   add_hook gdb_update_hook [code $this update]
   add_hook gdb_no_inferior_hook [code $this no_inferior]
-  add_hook gdb_idle_hook [code $this idle]
 }
 
 # ------------------------------------------------------------------
@@ -30,7 +29,6 @@ body StackWin::constructor {args} {
 # ------------------------------------------------------------------
 body StackWin::destructor {} {
   remove_hook gdb_update_hook [code $this update]
-  remove_hook gdb_idle_hook [code $this idle]
   remove_hook gdb_no_inferior_hook [code $this no_inferior]
 }
 
@@ -107,7 +105,7 @@ body StackWin::update {} {
   }
 }
 
-body StackWin::idle {} {
+body StackWin::idle {event} {
   set Running 0
   cursor {}
 }

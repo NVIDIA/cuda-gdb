@@ -57,6 +57,7 @@ proc gdbtk_tcl_set_variable {var val} {
 #   any state changes in either the target or the debugger.
 #define_hook gdb_busy_hook
 
+# *** DEPRECATED: Use GDBEventHandler::idle instead.
 # GDB_IDLE_HOOK
 #   This hook is used to register a callback when the UI should
 #   be enabled because the debugger is no longer busy.
@@ -178,11 +179,10 @@ proc gdbtk_update_safe {} {
 }
 
 # ------------------------------------------------------------------
-#   PROCEDURE: gdbtk_idle - run all idle hooks
+#   PROCEDURE: gdbtk_idle - dispatch IdleEvent
 #
-#          Use this procedure to run all the gdb_idle_hook's,
-#          which should free the UI for more user input. This
-#          hook should only be run AFTER all communication with
+#          Use this procedure to free the UI for more user input.
+#          This should only be run AFTER all communication with
 #          the target has halted, otherwise the risk of two (or
 #          more) widgets talking to the target arises.
 # ------------------------------------------------------------------
@@ -192,12 +192,11 @@ proc gdbtk_idle {} {
   # Put the unfiltered hook back in place, just in case
   # somebody swapped it out, and then died before they
   # could replace it.
-
   gdb_restore_fputs
-  set err [catch {run_hooks gdb_idle_hook} txt]
-  if {$err} { 
-    dbug E "idle_hook error: $txt" 
-  }
+
+  set e [IdleEvent \#auto]
+  GDBEventHandler::dispatch $e
+  delete object $e
   
   if {!$gdb_running} {
     set err [catch {run_hooks gdb_no_inferior_hook} txt]

@@ -34,7 +34,6 @@ body KodWin::constructor {args} {
 
   # Add hooks for this object
   add_hook gdb_update_hook [code $this update]
-  add_hook gdb_idle_hook [code $this idle]
 }
 
 # ------------------------------------------------------------------
@@ -398,7 +397,6 @@ body KodWin::destructor {} {
   catch {unset kodActivePane}
 
   remove_hook gdb_update_hook [code $this update]
-  remove_hook gdb_idle_hook [code $this idle]
 }
 
 # ------------------------------------------------------------------
@@ -438,9 +436,10 @@ body KodWin::busy {event} {
 }
 
 # ------------------------------------------------------------------
-#  METHOD:  idle - idle hook.  Run when the target is not running
+#  METHOD:  idle - idle event handler.  Run when the target is not
+#           running
 # ------------------------------------------------------------------
-body KodWin::idle {} {
+body KodWin::idle {event} {
   set Running 0
   _restore_buttons
   cursor {}

@@ -35,7 +35,6 @@ class SrcWin {
     method fillNameCB {}
     method fillFuncCB {name}
     method goto_func {w {val ""}}
-    method idle {}
     method location {tag linespec}
     method mode {w new_mode {go 1}}
     method no_inferior {}
@@ -61,6 +60,7 @@ class SrcWin {
     # GDB Events
     #
     method busy {event}
+    method idle {event}
   }
 
   private {

@@ -35,5 +35,8 @@ class GDBEventHandler {
 
     # Busy event
     method busy {event} {}
+
+    # Idle event
+    method idle {event} {}
   }
 }

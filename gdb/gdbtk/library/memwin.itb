@@ -50,7 +50,6 @@ body MemWin::constructor {args} {
   gdbtk_idle
 
   add_hook gdb_update_hook "$this update"
-  add_hook gdb_idle_hook [list $this idle]
 }
 
 # ------------------------------------------------------------------
@@ -61,7 +60,6 @@ body MemWin::destructor {} {
     $prefs_win cancel
   }
   remove_hook gdb_update_hook "$this update"
-  remove_hook gdb_idle_hook [list $this idle]
 }
 
 
@@ -380,7 +378,7 @@ body MemWin::update {} {
 # ------------------------------------------------------------------
 #  METHOD:  idle - memory window is idle, so enable menus
 # ------------------------------------------------------------------
-body MemWin::idle {} {
+body MemWin::idle {event} {
   # Fencepost
   set Running 0
 

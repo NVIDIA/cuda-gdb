@@ -29,7 +29,6 @@ body ProcessWin::constructor {args} {
   # Add hooks for this object
   add_hook gdb_update_hook [code $this update]
   add_hook gdb_no_inferior_hook [code $this idle]
-  add_hook gdb_idle_hook [code $this idle]
 }
 
 
@@ -128,7 +127,6 @@ body ProcessWin::change_context {y} {
 # ------------------------------------------------------------------
 body ProcessWin::destructor {} {
   remove_hook gdb_update_hook [code $this update]
-  remove_hook gdb_idle_hook [code $this idle]
   remove_hook gdb_no_inferior_hook [code $this no_inferior]
 }
 
@@ -153,9 +151,9 @@ body ProcessWin::busy {event} {
 }
 
 # ------------------------------------------------------------------
-#  METHOD:  idle - idle hook.  Run when the target is not running
+#  METHOD:  idle - handle IdleEvent
 # ------------------------------------------------------------------
-body ProcessWin::idle {} {
+body ProcessWin::idle {event} {
   set Running 0
   cursor {}
 }

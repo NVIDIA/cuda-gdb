@@ -52,7 +52,6 @@ class PluginWindow {
     pack $child -expand 1 -fill both
 
     eval itk_initialize $args
-    add_hook gdb_idle_hook [code $this stopped]
     add_hook gdb_no_inferior_hook [code $this no_inferior]
   }
 
@@ -60,7 +59,6 @@ class PluginWindow {
   #  DESTRUCTOR - destroy window containing widget
   # ------------------------------------------------------------------
   destructor {
-    remove_hook gdb_idle_hook [code $this stopped]
     remove_hook gdb_no_inferior_hook [code $this no_inferior]
 
     #destroy $this
@@ -80,11 +78,10 @@ class PluginWindow {
   ####################################################################
 
   # ------------------------------------------------------------------
-  #  METHOD:  stopped
-  #             Invoked when there is an inferior and it has stopped
+  #  METHOD:  idle - handle IdleEvent
   # ------------------------------------------------------------------
-  protected method stopped {} {
-    debug "PluginWindow::stopped"
+  protected method idle {event} {
+    debug "PluginWindow::idle"
     enable_ui 1
   }
 

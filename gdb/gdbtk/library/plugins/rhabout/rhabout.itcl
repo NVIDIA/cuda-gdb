@@ -70,13 +70,13 @@ class RHAbout {
     $_status configure -text "Running..."
   }
 
-  # You can overload the base class stopped method, but make sure
+  # You can overload the base class idle method, but make sure
   # to call it as well or the menu and button status will not be updated
   # (unless this is what you want)
-  private method stopped {} {
+  private method idle {} {
     debug
     # First call the baseclass version
-    PluginWindow::stopped
+    PluginWindow::idle
 
     # Display something in the status area
     $_status configure -text "Stopped."

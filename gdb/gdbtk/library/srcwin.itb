@@ -42,7 +42,6 @@ body SrcWin::constructor {args} {
     set update_hook_init 1
     add_hook gdb_update_hook "SrcWin::choose_and_update"
   }
-  add_hook gdb_idle_hook "$this idle"
   add_hook gdb_no_inferior_hook "$this no_inferior"
   add_hook download_progress_hook "$this download_progress"
   add_hook state_hook [code $this _set_state]
@@ -60,7 +59,6 @@ body SrcWin::constructor {args} {
 body SrcWin::destructor {} {
   debug
   remove_hook gdb_no_inferior_hook "$this no_inferior"
-  remove_hook gdb_idle_hook "$this idle"
   remove_hook download_progress_hook "$this download_progress"
   remove_hook state_hook [code $this _set_state]
   remove_hook gdb_clear_file_hook [code $this clear_file]
@@ -511,7 +509,7 @@ body SrcWin::_update {loc} {
 #  PUBLIC METHOD:  idle - callback for gdbtk_idle
 #  Called when the target is idle, so enable all buttons.
 # ------------------------------------------------------------------
-body SrcWin::idle {} {
+body SrcWin::idle {event} {
   $_toolbar configure -runstop normal
   enable_ui 1
 }

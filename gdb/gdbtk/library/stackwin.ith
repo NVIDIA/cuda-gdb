@@ -28,7 +28,6 @@ class StackWin {
     method change_frame {y}
     method update {}
     method no_inferior {}
-    method idle {}
   }
 
   public {
@@ -40,6 +39,7 @@ class StackWin {
     # GDB Events
     #
     method busy {event}
+    method idle {event}
   }
 
 }

@@ -26,7 +26,6 @@ class Console {
 
     method constructor {args}
     method destructor {}   
-    method idle {}
     method insert {line}
     method einsert {line tag}
     method invoke {}
@@ -38,6 +37,7 @@ class Console {
     # GDB Events
     #
     method busy {event}
+    method idle {event}
   }
 
   private {

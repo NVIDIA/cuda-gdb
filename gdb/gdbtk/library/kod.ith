@@ -43,7 +43,6 @@ class KodWin {
     method clear {}
     method top {}
     method up {}
-    method idle {}
     method cursor {glyph}
     method _disable_buttons {}
     method _restore_buttons {}
@@ -59,5 +58,6 @@ class KodWin {
     #
     method set_variable {event}
     method busy {event}
+    method idle {event}
   }
 }

@@ -61,7 +61,6 @@ class MemWin {
     method edit {cell}
     method toggle_enabled {}
     method update {}
-    method idle {}
     method newsize {height}
     method update_address_cb {}
     method update_address { {ae ""} }
@@ -79,5 +78,6 @@ class MemWin {
     # GDB Events
     #
     method busy {event}
+    method idle {event}
   }
 }
