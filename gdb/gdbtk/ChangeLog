@@ -1,3 +1,9 @@
+2003-12-11  Jim Blandy  <jimb@redhat.com>
+
+	* library/prefs.tcl (pref_read): The section marker or the word
+	'option' must be the first thing on the line; they don't count if
+	they appear in the middle of the line.
+
 2003-11-24  David Carlton  <carlton@kealia.com>
 
 	* generic/gdbtk.c (target_is_native): Replace STREQ by strcmp.

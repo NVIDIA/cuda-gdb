@@ -88,11 +88,11 @@ proc pref_read {} {
 	    ;# empty line; ignore it
 	  }
 
-	  {\[.*\]} {
+	  {^[ \t\n]*\[.*\]} {
 	    regexp {\[(.*)\]} $line match section
 	  }
 
-	  {[ \t\n]*option.*} {
+	  {^[ \t\n]*option.*} {
 	    set line [string trimleft $line]
 	    eval $line
 	  }
