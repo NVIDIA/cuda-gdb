@@ -1,3 +1,9 @@
+2005-01-27  Keith Seitz  <keiths@redhat.com>
+
+	* configure.in: Rename to ...
+	* configure.ac: ... this.
+	* configure: Regnerate.
+
 2004-07-19  Martin Hunt  <hunt@redhat.com>
 
 	* All: Updated load_lib calls to find new location
