@@ -1,3 +1,10 @@
+2000-12-06  Tom Tromey  <tromey@redhat.com>
+
+	* targetselection.itb (TargetSelection::build_win): Add option to
+	start xterm.
+	* interface.tcl (run_executable): Call tty::create if requested.
+	* tty.tcl: New file.
+
 2000-12-02  Tom Tromey  <tromey@redhat.com>
 
 	* console.ith (_set_wrap): Declare.

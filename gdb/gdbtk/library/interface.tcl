@@ -206,7 +206,7 @@ define_hook gdb_quit_hook
 #  PROCEDURE:  gdbtk_quit_check - Ask if the user really wants to quit.
 # ------------------------------------------------------------------
 proc gdbtk_quit_check {} {
-  global gdb_downloading gdb_running
+  global gdb_downloading gdb_running gdb_exe_name
   
   if {$gdb_downloading} {
     set msg "Downloading to target,\n really close the debugger?"
@@ -214,14 +214,16 @@ proc gdbtk_quit_check {} {
       return 0
     }
   } elseif {$gdb_running} {
-    # While we are running the inferior, gdb_cmd is fenceposted and returns
-    # immediately. Therefore, we need to ask here. Do we need to stop the target,
-    # too?
+    # While we are running the inferior, gdb_cmd is fenceposted and
+    # returns immediately. Therefore, we need to ask here. Do we need
+    # to stop the target, too?
     set msg "A debugging session is active.\n"
     append msg "Do you still want to close the debugger?"
     if {![gdbtk_tcl_query $msg no]} {
       return 0
     }
+  } elseif {$gdb_exe_name != ""} {
+    session_save
   }
   return 1
 }
@@ -736,6 +738,11 @@ proc gdbtk_locate_main {} {
 proc set_exe_name {exe} {
   global gdb_exe_name gdb_exe_changed
   #debug "set_exe_name: exe=$exe  gdb_exe_name=$gdb_exe_name"
+
+  if {$gdb_exe_name != ""} then {
+    session_save
+  }
+
   set gdb_exe_name $exe
   set gdb_exe_changed 1    
 }
@@ -995,7 +1002,7 @@ necessary,\nmodify the port setting with the debugger preferences."
 proc run_executable { {auto_start 1} } {
   global gdb_loaded gdb_downloading gdb_target_name
   global gdb_exe_changed gdb_target_changed gdb_program_has_run
-  global gdb_running gdb_exe_name
+  global gdb_running gdb_exe_name tcl_platform
 
 #  debug "auto_start=$auto_start gdb_target_name=$gdb_target_name"
 
@@ -1086,6 +1093,13 @@ proc run_executable { {auto_start 1} } {
 	debug "set args $gdb_args"
 	catch {gdb_cmd "set args $gdb_args"}
       }
+    }
+
+    # If the user requested it, start an xterm for use as the
+    # inferior's tty.
+    if {$tcl_platform(platform) != "windows"
+	&& [pref getd gdb/process/xtermtty] == "yes"} {
+      tty::create
     }
 
     # 

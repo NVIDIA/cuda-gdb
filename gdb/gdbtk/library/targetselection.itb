@@ -432,6 +432,9 @@ body TargetSelection::build_win {} {
   entry $f.fr.bp.func -textvariable [pref varname gdb/load/bp_func] -width 20
   checkbutton $f.fr.verb -text [gettext "Display Download Dialog"] \
     -variable [pref varname gdb/load/$target-verbose]
+  checkbutton $f.fr.xterm -text [gettext "Use xterm as inferior's tty"] \
+    -variable [pref varname gdb/process/xtermtty] \
+    -onvalue yes -offvalue no
 
   if {![pref get gdb/control_target]} {
     $f.fr.main configure -state disabled
@@ -457,6 +460,7 @@ body TargetSelection::build_win {} {
   pack $f.fr.bp.at_func $f.fr.bp.func -side left
   grid $f.fr.bp -sticky w -padx 5 -pady 5
   grid $f.fr.verb -sticky w -padx 5 -pady 5
+  grid $f.fr.xterm -sticky w -padx 5 -pady 5
   if {![pref get gdb/control_target]} {
     grid $f.fr.check -sticky w -padx 5 -pady 5
   }
