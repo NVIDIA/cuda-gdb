@@ -180,8 +180,6 @@ static int gdb_stop (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_target_has_execution_command (ClientData,
 					     Tcl_Interp *, int,
 					     Tcl_Obj * CONST[]);
-static int gdbtk_dis_asm_read_memory (bfd_vma, bfd_byte *, unsigned int,
-				      disassemble_info *);
 static void gdbtk_load_source (ClientData clientData,
 			       struct symtab *symtab,
 			       int start_line, int end_line);
@@ -2075,27 +2073,6 @@ gdb_disassemble_driver (CORE_ADDR low, CORE_ADDR high,
     }
 
   return TCL_OK;
-}
-
-/* This is the memory_read_func for gdb_disassemble_driver when we are
-   disassembling from the exec file. */
-
-static int
-gdbtk_dis_asm_read_memory (bfd_vma memaddr, bfd_byte *myaddr,
-			   unsigned int len, disassemble_info *info)
-{
-  extern struct target_ops exec_ops;
-  int res;
-
-  errno = 0;
-  res = xfer_memory (memaddr, myaddr, len, 0, 0, &exec_ops);
-
-  if (res == len)
-    return 0;
-  else if (errno == 0)
-    return EIO;
-  else
-    return errno;
 }
 
 /* This will be passed to qsort to sort the results of the disassembly */

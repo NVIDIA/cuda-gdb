@@ -1,3 +1,9 @@
+2004-12-13  Ben Elliston  <bje@au.ibm.com>
+
+	Remove some warnings:
+	* generic/gdbtk-hooks.c (gdbtk_pre_add_symbol): Cast `name'.
+	* generic/gdbtk-cmds.c (gdbtk_dis_asm_read_memory): Remove.
+
 2004-12-08  Keith Seitz  <kseitz@sources.redhat.com>
 
 	* library/download.ith (completed_steps): New variable.

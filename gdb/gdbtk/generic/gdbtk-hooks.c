@@ -597,7 +597,7 @@ gdbtk_load_hash (const char *section, unsigned long num)
 static void
 gdbtk_pre_add_symbol (const char *name)
 {
-  gdbtk_two_elem_cmd ("gdbtk_tcl_pre_add_symbol", name);
+  gdbtk_two_elem_cmd ("gdbtk_tcl_pre_add_symbol", (char *) name);
 }
 
 /* This hook is called whenever we finish loading a symbol file. */
