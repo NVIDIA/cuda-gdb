@@ -905,7 +905,7 @@ tracepoint_exists (char *args)
   char *file = NULL;
   int result = -1;
 
-  sals = decode_line_1 (&args, 1, NULL, 0, &canonical);
+  sals = decode_line_1 (&args, 1, NULL, 0, &canonical, NULL);
   if (sals.nelts == 1)
     {
       resolve_sal_pc (&sals.sals[0]);

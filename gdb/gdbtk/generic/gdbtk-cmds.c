@@ -938,7 +938,7 @@ gdb_get_line_command (ClientData clientData, Tcl_Interp *interp,
     }
 
   args = Tcl_GetStringFromObj (objv[1], NULL);
-  sals = decode_line_1 (&args, 1, NULL, 0, &canonical);
+  sals = decode_line_1 (&args, 1, NULL, 0, &canonical, NULL);
   if (sals.nelts == 1)
     {
       Tcl_SetIntObj (result_ptr->obj_ptr, sals.sals[0].line);
@@ -974,7 +974,7 @@ gdb_get_file_command (ClientData clientData, Tcl_Interp *interp,
     }
 
   args = Tcl_GetStringFromObj (objv[1], NULL);
-  sals = decode_line_1 (&args, 1, NULL, 0, &canonical);
+  sals = decode_line_1 (&args, 1, NULL, 0, &canonical, NULL);
   if (sals.nelts == 1)
     {
       Tcl_SetStringObj (result_ptr->obj_ptr,
@@ -1010,7 +1010,7 @@ gdb_get_function_command (ClientData clientData, Tcl_Interp *interp,
     }
 
   args = Tcl_GetStringFromObj (objv[1], NULL);
-  sals = decode_line_1 (&args, 1, NULL, 0, &canonical);
+  sals = decode_line_1 (&args, 1, NULL, 0, &canonical, NULL);
   if (sals.nelts == 1)
     {
       resolve_sal_pc (&sals.sals[0]);
