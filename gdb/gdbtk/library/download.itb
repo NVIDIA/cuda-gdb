@@ -31,12 +31,11 @@ body Download::constructor {args} {
 
   set i 0
   while {$i <$num_sections} {
-    iwidgets::feedback $f.meter$i -steps $num_steps
+    iwidgets::feedback $f.meter$i -steps $num_steps -fraction 0.0
     grid forget [$f.meter$i component percentage]
     label $f.sec$i -text [lindex $section(names) $i] -anchor w
     label $f.num$i -text $bytes($i) -anchor e
     grid $f.sec$i $f.meter$i $f.num$i -padx 4 -pady 4 -sticky news
-    set steps($i) 0
     incr i
   }
   grid columnconfigure $f 1 -weight 1
@@ -64,16 +63,11 @@ body Download::update_download { sec num tot } {
     set i $section($s)
 
     if {$s == $sec} {
-      set stepSize [expr {int($bytes($i) / $num_steps)}]
-      set new_step [expr {int($num / $stepSize)}]
-      set diff     [expr {$new_step - $steps($i)}]
-      set steps($i) $new_step
-      $itk_interior.f.meter$i step $diff
+      set f [expr {$num / $bytes($i)}]
+      $itk_interior.f.meter$i configure -fraction $f
       break
     } else {
-      if {$steps($i) != $num_steps} {
-	$itk_interior.f.meter$i step $num_steps
-      }
+      $itk_interior.f.meter$i configure -fraction 1.0
     }
   }
 
@@ -97,9 +91,7 @@ body Download::done { {msg ""} } {
     # set all indicators to FULL
     foreach sec $section(names) {
       set i $section($sec)
-      if {$steps($i) != $num_steps} {
-	$itk_interior.f.meter$i step $num_steps
-      }
+      $itk_interior.f.meter$i configure -fraction 1.0
     }
   } else {
     # download failed

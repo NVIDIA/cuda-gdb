@@ -1,3 +1,12 @@
+2002-04-04  Keith Seitz  <keiths@redhat.com>
+
+	* library/download.itb (constructor): Set feedback meter
+	to "0.0".
+	Remove "steps" array.
+	(update_download): Use fractional completions for feedback.
+	(done): Ditto.
+	* library/download.ith (protected variable steps): Remove.
+
 2002-04-04  Daniel Jacobowitz  <drow@mvista.com>
 
 	* generic/gdbtk-cmds.c (gdb_disassemble_driver): Skip

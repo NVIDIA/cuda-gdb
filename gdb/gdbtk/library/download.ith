@@ -16,8 +16,6 @@ class Download {
   inherit ManagedWin
   
   protected {
-    variable steps
-
     common total_bytes
     common section
     common bytes
