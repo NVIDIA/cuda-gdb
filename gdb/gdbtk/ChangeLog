@@ -1,5 +1,7 @@
 2002-10-15  Martin M. Hunt  <hunt@redhat.com>
 
+	* library/tclIndex: Rebuilt.
+
 	* library/* : auto_mkindex cannot rebuild
 	tclIndex because it does not recognize the namespace
 	import in main.tcl.  To get it to work again, rename the
