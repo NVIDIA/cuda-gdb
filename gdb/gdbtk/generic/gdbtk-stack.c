@@ -22,6 +22,7 @@
 #include "target.h"
 #include "breakpoint.h"
 #include "linespec.h"
+#include "block.h"
 
 #include <tcl.h>
 #include "gdbtk.h"

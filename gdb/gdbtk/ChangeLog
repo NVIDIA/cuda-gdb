@@ -1,3 +1,9 @@
+2003-02-20  Pierre Muller  <muller@ics.u-strasbg.fr>
+
+	* generic/gdbtk-cmds.c: Add missing "block.h" include.
+	generic/gdbtk-stack.c: Ditto.
+	generic/gdbtk-wrapper.c: Ditto.
+
 2003-02-18  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-main.c (main): Change name of intepreter to "insight".

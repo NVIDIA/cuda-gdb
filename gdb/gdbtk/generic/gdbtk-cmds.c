@@ -34,6 +34,7 @@
 #include "tui/tui-file.h"
 #include "top.h"
 #include "annotate.h"
+#include "block.h"
 
 /* tcl header files includes varargs.h unless HAS_STDARG is defined,
    but gdb uses stdarg.h, so make sure HAS_STDARG is defined.  */
