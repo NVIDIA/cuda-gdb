@@ -105,28 +105,16 @@ proc gdbtk_start {test}
     src/gdb/testsuite)
   SUBDIR
     The dejagnu testsuite subdirectory for the test (i.e., gdb.gdbtk)
-  GDBTK_LIBRARY
-    The location of the Insight tcl library (i.e., src/gdb/gdbtk/library)
-  TCL_LIBRARY
-    The location of the Tcl library (i.e., src/tcl/library)
-  TK_LIBRARY
-    The location of the Tk library (i.e., src/tk/library)
-  TIX_LIBRARY
-    The location of the Tix library (i.e., src/tix/library)
-  ITCL_LIBRARY
-    The location fo the Itcl librarry (i.e., src/itcl/itcl/library)
-  CYGNUS_GUI_LIBRARY
-    The location of libgui (i.e., src/libgui/library)
   DEFS
     The location of the testsuite definitions file (i.e.,
     src/gdb/testsuite/gdb.gdbtk/defs)
 
-  Note that *_LIBRARY and DEFS are converted to absolute tcl-style
-  paths. On unix, this means that GDBTK_LIBRARY would point to, for example,
-  /home/keiths/insight/src/gdb/gdbtk/library. On Cygwin it would point to
-  C:/cygwin/home/keiths/insight/src/gdb/gdbtk/library. This is because of
-  a descrepency between Cygwin's posix paths and Tcl's not-quite-posix
-  paths.
+  Note that DEFS is converted to abs$lute tcl-style paths. On unix,
+  this means that DEFS would point to, for example,
+  /home/keiths/insight/src/gdb/testsuite/gdb.gdbtk/defs. On Cygwin it
+  would point to C:/cygwin/home/keiths/insight/src/gdb/testsuite/gdb.gdbtk/defs.
+  This is because of a descrepency between Cygwin's posix paths and Tcl's
+  not-quite-posix paths.
 
 proc gdbtk_analyze_results {results}
   This function translates the list of results in RESULTS into dejagnu
@@ -215,26 +203,29 @@ gdb's dejagnu testsuite, the basic testsuite driver file should look
 (minimally) like this:
 
 File: mytest.exp
-1   if {[gdbtk_initialize_display]} {
-2     # We found a display to use
-3     gdb_exit;   # Make sure any previous gdb is gone
-4     set results [gdbtk_start mytest.test]
-5
-6     # Done!
-7     gdbtk_done [split $results \n]
-8   }
+1   load_lib "insight-support.exp"
+2   if {[gdbtk_initialize_display]} {
+3     # We found a display to use
+4     gdb_exit;   # Make sure any previous gdb is gone
+5     set results [gdbtk_start mytest.test]
+6
+7     # Done!
+8     gdbtk_done [split $results \n]
+9   }
 
-Line 1 calls gdbtk_initialize_display to ascertain whether there is a display
+Line 1 loads the insight testsuite support library which contains definitions
+for all the procedures used in dejagnu to initialize and run the Insight testsuite.
+Line 2 calls gdbtk_initialize_display to ascertain whether there is a display
 to use for the test. This could use an existing display (if GDB_DISPLAY is
 set in the environment) or gdbk_initialize_display could startup an Xvfb
 for use by the testsuite.
 
-Line 3 forces any previously executing gdb to terminate.
+Line 4 forces any previously executing gdb to terminate.
 
-Line 4 signals the start of the test run. "mytest.test" is the name of the
+Line 5 signals the start of the test run. "mytest.test" is the name of the
 Tcl test file to execute in Insight's built-in Tcl interpreter. The output
 of gdbtk_start_test is all of the results of the Tcl test from Insight, which
-is subsequently passed to gdbk_analyze_results via gdbtk_done on Line 7.
+is subsequently passed to gdbk_analyze_results via gdbtk_done on Line 8.
 
 Note how nothing happens if gdbtk_initialize_display returns false.
 
@@ -356,7 +347,7 @@ GUI. Please do not write tests which attempt to imitate a user (moving the
 mouse and clicking buttons), unless there is no other way to test the functionality.
 
 The basic test file (with one test) looks like this (nonsensical one):
-File: mytest.exp
+File: mytest.test
 1  if {![gdbtk_read_defs]} {
 2    break
 3  }

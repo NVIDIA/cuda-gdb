@@ -1,3 +1,12 @@
+2001-08-30  Keith Seitz  <keiths@redhat.com>
+
+	* README: Update documentation to reflect recent changes.
+	* browser.exp: Load the insight testsuite support library.
+	* c_variable.exp: Likewise.
+	* console.exp: Likewise.
+	* cpp_variable.exp: Likewise.
+	* srcwin.exp: Likewise.
+
 2001-08-16  Keith Seitz  <keiths@redhat.com>
 
 	* cpp_variable.test (2.29, 2.30, 2.43, 2.63, 2.72): Char
