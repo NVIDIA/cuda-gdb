@@ -13,8 +13,8 @@
    THIS SOFTWARE INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
    MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
 
-   $Revision: 1.187 $
-   $Date: 1999/11/11 18:13:32 $             
+   $Revision: 1.188 $
+   $Date: 1999/11/29 14:48:10 $             
 
 NOTEs:
 
@@ -462,8 +462,9 @@ sim_open (kind, cb, abfd, argv)
       sim_do_commandf (sd, "memory alias 0x%lx@1,0x%lx", 0xFFFF9000, 0x200); /* EBIF */
       sim_do_commandf (sd, "memory alias 0x%lx@1,0x%lx", 0xFFFFF500, 0x300); /* PIO */
       sim_do_commandf (sd, "memory alias 0x%lx@1,0x%lx", 0xFFFF8000, 0x804); /* DRAMC */
-      sim_do_commandf (sd, "memory alias 0x%lx@1,0x%lx", 0xB2100000, 0x004); /* ISA ctl */
       sim_do_commandf (sd, "memory alias 0x%lx@1,0x%lx", 0xB1000000, 0x400); /* ISA I/O */
+      sim_do_commandf (sd, "memory alias 0x%lx@1,0x%lx", 0xB2100000, 0x004); /* ISA ctl */
+      sim_do_commandf (sd, "memory alias 0x%lx@1,0x%lx", 0xB2500000, 0x004); /* LED/switch */
       sim_do_commandf (sd, "memory alias 0x%lx@1,0x%lx", 0xB2700000, 0x004); /* RTC */
       sim_do_commandf (sd, "memory alias 0x%lx@1,0x%lx", 0xB3C00000, 0x004); /* RTC */
 
