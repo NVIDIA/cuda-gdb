@@ -126,7 +126,7 @@ gdbtk_add_hooks (void)
   handlers.tracepoint_modify = gdbtk_modify_tracepoint;
   handlers.tracepoint_delete = gdbtk_delete_tracepoint;
   handlers.architecture_changed = gdbtk_architecture_changed;
-  set_gdb_event_hooks (&handlers);
+  deprecated_set_gdb_event_hooks (&handlers);
 
   /* Hooks */
   deprecated_call_command_hook = gdbtk_call_command;
