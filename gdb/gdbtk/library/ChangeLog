@@ -1,5 +1,26 @@
 2000-12-07  Tom Tromey  <tromey@redhat.com>
 
+	* bpwin.itb (BpWin::goto_bp): Handle multiple source windows.
+	* srctextwin.itb (SrcTextWin::get_file): New method.
+	(SrcTextWin::set_tag_to_stack): New method.
+	* srctextwin.ith (get_file): Declare.
+	* srcwin.ith (update_hook_init, window_list, pc_window): New
+	common variables.
+	(_choose_window, choose_and_update, is_fixed, get_file): Declare.
+	* srcwin.itb (SrcWin::_choose_window): New method.
+	(SrcWin::choose_and_update): Likewise.
+	(SrcWin::_update): Renamed from update.  Now private.  Added `loc'
+	argument.
+	(SrcWin::get_file): New method.
+	(SrcWin::is_fixed): Likewise.
+	(SrcWin::constructor): Only add update hook once.  Append this
+	object to window list.
+	(SrcWin::destructor): Don't add update hook.  Remove this object
+	from window list.  Clear pc_window if necessary.
+	(SrcWin::get_top): New method.
+	(SrcWin::_set_tag_to_stack): New method.
+	(SrcWin::choose_and_display): New method.
+
 	* srctextwin.itb (SrcTextWin::do_source_popup): Added "Set
 	Breakpoint" to popup menu.
 
