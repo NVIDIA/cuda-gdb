@@ -27,7 +27,7 @@ class ManagedWin {
     method window_name {wname {iname ""}}
 
     proc find {win}
-    proc open {args}
+    proc open {class args}
     proc open_dlg {class args}
     proc init {}
     proc restart {}
@@ -38,6 +38,9 @@ class ManagedWin {
   protected {
     # The Tk's toplevel window for this ManagedWin
     variable _top
+
+    # Variable which holds the geometry of this window
+    variable _geometry {}
 
     # this is the counter of TopLevelWins open
     # when it hits 0, exit.

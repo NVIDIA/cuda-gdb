@@ -38,15 +38,14 @@ body ManagedWin::destructor {} {
 
 # ------------------------------------------------------------
 #  PUBLIC METHOD:  window_name - Set the name of the window
-#   (and optionally it's icon's name).
+#   (and optionally its icon's name).
 # ------------------------------------------------------------
 body ManagedWin::window_name {wname {iname ""}} {
-  set top [winfo toplevel [namespace tail $this]]
-  wm title $top $wname
+  wm title $_top $wname
   if {$iname != ""} {
-    wm iconname $top $iname
+    wm iconname $_top $iname
   } else {
-    wm iconname $top $wname
+    wm iconname $_top $wname
   }
 }
 
@@ -66,19 +65,16 @@ body ManagedWin::reveal {} {
   # Do this update to flush all changes before deiconifying the window.
   update idletasks
   
-  set top [winfo toplevel [namespace tail $this]]
-  set g [wm geometry $top]
-  #debug "$top geometry=$g state=[wm state $top]"
-  raise $top
-  wm deiconify $top
-  if {[info exists ::$top._init_geometry]} {
-    upvar ::$top._init_geometry gm
-    if {$::tcl_platform(platform) == "unix"} {
-      wm geometry $top $gm
-    }
-    unset ::$top._init_geometry
+  raise $_top
+  wm deiconify $_top
+  # Some window managers (on unix) fail to honor the geometry unless
+  # the window is visible.
+  if {$_geometry != "" && $::tcl_platform(platform) == "unix"} {
+    wm geometry $_top $_geometry
+    set _geometry ""
   }
-  #debug "$top geometry=[wm geometry $top] state=[wm state $top]"
+
+  #debug "$_top geometry=[wm geometry $_top] state=[wm state $_top]"
 
   # There used to be a `focus -force' here, but using -force is
   # unfriendly, so it was removed.  It was then replaced with a simple
@@ -90,7 +86,7 @@ body ManagedWin::reveal {} {
   # register window on top of the source window, but the source window
   # will have the focus. This is not the proper model for Windows.
   if {$::tcl_platform(platform) == "windows"} {
-    focus -force [focus -lastfor $top]
+    focus -force [focus -lastfor $_top]
   }
 }
 
@@ -118,9 +114,11 @@ body ManagedWin::restart {} {
 body ManagedWin::shutdown {} {
   set activeWins {}
   foreach win [itcl_info objects -isa ManagedWin] {
-    set g [wm geometry [winfo toplevel [namespace tail $win]]]
-    pref setd gdb/geometry/[namespace tail $win] $g
-    lappend activeWins [$win pickle]
+    if {![$win isa ModalDialog]} {
+      set g [wm geometry [winfo toplevel [namespace tail $win]]]
+      pref setd gdb/geometry/[namespace tail $win] $g
+      lappend activeWins [$win pickle]
+    }
   }
   pref set gdb/window/active $activeWins
 }
@@ -244,20 +242,11 @@ body ManagedWin::_create { class args } {
   
   wm maxsize $top $_screenwidth $_screenheight
   wm minsize $top 20 20
-  
-  if {$over != ""} {
-    # center new window over widget
-    set t [winfo toplevel [namespace tail $over]]
-    set cx [expr {[winfo rootx $t] + [winfo width $t] / 2}]
-    set cy [expr {[winfo rooty $t] + [winfo height $t] / 2}]
-    set x [expr {$cx - [winfo reqwidth $top] / 2}]
-    set y [expr {$cy - [winfo reqheight $top] / 2}]
-    wm geometry $top +$x+$y    
-  } elseif {$center} {
-    # center the window on the screen
-    set x [expr {[winfo screenwidth $top] / 2 - [winfo reqwidth $top] / 2}]
-    set y [expr {[winfo screenheight $top] / 2 - [winfo reqheight $top] / 2}]
-    wm geometry $top +$x+$y
+  update idletasks
+
+  if {$over != "" || $center} {
+    # center new window
+    center_window $top -over $over
   }
   
   if {$transient} {
@@ -353,7 +342,7 @@ body ManagedWin::destroy_toplevel {} {
 }
 
 # ------------------------------------------------------------
-#  PRIVATE METHOD:  _freeze_me
+#  PROTECTED METHOD:  _freeze_me
 # ------------------------------------------------------------
 body ManagedWin::_freeze_me {} {
   $_top configure -cursor watch
@@ -361,7 +350,7 @@ body ManagedWin::_freeze_me {} {
 }
 
 # ------------------------------------------------------------
-#  PRIVATE METHOD: _thaw_me
+#  PROTECTED METHOD: _thaw_me
 # ------------------------------------------------------------
 body ManagedWin::_thaw_me {} {
 

@@ -1,5 +1,18 @@
 2001-05-18  Keith Seitz  <keiths@cygnus.com>
 
+	* library/managedwin.ith (_geometry): Use a protected variable
+	instead of a global from ManagedWin::reveal.
+	(open): Make arg list reflect managedwin.itb.
+	* library/managedwin.itb (window_name): Use class variable
+	_top instead of recomputing the toplevel every time.
+	(reveal): Ditto.
+	Use class variable "_geometry" instead of global variable.
+	(shutdown): Do not save ModalDialogs.
+	(_create): If centering the new window, use libgui's
+	center_window to do it.
+
+2001-05-18  Keith Seitz  <keiths@cygnus.com>
+
 	* generic/gdbtk-hooks.c (gdbtk_wait): Change integer pid
 	argument to match gdb's new "ptid_t" pids.
 
