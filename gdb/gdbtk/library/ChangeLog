@@ -1,3 +1,7 @@
+2000-09-18  Fernando Nasser  <fnasser@cygnus.com>
+
+	* watch.tcl (build_win): Use code when setting callback.
+
 2000-08-10  Fernando Nasser  <fnasser@cygnus.com>
 
 	* targetselection.itb (change_baud): Fix typo (ETH, not ETX).

@@ -52,7 +52,7 @@ class WatchWin {
     set entryFrame [frame $f.expr]
     VariableWin::build_win $treeFrame
     set Entry [entry $entryFrame.ent -font src-font]
-    button $entryFrame.but -text "Add Watch" -command "$this validateEntry"
+    button $entryFrame.but -text "Add Watch" -command [code $this validateEntry]
     pack $f -fill both -expand yes
     grid $entryFrame.ent -row 0 -column 0 -sticky news -padx 2
     grid $entryFrame.but -row 0 -column 1 -padx 2
