@@ -38,7 +38,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.195 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.196 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -2250,10 +2250,6 @@ If defined, this should be one or more tokens, such as
 of functions to indicate that they never return.  The default is already
 set correctly if compiling with GCC.  This will almost never need to be
 defined.
-
-@item NO_SIGINTERRUPT
-@findex siginterrupt
-Define this to indicate that @code{siginterrupt} is not available.
 
 @item SEEK_CUR
 @itemx SEEK_SET
