@@ -160,7 +160,6 @@ body SrcWin::_build_win {} {
     balloon register $_statbar.func.$i "Current function name"
     balloon register $_statbar.mode.$i "Source mode"
   }
-  balloon register $_statbar.frame.search "Search for text"
   balloon variable $_status ${twin}_balloon
 
   $_statbar.mode entryset [$twin mode_get]

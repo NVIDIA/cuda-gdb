@@ -1,3 +1,8 @@
+2002-03-06  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/srcwin.itb: Don't try to set balloon help
+	for search widget; it moved to srcbar.
+
 2002-03-05  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/prefs.tcl (pref_read): If a preference specifies
