@@ -1,3 +1,10 @@
+2002-11-06  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-hooks.c (gdbtk_call_command): Make a null
+	cleanup and run it after every issued gdb command. Apparently
+	some commands depend on this. [This should really be part of
+	main gdb...]
+
 2002-10-15  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/tclIndex: Rebuilt.

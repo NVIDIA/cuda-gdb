@@ -519,6 +519,9 @@ static void
 gdbtk_call_command (struct cmd_list_element *cmdblk,
 		    char *arg, int from_tty)
 {
+  struct cleanup *old_chain;
+
+  old_chain = make_cleanup (null_cleanup, 0);
   running_now = 0;
   if (cmdblk->class == class_run || cmdblk->class == class_trace)
     {
@@ -533,6 +536,8 @@ gdbtk_call_command (struct cmd_list_element *cmdblk,
     }
   else
     cmd_func (cmdblk, arg, from_tty);
+
+  do_cleanups (old_chain);
 }
 
 /* Called after a `set' command succeeds.  Runs the Tcl hook
