@@ -2567,24 +2567,18 @@ gdb_set_mem (clientData, interp, objc, objv)
  * a list of elements followed by an optional ASCII dump */
 
 static int
-gdb_get_mem (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_get_mem (ClientData clientData, Tcl_Interp *interp,
+	     int objc, Tcl_Obj *CONST objv[])
 {
   int size, asize, i, j, bc;
   CORE_ADDR addr;
   int nbytes, rnum, bpr;
-  long tmp;
   char format, buff[128], aschar, *mbuf, *mptr, *cptr, *bptr;
   struct type *val_type;
 
   if (objc < 6 || objc > 7)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr,
-			"addr format size bytes bytes_per_row ?ascii_char?",
-			-1);
+      Tcl_WrongNumArgs (interp, 1, objv, "addr format size bytes bytes_per_row ?ascii_char?");
       return TCL_ERROR;
     }
 
@@ -2595,7 +2589,7 @@ gdb_get_mem (clientData, interp, objc, objv)
     }
   else if (size <= 0)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr, "Invalid size, must be > 0", -1);
+      Tcl_SetObjResult (interp, Tcl_NewStringObj ("Invalid size, must be > 0", -1));
       return TCL_ERROR;
     }
 
@@ -2606,9 +2600,8 @@ gdb_get_mem (clientData, interp, objc, objv)
     }
   else if (nbytes <= 0)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr,
-			"Invalid number of bytes, must be > 0",
-			-1);
+      Tcl_SetObjResult (interp, 
+			Tcl_NewStringObj ("Invalid number of bytes, must be > 0", -1));
       return TCL_ERROR;
     }
 
@@ -2619,21 +2612,18 @@ gdb_get_mem (clientData, interp, objc, objv)
     }
   else if (bpr <= 0)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr,
-			"Invalid bytes per row, must be > 0", -1);
+      Tcl_SetObjResult (interp,
+			Tcl_NewStringObj ("Invalid bytes per row, must be > 0", -1));
       return TCL_ERROR;
     }
 
-  if (Tcl_GetLongFromObj (interp, objv[1], &tmp) != TCL_OK)
-    return TCL_OK;
-
-  addr = (CORE_ADDR) tmp;
+  addr = string_to_core_addr (Tcl_GetStringFromObj (objv[1], NULL));
 
   format = *(Tcl_GetStringFromObj (objv[2], NULL));
   mbuf = (char *) malloc (nbytes + 32);
   if (!mbuf)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr, "Out of memory.", -1);
+      Tcl_SetObjResult (interp, Tcl_NewStringObj ("Out of memory.", -1));
       return TCL_ERROR;
     }
 

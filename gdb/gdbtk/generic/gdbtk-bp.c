@@ -200,15 +200,11 @@ Gdbtk_Breakpoint_Init (Tcl_Interp *interp)
  *    It returns a list of breakpoint numbers
  */
 static int
-gdb_find_bp_at_addr (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-
+gdb_find_bp_at_addr ( ClientData clientData, Tcl_Interp *interp,
+		      int objc, Tcl_Obj *CONST objv[])
 {
   int i;
-  long addr;
+  CORE_ADDR addr;
 
   if (objc != 2)
     {
@@ -216,17 +212,13 @@ gdb_find_bp_at_addr (clientData, interp, objc, objv)
       return TCL_ERROR;
     }
 
-  if (Tcl_GetLongFromObj (interp, objv[1], &addr) == TCL_ERROR)
-    {
-      result_ptr->flags = GDBTK_IN_TCL_RESULT;
-      return TCL_ERROR;
-    }
+  addr = string_to_core_addr (Tcl_GetStringFromObj (objv[1], NULL));
 
   Tcl_SetListObj (result_ptr->obj_ptr, 0, NULL);
   for (i = 0; i < breakpoint_list_size; i++)
     {
       if (breakpoint_list[i] != NULL
-	  && breakpoint_list[i]->address == (CORE_ADDR) addr)
+	  && breakpoint_list[i]->address == addr)
 	Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
 				  Tcl_NewIntObj (i));
     }
@@ -489,11 +481,8 @@ gdb_get_breakpoint_list (clientData, interp, objc, objv)
  *    The return value of the call to gdbtk_tcl_breakpoint.
  */
 static int
-gdb_set_bp (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_set_bp (ClientData clientData, Tcl_Interp *interp,
+	    int objc, Tcl_Obj *CONST objv[])
 {
   struct symtab_and_line sal;
   int line, thread = -1;
@@ -518,19 +507,14 @@ gdb_set_bp (clientData, interp, objc, objv)
     }
 
   typestr = Tcl_GetStringFromObj (objv[3], NULL);
-  if (typestr == NULL)
-    {
-      result_ptr->flags = GDBTK_IN_TCL_RESULT;
-      return TCL_ERROR;
-    }
   if (strncmp (typestr, "temp", 4) == 0)
     disp = disp_del;
   else if (strncmp (typestr, "normal", 6) == 0)
     disp = disp_donttouch;
   else
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr,
-			"type must be \"temp\" or \"normal\"", -1);
+      Tcl_SetObjResult (interp, 
+			Tcl_NewStringObj ("type must be \"temp\" or \"normal\"", -1));
       return TCL_ERROR;
     }
 
@@ -582,7 +566,7 @@ gdb_set_bp_addr (ClientData clientData, Tcl_Interp *interp, int objc,
 {
   struct symtab_and_line sal;
   int thread = -1;
-  long addr;
+  CORE_ADDR addr;
   struct breakpoint *b;
   char *typestr, *buf;
   enum bpdisp disp;
@@ -593,26 +577,17 @@ gdb_set_bp_addr (ClientData clientData, Tcl_Interp *interp, int objc,
       return TCL_ERROR;
     }
 
-  if (Tcl_GetLongFromObj (interp, objv[1], &addr) == TCL_ERROR)
-    {
-      result_ptr->flags = GDBTK_IN_TCL_RESULT;
-      return TCL_ERROR;
-    }
+  addr = string_to_core_addr (Tcl_GetStringFromObj (objv[1], NULL));
 
   typestr = Tcl_GetStringFromObj (objv[2], NULL);
-  if (typestr == NULL)
-    {
-      result_ptr->flags = GDBTK_IN_TCL_RESULT;
-      return TCL_ERROR;
-    }
   if (strncmp (typestr, "temp", 4) == 0)
     disp = disp_del;
   else if (strncmp (typestr, "normal", 6) == 0)
     disp = disp_donttouch;
   else
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr,
-			"type must be \"temp\" or \"normal\"", -1);
+      Tcl_SetObjResult (interp, 
+			Tcl_NewStringObj ("type must be \"temp\" or \"normal\"", -1));
       return TCL_ERROR;
     }
 
