@@ -1,3 +1,10 @@
+2002-01-18  Keith Seitz  <keiths@redhat.com>
+
+	* library/console.ith (get_text): Delete.
+	(test): New public method.
+	* library/console.itb (get_text): Delete.
+	(test): New public method.
+
 2002-01-15  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-varobj.c (variable_value): When varobj_get_value

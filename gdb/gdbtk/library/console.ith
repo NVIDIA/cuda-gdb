@@ -29,8 +29,8 @@ class Console {
     method insert {line {tag ""}}
     method invoke {}
     method _insertion {args}
-    method get_text {}
     method activate {{prompt {}}}
+    method test {args}
 
     #
     # GDB Events
