@@ -42,7 +42,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.48 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.49 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3500,6 +3500,17 @@ Non-zero if the target has both @code{BIG_ENDIAN} and
 @item TARGET_CHAR_BIT
 @findex TARGET_CHAR_BIT
 Number of bits in a char; defaults to 8.
+
+@item TARGET_CHAR_SIGNED
+@findex TARGET_CHAR_SIGNED
+Non-zero if @code{char} is normally signed on this architecture; zero if
+it should be unsigned.
+
+The ISO C standard requires the compiler to treat @code{char} as
+equivalent to either @code{signed char} or @code{unsigned char}; any
+character in the standard execution set is supposed to be positive.
+Most compilers treat @code{char} as signed, but @code{char} is unsigned
+on the IBM S/390, RS6000, and PowerPC targets.
 
 @item TARGET_COMPLEX_BIT
 @findex TARGET_COMPLEX_BIT
