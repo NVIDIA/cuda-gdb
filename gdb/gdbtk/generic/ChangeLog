@@ -1,3 +1,8 @@
+2000-11-29  Tom Tromey  <tromey@cygnus.com>
+
+	* gdbtk-cmds.c (call_wrapper): Don't reset result if wrapped
+	command returned error.
+
 2000-11-28  Tom Tromey  <tromey@cygnus.com>
 
 	* gdbtk-cmds.c (gdb_clear_file): Use Tcl_WrongNumArgs.

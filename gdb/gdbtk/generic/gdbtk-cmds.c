@@ -459,6 +459,7 @@ call_wrapper (clientData, interp, objc, objv)
 {
   struct wrapped_call_args wrapped_args;
   gdbtk_result new_result, *old_result_ptr;
+  int wrapped_returned_error = 0;
 
   old_result_ptr = result_ptr;
   result_ptr = &new_result;
@@ -497,16 +498,24 @@ call_wrapper (clientData, interp, objc, objv)
       Tcl_Eval (interp, "gdbtk_tcl_idle");
 
     }
+  else
+    {
+      /* If the wrapped call returned an error directly, then we don't
+	 want to reset the result.  */
+      wrapped_returned_error = wrapped_args.val == TCL_ERROR;
+    }
 
   /* do not suppress any errors -- a remote target could have errored */
   load_in_progress = 0;
 
   /*
-   * Now copy the result over to the true Tcl result.  If GDBTK_TO_RESULT flag
-   * bit is set , this just copies a null object over to the Tcl result, 
-   * which is fine because we should reset the result in this case anyway.
+   * Now copy the result over to the true Tcl result.  If
+   * GDBTK_TO_RESULT flag bit is set, this just copies a null object
+   * over to the Tcl result, which is fine because we should reset the
+   * result in this case anyway.  If the wrapped command returned an
+   * error, then we assume that the result is already set correctly.
    */
-  if (result_ptr->flags & GDBTK_IN_TCL_RESULT)
+  if ((result_ptr->flags & GDBTK_IN_TCL_RESULT) || wrapped_returned_error)
     {
       Tcl_DecrRefCount (result_ptr->obj_ptr);
     }
