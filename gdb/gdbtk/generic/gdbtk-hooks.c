@@ -88,7 +88,7 @@ static void gdbtk_file_changed (char *);
 static void gdbtk_exec_file_display (char *);
 static void tk_command_loop (void);
 static void gdbtk_call_command (struct cmd_list_element *, char *, int);
-static int gdbtk_wait (int, struct target_waitstatus *);
+static ptid_t gdbtk_wait (ptid_t, struct target_waitstatus *);
 int x_event (int);
 static int gdbtk_query (const char *, va_list);
 static void gdbtk_warning (const char *, va_list);
@@ -661,17 +661,17 @@ gdbtk_post_add_symbol ()
 /* This hook function is called whenever we want to wait for the
    target.  */
 
-static int
-gdbtk_wait (pid, ourstatus)
-     int pid;
+static ptid_t
+gdbtk_wait (ptid, ourstatus)
+     ptid_t ptid;
      struct target_waitstatus *ourstatus;
 {
   gdbtk_force_detach = 0;
   gdbtk_start_timer ();
-  pid = target_wait (pid, ourstatus);
+  ptid = target_wait (ptid, ourstatus);
   gdbtk_stop_timer ();
 
-  return pid;
+  return ptid;
 }
 
 /*
