@@ -547,7 +547,6 @@ itcl::body TargetSelection::build_win {} {
   set rm_frame [iwidgets::labeledframe $frame.run_method -labelpos nw -labeltext "Run Method" ]
   set RunMethod [ $rm_frame childsite ]
 
-  set rm_label [label $frame.label -text "Run Method:"]
   set var [pref varname gdb/src/run_cont]
   radiobutton $RunMethod.cont -text {Continue from Last Stop} -value 1 -variable $var \
     -command [code $this set_run run]
@@ -560,9 +559,8 @@ itcl::body TargetSelection::build_win {} {
   set _after_entry [entry $frame.aftere]
   label $frame.afterl -text {Command to issue after attaching:}
 
-  grid $frame.label -column 1 -row 0 -sticky w
-  grid $frame.attach -column 0 -row 1 -ipady 2
-  grid $frame.load -column 0 -row 2 -ipady 2
+  grid $frame.attach -column 0 -row 1 -padx 10 -sticky w
+  grid $frame.load -column 0 -row 2 -padx 10 -sticky w
 
   grid $RunMethod.run -column 0 -row 1 -sticky w -ipady 2
   grid $RunMethod.cont -column 0 -row 2 -sticky w -ipady 2

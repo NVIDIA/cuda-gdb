@@ -1,5 +1,9 @@
 2003-02-03  Martin M. Hunt  <hunt@redhat.com>
 
+	* library/targetselection.itb (TargetSelection::build_win): Remove duplicate label.
+
+2003-02-03  Martin M. Hunt  <hunt@redhat.com>	
+
 	* library/globalpref.itb, library/mempref.itb, library/srcpref.itb,
 	library/srcwin.itb, library/targetselection.itb, library/tracedlg.tcl:
 	Set background color of comboboxes to Colors(textbg).
