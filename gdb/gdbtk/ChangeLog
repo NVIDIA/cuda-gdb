@@ -1,5 +1,10 @@
 2001-03-01  Nicholas Duffek  <nsd@redhat.com>
 
+	* library/srctextwin.itb (SrcTextWin::location): Clear previous
+	pane's cursor after switching panes.
+
+2001-03-01  Nicholas Duffek  <nsd@redhat.com>
+
 	* library/srctextwin.itb (config_win): Give focus to $win.
 
 Tue Feb 27 23:56:23 2001  Andrew Cagney  <ac131313@redhat.com>
