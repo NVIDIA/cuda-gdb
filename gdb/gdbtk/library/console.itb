@@ -64,6 +64,8 @@ body Console::_build_win {} {
   # bind editing keys for console window
   #
   bind $_twin <Return> "$this invoke; break"
+  bind_plain_key $_twin Control-m "$this invoke; break"
+  bind_plain_key $_twin Control-j "$this invoke; break"
 
   # History control.
   bind_plain_key $_twin Control-p "[code $this _previous]; break"
