@@ -42,7 +42,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.37 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.38 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -2296,9 +2296,6 @@ warning.  This is currently defined if you configure using
 @item NO_SIGINTERRUPT
 @findex siginterrupt
 Define this to indicate that @code{siginterrupt} is not available.
-
-@item R_OK
-Define if this is not in a system header file (typically, @file{unistd.h}).
 
 @item SEEK_CUR
 @itemx SEEK_SET
