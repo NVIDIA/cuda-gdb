@@ -1833,8 +1833,23 @@ gdb_restore_fputs (clientData, interp, objc, objv)
     return TCL_OK;
 }
 
-/* This implements the TCL command `gdb_regnames', which returns a list of
-   all of the register names. */
+/* This implements the TCL command `gdb_regnames'.  Its syntax is:
+
+   gdb_regnames [-numbers] [REGNUM ...]
+
+   Return a list containing the names of the registers whose numbers
+   are given by REGNUM ... .  If no register numbers are given, return
+   all the registers' names.
+
+   Note that some processors have gaps in the register numberings:
+   even if there is no register numbered N, there may still be a
+   register numbered N+1.  So if you call gdb_regnames with no
+   arguments, you can't assume that the N'th element of the result is
+   register number N.
+
+   Given the -numbers option, gdb_regnames returns, not a list of names,
+   but a list of pairs {NAME NUMBER}, where NAME is the register name,
+   and NUMBER is its number.  */
 
 static int
 gdb_regnames (clientData, interp, objc, objv)
@@ -1843,19 +1858,47 @@ gdb_regnames (clientData, interp, objc, objv)
      int objc;
      Tcl_Obj *CONST objv[];
 {
+  int numbers = 0;
+
   objc--;
   objv++;
 
-  return map_arg_registers (objc, objv, get_register_name, NULL);
+  if (objc >= 1)
+    {
+      char *s = Tcl_GetStringFromObj (objv[0], NULL);
+      if (STREQ (s, "-numbers"))
+	numbers = 1;
+      objc--;
+      objv++;
+    }
+
+  return map_arg_registers (objc, objv, get_register_name, &numbers);
 }
 
 static void
 get_register_name (regnum, argp)
      int regnum;
-     void *argp;		/* Ignored */
+     void *argp;
 {
-  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-			    Tcl_NewStringObj (REGISTER_NAME (regnum), -1));
+  /* Non-zero if the caller wants the register numbers, too.  */
+  int numbers = * (int *) argp;
+  Tcl_Obj *name = Tcl_NewStringObj (REGISTER_NAME (regnum), -1);
+  Tcl_Obj *elt;
+
+  if (numbers)
+    {
+      /* Build a tuple of the form "{REGNAME NUMBER}", and append it to
+	 our result.  */
+      Tcl_Obj *array[2];
+
+      array[0] = name;
+      array[1] = Tcl_NewIntObj (regnum);
+      elt = Tcl_NewListObj (2, array);
+    }
+  else
+    elt = name;
+
+  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, elt);
 }
 
 /* This implements the tcl command gdb_fetch_registers
