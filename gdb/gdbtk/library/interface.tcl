@@ -332,9 +332,20 @@ proc show_warning {message} {
   # here.
   set title "GDB"
   set modal "task"
+
+# On Windows, we use ide_messageBox which runs the Win32 MessageBox function
+# in another thread.  This permits a program which handles IDE requests from
+# other programs to not return from the request until the MessageBox completes.
+# This is not possible without using another thread, since the MessageBox
+# function call will be running its own event loop, and will be higher on the
+# stack than the IDE request.
+#
+# On Unix tk_messageBox runs in the regular Tk event loop, so
+# another thread is not required.
+
  
   if {$tcl_platform(platform) == "windows"} {
-      ide_messageBox -icon warning \
+      ide_messageBox [list set r] -icon warning \
         -default ok -message $message -title $title \
         -type ok -modal $modal -parent .
   } else {

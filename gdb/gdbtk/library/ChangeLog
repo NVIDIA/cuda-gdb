@@ -1,3 +1,8 @@
+2000-11-06  Fernando Nasser  <fnasser@cygnus.com>
+
+	* interface.tcl (show_warning): Add missing argument to ide_messageBox
+	and add comments explaining why we use it for windows.
+
 2000-11-01  Larry Smith  <lsmith@redhat.com>
 
         * console.itb (_build_win): Added code to remove horizontal
