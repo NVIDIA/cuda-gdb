@@ -1,5 +1,11 @@
 2001-08-13  Keith Seitz  <keiths@redhat.com>
 
+	* library/regwin.ith: Rewrite.
+	* library/regwin.itb: Rewrite.
+	* library/tclIndex: Regenerate.
+
+2001-08-13  Keith Seitz  <keiths@redhat.com>
+
 	* generic/gdbtk-register.c (gdb_register_info): New function.
 	Consolidates all register handling.
 	(get_register_size): New function.
