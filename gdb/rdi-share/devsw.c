@@ -8,8 +8,8 @@
 
 /* -*-C-*-
  *
- * $Revision: 1.4 $
- *     $Date: 1999/11/01 12:11:35 $
+ * $Revision: 1.5 $
+ *     $Date: 1999/11/02 11:28:53 $
  *
  */
 #include <stdio.h>
@@ -47,7 +47,9 @@ static void openLogFile ()
       perror ("fopen");
     }
   else
-    setlinebuf (angelDebugLogFile);
+    /* The following line is equivalent to: */
+    /* setlinebuf (angelDebugLogFile); */
+    setvbuf(angelDebugLogFile, (char *)NULL, _IOLBF, 0);
   
   time (&t);
   fprintf (angelDebugLogFile,"ADP log file opened at %s\n",asctime(localtime(&t)));
