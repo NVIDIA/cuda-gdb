@@ -101,7 +101,6 @@ gdb_block_vars (clientData, interp, objc, objv)
   if (objc < 3)
     {
       Tcl_WrongNumArgs (interp, 1, objv, "startAddr endAddr");
-      result_ptr->flags |= GDBTK_IN_TCL_RESULT;
       return TCL_ERROR;
     }
 
@@ -319,8 +318,7 @@ gdb_get_vars_command (clientData, interp, objc, objv)
       sals = decode_line_1 (&args, 1, NULL, 0, &canonical);
       if (sals.nelts == 0)
 	{
-	  Tcl_SetStringObj (result_ptr->obj_ptr,
-			    "error decoding line", -1);
+	  gdbtk_set_result (interp, "error decoding line");
 	  return TCL_ERROR;
 	}
 
@@ -479,7 +477,6 @@ gdb_stack (clientData, interp, objc, objv)
   if (objc < 3)
     {
       Tcl_WrongNumArgs (interp, 1, objv, "start count");
-      result_ptr->flags |= GDBTK_IN_TCL_RESULT;
       return TCL_ERROR;
     }
 

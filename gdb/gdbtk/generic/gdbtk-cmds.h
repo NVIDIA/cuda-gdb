@@ -50,6 +50,9 @@ extern char *pc_function_name (CORE_ADDR pc);
    a Tcl list object. */
 extern void sprintf_append_element_to_obj (Tcl_Obj * objp, char *format, ...);
 
+/* printf-like function to return error messages */
+extern void gdbtk_set_result (Tcl_Interp *interp, const char *fmt,...);
+
 /* Module init routines: Each module of commands should be declared here. */
 extern int Gdbtk_Breakpoint_Init (Tcl_Interp *interp);
 extern int Gdbtk_Stack_Init (Tcl_Interp *interp);

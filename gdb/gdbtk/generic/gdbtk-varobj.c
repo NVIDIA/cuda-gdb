@@ -510,11 +510,9 @@ variable_format (interp, objc, objv, var)
 	varobj_set_display_format (var, FORMAT_OCTAL);
       else
 	{
-	  Tcl_Obj *obj = Tcl_NewStringObj (NULL, 0);
-	  Tcl_AppendStringsToObj (obj, "unknown display format \"",
-				  fmt, "\": must be: \"natural\", \"binary\""
-		      ", \"decimal\", \"hexadecimal\", or \"octal\"", NULL);
-	  Tcl_SetObjResult (interp, obj);
+	  gdbtk_set_result (interp, "unknown display format \"",
+		      fmt, "\": must be: \"natural\", \"binary\""
+		      ", \"decimal\", \"hexadecimal\", or \"octal\"");
 	  return TCL_ERROR;
 	}
     }
@@ -597,9 +595,9 @@ variable_value (interp, objc, objv, var)
 	  s = Tcl_GetStringFromObj (objv[2], NULL);
 	  if (!varobj_set_value (var, s))
             {
-              r = error_last_message ();
-              Tcl_SetObjResult (interp, Tcl_NewStringObj (r, -1));
-              FREEIF (r);
+	      r = error_last_message();
+	      gdbtk_set_result (interp, "%s", r);
+	      xfree (r);
 	      return TCL_ERROR;
             }
 	}

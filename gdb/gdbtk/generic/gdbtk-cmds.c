@@ -688,8 +688,7 @@ gdb_cmd (clientData, interp, objc, objv)
     {
       if (Tcl_GetBooleanFromObj (NULL, objv[2], &from_tty) != TCL_OK)
 	{
-	  Tcl_SetStringObj (result_ptr->obj_ptr, "from_tty must be a boolean.",
-			    -1);
+	  gdbtk_set_result (interp, "from_tty must be a boolean.");
 	  return TCL_ERROR;
 	}
     }
@@ -758,8 +757,7 @@ gdb_immediate_command (clientData, interp, objc, objv)
     {
       if (Tcl_GetBooleanFromObj (NULL, objv[2], &from_tty) != TCL_OK)
 	{
-	  Tcl_SetStringObj (result_ptr->obj_ptr, "from_tty must be a boolean.",
-			    -1);
+	  gdbtk_set_result (interp, "from_tty must be a boolean.");
 	  return TCL_ERROR;
 	}
     }
@@ -923,14 +921,14 @@ gdb_load_info (clientData, interp, objc, objv)
   loadfile_bfd = bfd_openr (filename, gnutarget);
   if (loadfile_bfd == NULL)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr, "Open failed", -1);
+      gdbtk_set_result (interp, "Open of %s failed", filename);
       return TCL_ERROR;
     }
   old_cleanups = make_cleanup_bfd_close (loadfile_bfd);
 
   if (!bfd_check_format (loadfile_bfd, bfd_object))
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr, "Bad Object File", -1);
+      gdbtk_set_result (interp, "Bad Object File");
       return TCL_ERROR;
     }
 
@@ -1109,8 +1107,7 @@ gdb_find_file_command (clientData, interp, objc, objv)
   /* We should always get a symtab. */
   if (!st)
     {
-      Tcl_SetStringObj ( result_ptr->obj_ptr,
-                         "File not found in symtab (2)", -1);
+      gdbtk_set_result (interp, "File not found in symtab (2)");
       return TCL_ERROR;
     }
 
@@ -1282,7 +1279,6 @@ gdb_search (clientData, interp, objc, objv)
   if (objc < 3)
     {
       Tcl_WrongNumArgs (interp, 1, objv, "option regexp ?arg ...?");
-      result_ptr->flags |= GDBTK_IN_TCL_RESULT;
       return TCL_ERROR;
     }
 
@@ -1477,10 +1473,11 @@ gdb_listfuncs (clientData, interp, objc, objv)
   symtab = full_lookup_symtab (Tcl_GetStringFromObj (objv[1], NULL));
   if (!symtab)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr, "No such file", -1);
+      gdbtk_set_result (interp, "No such file (%s)", 
+		  Tcl_GetStringFromObj (objv[1], NULL));
       return TCL_ERROR;
     }
-
+  
   if (mangled == NULL)
     {
       mangled = Tcl_NewBooleanObj (1);
@@ -1651,14 +1648,13 @@ gdb_load_disassembly (ClientData clientData, Tcl_Interp *interp,
   if ( Tk_NameToWindow (interp, client_data.widget,
 			Tk_MainWindow (interp)) == NULL)
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr, "Invalid widget name.", -1);
+      gdbtk_set_result (interp, "Invalid widget name.");
       return TCL_ERROR;
     }
 
   if (!Tcl_GetCommandInfo (interp, client_data.widget, &client_data.cmd))
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr, "Can't get widget command info",
-			-1);
+      gdbtk_set_result (interp, "Can't get widget command info");
       return TCL_ERROR;
     }
 
@@ -1669,8 +1665,7 @@ gdb_load_disassembly (ClientData clientData, Tcl_Interp *interp,
     mixed_source_and_assembly = 0;
   else
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr,
-			"Second arg must be 'source' or 'nosource'", -1);
+      gdbtk_set_result (interp, "Second arg must be 'source' or 'nosource'");
       return TCL_ERROR;
     }
 
@@ -1695,7 +1690,7 @@ gdb_load_disassembly (ClientData clientData, Tcl_Interp *interp,
       
       client_data.map_arr = "map_array";
       if (Tcl_UpVar (interp, "1", map_name, client_data.map_arr, 0) != TCL_OK) {
-	Tcl_SetStringObj (result_ptr->obj_ptr, "Can't link map array.", -1);
+	gdbtk_set_result (interp, "Can't link map array.");
 	return TCL_ERROR;
       }
 
@@ -2376,7 +2371,7 @@ gdb_loc (ClientData clientData, Tcl_Interp *interp, int objc, Tcl_Obj *CONST obj
 
       if (sals.nelts != 1)
 	{
-	  Tcl_SetStringObj (result_ptr->obj_ptr, "Ambiguous line spec", -1);
+	  gdbtk_set_result (interp, "Ambiguous line spec", -1);
 	  return TCL_ERROR;
 	}
       resolve_sal_pc (&sal);
@@ -2538,11 +2533,7 @@ gdb_set_mem (clientData, interp, objc, objv)
   if (size < 0)
     {
       /* Error in input */
-      char *res;
-
-      xasprintf (&res, "Invalid hexadecimal input: \"0x%s\"", hexstr);
-      Tcl_SetObjResult (interp, Tcl_NewStringObj (res, -1));
-      free (res);
+      gdbtk_set_result (interp, "Invalid hexadecimal input: \"0x%s\"", hexstr);
       return TCL_ERROR;
     }
 
@@ -2589,7 +2580,7 @@ gdb_get_mem (ClientData clientData, Tcl_Interp *interp,
     }
   else if (size <= 0)
     {
-      Tcl_SetObjResult (interp, Tcl_NewStringObj ("Invalid size, must be > 0", -1));
+      gdbtk_set_result (interp, "Invalid size, must be > 0");
       return TCL_ERROR;
     }
 
@@ -2600,8 +2591,7 @@ gdb_get_mem (ClientData clientData, Tcl_Interp *interp,
     }
   else if (nbytes <= 0)
     {
-      Tcl_SetObjResult (interp, 
-			Tcl_NewStringObj ("Invalid number of bytes, must be > 0", -1));
+      gdbtk_set_result (interp, "Invalid number of bytes, must be > 0");
       return TCL_ERROR;
     }
 
@@ -2612,8 +2602,7 @@ gdb_get_mem (ClientData clientData, Tcl_Interp *interp,
     }
   else if (bpr <= 0)
     {
-      Tcl_SetObjResult (interp,
-			Tcl_NewStringObj ("Invalid bytes per row, must be > 0", -1));
+      gdbtk_set_result (interp, "Invalid bytes per row, must be > 0");
       return TCL_ERROR;
     }
 
@@ -2623,7 +2612,7 @@ gdb_get_mem (ClientData clientData, Tcl_Interp *interp,
   mbuf = (char *) malloc (nbytes + 32);
   if (!mbuf)
     {
-      Tcl_SetObjResult (interp, Tcl_NewStringObj ("Out of memory.", -1));
+      gdbtk_set_result (interp, "Out of memory.");
       return TCL_ERROR;
     }
 
@@ -2773,8 +2762,7 @@ gdb_loadfile (ClientData clientData, Tcl_Interp *interp, int objc,
 
   if (!Tcl_GetCommandInfo (interp, widget, &text_cmd))
     {
-      Tcl_SetStringObj (result_ptr->obj_ptr, "Can't get widget command info",
-			-1);
+      gdbtk_set_result (interp, "Can't get widget command info");
       return TCL_ERROR;
     }
   
@@ -2784,15 +2772,14 @@ gdb_loadfile (ClientData clientData, Tcl_Interp *interp, int objc,
   symtab = full_lookup_symtab (file);
   if (!symtab)
     {
-      Tcl_SetStringObj ( result_ptr->obj_ptr, "File not found in symtab", -1);
+      gdbtk_set_result (interp, "File not found in symtab");
       return TCL_ERROR;
     }
 
   file = symtab_to_filename ( symtab );
   if ((fp = fopen ( file, "r" )) == NULL)
     {
-      Tcl_SetStringObj ( result_ptr->obj_ptr, "Can't open file for reading",
-			 -1);
+      gdbtk_set_result (interp, "Can't open file for reading");
       return TCL_ERROR;
     }
 
@@ -2823,8 +2810,8 @@ gdb_loadfile (ClientData clientData, Tcl_Interp *interp, int objc,
   ltable = (char *)malloc (LTABLE_SIZE);
   if (ltable == NULL)
     {
-      Tcl_SetStringObj ( result_ptr->obj_ptr, "Out of memory.", -1);
       fclose (fp);
+      gdbtk_set_result (interp, "Out of memory.");
       return TCL_ERROR;
     }
 
@@ -2844,10 +2831,9 @@ gdb_loadfile (ClientData clientData, Tcl_Interp *interp, int objc,
               ltable_size *= 2;
               if (new_ltable == NULL)
                 {
-                  Tcl_SetStringObj ( result_ptr->obj_ptr, "Out of memory.",
-				     -1);
                   free (ltable);
                   fclose (fp);
+		  gdbtk_set_result (interp, "Out of memory.");
                   return TCL_ERROR;
                 }
               ltable = new_ltable;
@@ -3103,4 +3089,17 @@ pc_function_name (pc)
     funcname = "";
 
   return funcname;
+}
+
+void
+gdbtk_set_result (Tcl_Interp *interp, const char *fmt,...)
+{
+  va_list args;
+  char *buf;
+
+  va_start (args, fmt);
+  xvasprintf (&buf, fmt, args);
+  va_end (args);
+  Tcl_SetObjResult (interp, Tcl_NewStringObj (buf, -1));
+  xfree(buf);
 }

@@ -309,10 +309,7 @@ gdb_get_breakpoint_info (ClientData clientData, Tcl_Interp *interp, int objc,
   b = (bpnum <= breakpoint_list_size ? breakpoint_list[bpnum] : NULL);
   if (!b || b->type != bp_breakpoint)
     {
-      char *err_buf;
-      xasprintf (&err_buf, "Breakpoint #%d does not exist.", bpnum);
-      Tcl_SetStringObj (result_ptr->obj_ptr, err_buf, -1);
-      free(err_buf);
+      gdbtk_set_result (interp, "Breakpoint #%d does not exist.", bpnum);
       return TCL_ERROR;
     }
 
@@ -513,8 +510,7 @@ gdb_set_bp (ClientData clientData, Tcl_Interp *interp,
     disp = disp_donttouch;
   else
     {
-      Tcl_SetObjResult (interp, 
-			Tcl_NewStringObj ("type must be \"temp\" or \"normal\"", -1));
+      gdbtk_set_result (interp, "type must be \"temp\" or \"normal\"");
       return TCL_ERROR;
     }
 
@@ -587,8 +583,7 @@ gdb_set_bp_addr (ClientData clientData, Tcl_Interp *interp, int objc,
     disp = disp_donttouch;
   else
     {
-      Tcl_SetObjResult (interp, 
-			Tcl_NewStringObj ("type must be \"temp\" or \"normal\"", -1));
+      gdbtk_set_result (interp, "type must be \"temp\" or \"normal\"");
       return TCL_ERROR;
     }
 
@@ -830,10 +825,7 @@ gdb_get_tracepoint_info (ClientData clientData, Tcl_Interp *interp,
 
   if (tp == NULL)
     {
-      char *buff;
-      xasprintf (&buff, "Tracepoint #%d does not exist", tpnum);
-      Tcl_SetStringObj (result_ptr->obj_ptr, buff, -1);
-      free(buff);
+      gdbtk_set_result (interp, "Tracepoint #%d does not exist", tpnum);
       return TCL_ERROR;
     }
 
