@@ -1,3 +1,10 @@
+2002-03-01  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-register.c (register_changed_p): Don't use REGISTER_BYTES.
+	There is no guarantee anymore that REGISTER_BYTES contains
+	NUM_REGS+NUM_PSEUDO_REGS registers.
+	(setup_architecture_data): Likewise.
+
 2002-02-25  Ian Roxborough  <irox@redhat.com>
 
 	* library/srcbar.itcl (SrcBar::create_buttons): Added

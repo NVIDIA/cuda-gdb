@@ -28,7 +28,9 @@
 #include "gdbtk-cmds.h"
 
 /* This contains the previous values of the registers, since the last call to
-   gdb_changed_register_list.  */
+   gdb_changed_register_list.
+
+   It is an array of (NUM_REGS+NUM_PSEUDO_REGS)*MAX_REGISTER_RAW_SIZE bytes. */
 
 static char *old_regs = NULL;
 
@@ -355,13 +357,13 @@ register_changed_p (int regnum, void *argp)
   if (read_relative_register_raw_bytes (regnum, raw_buffer))
     return;
 
-  if (memcmp (&old_regs[REGISTER_BYTE (regnum)], raw_buffer,
+  if (memcmp (&old_regs[regnum * MAX_REGISTER_RAW_SIZE], raw_buffer,
 	      REGISTER_RAW_SIZE (regnum)) == 0)
     return;
 
   /* Found a changed register.  Save new value and return its number. */
 
-  memcpy (&old_regs[REGISTER_BYTE (regnum)], raw_buffer,
+  memcpy (&old_regs[regnum * MAX_REGISTER_RAW_SIZE], raw_buffer,
 	  REGISTER_RAW_SIZE (regnum));
 
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, Tcl_NewIntObj (regnum));
@@ -370,11 +372,10 @@ register_changed_p (int regnum, void *argp)
 static void
 setup_architecture_data ()
 {
-  /* don't trust REGISTER_BYTES to be zero. */
   if (old_regs != NULL)
     xfree (old_regs);
 
-  old_regs = xmalloc (REGISTER_BYTES + 1);
-  memset (old_regs, 0, REGISTER_BYTES + 1);
+  old_regs = xmalloc ((NUM_REGS + NUM_PSEUDO_REGS) * MAX_REGISTER_RAW_SIZE + 1);
+  memset (old_regs, 0, sizeof  (old_regs));
 }
 
