@@ -364,7 +364,7 @@ variable_create (interp, objc, objv)
 	  {
 	    char *str;
 	    str = Tcl_GetStringFromObj (objv[1], NULL);
-	    frame = parse_and_eval_address (str);
+	    frame = string_to_core_addr (str);
 	    how_specified = USE_SPECIFIED_FRAME;
 	    objc--;
 	    objv++;

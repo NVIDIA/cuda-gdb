@@ -1,3 +1,13 @@
+2001-10-16  Andrew Cagney  <ac131313@redhat.com>
+
+	From 2001-08-29 John Moore <jmoore@redhat.com>:
+	* gdbtk/generic/gdbtk-cmds.c (gdb_disassemble): Replaced
+	parse_and_eval_address() with string_to_core_addr().
+	(gdb_load_disassembly): Same.
+	(gdb_set_mem): Ditto.
+	* gdbtk/generic/gdbtk-stack.c (gdb_block_vars): Ditto.
+	* gdbtk/generic/gdbtk-varobj.c (variable_create): Same.
+
 2001-10-17  Tom Tromey  <tromey@cygnus.com>
 
 	* console.itb (Console::_build_win): Handle bindings which

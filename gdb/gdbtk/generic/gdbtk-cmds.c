@@ -1599,7 +1599,7 @@ gdb_disassemble (clientData, interp, objc, objv)
   else
     error ("First arg must be 'source' or 'nosource'");
 
-  low = parse_and_eval_address (Tcl_GetStringFromObj (objv[2], NULL));
+  low = string_to_core_addr (Tcl_GetStringFromObj (objv[2], NULL));
 
   if (objc == 3)
     {
@@ -1607,7 +1607,7 @@ gdb_disassemble (clientData, interp, objc, objv)
         error ("No function contains specified address");
     }
   else
-    high = parse_and_eval_address (Tcl_GetStringFromObj (objv[3], NULL));
+    high = string_to_core_addr (Tcl_GetStringFromObj (objv[3], NULL));
 
   return gdb_disassemble_driver (low, high, mixed_source_and_assembly, NULL,
 			  gdbtk_print_source, gdbtk_print_asm);
@@ -2520,7 +2520,7 @@ gdb_set_mem (clientData, interp, objc, objv)
     }
 
   /* Address to write */
-  addr = parse_and_eval_address (Tcl_GetStringFromObj (objv[1], NULL));
+  addr = string_to_core_addr (Tcl_GetStringFromObj (objv[1], NULL));
 
   /* String value to write: it's in hex */
   hexstr = Tcl_GetStringFromObj (objv[2], NULL);

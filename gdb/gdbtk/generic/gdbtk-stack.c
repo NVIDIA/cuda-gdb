@@ -109,8 +109,8 @@ gdb_block_vars (clientData, interp, objc, objv)
   if (selected_frame == NULL)
     return TCL_OK;
 
-  start = parse_and_eval_address (Tcl_GetStringFromObj (objv[1], NULL));
-  end   = parse_and_eval_address (Tcl_GetStringFromObj (objv[2], NULL));
+  start = string_to_core_addr (Tcl_GetStringFromObj (objv[1], NULL));
+  end   = string_to_core_addr (Tcl_GetStringFromObj (objv[2], NULL));
   
   block = get_frame_block (selected_frame);
 
