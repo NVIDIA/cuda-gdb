@@ -1,6 +1,12 @@
 2001-01-24  Fernando Nasser  <fnasser@redhat.com>
 
 	From  Martin Hunt  <hunt@cygnus.com>
+	* generic/gdbtk-cmds.c (gdb_set_bp_addr, gdb_set_bp): Change
+	strsave() to xstrdup().
+
+2001-01-24  Fernando Nasser  <fnasser@redhat.com>
+
+	From  Martin Hunt  <hunt@cygnus.com>
 	* generic/gdbtk-cmds.c (gdbtk_dis_asm_read_memory): Fix call
 	to xfer_memory().
 
