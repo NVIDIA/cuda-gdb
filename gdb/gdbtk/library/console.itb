@@ -108,7 +108,7 @@ body Console::_build_win {} {
     %W delete {cmdmark + 1 char} insert
     %W see {insert linestart}
   }
-  
+
   # Control-w deletes previous word.
   bind_plain_key $_twin Control-w {
     if {[%W compare {insert -1c wordstart} > cmdmark]} {
@@ -127,13 +127,19 @@ body Console::_build_win {} {
   # movement.  We only need to do this after events we do not
   # explicitly override.  Note that since the edit line is always the
   # last line, we can't possibly go past it, so we don't bother
-  # checking that.
+  # checking that.  Note also that we check for a binding which is
+  # simply `;'; this lets us handle keys already bound via
+  # bind_plain_key.
   foreach event [bind Text] {
-    if {[string match *Key* $event] && [bind $_twin $event] == ""} {
-      bind $_twin $event {
+    if {[string match *Key* $event]
+	&& ([bind $_twin $event] == ""
+	    || [bind $_twin $event] == ";")} {
+      bind $_twin $event [bind Text $event]
+      bind $_twin $event {+
 	if {[%W compare insert <= {cmdmark + 1 char}]} {
 	  %W mark set insert {cmdmark + 1 char}
 	}
+	break
       }
     }
   }
