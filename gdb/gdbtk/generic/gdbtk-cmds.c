@@ -36,6 +36,7 @@
 #include "tracepoint.h"
 #include "demangle.h"
 #include "frame.h"
+#include "regcache.h"
 #include "tui/tui-file.h"
 
 #include <sys/stat.h>
