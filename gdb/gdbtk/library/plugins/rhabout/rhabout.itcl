@@ -1,8 +1,39 @@
 class RHAbout {
-  inherit ManagedWin ModalDialog
+#  inherit PluginWindow ModalDialog
+  inherit PluginWindow
   constructor {args} {
     global gdb_ImageDir
-    set f [frame $itk_interior.f]
+
+    # What about a menu?
+    $menubar menubar_new_menu file "File" 0
+    $menubar menubar_add_menu_command None "Close" \
+      [code $this destroy_toplevel] \
+      -underline 1
+    $menubar menubar_new_menu help "Help" 0
+    $menubar menubar_add_menu_command Other "Help Topics" \
+      {HtmlViewer::open_help index.html} \
+      -underline 0
+    $menubar menubar_add_menu_separator
+    $menubar menubar_add_menu_command Other "About GDB..." \
+      {ManagedWin::open About -transient} \
+      -underline 0
+
+    # The menu only shows up if you do this:
+    $menubar menubar_show
+
+    # Do you want a toolbar?
+    $toolbar toolbar_add_button con Other {ManagedWin::open Console} \
+                           "Console (Ctrl+N)" -image console_img
+
+    # The toolbar will only show up if you do this:
+    $toolbar toolbar_show
+
+    # Now, fill the childsite with some graphics and text
+
+    # Remember to use the childsite, do not pack in the widget hull
+    set f [childsite]
+
+    # Put in some graphics
     label $f.image1 -bg white -image \
       [image create photo -file [file join $gdb_ImageDir insight.gif]]
 
@@ -13,11 +44,9 @@ class RHAbout {
     catch {append text [rhabout_extra_text]}
 
     message $f.m -bg white -fg black -text $text -aspect 500 -relief flat
-    pack $f.image1 $f.m $itk_interior.f -fill both -expand yes
+    pack $f.image1 $f.m -fill both -expand yes
     pack  $itk_interior
-    bind $f.image1 <1> [code $this unpost]
-    bind $f.m <1> [code $this unpost]
-    window_name "About Cygnus Insight"
+    window_name "About Red Hat Insight"
   }
 
   # Don't quit if this is the last window.  The only way that this can

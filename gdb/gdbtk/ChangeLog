@@ -1,5 +1,14 @@
 2001-01-31  Fernando Nasser  <fnasser@redhat.com>
 
+	* library/pluginwin.itcl: New file.  Implements the PluginWindow
+	class that provides some basic functionality for plug-ins.
+	* library/plugins/rhabout/rhabout.itcl: Inherit from the new
+	PluginWindow class.  Remove code dependent on ModalDlg.
+	(constructor): Creates menus and a toolbar to show how these
+	PluginWindow components are used.
+
+2001-01-31  Fernando Nasser  <fnasser@redhat.com>
+
 	* library/plugins/rhabout.tcl: Add load for optional sample C command 
 	procedure.
 	* library/plugins/rhabout/rhabout.itcl (constructor): Try calling
