@@ -42,7 +42,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.45 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.46 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -2323,7 +2323,7 @@ with them.
 
 The target architecture object is implemented as the C structure
 @code{struct gdbarch *}.  The structure, and its methods, are generated
-using the Bourn shell script @file{gdbarch.sh}.
+using the Bourne shell script @file{gdbarch.sh}.
 
 @section Registers and Memory
 
