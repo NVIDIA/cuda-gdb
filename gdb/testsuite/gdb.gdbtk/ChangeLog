@@ -1,3 +1,7 @@
+2004-07-16  Andrew Cagney  <cagney@redhat.com>
+
+	* insight-support.exp: Moved to here from ../lib.
+
 2003-02-28  Martin M. Hunt  <hunt@redhat.com>
 
 	* c_variable.test: Fix result for 6.22.
