@@ -1,3 +1,8 @@
+2002-09-27  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-hooks.c (gdbtk_add_hooks): Add gdbtk_annotate_signal
+	as annotate_signalled_hook.
+
 2002-09-26  Andrew Cagney  <ac131313@redhat.com>
 
 	From Grace Sainsbury <graces@redhat.com>:

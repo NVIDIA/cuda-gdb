@@ -168,6 +168,7 @@ gdbtk_add_hooks (void)
   error_begin_hook = gdbtk_error_begin;
 
   annotate_signal_hook = gdbtk_annotate_signal;
+  annotate_signalled_hook = gdbtk_annotate_signal;
 }
 
 /* These control where to put the gdb output which is created by
