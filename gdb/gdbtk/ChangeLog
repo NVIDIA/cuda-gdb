@@ -1,5 +1,12 @@
 2001-02-01  Fernando Nasser  <fnasser@redhat.com>
 
+	* library/images/insight.gif: New splash screen/about graphics.
+	* library/images2/insight.gif: New splash screen/about graphics.
+	* library/about.tcl: Update copyright, window title and change colors
+	to match new splash screen/about images.
+
+2001-02-01  Fernando Nasser  <fnasser@redhat.com>
+
 	* library/gdbtoolbar.itcl (add): New method.  Emulate the style of the
 	toolbar iwidget commands.
 	(toolbar_show): Old name.
