@@ -342,6 +342,10 @@ itcl::body  VarTree::_but3 {x y X Y} {
   $f add radio -label "Binary" -variable [scope popup_temp] -value "binary" -command [code $this _change_format $var]
   $pop add command -label "Edit" -command [code $this edit $j3]
   $pop add command -label "Delete" -command [code $this remove $var]
+  if {![catch {$var value} value]} {
+    $pop add separator   
+    $pop add command -label "Dump Memory at $value" -command [list ManagedWin::open MemWin -force -addr_exp $value]
+  }
   $pop add separator
   if {$type == "local"} {
     $pop add command -label "Help" -command "open_help watch.html"
