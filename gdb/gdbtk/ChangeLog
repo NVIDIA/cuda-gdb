@@ -1,3 +1,24 @@
+2001-03-01  Keith Seitz  <keiths@cygnus.com>
+
+	* library/managedwin.ith: Move all implementations into
+	managedwin.itb.
+	(public variable nosize): Delete.
+	(freeze_me, thaw_me, make_icon_window): Prepend with
+	underscore to remind people these are not public
+	methods/procs.
+	(protected variable Top, screenwidth, screenheight): Ditto
+	for these variables.
+	(protected common manage_active, mainwindow): Delete.
+	(enable): Delete.
+	(reconfig): Add empty body.
+	* library/managedwin.itb: Move all implementations from
+	header here.
+	Update all references to renamed variables/methods/procs.
+	(destructor, restart, shutdown, _open, find) Let
+	Itcl tell us which ManagedWins we have lying around.
+	(enable): Delete.
+	(reconfig): It's empty. Moved empty body to header.
+
 2001-03-01  Nicholas Duffek  <nsd@redhat.com>
 
 	* library/managedwin.itb (ManagedWin::shutdown): Save each

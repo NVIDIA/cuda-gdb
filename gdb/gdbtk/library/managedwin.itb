@@ -1,5 +1,5 @@
 # Managed window for GDBtk.
-# Copyright 1998, 1999 Cygnus Solutions
+# Copyright 1998, 1999, 2000, 2001 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -12,9 +12,34 @@
 # GNU General Public License for more details.
 
 
-body ManagedWin::reconfig {} {}
+# ------------------------------------------------------------
+#  PUBLIC METHOD:  constructor
+# ------------------------------------------------------------
+body ManagedWin::constructor {args} {
+  #debug "$this args=$args"
+  set _top [winfo toplevel $itk_interior]
+}
 
+# ------------------------------------------------------------
+#  PUBLIC METHOD: destructor
+# ------------------------------------------------------------
+body ManagedWin::destructor {} {
 
+  # If no toplevels remain, quit.  However, check the quit_if_last
+  # flag since we might be doing something like displaying a 
+  # splash screen at startup...
+
+  if {!$numTopWins && [quit_if_last]} {
+    gdb_force_quit
+  } else {
+    destroy_toplevel
+  }
+}
+
+# ------------------------------------------------------------
+#  PUBLIC METHOD:  window_name - Set the name of the window
+#   (and optionally it's icon's name).
+# ------------------------------------------------------------
 body ManagedWin::window_name {wname {iname ""}} {
   set top [winfo toplevel [namespace tail $this]]
   wm title $top $wname
@@ -26,13 +51,17 @@ body ManagedWin::window_name {wname {iname ""}} {
 }
 
 # ------------------------------------------------------------
-# pickle - This is the base class pickle method.  It returns a
-#  a command that can be used to recreate this particular window.  
+#  PUBLIC METHOD: pickle - This is the base class pickle
+#   method.  It returns a command that can be used to recreate
+#   this particular window.  
 # ------------------------------------------------------------
 body ManagedWin::pickle {} {
   return [list ManagedWin::open [namespace tail [info class]]]
 }
 
+# ------------------------------------------------------------
+#  PUBLIC METHOD:  reveal
+# ------------------------------------------------------------
 body ManagedWin::reveal {} {
   # Do this update to flush all changes before deiconifying the window.
   update idletasks
@@ -48,13 +77,16 @@ body ManagedWin::reveal {} {
   # This can actually be confusing to the user.
 }
 
+# ------------------------------------------------------------
+#  PUBLIC PROC:  restart
+# ------------------------------------------------------------
 body ManagedWin::restart {} {
   # This is needed in case we've called "gdbtk_busy" before the restart.
   # This will configure the stop/run button as necessary
   after idle gdbtk_idle
   
   # call the reconfig method for each object
-  foreach obj $manage_active {
+  foreach obj [itcl_info objects -isa ManagedWin] {
     if {[catch {$obj reconfig} msg]} {
       dbug W "reconfig failed for $obj - $msg"
     } 
@@ -62,28 +94,25 @@ body ManagedWin::restart {} {
 }
 
 # ------------------------------------------------------------------
-#  shutdown - This writes all the active windows to the preferences file,
-#  so they can be restored at startup.
-#  FIXME: Currently assumes only ONE window per type...
+#  PUBLIC PROC:  shutdown - This writes all the active windows to
+#   the preferences file, so they can be restored at startup.
+#   FIXME: Currently assumes only ONE window per type...
 # ------------------------------------------------------------------
-
 body ManagedWin::shutdown {} {
   set activeWins {}
-  foreach win $manage_active {
-    if {[$win isa ManagedWin]} {
-      set g [wm geometry [winfo toplevel [namespace tail $win]]]
-      pref setd gdb/geometry/[namespace tail $win] $g
-      lappend activeWins [$win pickle]
-    }
+  foreach win [itcl_info objects -isa ManagedWin] {
+    set g [wm geometry [winfo toplevel [namespace tail $win]]]
+    pref setd gdb/geometry/[namespace tail $win] $g
+    lappend activeWins [$win pickle]
   }
   pref set gdb/window/active $activeWins
 }
 
 # ------------------------------------------------------------------
-#  startup - This restores all the windows that were opened at shutdown.
-#  FIXME: Currently assumes only ONE window per type...
+#  PUBLIC PROC:  startup - This restores all the windows that were
+#   opened at shutdown.
+#   FIXME: Currently assumes only ONE window per type...
 # ------------------------------------------------------------------
-
 body ManagedWin::startup {} {
   debug "Got active list [pref get gdb/window/active]"
 
@@ -102,6 +131,9 @@ body ManagedWin::startup {} {
   }
 }
 
+# ------------------------------------------------------------
+#  PUBLIC PROC:  open_dlg
+# ------------------------------------------------------------
 body ManagedWin::open_dlg {class args} {
   
   set newwin [eval _open $class $args]
@@ -111,7 +143,9 @@ body ManagedWin::open_dlg {class args} {
   }
 }
 
-
+# ------------------------------------------------------------
+#  PUBLIC PROC:  open
+# ------------------------------------------------------------
 body ManagedWin::open {class args} {
   
   set newwin [eval _open $class $args]
@@ -127,6 +161,9 @@ body ManagedWin::open {class args} {
   return $newwin
 }
 
+# ------------------------------------------------------------
+#  PRIVATE PROC:  _open
+# ------------------------------------------------------------
 body ManagedWin::_open { class args } {
   debug "$class $args"
   
@@ -134,7 +171,7 @@ body ManagedWin::_open { class args } {
 
   if {!$force} {
     # check all windows for one of this type
-    foreach obj $manage_active {
+    foreach obj [itcl_info objects -isa ManagedWin] {
       if {[$obj isa $class]} {
 	$obj reveal
 	return $obj
@@ -146,6 +183,9 @@ body ManagedWin::_open { class args } {
   return [eval _create $class $args]
 }
 
+# ------------------------------------------------------------
+#  PRIVATE PROC:  _create
+# ------------------------------------------------------------
 body ManagedWin::_create { class args } {
   
   set win [string tolower $class]
@@ -185,7 +225,7 @@ body ManagedWin::_create { class args } {
     return ""
   }
   
-  wm maxsize $top $screenwidth $screenheight
+  wm maxsize $top $_screenwidth $_screenheight
   wm minsize $top 20 20
   
   if {$over != ""} {
@@ -209,7 +249,7 @@ body ManagedWin::_create { class args } {
   } elseif {$::tcl_platform(platform) == "unix"} {
     # Modal dialogs DONT get Icons...
     if {[pref get gdb/use_icons] && ![$newwin isa ModalDialog]} {
-      set icon [make_icon_window ${top}_icon]
+      set icon [_make_icon_window ${top}_icon]
       wm iconwindow $top $icon
       bind $icon <Double-1> "$newwin reveal"
     }
@@ -232,10 +272,10 @@ body ManagedWin::_create { class args } {
       set w 0; set h 0; set x 0; set y 0
       if {![catch {scan $g  "%dx%d%d%d" w h x y} res]} {
 	if {$x < 0} {
-	  set x [expr $screenwidth + $x]
+	  set x [expr $_screenwidth + $x]
 	}
 	if {$y < 0} {
-	  set y [expr $screenheight + $y]
+	  set y [expr $_screenheight + $y]
 	}
 	
 	# If the window is transient, then don't reset its size, since
@@ -251,7 +291,7 @@ body ManagedWin::_create { class args } {
 	} else {
 	  set g "${w}x${h}+${x}+${y}"
 	}
-	if {[expr $x+50] < $screenwidth && [expr $y+20] < $screenheight} {
+	if {[expr $x+50] < $_screenwidth && [expr $y+20] < $_screenheight} {
 	  wm geometry $top $g
 	  wm positionfrom $top user
 	}
@@ -264,10 +304,13 @@ body ManagedWin::_create { class args } {
   return $newwin
 }
 
+# ------------------------------------------------------------
+#  PUBLIC PROC:  find
+# ------------------------------------------------------------
 body ManagedWin::find { win } {
   debug "$win"
   set res ""
-  foreach obj $manage_active {
+  foreach obj [itcl_info objects -isa ManagedWin] {
     if {[$obj isa $win]} {
       lappend res $obj
     }
@@ -275,38 +318,45 @@ body ManagedWin::find { win } {
   return $res
 }
 
-body ManagedWin::enable { on } {
-}
-
-
+# ------------------------------------------------------------
+#  PUBLIC PROC:  init
+# ------------------------------------------------------------
 body ManagedWin::init {} {
   debug
   wm withdraw .
-  set screenheight [winfo screenheight .]
-  set screenwidth [winfo screenwidth .]
+  set _screenheight [winfo screenheight .]
+  set _screenwidth [winfo screenwidth .]
 }
 
+# ------------------------------------------------------------
+#  PUBLIC METHOD:  destroy_toplevel
+# ------------------------------------------------------------
 body ManagedWin::destroy_toplevel {} {
-  after idle "update idletasks;destroy $Top"
+  after idle "update idletasks;destroy $_top"
 }
 
-body ManagedWin::freeze_me {} {
-  $Top configure -cursor watch
+# ------------------------------------------------------------
+#  PRIVATE METHOD:  _freeze_me
+# ------------------------------------------------------------
+body ManagedWin::_freeze_me {} {
+  $_top configure -cursor watch
   ::update idletasks
 }
 
-body ManagedWin::thaw_me {} {
+# ------------------------------------------------------------
+#  PRIVATE METHOD: _thaw_me
+# ------------------------------------------------------------
+body ManagedWin::_thaw_me {} {
 
-  $Top configure -cursor {}
+  $_top configure -cursor {}
   ::update idletasks
 }
 
 # ------------------------------------------------------------------
-#  make_icon_window - create a small window with an icon in
-#  it for use by certain Unix window managers.
+#  PRIVATE PROC: _make_icon_window - create a small window with an
+#   icon in it for use by certain Unix window managers.
 # ------------------------------------------------------------------
-
-body ManagedWin::make_icon_window {name {file "gdbtk_icon"}} {
+body ManagedWin::_make_icon_window {name {file "gdbtk_icon"}} {
   if {![winfo exists $name]} {
     toplevel $name
     label $name.im -image \
