@@ -434,7 +434,18 @@ gdbtk_init (argv0)
 \
 	  if {![info exists env(GDBTK_LIBRARY)]} {\n\
 	      set env(GDBTK_LIBRARY) [file join $srcDir gdb gdbtk library]\n\
-	  }\n";
+	  }\n\
+\
+          # Append the directory with the itcl pkg index\n\
+          if {[info exists env(TCLLIBPATH)]} {\n\
+            append env(TCLLIBPATH) :[file joing $srcDir itcl]\n\
+          } else {\n\
+            set env(TCLLIBPATH) [file join $srcDir itcl]\n\
+          }\n\
+\
+          # We also need to append the iwidgets library path.\n\
+          # Unfortunately, there is no IWIDGETS_LIBRARY.\n\
+          set IWIDGETS_LIBRARY [file join $srcDir itcl iwidgets3.0.0 generic]\n";
 
       Tcl_Obj *commandObj;
 

@@ -58,6 +58,11 @@ namespace import itcl::*
 
 namespace import debug::*
 
+# Setup iwidgets path, if needed
+if {[info exists IWIDGETS_LIBRARY]} {
+  lappend auto_path $IWIDGETS_LIBRARY
+}
+
 if {[catch {package require Iwidgets 3.0} errMsg]} {
   set msg "Could not find the Iwidgets libraries.\n\nGot nameofexec: [info nameofexecutable]\nError(s) were: \n$errMsg"
 
