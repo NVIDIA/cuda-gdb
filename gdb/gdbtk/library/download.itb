@@ -266,7 +266,7 @@ body Download::download_it { } {
       catch {$download_dialog done}
     }
   }
-
+  
   foreach src [ManagedWin::find SrcWin] {
     if {$download_error == "CANCEL"} {
       $src download_progress CANCEL 1 1

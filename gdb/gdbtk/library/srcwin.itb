@@ -19,29 +19,26 @@ body SrcWin::constructor {args} {
   debug "$args"
   eval itk_initialize $args
   set top [winfo toplevel $itk_interior]
-
+  
   _update_title ""
-
+  
   # On Windows, create a sizebox.
   if {$::tcl_platform(platform) == "windows"} {
     ide_sizebox $itk_interior.sizebox
   }
-
+  
   set Tracing [pref get gdb/mode]
   set current(filename) ""
-
+  
   if {[catch {_build_win} mssg]} {
     dbug E "_build_win returned: $::errorInfo"
   }
-
+  
   # add special delete handler
   wm protocol $top WM_DELETE_WINDOW "[code $this _exit]"
-
+  
   # add hooks
-  if {! $update_hook_init} then {
-    set update_hook_init 1
-    add_hook gdb_update_hook "SrcWin::choose_and_update"
-  }
+  add_hook gdb_update_hook "$this update"
   add_hook gdb_busy_hook "$this busy"
   add_hook gdb_idle_hook "$this idle"
   add_hook gdb_no_inferior_hook "$this no_inferior"
@@ -51,8 +48,6 @@ body SrcWin::constructor {args} {
   after idle "
       update idletasks
       $this sizeWinByChild toolbar"
-
-  lappend window_list $this
 }
 
 # ------------------------------------------------------------------
@@ -60,16 +55,13 @@ body SrcWin::constructor {args} {
 # ------------------------------------------------------------------
 body SrcWin::destructor {} {
   debug
+  remove_hook gdb_update_hook "$this update"
   remove_hook gdb_busy_hook "$this busy"
   remove_hook gdb_no_inferior_hook "$this no_inferior"
   remove_hook gdb_idle_hook "$this idle"
   remove_hook download_progress_hook "$this download_progress"
   remove_hook state_hook [code $this _set_state]
   remove_hook gdb_clear_file_hook [code $this clear_file]
-  set window_list [lremove $window_list $this]
-  if {$pc_window == $this} then {
-    set pc_window ""
-  }
 }
 
 # ------------------------------------------------------------------
@@ -471,15 +463,19 @@ body SrcWin::stack {cmd} {
 }
 
 # ------------------------------------------------------------------
-#  METHOD:  _update - update widget when PC changes
+#  PUBLIC METHOD:  update - update widget when PC changes
 # ------------------------------------------------------------------
-body SrcWin::_update {loc} {
-  debug "loc=$loc"
-  # See if name combobox needs filled.
-  if {$need_files} {
-    fillNameCB
+body SrcWin::update {} {
+  if {[catch {gdb_loc} loc]} {
+    set_execution_status
+  } else {
+    debug "loc=$loc"
+    # See if name combobox needs filled.
+    if {$need_files} {
+      fillNameCB
+    }
+    location "" $loc
   }
-  location "" $loc
 }
 
 # ------------------------------------------------------------------
@@ -871,122 +867,4 @@ body SrcWin::clear_file {} {
 
   # run srctextwin clear_file
   $twin clear_file
-}
-
-# ------------------------------------------------------------------
-#  METHOD:  get_file
-#  Return name of displayed file, or empty string if no file.
-# ------------------------------------------------------------------
-body SrcWin::get_file {} {
-  if {$twin == ""} {
-    return ""
-  } else {
-    return [$twin get_file]
-  }
-}
-
-# ------------------------------------------------------------------
-#  METHOD:  is_fixed
-#  Return boolean indicating whether this window is fixed.
-# ------------------------------------------------------------------
-body SrcWin::is_fixed {} {
-  return 0
-}
-
-# ------------------------------------------------------------------
-#  METHOD:  get_top
-#  Return toplevel
-# ------------------------------------------------------------------
-body SrcWin::get_top {} {
-  return $top
-}
-
-# ------------------------------------------------------------------
-#  METHOD:  _set_tag_to_stack
-#  Set tag to `stack' and update the underlying window.
-# ------------------------------------------------------------------
-body SrcWin::_set_tag_to_stack {} {
-  set tag STACK_TAG
-  if {$twin != ""} then {
-    $twin set_tag_to_stack
-  }
-}
-
-# ------------------------------------------------------------------
-#  METHOD:  _choose_window
-#  Choose the right source window.
-# ------------------------------------------------------------------
-body SrcWin::_choose_window {file} {
-  # Find the next available source window.  The rules are:
-  # 1. LRU overall
-  # 2. Skip iconified windows
-  # 3. If a window already shows the file, use it.  Prefer the
-  #    window currently showing the PC
-  # 4. If the window is fixed, skip it
-  if {$pc_window != ""} then {
-    if {[$pc_window get_file] == $file} then {
-      return $pc_window
-    }
-  }
-
-  set choice ""
-  foreach win $window_list {
-    if {[wm state [$win get_top]] != "normal"} then {
-      continue
-    }
-
-    if {[$win get_file] == ""
-	|| [$win get_file] == $file
-	|| ! [$win is_fixed]} then {
-      set choice $win
-      break
-    }
-  }
-
-  # If we didn't find an available window, then pick the current PC
-  # window.
-  if {$choice == ""} then {
-    set choice $pc_window
-  }
-
-  set window_list [lremove $window_list $choice]
-  lappend window_list $choice
-
-  return $choice
-}
-
-# ------------------------------------------------------------------
-#  METHOD:  choose_and_update
-#  Choose the right source window and then cause it to be updated
-# ------------------------------------------------------------------
-body SrcWin::choose_and_update {} {
-  if {$pc_window == ""} then {
-    set pc_window [lindex $window_list 0]
-  }
-
-  if {$pc_window == ""} then {
-    # Nothing.
-  } elseif {[catch {gdb_loc} loc]} {
-    $pc_window set_execution_status
-  } else {
-    set prev $pc_window
-    set file [lindex $loc 2]
-    set pc_window [_choose_window $file]
-    debug "chose window $pc_window"
-    $pc_window _update $loc
-    if {$pc_window != $prev} then {
-      $pc_window reveal
-      $prev _set_tag_to_stack
-    }
-  }
-}
-
-# ------------------------------------------------------------------
-#  METHOD:  choose_and_display
-#  Choose the right source window for a given file
-# ------------------------------------------------------------------
-body SrcWin::choose_and_display {tag linespec} {
-  set file [lindex $linespec 2]
-  set window [_choose_window $file]
-  $window location $tag $linespec
 }
