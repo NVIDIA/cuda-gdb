@@ -42,7 +42,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.46 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.47 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -2165,11 +2165,6 @@ tables.  For some machines this allows for sharing and quick updates.
 
 @item HAVE_TERMIO
 Define this if the host system has @code{termio.h}.
-
-@item HOST_BYTE_ORDER
-@cindex byte order
-The ordering of bytes in the host.  This must be defined to be either
-@code{BIG_ENDIAN} or @code{LITTLE_ENDIAN}.
 
 @item INT_MAX
 @itemx INT_MIN
