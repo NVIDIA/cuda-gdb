@@ -17,6 +17,7 @@ class MemWin {
 
   private {
     variable saved_addr ""
+    variable bad_expr 0
     variable current_addr ""
     variable dont_size 0
     variable mbar 1

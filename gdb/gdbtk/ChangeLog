@@ -1,5 +1,32 @@
 2001-11-08  Martin M. Hunt  <hunt@redhat.com>
+	* generic/gdbtk-cmds.c (gdb_eval): Add an optional
+	format argument.
+	(hex2bin): Swap bytes around if target is little endian.
+	Fix loop count.
+	(gdb_incr_addr): New function to do address arithmetic.
+	Needed because some addresses are 64-bits and tcl can't
+	deal with them, except as strings.
 
+	* library/memwin.itb (MemWin::build_win): Add a label
+	to indicate the target endianess.
+	(MemWin::edit): Use gdb_incr_addr.
+	(MemWin::busy): The constructor calls gdbtk_busy which
+	calls this before the window has finished drawing, so
+	don't disable items that don't exist yet.
+	(MemWin::update_address): Set a flag, bad_expr, if the
+	expression does not evaluate. Call gdb_eval with 'x' flag
+	to force the result to be hex.
+	(MemWin::BadExpr): Set bad_expr.
+	(MemWin::incr_addr): Use gdb_incr_addr.
+	(MemWin::update_addr): Return is bad_expr is set. Use
+	gdb_incr_addr.
+	(MemWin::goto): Call update_address.
+	* library/memwin.itb: Declare private variable bad_expr.
+	
+	* library/util.tcl (gdbtk_endian): New procedure. Returns
+	BIG or LITTLE to indicate target endianess.
+
+2001-11-08  Martin M. Hunt  <hunt@redhat.com>	
 	* library/managedwin.itb (ManagedWin::shutdown): Fix
 	typo in class name DebugWinDOpts.
 

@@ -146,6 +146,7 @@ static int gdb_get_mem (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_set_mem (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_immediate_command (ClientData, Tcl_Interp *, int,
 				  Tcl_Obj * CONST[]);
+static int gdb_incr_addr (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_listfiles (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_listfuncs (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_loadfile (ClientData, Tcl_Interp *, int,
@@ -237,6 +238,7 @@ Gdbtk_Init (interp)
   Tcl_CreateObjCommand (interp, "gdb_disassemble", gdbtk_call_wrapper,
 			gdb_disassemble, NULL);
   Tcl_CreateObjCommand (interp, "gdb_eval", gdbtk_call_wrapper, gdb_eval, NULL);
+  Tcl_CreateObjCommand (interp, "gdb_incr_addr", gdbtk_call_wrapper, gdb_incr_addr, NULL);
   Tcl_CreateObjCommand (interp, "gdb_clear_file", gdbtk_call_wrapper,
 			gdb_clear_file, NULL);
   Tcl_CreateObjCommand (interp, "gdb_confirm_quit", gdbtk_call_wrapper,
@@ -612,31 +614,39 @@ gdb_stop (clientData, interp, objc, objv)
  *
  * Tcl Arguments:
  *     expression - the expression to evaluate.
+ *     format - optional format character.  Valid chars are:
+ *	o - octal
+ *	x - hex
+ *	d - decimal
+ *	u - unsigned decimal
+ *	t - binary
+ *	f - float
+ *	a - address
+ *	c - char
  * Tcl Result:
  *     The result of the evaluation.
  */
 
 static int
-gdb_eval (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_eval (ClientData clientData, Tcl_Interp *interp,
+	  int objc, Tcl_Obj *CONST objv[])
 {
   struct expression *expr;
   struct cleanup *old_chain = NULL;
+  int format = 0;
   value_ptr val;
 
-  if (objc != 2)
+  if (objc != 2 && objc != 3)
     {
-      Tcl_WrongNumArgs (interp, 1, objv, "expression");
+      Tcl_WrongNumArgs (interp, 1, objv, "expression [format]");
       return TCL_ERROR;
     }
 
+  if (objc == 3)
+    format = *(Tcl_GetStringFromObj (objv[2], NULL));
+
   expr = parse_expression (Tcl_GetStringFromObj (objv[1], NULL));
-
   old_chain = make_cleanup (free_current_contents, &expr);
-
   val = evaluate_expression (expr);
 
   /*
@@ -647,10 +657,9 @@ gdb_eval (clientData, interp, objc, objv)
 
   val_print (VALUE_TYPE (val), VALUE_CONTENTS (val),
 	     VALUE_EMBEDDED_OFFSET (val), VALUE_ADDRESS (val),
-	     gdb_stdout, 0, 0, 0, 0);
+	     gdb_stdout, format, 0, 0, 0);
 
   do_cleanups (old_chain);
-
   return TCL_OK;
 }
 
@@ -2464,10 +2473,18 @@ fromhex (int a)
 static int
 hex2bin (const char *hex, char *bin, int count)
 {
-  int i;
-  int m, n;
+  int i, m, n;
+  int incr = 2;
 
-  for (i = 0; i < count; i++)
+
+  if (TARGET_BYTE_ORDER == LITTLE_ENDIAN)
+    {
+      /* need to read string in reverse */
+      hex += count - 2;
+      incr = -2;
+    }
+
+  for (i = 0; i < count; i += 2)
     {
       if (hex[0] == 0 || hex[1] == 0)
 	{
@@ -2480,7 +2497,7 @@ hex2bin (const char *hex, char *bin, int count)
       if (m == -1 || n == -1)
 	return -1;
       *bin++ = m * 16 + n;
-      hex += 2;
+      hex += incr;
     }
 
   return i;
@@ -3102,4 +3119,46 @@ gdbtk_set_result (Tcl_Interp *interp, const char *fmt,...)
   va_end (args);
   Tcl_SetObjResult (interp, Tcl_NewStringObj (buf, -1));
   xfree(buf);
+}
+
+
+/* This implements the tcl command 'gdb_incr_addr'.
+ * It increments addresses, which must be implemented
+ * this way because tcl cannot handle 64-bit values.
+ *
+ * Tcl Arguments:
+ *     addr   - 32 or 64-bit address
+ *     number - optional number to add to the address
+ *	default is 1.
+ *
+ * Tcl Result:
+ *     addr + number
+ */
+
+static int
+gdb_incr_addr (ClientData clientData, Tcl_Interp *interp,
+	       int objc, Tcl_Obj *CONST objv[])
+{
+  CORE_ADDR address;
+  int number = 1;
+
+  if (objc != 2 && objc != 3)
+    {
+      Tcl_WrongNumArgs (interp, 1, objv, "address [number]");
+      return TCL_ERROR;
+    }
+
+  address = string_to_core_addr (Tcl_GetStringFromObj (objv[1], NULL));
+
+  if (objc == 3)
+    {
+      if (Tcl_GetIntFromObj (interp, objv[2], &number) != TCL_OK)
+	return TCL_ERROR;
+    }
+  
+  address += number;
+
+  Tcl_SetStringObj (result_ptr->obj_ptr, (char *)core_addr_to_string (address), -1);
+  
+  return TCL_OK;
 }

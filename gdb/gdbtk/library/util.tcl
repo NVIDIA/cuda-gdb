@@ -275,3 +275,23 @@ proc list_element_strcmp {index first second} {
 
   return [string compare $theFirst $theSecond]
 }
+
+# ------------------------------------------------------------------
+#  PROC:  gdbtk_endian - returns BIG or LITTLE depending on target
+#                        endianess
+# ------------------------------------------------------------------
+
+proc gdbtk_endian {} {
+  if {[catch {gdb_cmd "show endian"} result]} {
+    return "UNKNOWN"
+  }
+  if {[regexp {.*big endian} $result]} {
+    set result "BIG"
+  } elseif {[regexp {.*little endian} $result]} {
+    set result "LITTLE"
+  } else {
+    set result "UNKNOWN"
+  }
+  return $result
+}
+

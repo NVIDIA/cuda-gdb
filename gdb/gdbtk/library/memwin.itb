@@ -153,9 +153,10 @@ body MemWin::build_win {} {
     -decrement "after idle $this incr_addr 1" \
     -validate {} \
     -textbackground white
-
   $itk_interior.f.cntl delete 0 end
   $itk_interior.f.cntl insert end $addr_exp
+
+  label $itk_interior.f.endian -text "Target is [gdbtk_endian] endian"
 
   balloon register [$itk_interior.f.cntl childsite].uparrow \
     "Scroll Up (Decrement Address)"
@@ -168,9 +169,9 @@ body MemWin::build_win {} {
     balloon register $itk_interior.f.upd "Update Now"
     checkbutton $itk_interior.cb -variable _mem($this,enabled) -command "$this toggle_enabled"
     balloon register $itk_interior.cb "Toggles Automatic Display Updates"
-    grid $itk_interior.f.upd $itk_interior.f.cntl -sticky ew -padx 5
+    grid $itk_interior.f.upd $itk_interior.f.cntl $itk_interior.f.endian -sticky ew -padx 5
   } else {
-    grid $itk_interior.f.cntl x -sticky w
+    grid $itk_interior.f.cntl x $itk_interior.f.endian -sticky e
     grid columnconfigure $itk_interior.f 1 -weight 1
   }
 
@@ -268,7 +269,7 @@ body MemWin::edit { cell } {
 
   if {$col == $Numcols} { 
     # editing the ASCII field
-    set addr [expr {$current_addr + $bytes_per_row * $row}]
+    set addr [gdb_incr_addr $current_addr + [expr {$bytes_per_row * $row}]]
     set start_addr $addr
 
     # calculate number of rows to modify
@@ -292,7 +293,7 @@ body MemWin::edit { cell } {
 	  return
 	}
       }
-      incr addr
+      set addr [gdb_incr_addr $addr]
     }
     set addr $start_addr
     set nextval 0
@@ -306,21 +307,22 @@ body MemWin::edit { cell } {
       }
       set ${this}_memval($row,$col) [lindex $vals $nextval]
       incr nextval
-      incr addr $bytes_per_row
+      set addr [gdb_incr_addr $addr $bytes_per_row]
       incr row
     }
     return
   }
 
   # calculate address based on row and column
-  set addr [expr {$current_addr + $bytes_per_row * $row + $size * $col}]
-  #debug "  edit $row,$col         [format "%x" $addr] = $val"
+  set addr [gdb_incr_addr $current_addr [expr {$bytes_per_row * $row + $size * $col}]]
+  #debug "  edit $row,$col         $addr = $val"
 
   # Pad the value with zeros, if necessary
   set s [expr {$size * 2}]
   set val [format "0x%0${s}x" $val]
 
   # set memory
+  #debug "set_mem $addr $val $size"
   if {[catch {gdb_set_mem $addr $val $size} res]} {
     error_dialog $res
 
@@ -409,6 +411,9 @@ body MemWin::busy {event} {
   # cursor
   cursor watch
 
+  # go away if window is not finished drawing
+  if {![winfo exists $itk_interior.f.cntl]} { return }
+  
   # Disable menus
   if {$mbar} {
     for {set i 0} {$i <= [$itk_interior.m.addr index last]} {incr i} {
@@ -427,6 +432,7 @@ body MemWin::busy {event} {
 #  window is resized.
 # ------------------------------------------------------------------
 body MemWin::newsize {height} {
+
   if {$dont_size || $Running} {
     return 
   }
@@ -459,16 +465,19 @@ body MemWin::update_address_cb {} {
 #  METHOD: update_address - update address and data displayed
 # ------------------------------------------------------------------
 body MemWin::update_address { {ae ""} } {
+  debug $ae
   if {$ae == ""} {
     set addr_exp [string trimleft [$itk_interior.f.cntl get]]
   } else {
     set addr_exp $ae
   }
 
+  set bad_expr 0
   set saved_addr $current_addr
   if {[string match {[a-zA-Z_&0-9\*]*} $addr_exp]} {
     # Looks like an expression
-    set retVal [catch {gdb_eval "$addr_exp"} current_addr]
+    set retVal [catch {gdb_eval "$addr_exp" x} current_addr]
+    #debug "retVal=$retVal current_addr=$current_addr"
     if {$retVal || [string match "No symbol*" $current_addr] || \
 	  [string match "Invalid *" $current_addr]} {
       BadExpr $current_addr
@@ -482,13 +491,14 @@ body MemWin::update_address { {ae ""} } {
     }
   } elseif {[regexp {\$[a-zA-Z_]} $addr_exp]} {
     # Looks like a local variable
-    catch {gdb_eval "$addr_exp"} current_addr
-    if {$current_addr == "No registers.\n"} { 
-      # we asked for a register value and debugging hasn't started yet
-      return 
+    set retVal [catch {gdb_eval "$addr_exp" x} current_addr]
+    #debug "retVal=$retVal current_addr=$current_addr"
+    if {$retVal} {
+      BadExpr $current_addr
+      return
     }
     if {$current_addr == "void"} {
-      BadExpr "No Local Variable Named \"$addr_ex\""
+      BadExpr "No Local Variable Named \"$addr_exp\""
       return
     }
   } else {
@@ -496,7 +506,7 @@ body MemWin::update_address { {ae ""} } {
     BadExpr "Can't Evaluate \"$addr_exp\""
     return
   }
-
+  
   # Check for spaces
   set index [string first \  $current_addr]
   if {$index != -1} {
@@ -521,6 +531,7 @@ body MemWin::BadExpr {errTxt} {
   $itk_interior.t config -bg gray -state disabled
   set current_addr $saved_addr
   set saved_addr ""
+  set bad_expr 1
 }
 
 # ------------------------------------------------------------------
@@ -528,17 +539,11 @@ body MemWin::BadExpr {errTxt} {
 #  the current address.
 # ------------------------------------------------------------------
 body MemWin::incr_addr {num} {
-
   if {$current_addr == ""} {
     return
   }
   set old_addr $current_addr
-
-  # You have to be careful with address calculations here, since the memory
-  # space of the target may be bigger than a long, which will cause Tcl to
-  # overflow.  Let gdb do the calculations instead.
-
-  set current_addr [gdb_cmd "printf \"%u\", $current_addr + $num * $bytes_per_row"]
+  set current_addr [gdb_incr_addr $current_addr + [expr {$bytes_per_row * $num}]]
 
   # A memory address less than zero is probably not a good thing...
   #
@@ -558,14 +563,17 @@ body MemWin::incr_addr {num} {
 
 # ------------------------------------------------------------------
 #  METHOD:  update_addr - read in data starting at $current_addr
-#  This is just a helper function for update_address.
+#  This is just a helper function for update_address. 
 # ------------------------------------------------------------------
 body MemWin::update_addr {} {
   global _mem ${this}_memval
 
+  if {$bad_expr} {
+    return
+  }
+
   gdbtk_busy
   set addr $current_addr
-
   set row 0
 
   if {$numbytes == 0} {
@@ -581,49 +589,47 @@ body MemWin::update_addr {} {
     set asc ""
   }
 
-  # Last chance to verify addr
-  if {![catch {gdb_eval $addr}]} {
-    set retVal [catch {gdb_get_mem $addr $format \
-			 $size $nb $bytes_per_row $asc} vals]
- 
-    if {$retVal || [llength $vals] == 0}  {
-      # FIXME gdb_get_mem does not always return an error when addr is invalid.
-      BadExpr "Couldn't get memory at address: \"$addr\""
-      gdbtk_idle 
-      debug "gdb_get_mem returned return code: $retVal and value: \"$vals\""
-      return
+  #debug "get_mem $addr $format $size $nb $bytes_per_row $asc"
+  set retVal [catch {gdb_get_mem $addr $format \
+		       $size $nb $bytes_per_row $asc} vals]
+  #debug "retVal=$retVal vals=$vals"
+  if {$retVal || [llength $vals] == 0}  {
+    # FIXME gdb_get_mem does not always return an error when addr is invalid.
+    BadExpr "Couldn't get memory at address: \"$addr\""
+    gdbtk_idle 
+    dbug W "gdb_get_mem returned return code: $retVal and value: \"$vals\""
+    return
+  }
+  
+  set mlen 0
+  for {set n 0} {$n < $nb} {incr n $bytes_per_row} {
+    set x $addr
+    if {[string length $x] > $mlen} {
+      set mlen [string length $x]
     }
-
-    set mlen 0
-    for {set n 0} {$n < $nb} {incr n $bytes_per_row} {
-      set x [format "0x%x" $addr]
-      if {[string length $x] > $mlen} {
-	set mlen [string length $x]
-      }
-      set ${this}_memval($row,-1) $x
-      for { set col 0 } { $col < $num } { incr col } {
-	set x [lindex $vals $nextval]
-	if {[string length $x] > $maxlen} {set maxlen [string length $x]}
-	set ${this}_memval($row,$col) $x
-	incr nextval
-      }
-      if {$ascii} {
-	set x [lindex $vals $nextval]
-	if {[string length $x] > $maxalen} {set maxalen [string length $x]}
-	set ${this}_memval($row,$col) $x
-	incr nextval
-      }
-      incr addr $bytes_per_row
-      incr row
+    set ${this}_memval($row,-1) $x
+    for { set col 0 } { $col < $num } { incr col } {
+      set x [lindex $vals $nextval]
+      if {[string length $x] > $maxlen} {set maxlen [string length $x]}
+      set ${this}_memval($row,$col) $x
+      incr nextval
     }
-    # set default column width to the max in the data columns
-    $itk_interior.t configure -colwidth [expr {$maxlen + 1}]
-    # set border column width
-    $itk_interior.t width -1 [expr {$mlen + 1}]
     if {$ascii} {
-      # set ascii column width
-      $itk_interior.t width $Numcols [expr {$maxalen + 1}]
+      set x [lindex $vals $nextval]
+      if {[string length $x] > $maxalen} {set maxalen [string length $x]}
+      set ${this}_memval($row,$col) $x
+      incr nextval
     }
+    set addr [gdb_incr_addr $addr $bytes_per_row]
+    incr row
+  }
+  # set default column width to the max in the data columns
+  $itk_interior.t configure -colwidth [expr {$maxlen + 1}]
+  # set border column width
+  $itk_interior.t width -1 [expr {$mlen + 1}]
+  if {$ascii} {
+    # set ascii column width
+    $itk_interior.t width $Numcols [expr {$maxalen + 1}]
   }
 
   gdbtk_idle
@@ -705,6 +711,7 @@ body MemWin::goto { addr } {
   set current_addr $addr
   $itk_interior.f.cntl delete 0 end
   $itk_interior.f.cntl insert end $addr
+  update_address
 }
 
 # ------------------------------------------------------------------

@@ -1761,3 +1761,21 @@ proc gdbtk_tcl_architecture_changed {} {
   GDBEventHandler::dispatch $e
   delete object $e
 }
+
+proc gdbtk_eval {exp} {
+  debug $exp
+  set ret [catch {gdb_cmd "p/x $exp"} val]
+  if {$ret} {
+    return "" 
+  }
+
+  debug "val=\"$val\""
+  # response looks like "$1 = value\n"
+  set ind [string first "=" $val]
+  if { $ind == -1 } { return "" }
+  set val [string range $val [expr $ind + 1] [string length $val]]
+  set val [string trimleft $val]
+  set val [string trimright $val "\n"]
+  debug "returning \"$val\""
+  return $val
+}
