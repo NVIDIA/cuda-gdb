@@ -46,7 +46,7 @@ regarded as a program in the language TeX).
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.1.1.15 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.1.1.16 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -1480,6 +1480,17 @@ trampoline that connects to a shared library.
 @item IN_SOLIB_RETURN_TRAMPOLINE pc name
 Define this to evaluate to nonzero if the program is stopped in the
 trampoline that returns from a shared library.
+
+@item IN_SOLIB_DYNSYM_RESOLVE_CODE pc
+Define this to evaluate to nonzero if the program is stopped in the
+dynamic linker.
+
+@item SKIP_SOLIB_RESOLVER pc
+Define this to evaluate to the (nonzero) address at which execution
+should continue to get past the dynamic linker's symbol resolution
+function.  A zero value indicates that it is not important or necessary
+to set a breakpoint to get through the dynamic linker and that single
+stepping will suffice.
 
 @item IS_TRAPPED_INTERNALVAR (name)
 This is an ugly hook to allow the specification of special actions that

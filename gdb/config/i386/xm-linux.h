@@ -21,6 +21,8 @@
 #ifndef XM_LINUX_H
 #define XM_LINUX_H
 
+#define HOST_I386
+
 #define HOST_BYTE_ORDER LITTLE_ENDIAN
 
 #define HAVE_TERMIOS
