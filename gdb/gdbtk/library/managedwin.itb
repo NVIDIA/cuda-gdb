@@ -67,15 +67,17 @@ body ManagedWin::reveal {} {
   
   raise $_top
   wm deiconify $_top
+
   # Some window managers (on unix) fail to honor the geometry unless
   # the window is visible.
-  if {$_geometry != "" && $::tcl_platform(platform) == "unix"} {
-    wm geometry $_top $_geometry
-    set _geometry ""
+  if {[info exists ::$_top._init_geometry]} {
+    upvar ::$_top._init_geometry gm
+    if {$::tcl_platform(platform) == "unix"} {
+      wm geometry $_top $gm
+    }
+    unset ::$_top._init_geometry
   }
-
-  #debug "$_top geometry=[wm geometry $_top] state=[wm state $_top]"
-
+  
   # There used to be a `focus -force' here, but using -force is
   # unfriendly, so it was removed.  It was then replaced with a simple
   # `focus $top'.  However, this has no useful effect -- it just
