@@ -1,3 +1,8 @@
+2002-04-17  Andrew Cagney  <cagney@redhat.com>
+
+	* generic/gdbtk.c (gdbtk_init): Use error or throw_exception to
+	report an error.
+
 2002-04-12  Andrew Cagney  <cagney@redhat.com>
 
 	* generic/gdbtk-register.c (register_changed_p): Use

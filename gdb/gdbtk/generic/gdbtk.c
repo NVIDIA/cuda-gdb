@@ -635,12 +635,16 @@ gdbtk_find_main";
 	msg = Tcl_GetVar (gdbtk_interp, "errorInfo", TCL_GLOBAL_ONLY);
 
 #ifdef _WIN32
+	/* On windows, display the error using a pop-up message box.
+           If GDB wasn't started from the DOS prompt, the user won't
+           get to see the failure reason.  */
 	MessageBox (NULL, msg, NULL, MB_OK | MB_ICONERROR | MB_TASKMODAL);
+	throw_exception (RETURN_ERROR);
 #else
-	fprintf (stderr,msg);
+	/* FIXME: cagney/2002-04-17: Wonder what the lifetime of
+           ``msg'' is - does it need a cleanup?  */
+	error (msg);
 #endif
-
-	error ("");
       }
   }
 
