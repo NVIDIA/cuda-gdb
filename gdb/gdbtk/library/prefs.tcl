@@ -167,7 +167,12 @@ proc pref_save {{win {}}} {
     puts $fd "\[gdb\]"
     foreach var $plist {
       set t [split $var /]
-      if {[lindex $t 0] == "gdb" && [lindex $t 2] == ""} {
+      # We use the funny join/lreplace code because the session code
+      # can generate a key where [lindex $t 2] is empty but there is
+      # still stuff after that.  This happens because the session code
+      # uses filenames, which can start with `/'.
+      if {[lindex $t 0] == "gdb"
+	  && [string compare [join [lreplace $t 0 1] /] ""] == 0} {
 	set x [lindex $t 1]
 	if {$x != ""} {
 	  set v [escape_value [pref get $var]]

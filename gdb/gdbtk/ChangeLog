@@ -1,3 +1,8 @@
+2001-05-11  Tom Tromey  <tromey@redhat.com>
+
+	* library/prefs.tcl (pref_save): Fix bug when key in gdb space has
+	extra `/' in it.
+
 2001-05-11  Kevin Buettner  <kevinb@redhat.com>
 
 	* generic/gdbtk-bp.c (set_raw_breakpoint): Revise declaration
