@@ -158,7 +158,7 @@ wrap_type_print (char *a)
   char *varstring = (*args)->args[1];
   struct ui_file *stream = (struct ui_file *) (*args)->args[2];
   int show = (int) (*args)->args[3];
-  type_print (VALUE_TYPE (val), varstring, stream, show);
+  type_print (value_type (val), varstring, stream, show);
   return 1;
 }
 

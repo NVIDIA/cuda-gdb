@@ -38,6 +38,7 @@
 #include "dictionary.h"
 #include "filenames.h"
 #include "disasm.h"
+#include "value.h"
 
 /* tcl header files includes varargs.h unless HAS_STDARG is defined,
    but gdb uses stdarg.h, so make sure HAS_STDARG is defined.  */
@@ -622,7 +623,7 @@ gdb_eval (ClientData clientData, Tcl_Interp *interp,
   /* "Print" the result of the expression evaluation. */
   stb = mem_fileopen ();
   make_cleanup_ui_file_delete (stb);
-  val_print (VALUE_TYPE (val), VALUE_CONTENTS (val),
+  val_print (value_type (val), VALUE_CONTENTS (val),
 	     VALUE_EMBEDDED_OFFSET (val), VALUE_ADDRESS (val),
 	     stb, format, 0, 0, 0);
   result = ui_file_xstrdup (stb, &dummy);

@@ -1,3 +1,9 @@
+2004-11-18  Keith Seitz  <kseitz@sources.redhat.com>
+
+	* generic/gdbtk-wrapper.c (wrap_type_print): Use value_type instead
+	of VALUE_TYPE.
+	* generic/gdbtk-cmds.c (gdb_eval): Likewise.
+
 2004-10-31  David Lecomber <dsl@sources.redhat.com>
 	* generic/gdbtk-register.c: Add message parameter
 	to call of get_selected_frame.
