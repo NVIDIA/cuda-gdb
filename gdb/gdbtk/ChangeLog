@@ -1,5 +1,27 @@
 2001-02-01  Fernando Nasser  <fnasser@redhat.com>
 
+	* library/gdbtoolbar.itcl (add): New method.  Emulate the style of the
+	toolbar iwidget commands.
+	(toolbar_show): Old name.
+        (show): New name.
+	(toolbar_create_button): Old name.
+        (create): New name.
+	(toolbar_configure_button): Old name.
+        (itemconfigure): New name.
+        (toolbar_bind_button): Old name.
+        (itembind): New name.
+        (toolbar_set_button_balloon): Old name.
+        (itemballoon): New name.
+        (toolbar_add_button): Make private.
+        (toolbar_add_label): Ditto.
+        (toolbar_add_button_separator): Ditto.
+	(toolbar_remove_button): Ditto.
+	(tollbar_insert_button): Ditto.
+	* library/srcbar.itcl: Adjust to the above syntax.
+	* library/plugins/rhabout/rhabout.itcl: Ditto.
+
+2001-02-01  Fernando Nasser  <fnasser@redhat.com>
+
 	* library/gdbmenubar.itcl (constructor): Remove unused code.
 	(add): New method.  Emulate the style of the menubar iwidget commands.
 	(menubar_show): Old name.

@@ -21,11 +21,11 @@ class RHAbout {
     $menubar show
 
     # Do you want a toolbar?
-    $toolbar toolbar_add_button con Other {ManagedWin::open Console} \
+    $toolbar add button con Other {ManagedWin::open Console} \
                            "Console (Ctrl+N)" -image console_img
 
     # The toolbar will only show up if you do this:
-    $toolbar toolbar_show
+    $toolbar show
 
     # Now, fill the childsite with some graphics and text
 

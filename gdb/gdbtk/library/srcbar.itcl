@@ -59,7 +59,7 @@ class SrcBar {
     # First give the necessary info about each button and their position
     create_buttons
     # Then effectively create the tollbar widget
-    $Tool toolbar_show
+    $Tool show
 
     # Pack the toolbar
     pack $Tool -expand 1 -fill both
@@ -450,18 +450,18 @@ class SrcBar {
   private  method create_buttons {} {
     global enable_external_editor
 
-    $Tool toolbar_add_button stop None {} {}
+    $Tool add button stop None {} {}
     _set_runstop
 
     if {[pref get gdb/mode]} {
-      $Tool toolbar_add_button tstop Control \
+      $Tool add button tstop Control \
                          [list $this do_tstop] "Start Collection" \
 	                 -image Movie_on_img
 
-      $Tool toolbar_add_button view Other [list $this set_control_mode 1] \
+      $Tool add button view Other [list $this set_control_mode 1] \
 	                 "Switch to Browse Mode" -image watch_movie_img
 
-      $Tool toolbar_add_button_separator
+      $Tool add separator
 
     }
 
@@ -479,31 +479,31 @@ class SrcBar {
       create_trace_buttons 1
    }
 
-    $Tool toolbar_add_button_separator
+    $Tool add separator
 
     create_window_buttons
 
     # Random bits of obscurity...
-    $Tool toolbar_bind_button reg   <Button-3> "ManagedWin::open RegWin -force"
-    $Tool toolbar_bind_button mem   <Button-3> "ManagedWin::open MemWin -force"
-    $Tool toolbar_bind_button watch <Button-3> \
+    $Tool itembind reg   <Button-3> "ManagedWin::open RegWin -force"
+    $Tool itembind mem   <Button-3> "ManagedWin::open MemWin -force"
+    $Tool itembind watch <Button-3> \
       "ManagedWin::open WatchWin -force"
-    $Tool toolbar_bind_button vars  <Button-3> \
+    $Tool itembind vars  <Button-3> \
       "ManagedWin::open LocalsWin -force"
 
-    $Tool toolbar_add_button_separator
+    $Tool add separator
 
     if {[info exists enable_external_editor] && $enable_external_editor} {
-      $Tool toolbar_add_button edit Other [code $source edit] "Edit Source" \
+      $Tool add button edit Other [code $source edit] "Edit Source" \
 	                      -image edit_img
 
-      $Tool toolbar_add_button_separator
+      $Tool add separator
     }
 
-    $Tool toolbar_add_label addr $address "Address" -width 10 -relief sunken \
+    $Tool add label addr $address "Address" -width 10 -relief sunken \
                            -bd 1 -anchor e -font  src-font
 
-    $Tool toolbar_add_label line $line "Line Number" -width 6 -relief sunken \
+    $Tool add label line $line "Line Number" -width 6 -relief sunken \
                            -bd 1 -anchor e -font  src-font
 
     $Tool toolbar_button_right_justify
@@ -524,26 +524,26 @@ class SrcBar {
   # ------------------------------------------------------------------
   
   private method create_control_buttons {} {
-    $Tool toolbar_add_button step Control [code $source inferior step] \
+    $Tool add button step Control [code $source inferior step] \
       "Step (S)" -image step_img
     
-    $Tool toolbar_add_button next Control [code $source inferior next] \
+    $Tool add button next Control [code $source inferior next] \
       "Next (N)" -image next_img
     
-    $Tool toolbar_add_button finish Control [code $source inferior finish] \
+    $Tool add button finish Control [code $source inferior finish] \
       "Finish (F)" -image finish_img
     
-    $Tool toolbar_add_button continue Control [code $source inferior continue] \
+    $Tool add button continue Control [code $source inferior continue] \
       "Continue (C)" -image continue_img
     
     # A spacer before the assembly-level items looks good.  It helps
     # to indicate that these are somehow different.
-    $Tool toolbar_add_button_separator
+    $Tool add separator
     
-    $Tool toolbar_add_button stepi Control [code $source inferior stepi] \
+    $Tool add button stepi Control [code $source inferior stepi] \
       "Step Asm Inst (S)" -image stepi_img
     
-    $Tool toolbar_add_button nexti Control [code $source inferior nexti] \
+    $Tool add button nexti Control [code $source inferior nexti] \
       "Next Asm Inst (N)" -image nexti_img
     
     _set_stepi
@@ -559,9 +559,9 @@ class SrcBar {
   private method create_trace_buttons {{show 0}} {
 
     if {$show} {
-      set command $Tool toolbar_add_button
+      set command $Tool add button
     } else {
-      set command $Tool toolbar_create_button
+      set command $Tool create
     }
 
     $command tfindstart Trace {tfind_cmd "tfind start"} "First Hit <F>" \
@@ -586,36 +586,36 @@ class SrcBar {
   # ------------------------------------------------------------------
   
   private method create_window_buttons {} {
-    $Tool toolbar_add_button reg Other {ManagedWin::open RegWin} \
+    $Tool add button reg Other {ManagedWin::open RegWin} \
                            "Registers (Ctrl+R)" -image reg_img
 
-    $Tool toolbar_add_button mem Other {ManagedWin::open MemWin} \
+    $Tool add button mem Other {ManagedWin::open MemWin} \
                            "Memory (Ctrl+M)" -image memory_img
 
-    $Tool toolbar_add_button stack Other {ManagedWin::open StackWin} \
+    $Tool add button stack Other {ManagedWin::open StackWin} \
                              "Stack (Ctrl+S)" -image stack_img
 
-    $Tool toolbar_add_button watch Other {ManagedWin::open WatchWin} \
+    $Tool add button watch Other {ManagedWin::open WatchWin} \
                              "Watch Expressions (Ctrl+W)" -image watch_img
 
-    $Tool toolbar_add_button vars Other {ManagedWin::open LocalsWin} \
+    $Tool add button vars Other {ManagedWin::open LocalsWin} \
                             "Local Variables (Ctrl+L)" -image vars_img
 
     if {[pref get gdb/control_target]} {
-      $Tool toolbar_add_button bp Other {ManagedWin::open BpWin} \
+      $Tool add button bp Other {ManagedWin::open BpWin} \
                             "Breakpoints (Ctrl+B)" -image bp_img
     }
 
     if {[pref get gdb/mode]} {
-      $Tool toolbar_add_button tp Other \
+      $Tool add button tp Other \
         {ManagedWin::open BpWin -tracepoints 1} \
 	"Tracepoints (Ctrl+T)" -image tp_img
       
-      $Tool toolbar_add_button tdump Trace {ManagedWin::open TdumpWin} \
+      $Tool add button tdump Trace {ManagedWin::open TdumpWin} \
                                "Tdump (Ctrl+D)" -image tdump_img
     }
 
-    $Tool toolbar_add_button con Other {ManagedWin::open Console} \
+    $Tool add button con Other {ManagedWin::open Console} \
                            "Console (Ctrl+N)" -image console_img
   }
 
@@ -625,15 +625,15 @@ class SrcBar {
   
   private method create_stack_buttons {} {
 
-    $Tool toolbar_add_button down {Trace Control} \
+    $Tool add button down {Trace Control} \
       [code $source stack down] \
       "Down Stack Frame" -image down_img
 
-    $Tool toolbar_add_button up {Trace Control} \
+    $Tool add button up {Trace Control} \
       [code $source stack up] \
       "Up Stack Frame" -image up_img
 
-    $Tool toolbar_add_button bottom {Trace Control} \
+    $Tool add button bottom {Trace Control} \
       [code $source stack bottom] \
       "Go to Bottom of Stack" -image bottom_img
 
@@ -693,22 +693,22 @@ class SrcBar {
 
     switch $runstop {
       busy {
-	$Tool toolbar_configure_button stop -state disabled
+	$Tool itemconfigure stop -state disabled
       }
       downloading {
-	$Tool toolbar_configure_button stop -state normal -image stop_img \
+	$Tool itemconfigure stop -state normal -image stop_img \
 	  -command [code $this cancel_download]
-	$Tool toolbar_set_button_balloon stop "Stop"
+	$Tool itemballoon stop "Stop"
       }
       running {
-	$Tool toolbar_configure_button stop -state normal -image stop_img \
+	$Tool itemconfigure stop -state normal -image stop_img \
 	  -command [code $source inferior stop]
-	$Tool toolbar_set_button_balloon stop "Stop"
+	$Tool itemballoon stop "Stop"
       }
       normal {
-	$Tool toolbar_configure_button stop -state normal -image run_img \
+	$Tool itemconfigure stop -state normal -image run_img \
 	  -command [code $source inferior run]
-	$Tool toolbar_set_button_balloon stop "Run (R)"
+	$Tool itemballoon stop "Run (R)"
       }
       default {
 	dbug W "unknown state $runstop"
@@ -731,8 +731,8 @@ class SrcBar {
       } else {
 	set state normal
       }
-      $Tool toolbar_configure_button stepi -state $state
-      $Tool toolbar_configure_button nexti -state $state
+      $Tool itemconfigure stepi -state $state
+      $Tool itemconfigure nexti -state $state
     }
   }
 
@@ -770,9 +770,9 @@ class SrcBar {
     debug "set_control_mode called with mode $mode"
     if {$mode} {
       set Browsing 1
-      $Tool toolbar_configure_button view -image run_expt_img \
+      $Tool itemconfigure view -image run_expt_img \
                             -command "$this set_control_mode 0"
-      $Tool toolbar_set_button_balloon view "Switch to Control mode"
+      $Tool itemballoon view "Switch to Control mode"
       # Now swap out the buttons...
       $Tool toolbar_swap_button_lists $Trace_control_buttons \
                                       $Run_control_buttons
@@ -782,9 +782,9 @@ class SrcBar {
 	tfind_cmd {tfind none}
       }
       set Browsing 0
-      $Tool toolbar_configure_button view -image watch_movie_img \
+      $Tool itemconfigure view -image watch_movie_img \
                             -command "$this set_control_mode 1"
-      $Tool toolbar_set_button_balloon view "Switch to Browse mode"
+      $Tool itemballoon view "Switch to Browse mode"
       # Now swap out the buttons...
       $Tool toolbar_swap_button_lists $Run_control_buttons \
                                       $Trace_control_buttons
@@ -1044,8 +1044,8 @@ Do you want to continue?" \
       if {[tstart]} {
         # FIXME: Must enable the Stop Collection menu item and
         # disable the Start Collection item
-        $Tool toolbar_configure_button tstop -image Movie_off_img
-        $Tool toolbar_set_button_balloon tstop "End Collection"
+        $Tool itemconfigure tstop -image Movie_off_img
+        $Tool itemballoon tstop "End Collection"
 	set Collecting 1
       } else {
 	tk_messageBox -title Error \
@@ -1060,8 +1060,8 @@ Do you want to continue?" \
       if {[tstop]} {	
         # FIXME: Must enable the Stop Collection menu item and
         # disable the Start Collection item
-        $Tool toolbar_configure_button tstop -image Movie_on_img
-        $Tool toolbar_set_button_balloon tstop "Start Collection"
+        $Tool itemconfigure tstop -image Movie_on_img
+        $Tool itemballoon tstop "Start Collection"
 	set Collecting 0
      }
     }
@@ -1119,12 +1119,12 @@ Do you want to continue?" \
 
   # This holds the text that is shown in the address label.
   public variable address {} {
-    $Tool toolbar_configure_button addr -text $address -font src-font
+    $Tool itemconfigure addr -text $address -font src-font
   }
 
   # This holds the text that is shown in the line label.
   public variable line {} {
-    $Tool toolbar_configure_button line -text $line
+    $Tool itemconfigure line -text $line
   }
 
   # This holds the source window's display mode.  Valid values are

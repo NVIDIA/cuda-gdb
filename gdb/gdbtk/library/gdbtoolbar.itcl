@@ -54,9 +54,9 @@ class GDBToolBar {
   }
 
   # ------------------------------------------------------------------
-  #  METHOD:  toolbar_show - show the toolbar
+  #  METHOD:  show - show the toolbar
   # ------------------------------------------------------------------
-  public method toolbar_show {} {
+  public method show {} {
 
     if {[llength $button_list]} {
       eval standard_toolbar $ButtonFrame $button_list
@@ -77,7 +77,7 @@ class GDBToolBar {
           # debug "$type $state \{$class_list\}"
 	  foreach button $class_list {
             # debug "$type $button $state"
-	    toolbar_configure_button $button -state $state
+	    itemconfigure $button -state $state
 	  }
         }
       }
@@ -87,6 +87,67 @@ class GDBToolBar {
   ####################################################################
   # Methods that deal with buttons.
   ####################################################################
+
+  # ------------------------------------------------------------------
+  #  METHOD:  add - Add something.
+  #                 It can be a button a separator or a label.
+  #
+  #  type - what we want to add
+  #  args - arguments appropriate to what is being added
+  #
+  # ------------------------------------------------------------------
+  method add {type args} {
+
+    switch $type {
+      button {
+        eval toolbar_add_button $args
+      }
+      label {
+        eval toolbar_add_label $args
+      }
+      separator {
+        toolbar_add_button_separator
+      }
+      default {
+        error "Invalid item type: $type"
+      }
+    }
+  }
+
+  # ------------------------------------------------------------------
+  #  PRIVATE METHOD:  toolbar_add_button - Creates a button, and inserts
+  #                      it at the end of the button list.  Call this when
+  #                      the toolbar is being set up, but has not yet been
+  #                      made.
+  # ------------------------------------------------------------------
+  private method toolbar_add_button {name class command balloon args} {
+    
+    lappend button_list \
+            [eval _register_button 1 \$name \$class \$command \$balloon $args]
+    
+  }
+
+  # ------------------------------------------------------------------
+  #  PRIVATE METHOD:  toolbar_add_label - Create a label to be inserted
+  #                        in the toolbar.
+  # ------------------------------------------------------------------
+
+  private method toolbar_add_label {name text balloon args} {
+    set lname $ButtonFrame.$name
+    set Buttons($name) $lname
+    set Buttons($lname,align) $button_align
+    eval label $lname -text \$text $args
+    balloon register $lname $balloon
+    lappend button_list $lname    
+  }
+
+  # ------------------------------------------------------------------
+  #  PRIVATE METHOD:  toolbar_add_button_separator - 
+  # ------------------------------------------------------------------
+
+  private method toolbar_add_button_separator {} {
+    lappend button_list -
+  }
  
   # ------------------------------------------------------------------
   #  PRIVATE METHOD:  _register_button - Creates all the bookkeeping
@@ -129,64 +190,45 @@ class GDBToolBar {
   }
  
   # ------------------------------------------------------------------
-  #  METHOD:  toolbar_create_button - Creates all the bookkeeping for a button,
+  #  METHOD:  create - Creates all the bookkeeping for a button,
   #           without actually inserting it in the toolbar.
   # ------------------------------------------------------------------
-  method toolbar_create_button {name class command balloon args} {
+  method create {name class command balloon args} {
 
     return [eval _register_button 0 \$name \$class \$command \$balloon $args]
   }
 
   # ------------------------------------------------------------------
-  #  METHOD:  toolbar_add_button - Creates a button, and inserts it at the end
-  #           of the button list.  Call this when the toolbar is being
-  #           set up, but has not yet been made.
-  # ------------------------------------------------------------------
-  method toolbar_add_button {name class command balloon args} {
-    
-    lappend button_list \
-            [eval _register_button 1 \$name \$class \$command \$balloon $args]
-    
-  }
-
-  # ------------------------------------------------------------------
-  #  METHOD:  toolbar_add_button_separator - 
-  # ------------------------------------------------------------------
-
-  method toolbar_add_button_separator {} {
-    lappend button_list -
-  }
-
-  # ------------------------------------------------------------------
-  #  METHOD:  toolbar_button_right_justify - 
+  #  METHOD:  itemconfigure - 
   # ------------------------------------------------------------------
   
-  method toolbar_button_right_justify {} {
-    lappend button_list --
-    set button_align "right"
+  method itemconfigure {button args} {
+    eval $Buttons($button) configure $args
   }
 
   # ------------------------------------------------------------------
-  #  METHOD:  toolbar_add_label - Create a label to be inserted in the
-  #                               toolbar.
+  #  METHOD:  itembind - 
   # ------------------------------------------------------------------
-
-  method toolbar_add_label {name text balloon args} {
-    set lname $ButtonFrame.$name
-    set Buttons($name) $lname
-    set Buttons($lname,align) $button_align
-    eval label $lname -text \$text $args
-    balloon register $lname $balloon
-    lappend button_list $lname    
+  
+  method itembind {button key cmd} {
+    eval [list bind $Buttons($button) $key $cmd]
   }
 
   # ------------------------------------------------------------------
-  #  METHOD:  toolbar_insert_button - Inserts button "name" before
+  #  METHOD:  itemballoon - 
+  # ------------------------------------------------------------------
+  
+  method itemballoon {button text} {
+    eval [list balloon register $Buttons($button) $text]
+  }
+
+  # ------------------------------------------------------------------
+  #  PRIVATE METHOD:  toolbar_insert_button - Inserts button "name" before
   #           button "before".
   #           The toolbar must be made, and the buttons must have been
   #           created before you run this.
   # ------------------------------------------------------------------
-  method toolbar_insert_button {name before} {
+  private method toolbar_insert_button {name before} {
 
     if {[string first "-" $name] == 0} {
       set name [string range $name 1 end]
@@ -225,10 +267,10 @@ class GDBToolBar {
   }
 
   # ------------------------------------------------------------------
-  #  METHOD:  toolbar_remove_button - 
+  #  PRIVATE METHOD:  toolbar_remove_button -
   # ------------------------------------------------------------------
 
-  method toolbar_remove_button {name} {
+  private method toolbar_remove_button {name} {
 
     if {[string first "-" $name] == 0} {
       set name [string range $name 1 end]
@@ -264,27 +306,12 @@ class GDBToolBar {
   }
 
   # ------------------------------------------------------------------
-  #  METHOD:  toolbar_configure_button - 
+  #  METHOD:  toolbar_button_right_justify - 
   # ------------------------------------------------------------------
   
-  method toolbar_configure_button {button args} {
-    eval $Buttons($button) configure $args
-  }
-
-  # ------------------------------------------------------------------
-  #  METHOD:  toolbar_bind_button - 
-  # ------------------------------------------------------------------
-  
-  method toolbar_bind_button {button key cmd} {
-    eval [list bind $Buttons($button) $key $cmd]
-  }
-
-  # ------------------------------------------------------------------
-  #  METHOD:  toolbar_set_button_balloon - 
-  # ------------------------------------------------------------------
-  
-  method toolbar_set_button_balloon {button text} {
-    eval [list balloon register $Buttons($button) $text]
+  method toolbar_button_right_justify {} {
+    lappend button_list --
+    set button_align "right"
   }
 
   # ------------------------------------------------------------------
