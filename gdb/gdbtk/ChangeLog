@@ -1,5 +1,18 @@
 2001-08-16  Keith Seitz  <keiths@redhat.com>
 
+	* library/globalpref.ith (_change_font, _change_size): New
+	private methods.
+	(_size): New private variable.
+	(font_changed, wfont_changed): Removed.
+	* library/globalpref.itb (make_font_item): Change combobox
+	callback to use _change_font.
+	Replace tixControl with iwidgets::spinint.
+	(font_changed, wfont_changed): Removed.
+	(_change_font, _change_size): New private methods.
+	* tclIndex: Regenerate.
+
+2001-08-16  Keith Seitz  <keiths@redhat.com>
+
 	* generic/gdbtk.c (gdbtk_init): Make sure we're working with
 	absolute pathnames in the *_LIBRAY variables.
 

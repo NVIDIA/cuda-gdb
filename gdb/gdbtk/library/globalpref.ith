@@ -18,6 +18,7 @@ class GlobalPref {
   private {
     variable icondirlist ""
     variable Original	;# Original settings
+    variable _size      ;# Array tracking spinint values
     variable Fonts	;# List of all available fonts for editing
     common tracing_labels
     common inited 0
@@ -28,8 +29,8 @@ class GlobalPref {
     method make_font_item {f name label font_list}
     method resize_font_item_height {}
     method change_icons {w args}
-    method wfont_changed  {attribute font w val}
-    method font_changed {attribute font val}
+    method _change_font {font stupid implementation}
+    method _change_size {direction font}
     method toggle_tracing_mode {}
     method ok {}
     method apply {{deleteMe 0}}

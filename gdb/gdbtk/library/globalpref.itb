@@ -243,22 +243,25 @@ body GlobalPref::make_font_item {f name label font_list} {
   font create test-$name-font -family $Original($name,family) \
     -size $Original($name,size)
   label $f.${name}x -text $label
-  
+
   combobox::combobox $f.${name}n -editable 0 -value $Original($name,family) \
-    -command [code $this wfont_changed family $name]
-  
+    -command [code $this _change_font $name]
+
   foreach a $font_list {
     $f.${name}n list insert end $a
   }
   
-  tixControl $f.${name}s -label Size: -integer true -max 18 -min 6 \
-    -value $Original(${name},size) -command [code $this font_changed size $name]
-  [$f.${name}s subwidget entry] configure -width 2
+  itk_component add $name-size {
+    iwidgets::spinint $f.${name}s -labeltext "Size:" -range {6 18} -step 1 \
+      -fixed 2 -width 2 -textvariable [scope _size($name)] -wrap 0 \
+      -increment [code $this _change_size up $name] \
+      -decrement [code $this _change_size down $name]
+  } {}
   label $f.${name}l -text ABCDEFabcdef0123456789 -font test-$name-font
-  
+  set _size($name) $Original($name,size)
+
   grid $f.${name}x $f.${name}n $f.${name}s $f.${name}l -sticky we -padx 5 -pady 5
   grid columnconfigure $f 3 -weight 1
-  
 }
 
 # ------------------------------------------------------------------
@@ -287,29 +290,42 @@ body GlobalPref::change_icons {w args} {
 }
 
 # ------------------------------------------------------------------
-#  PRIVATE METHOD:  wfont_changed - callback from font comboboxes
-#  PRIVATE METHOD:  font_changed - callback from font tixControls
+#  NAME:         private method GlobalPref::_change_font
+#  DESCRIPTION:  Change the given font's family
+#
+#  ARGUMENTS:
+#                font           - the font whose family is to be
+#                                 changed
+#                stupid         - the comobox widget which changed
+#                implementation - the new value of the combobox
+#  RETURNS:      Nothing
+#
+#  NOTES:        The combobox has a really non-standard callback
+#                mechanism: it always adds two args to the callback.
 # ------------------------------------------------------------------
-body GlobalPref::wfont_changed {attribute font w val} {
-  font_changed $attribute $font $val
+body GlobalPref::_change_font {font stupid implementation} {
+  font configure test-$font-font -family $implementation
 }
 
-body GlobalPref::font_changed {attribute font val} {
-  # val will be a size or a font name
+# ------------------------------------------------------------------
+#  NAME:         private method GlobalPref::_change_size
+#  DESCRIPTION:  Change the given font's size
+#
+#  ARGUMENTS:
+#                direction  - the direction of the change (up/down)
+#                font       - the font that is changing
+#  RETURNS:      Nothing
+#
+#  NOTES:        See comments for purpose of "direction". Sigh.
+# ------------------------------------------------------------------
+body GlobalPref::_change_size {direction font} {
 
-  switch $attribute {
-    size {
-      set oldval [font configure test-$font-font -size]
-      font configure test-$font-font -size $val
-    }
-
-    family {
-      set oldval [font configure test-$font-font -family]
-      font configure test-$font-font -family $val
-    }
-    
-    default { debug "GlobalPref::font_changed -- invalid change" }
-  }
+  # Almost as stupid as the comobox, the iwidgets::spinint class
+  # will not treat its -increment and -decrement commands
+  # as command callbacks. Instead it OVERRIDES all behavior.
+  # Thus, we need to call the stupid spinint's callback.
+  $itk_component($font-size) $direction
+  font configure test-$font-font -size $_size($font)
 }
 
 # ------------------------------------------------------------------
