@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.61 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.62 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3470,12 +3470,6 @@ where @var{valbuf} is the address of the value to be stored.
 @findex SYMBOL_RELOADING_DEFAULT
 The default value of the ``symbol-reloading'' variable.  (Never defined in
 current sources.)
-
-@item TARGET_BYTE_ORDER_DEFAULT
-@findex TARGET_BYTE_ORDER_DEFAULT
-The ordering of bytes in the target.  This must be either
-@code{BFD_ENDIAN_BIG} or @code{BFD_ENDIAN_LITTLE}.  This macro replaces
-@code{TARGET_BYTE_ORDER} which is deprecated.
 
 @item TARGET_CHAR_BIT
 @findex TARGET_CHAR_BIT
