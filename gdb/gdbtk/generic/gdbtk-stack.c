@@ -1,5 +1,5 @@
 /* Tcl/Tk command definitions for Insight - Stack.
-   Copyright 2001 Free Software Foundation, Inc.
+   Copyright 2001, 2002 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -87,11 +87,8 @@ Gdbtk_Stack_Init (Tcl_Interp *interp)
  *    All variables defined in the given block.
  */
 static int
-gdb_block_vars (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_block_vars (ClientData clientData, Tcl_Interp *interp,
+		int objc, Tcl_Obj *CONST objv[])
 {
   struct block *block;
   int i;
@@ -163,11 +160,8 @@ gdb_block_vars (clientData, interp, objc, objv)
  *    A list of all valid blocks in the selected_frame.
  */
 static int
-gdb_get_blocks (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_get_blocks (ClientData clientData, Tcl_Interp *interp,
+		int objc, Tcl_Obj *CONST objv[])
 {
   struct block *block;
   int i, junk;
@@ -251,47 +245,38 @@ gdb_get_blocks (clientData, interp, objc, objv)
  * of the command, because the call wrapper uses this instead...
  */
 static int
-gdb_get_args_command (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_get_args_command (ClientData clientData, Tcl_Interp *interp,
+		      int objc, Tcl_Obj *CONST objv[])
 {
   return gdb_get_vars_command ((ClientData) 1, interp, objc, objv);
 }
 
 
 static int
-gdb_get_locals_command (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_get_locals_command (ClientData clientData, Tcl_Interp *interp,
+			int objc, Tcl_Obj *CONST objv[])
 {
   return gdb_get_vars_command ((ClientData) 0, interp, objc, objv);
 }
 
 /* This implements the tcl commands "gdb_get_locals" and "gdb_get_args"
 
- * This function sets the Tcl interpreter's result to a list of variable names
- * depending on clientData. If clientData is one, the result is a list of
- * arguments; zero returns a list of locals -- all relative to the block
- * specified as an argument to the command. Valid commands include
- * anything decode_line_1 can handle (like "main.c:2", "*0x02020202",
- * and "main").
- *
- * Tcl Arguments:
- *   linespec - the linespec defining the scope of the lookup. Empty string
- *              to use the current block in the innermost frame.
- * Tcl Result:
- *   A list of the locals or args
- */
+* This function sets the Tcl interpreter's result to a list of variable names
+* depending on clientData. If clientData is one, the result is a list of
+* arguments; zero returns a list of locals -- all relative to the block
+* specified as an argument to the command. Valid commands include
+* anything decode_line_1 can handle (like "main.c:2", "*0x02020202",
+* and "main").
+*
+* Tcl Arguments:
+*   linespec - the linespec defining the scope of the lookup. Empty string
+*              to use the current block in the innermost frame.
+* Tcl Result:
+*   A list of the locals or args
+*/
 static int
-gdb_get_vars_command (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_get_vars_command (ClientData clientData, Tcl_Interp *interp,
+		      int objc, Tcl_Obj *CONST objv[])
 {
   struct symtabs_and_lines sals;
   struct symbol *sym;
@@ -361,7 +346,7 @@ gdb_get_vars_command (clientData, interp, objc, objv)
 	    case LOC_BASEREG_ARG:	/* basereg arg           */
 	      if (arguments)
 		Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-				  Tcl_NewStringObj (SYMBOL_NAME (sym), -1));
+					  Tcl_NewStringObj (SYMBOL_NAME (sym), -1));
 	      break;
 	    case LOC_LOCAL:	/* stack local           */
 	    case LOC_BASEREG:	/* basereg local         */
@@ -369,7 +354,7 @@ gdb_get_vars_command (clientData, interp, objc, objv)
 	    case LOC_REGISTER:	/* register              */
 	      if (!arguments)
 		Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-				  Tcl_NewStringObj (SYMBOL_NAME (sym), -1));
+					  Tcl_NewStringObj (SYMBOL_NAME (sym), -1));
 	      break;
 	    }
 	}
@@ -393,11 +378,8 @@ gdb_get_vars_command (clientData, interp, objc, objv)
  *    The currently selected block's start and end addresses
  */
 static int
-gdb_selected_block (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_selected_block (ClientData clientData, Tcl_Interp *interp,
+		    int objc, Tcl_Obj *CONST objv[])
 {
   char *start = NULL;
   char *end   = NULL;
@@ -428,20 +410,17 @@ gdb_selected_block (clientData, interp, objc, objv)
 
 /* This implements the tcl command gdb_selected_frame
 
- * Returns the address of the selected frame
- * frame.
- *
- * Arguments:
- *    None
- * Tcl Result:
- *    The currently selected frame's address
- */
+* Returns the address of the selected frame
+* frame.
+*
+* Arguments:
+*    None
+* Tcl Result:
+*    The currently selected frame's address
+*/
 static int
-gdb_selected_frame (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_selected_frame (ClientData clientData, Tcl_Interp *interp,
+		    int objc, Tcl_Obj *CONST objv[])
 {
   char *frame;
 
@@ -466,11 +445,8 @@ gdb_selected_frame (clientData, interp, objc, objv)
  *    A list of function names
  */
 static int
-gdb_stack (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_stack (ClientData clientData, Tcl_Interp *interp,
+	   int objc, Tcl_Obj *CONST objv[])
 {
   int start, count;
 

@@ -1,5 +1,5 @@
 /* Tcl/Tk command definitions for Insight - Breakpoints.
-   Copyright 2001 Free Software Foundation, Inc.
+   Copyright 2001, 2002 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -41,17 +41,17 @@ extern void report_error (void);
    They are also used in gdbtk-hooks.c */
 
 char *bptypes[] =
-{"none", "breakpoint", "hw breakpoint", "until",
- "finish", "watchpoint", "hw watchpoint",
- "read watchpoint", "acc watchpoint",
- "longjmp", "longjmp resume", "step resume",
- "sigtramp", "watchpoint scope",
- "call dummy", "shlib events", "catch load",
- "catch unload", "catch fork", "catch vfork",
- "catch exec", "catch catch", "catch throw"
-};
+  {"none", "breakpoint", "hw breakpoint", "until",
+   "finish", "watchpoint", "hw watchpoint",
+   "read watchpoint", "acc watchpoint",
+   "longjmp", "longjmp resume", "step resume",
+   "sigtramp", "watchpoint scope",
+   "call dummy", "shlib events", "catch load",
+   "catch unload", "catch fork", "catch vfork",
+   "catch exec", "catch catch", "catch throw"
+  };
 char *bpdisp[] =
-{"delete", "delstop", "disable", "donttouch"};
+  {"delete", "delstop", "disable", "donttouch"};
 
 /* Is this breakpoint interesting to a user interface? */
 #define BREAKPOINT_IS_INTERESTING(bp) \
@@ -189,16 +189,16 @@ Gdbtk_Breakpoint_Init (Tcl_Interp *interp)
    disable,                     Disable it 
    donttouch                    Leave it alone 
    };
- */
+*/
 
 
 /* This implements the tcl command "gdb_find_bp_at_addr"
 
- * Tcl Arguments:
- *    addr:     address
- * Tcl Result:
- *    It returns a list of breakpoint numbers
- */
+* Tcl Arguments:
+*    addr:     address
+* Tcl Result:
+*    It returns a list of breakpoint numbers
+*/
 static int
 gdb_find_bp_at_addr (ClientData clientData, Tcl_Interp *interp,
 		     int objc, Tcl_Obj *CONST objv[])
@@ -228,23 +228,19 @@ gdb_find_bp_at_addr (ClientData clientData, Tcl_Interp *interp,
 
 /* This implements the tcl command "gdb_find_bp_at_line"
 
- * Tcl Arguments:
- *    filename: the file in which to find the breakpoint
- *    line:     the line number for the breakpoint
- * Tcl Result:
- *    It returns a list of breakpoint numbers
- */
+* Tcl Arguments:
+*    filename: the file in which to find the breakpoint
+*    line:     the line number for the breakpoint
+* Tcl Result:
+*    It returns a list of breakpoint numbers
+*/
 static int
-gdb_find_bp_at_line (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_find_bp_at_line (ClientData clientData, Tcl_Interp *interp,
+		     int objc, Tcl_Obj *CONST objv[])
 
 {
   struct symtab *s;
-  int line;
-  int i;
+  int i, line;
 
   if (objc != 3)
     {
@@ -287,7 +283,6 @@ gdb_get_breakpoint_info (ClientData clientData, Tcl_Interp *interp, int objc,
 			 Tcl_Obj *CONST objv[])
 {
   struct symtab_and_line sal;
-  struct command_line *cmd;
   int bpnum;
   struct breakpoint *b;
   char *funcname, *filename;
@@ -397,7 +392,7 @@ get_breakpoint_commands (struct command_line *cmd)
 	  Tcl_AppendToObj (tmp, cmd->line, -1);
 	  Tcl_ListObjAppendElement (NULL, obj, tmp);
 	  Tcl_ListObjAppendList (NULL, obj,
-				    get_breakpoint_commands (*cmd->body_list));
+				 get_breakpoint_commands (*cmd->body_list));
 	  sprintf_append_element_to_obj (obj, "end");
 	  break;
 
@@ -413,7 +408,7 @@ get_breakpoint_commands (struct command_line *cmd)
 	    {
 	      sprintf_append_element_to_obj (obj, "else");
 	      Tcl_ListObjAppendList (NULL, obj,
-					get_breakpoint_commands(cmd->body_list[1]));
+				     get_breakpoint_commands(cmd->body_list[1]));
 	    }
 	  sprintf_append_element_to_obj (obj, "end");
 	  break;
@@ -438,11 +433,8 @@ get_breakpoint_commands (struct command_line *cmd)
  *    A list of breakpoint numbers.
  */
 static int
-gdb_get_breakpoint_list (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_get_breakpoint_list (ClientData clientData, Tcl_Interp *interp,
+			 int objc, Tcl_Obj *CONST objv[])
 {
   int i;
   Tcl_Obj *new_obj;
@@ -536,7 +528,7 @@ gdb_set_bp (ClientData clientData, Tcl_Interp *interp,
 
   /* FIXME: this won't work for duplicate basenames! */
   xasprintf (&buf, "%s:%d", basename (Tcl_GetStringFromObj (objv[1], NULL)),
-	   line);
+	     line);
   b->addr_string = xstrdup (buf);
   free(buf);
 
@@ -564,7 +556,7 @@ gdb_set_bp_addr (ClientData clientData, Tcl_Interp *interp, int objc,
   int thread = -1;
   CORE_ADDR addr;
   struct breakpoint *b;
-  char *saddr, *typestr, *buf;
+  char *saddr, *typestr;
   enum bpdisp disp;
 
   if (objc != 3 && objc != 4)
@@ -673,9 +665,7 @@ gdbtk_modify_breakpoint (int num)
  * On error, the error string is written to gdb_stdout.
  */
 static void
-breakpoint_notify (num, action)
-     int num;
-     const char *action;
+breakpoint_notify (int num, const char *action)
 {
   char *buf;
 
@@ -710,11 +700,8 @@ breakpoint_notify (num, action)
  */
 
 static int
-gdb_actions_command (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_actions_command (ClientData clientData, Tcl_Interp *interp,
+		     int objc, Tcl_Obj *CONST objv[])
 {
   struct tracepoint *tp;
   Tcl_Obj **actions;
@@ -779,11 +766,8 @@ gdb_actions_command (clientData, interp, objc, objv)
 }
 
 static int
-gdb_get_trace_frame_num (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_get_trace_frame_num (ClientData clientData, Tcl_Interp *interp,
+			 int objc, Tcl_Obj *CONST objv[])
 {
   if (objc != 1)
     {
@@ -821,7 +805,7 @@ gdb_get_tracepoint_info (ClientData clientData, Tcl_Interp *interp,
 
   ALL_TRACEPOINTS (tp)
     if (tp->number == tpnum)
-    break;
+      break;
 
   if (tp == NULL)
     {
@@ -875,11 +859,10 @@ gdb_get_tracepoint_info (ClientData clientData, Tcl_Interp *interp,
 
 /* return a list of all tracepoint numbers in interpreter */
 static int
-gdb_get_tracepoint_list (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_get_tracepoint_list (ClientData clientData,
+			 Tcl_Interp *interp,
+			 int objc,
+			 Tcl_Obj *CONST objv[])
 {
   struct tracepoint *tp;
 
@@ -893,11 +876,10 @@ gdb_get_tracepoint_list (clientData, interp, objc, objv)
 }
 
 static int
-gdb_trace_status (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_trace_status (ClientData clientData,
+		  Tcl_Interp *interp,
+		  int objc,
+		  Tcl_Obj *CONST objv[])
 {
   int result = 0;
 
@@ -930,17 +912,17 @@ tracepoint_exists (char *args)
 	  strcat (file, sals.sals[0].symtab->filename);
 
 	  ALL_TRACEPOINTS (tp)
-	  {
-	    if (tp->address == sals.sals[0].pc)
-	      result = tp->number;
+	    {
+	      if (tp->address == sals.sals[0].pc)
+		result = tp->number;
 #if 0
-	    /* Why is this here? This messes up assembly traces */
-	    else if (tp->source_file != NULL
-		     && strcmp (tp->source_file, file) == 0
-		     && sals.sals[0].line == tp->line_number)
-	      result = tp->number;
+	      /* Why is this here? This messes up assembly traces */
+	      else if (tp->source_file != NULL
+		       && strcmp (tp->source_file, file) == 0
+		       && sals.sals[0].line == tp->line_number)
+		result = tp->number;
 #endif
-	  }
+	    }
 	}
     }
   if (file != NULL)
@@ -949,11 +931,10 @@ tracepoint_exists (char *args)
 }
 
 static int
-gdb_tracepoint_exists_command (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_tracepoint_exists_command (ClientData clientData,
+			       Tcl_Interp *interp,
+			       int objc,
+			       Tcl_Obj *CONST objv[])
 {
   char *args;
 
@@ -994,9 +975,7 @@ gdbtk_modify_tracepoint (int num)
 }
 
 static void
-tracepoint_notify (num, action)
-     int num;
-     const char *action;
+tracepoint_notify (int num, const char *action)
 {
   char *buf;
 

@@ -1,5 +1,5 @@
 /* Tcl/Tk command definitions for Insight.
-   Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2001
+   Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2001, 2002
    Free Software Foundation, Inc.
 
    Written by Stu Grossman <grossman@cygnus.com> of Cygnus Support.
@@ -81,16 +81,17 @@ int load_in_progress = 0;
    reordering in this function.  */
 
 struct my_line_entry
-  {
-    int line;
-    CORE_ADDR start_pc;
-    CORE_ADDR end_pc;
-  };
+{
+  int line;
+  CORE_ADDR start_pc;
+  CORE_ADDR end_pc;
+};
 
 /* Use this to pass the Tcl Text widget command and the open file
    descriptor to the disassembly load command. */
 
-struct disassembly_client_data {
+struct disassembly_client_data 
+{
   FILE *fp;
   int file_opened_p;
   int widget_line_no;
@@ -213,8 +214,7 @@ static int fromhex (int a);
  */
 
 int
-Gdbtk_Init (interp)
-     Tcl_Interp *interp;
+Gdbtk_Init (Tcl_Interp *interp)
 {
   Tcl_CreateObjCommand (interp, "gdb_cmd", gdbtk_call_wrapper, gdb_cmd, NULL);
   Tcl_CreateObjCommand (interp, "gdb_immediate", gdbtk_call_wrapper,
@@ -326,11 +326,8 @@ Gdbtk_Init (interp)
    necessary. */
 
 int
-gdbtk_call_wrapper (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdbtk_call_wrapper (ClientData clientData, Tcl_Interp *interp,
+		    int objc, Tcl_Obj *CONST objv[])
 {
   struct wrapped_call_args wrapped_args;
   gdbtk_result new_result, *old_result_ptr;
@@ -413,8 +410,7 @@ gdbtk_call_wrapper (clientData, interp, objc, objv)
  */
 
 static int
-wrapped_call (opaque_args)
-     PTR opaque_args;
+wrapped_call (PTR opaque_args)
 {
   struct wrapped_call_args *args = (struct wrapped_call_args *) opaque_args;
   args->val = (*args->func) (args->func, args->interp, args->objc, args->objv);
@@ -445,24 +441,21 @@ sprintf_append_element_to_obj (Tcl_Obj * objp, char *format,...)
 
 /* This implements the tcl command gdb_clear_file.
 
- * Prepare to accept a new executable file.  This is called when we
- * want to clear away everything we know about the old file, without
- * asking the user.  The Tcl code will have already asked the user if
- * necessary.  After this is called, we should be able to run the
- * `file' command without getting any questions.  
- *
- * Arguments:
- *    None
- * Tcl Result:
- *    None
- */
+* Prepare to accept a new executable file.  This is called when we
+* want to clear away everything we know about the old file, without
+* asking the user.  The Tcl code will have already asked the user if
+* necessary.  After this is called, we should be able to run the
+* `file' command without getting any questions.  
+*
+* Arguments:
+*    None
+* Tcl Result:
+*    None
+*/
 
 static int
-gdb_clear_file (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_clear_file (ClientData clientData, Tcl_Interp *interp,
+		int objc, Tcl_Obj *CONST objv[])
 {
   if (objc != 1)
     {
@@ -498,11 +491,8 @@ gdb_clear_file (clientData, interp, objc, objv)
  */
 
 static int
-gdb_confirm_quit (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_confirm_quit (ClientData clientData, Tcl_Interp *interp,
+		  int objc, Tcl_Obj *CONST objv[])
 {
   int ret;
 
@@ -527,11 +517,8 @@ gdb_confirm_quit (clientData, interp, objc, objv)
  */
 
 static int
-gdb_force_quit (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_force_quit (ClientData clientData, Tcl_Interp *interp,
+		int objc, Tcl_Obj *CONST objv[])
 {
   if (objc != 1)
     {
@@ -568,11 +555,8 @@ gdb_force_quit (clientData, interp, objc, objv)
  */
 
 static int
-gdb_stop (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_stop (ClientData clientData, Tcl_Interp *interp,
+	  int objc, Tcl_Obj *CONST objv[])
 {
   int force = 0;
   char *s;
@@ -665,25 +649,22 @@ gdb_eval (ClientData clientData, Tcl_Interp *interp,
 
 /* This implements the tcl command "gdb_cmd".
 
- * It sends its argument to the GDB command scanner for execution. 
- * This command will never cause the update, idle and busy hooks to be called
- * within the GUI.
- * 
- * Tcl Arguments:
- *    command - The GDB command to execute
- *    from_tty - 1 indicates this comes to the console.
- *               Pass this to the gdb command.
- * Tcl Result:
- *    The output from the gdb command (except for the "load" & "while"
- *    which dump their output to the console.
- */
+* It sends its argument to the GDB command scanner for execution. 
+* This command will never cause the update, idle and busy hooks to be called
+* within the GUI.
+* 
+* Tcl Arguments:
+*    command - The GDB command to execute
+*    from_tty - 1 indicates this comes to the console.
+*               Pass this to the gdb command.
+* Tcl Result:
+*    The output from the gdb command (except for the "load" & "while"
+*    which dump their output to the console.
+*/
 
 static int
-gdb_cmd (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_cmd (ClientData clientData, Tcl_Interp *interp,
+	 int objc, Tcl_Obj *CONST objv[])
 {
   int from_tty = 0;
 
@@ -747,13 +728,9 @@ gdb_cmd (clientData, interp, objc, objv)
  */
 
 static int
-gdb_immediate_command (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_immediate_command (ClientData clientData, Tcl_Interp *interp,
+		       int objc, Tcl_Obj *CONST objv[])
 {
-
   int from_tty = 0;
 
   if (objc < 2 || objc > 3)
@@ -789,20 +766,17 @@ gdb_immediate_command (clientData, interp, objc, objv)
 
 /* This implements the tcl command "gdb_prompt"
 
- * It returns the gdb interpreter's prompt.
- *
- * Tcl Arguments:
- *    None.
- * Tcl Result:
- *    The prompt.
- */
+* It returns the gdb interpreter's prompt.
+*
+* Tcl Arguments:
+*    None.
+* Tcl Result:
+*    The prompt.
+*/
 
 static int
-gdb_prompt_command (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_prompt_command (ClientData clientData, Tcl_Interp *interp,
+		    int objc, Tcl_Obj *CONST objv[])
 {
   Tcl_SetStringObj (result_ptr->obj_ptr, get_prompt (), -1);
   return TCL_OK;
@@ -815,20 +789,17 @@ gdb_prompt_command (clientData, interp, objc, objv)
 
 /* This implements the tcl command "gdb_target_has_execution"
 
- * Tells whether the target is executing.
- *
- * Tcl Arguments:
- *    None
- * Tcl Result:
- *    A boolean indicating whether the target is executing.
- */
+* Tells whether the target is executing.
+*
+* Tcl Arguments:
+*    None
+* Tcl Result:
+*    A boolean indicating whether the target is executing.
+*/
 
 static int
-gdb_target_has_execution_command (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_target_has_execution_command (ClientData clientData, Tcl_Interp *interp,
+				  int objc, Tcl_Obj *CONST objv[])
 {
   int result = 0;
 
@@ -841,20 +812,17 @@ gdb_target_has_execution_command (clientData, interp, objc, objv)
 
 /* This implements the tcl command "gdb_get_inferior_args"
 
- * Returns inferior command line arguments as a string
- *
- * Tcl Arguments:
- *    None
- * Tcl Result:
- *    A string containing the inferior command line arguments
- */
+* Returns inferior command line arguments as a string
+*
+* Tcl Arguments:
+*    None
+* Tcl Result:
+*    A string containing the inferior command line arguments
+*/
 
 static int
-gdb_get_inferior_args (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_get_inferior_args (ClientData clientData, Tcl_Interp *interp,
+		       int objc, Tcl_Obj *CONST objv[])
 {
   if (objc != 1)
     {
@@ -868,20 +836,17 @@ gdb_get_inferior_args (clientData, interp, objc, objv)
 
 /* This implements the tcl command "gdb_set_inferior_args"
 
- * Sets inferior command line arguments
- *
- * Tcl Arguments:
- *    A string containing the inferior command line arguments
- * Tcl Result:
- *    None
- */
+* Sets inferior command line arguments
+*
+* Tcl Arguments:
+*    A string containing the inferior command line arguments
+* Tcl Result:
+*    None
+*/
 
 static int
-gdb_set_inferior_args (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_set_inferior_args (ClientData clientData, Tcl_Interp *interp,
+		       int objc, Tcl_Obj *CONST objv[])
 {
   char *args;
 
@@ -905,20 +870,17 @@ gdb_set_inferior_args (clientData, interp, objc, objv)
 
 /* This implements the tcl command "gdb_load_info"
 
- * It returns information about the file about to be downloaded.
- *
- * Tcl Arguments:
- *    filename: The file to open & get the info on.
- * Tcl Result:
- *    A list consisting of the name and size of each section.
- */
+* It returns information about the file about to be downloaded.
+*
+* Tcl Arguments:
+*    filename: The file to open & get the info on.
+* Tcl Result:
+*    A list consisting of the name and size of each section.
+*/
 
 static int
-gdb_load_info (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_load_info (ClientData clientData, Tcl_Interp *interp,
+	       int objc, Tcl_Obj *CONST objv[])
 {
   bfd *loadfile_bfd;
   struct cleanup *old_cleanups;
@@ -967,20 +929,17 @@ gdb_load_info (clientData, interp, objc, objv)
 
 /* This implements the tcl command "gdb_get_line"
 
- * It returns the linenumber for a given linespec.  It will take any spec
- * that can be passed to decode_line_1
- *
- * Tcl Arguments:
- *    linespec - the line specification
- * Tcl Result:
- *    The line number for that spec.
- */
+* It returns the linenumber for a given linespec.  It will take any spec
+* that can be passed to decode_line_1
+*
+* Tcl Arguments:
+*    linespec - the line specification
+* Tcl Result:
+*    The line number for that spec.
+*/
 static int
-gdb_get_line_command (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_get_line_command (ClientData clientData, Tcl_Interp *interp,
+		      int objc, Tcl_Obj *CONST objv[])
 {
   struct symtabs_and_lines sals;
   char *args, **canonical;
@@ -1006,20 +965,17 @@ gdb_get_line_command (clientData, interp, objc, objv)
 
 /* This implements the tcl command "gdb_get_file"
 
- * It returns the file containing a given line spec.
- *
- * Tcl Arguments:
- *    linespec - The linespec to look up
- * Tcl Result:
- *    The file containing it.
- */
+* It returns the file containing a given line spec.
+*
+* Tcl Arguments:
+*    linespec - The linespec to look up
+* Tcl Result:
+*    The file containing it.
+*/
 
 static int
-gdb_get_file_command (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_get_file_command (ClientData clientData, Tcl_Interp *interp,
+		      int objc, Tcl_Obj *CONST objv[])
 {
   struct symtabs_and_lines sals;
   char *args, **canonical;
@@ -1045,19 +1001,16 @@ gdb_get_file_command (clientData, interp, objc, objv)
 
 /* This implements the tcl command "gdb_get_function"
 
- * It finds the function containing the given line spec.
- *
- * Tcl Arguments:
- *    linespec - The line specification
- * Tcl Result:
- *    The function that contains it, or "N/A" if it is not in a function.
- */
+* It finds the function containing the given line spec.
+*
+* Tcl Arguments:
+*    linespec - The line specification
+* Tcl Result:
+*    The function that contains it, or "N/A" if it is not in a function.
+*/
 static int
-gdb_get_function_command (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_get_function_command (ClientData clientData, Tcl_Interp *interp,
+			  int objc, Tcl_Obj *CONST objv[])
 {
   char *function;
   struct symtabs_and_lines sals;
@@ -1085,21 +1038,18 @@ gdb_get_function_command (clientData, interp, objc, objv)
 
 /* This implements the tcl command "gdb_find_file"
 
- * It searches the symbol tables to get the full pathname to a file.
- *
- * Tcl Arguments:
- *    filename: the file name to search for.
- * Tcl Result:
- *    The full path to the file, an empty string if the file was not
- *    available or an error message if the file is not found in the symtab.
- */
+* It searches the symbol tables to get the full pathname to a file.
+*
+* Tcl Arguments:
+*    filename: the file name to search for.
+* Tcl Result:
+*    The full path to the file, an empty string if the file was not
+*    available or an error message if the file is not found in the symtab.
+*/
 
 static int
-gdb_find_file_command (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_find_file_command (ClientData clientData, Tcl_Interp *interp,
+		       int objc, Tcl_Obj *CONST objv[])
 {
   struct symtab *st;
   char *filename, *fullname;
@@ -1139,29 +1089,26 @@ gdb_find_file_command (clientData, interp, objc, objv)
 
 /* This implements the tcl command "gdb_listfiles"
 
- * This lists all the files in the current executible.
- *
- * Note that this currently pulls in all sorts of filenames
- * that aren't really part of the executable.  It would be
- * best if we could check each file to see if it actually
- * contains executable lines of code, but we can't do that
- * with psymtabs.
- *
- * Arguments:
- *    ?pathname? - If provided, only files which match pathname
- *        (up to strlen(pathname)) are included. THIS DOES NOT
- *        CURRENTLY WORK BECAUSE PARTIAL_SYMTABS DON'T SUPPLY
- *        THE FULL PATHNAME!!!
- *
- * Tcl Result:
- *    A list of all matching files.
- */
+* This lists all the files in the current executible.
+*
+* Note that this currently pulls in all sorts of filenames
+* that aren't really part of the executable.  It would be
+* best if we could check each file to see if it actually
+* contains executable lines of code, but we can't do that
+* with psymtabs.
+*
+* Arguments:
+*    ?pathname? - If provided, only files which match pathname
+*        (up to strlen(pathname)) are included. THIS DOES NOT
+*        CURRENTLY WORK BECAUSE PARTIAL_SYMTABS DON'T SUPPLY
+*        THE FULL PATHNAME!!!
+*
+* Tcl Result:
+*    A list of all matching files.
+*/
 static int
-gdb_listfiles (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_listfiles (ClientData clientData, Tcl_Interp *interp,
+	       int objc, Tcl_Obj *CONST objv[])
 {
   struct objfile *objfile;
   struct partial_symtab *psymtab;
@@ -1182,38 +1129,38 @@ gdb_listfiles (clientData, interp, objc, objv)
     pathname = Tcl_GetStringFromObj (objv[1], &len);
 
   ALL_PSYMTABS (objfile, psymtab)
-  {
-    if (numfiles == files_size)
-      {
-	files_size = files_size * 2;
-	files = (char **) xrealloc (files, sizeof (char *) * files_size);
-      }
-    if (psymtab->filename)
-      {
-	if (!len || !strncmp (pathname, psymtab->filename, len)
-	    || !strcmp (psymtab->filename, basename (psymtab->filename)))
-	  {
-	    files[numfiles++] = basename (psymtab->filename);
-	  }
-      }
-  }
+    {
+      if (numfiles == files_size)
+	{
+	  files_size = files_size * 2;
+	  files = (char **) xrealloc (files, sizeof (char *) * files_size);
+	}
+      if (psymtab->filename)
+	{
+	  if (!len || !strncmp (pathname, psymtab->filename, len)
+	      || !strcmp (psymtab->filename, basename (psymtab->filename)))
+	    {
+	      files[numfiles++] = basename (psymtab->filename);
+	    }
+	}
+    }
 
   ALL_SYMTABS (objfile, symtab)
-  {
-    if (numfiles == files_size)
-      {
-	files_size = files_size * 2;
-	files = (char **) xrealloc (files, sizeof (char *) * files_size);
-      }
-    if (symtab->filename && symtab->linetable && symtab->linetable->nitems)
-      {
-	if (!len || !strncmp (pathname, symtab->filename, len)
-	    || !strcmp (symtab->filename, basename (symtab->filename)))
-	  {
-	    files[numfiles++] = basename (symtab->filename);
-	  }
-      }
-  }
+    {
+      if (numfiles == files_size)
+	{
+	  files_size = files_size * 2;
+	  files = (char **) xrealloc (files, sizeof (char *) * files_size);
+	}
+      if (symtab->filename && symtab->linetable && symtab->linetable->nitems)
+	{
+	  if (!len || !strncmp (pathname, symtab->filename, len)
+	      || !strcmp (symtab->filename, basename (symtab->filename)))
+	    {
+	      files[numfiles++] = basename (symtab->filename);
+	    }
+	}
+    }
 
   qsort (files, numfiles, sizeof (char *), comp_files);
 
@@ -1237,8 +1184,7 @@ gdb_listfiles (clientData, interp, objc, objv)
 }
 
 static int
-comp_files (file1, file2)
-     const void *file1, *file2;
+comp_files (const void *file1, const void *file2)
 {
   return strcmp (*(char **) file1, *(char **) file2);
 }
@@ -1247,25 +1193,22 @@ comp_files (file1, file2)
 /* This implements the tcl command "gdb_search"
 
 
- * Tcl Arguments:
- *    option - One of "functions", "variables" or "types"
- *    regexp - The regular expression to look for.
- * Then, optionally:
- *    -files fileList
- *    -static 1/0
- *    -filename 1/0
- * Tcl Result:
- *    A list of all the matches found.  Optionally, if -filename is set to 1,
- *    then the output is a list of two element lists, with the symbol first,
- *    and the file in which it is found second.
- */
+* Tcl Arguments:
+*    option - One of "functions", "variables" or "types"
+*    regexp - The regular expression to look for.
+* Then, optionally:
+*    -files fileList
+*    -static 1/0
+*    -filename 1/0
+* Tcl Result:
+*    A list of all the matches found.  Optionally, if -filename is set to 1,
+*    then the output is a list of two element lists, with the symbol first,
+*    and the file in which it is found second.
+*/
 
 static int
-gdb_search (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_search (ClientData clientData, Tcl_Interp *interp,
+	    int objc, Tcl_Obj *CONST objv[])
 {
   struct symbol_search *ss = NULL;
   struct symbol_search *p;
@@ -1278,9 +1221,9 @@ gdb_search (clientData, interp, objc, objv)
   Tcl_Obj **file_list;
   char **files;
   static char *search_options[] =
-  {"functions", "variables", "types", (char *) NULL};
+    {"functions", "variables", "types", (char *) NULL};
   static char *switches[] =
-  {"-files", "-filename", "-static", (char *) NULL};
+    {"-files", "-filename", "-static", (char *) NULL};
   enum search_opts
     {
       SEARCH_FUNCTIONS, SEARCH_VARIABLES, SEARCH_TYPES
@@ -1423,10 +1366,10 @@ gdb_search (clientData, interp, objc, objv)
 
 	  if (p->msymbol == NULL)
 	    Tcl_ListObjAppendElement (interp, elem,
-		     Tcl_NewStringObj (SYMBOL_SOURCE_NAME (p->symbol), -1));
+				      Tcl_NewStringObj (SYMBOL_SOURCE_NAME (p->symbol), -1));
 	  else
 	    Tcl_ListObjAppendElement (interp, elem,
-		    Tcl_NewStringObj (SYMBOL_SOURCE_NAME (p->msymbol), -1));
+				      Tcl_NewStringObj (SYMBOL_SOURCE_NAME (p->msymbol), -1));
 
 	  if (show_files)
 	    {
@@ -1454,15 +1397,15 @@ gdb_search (clientData, interp, objc, objv)
 
 /* This implements the tcl command gdb_listfuncs
 
- * It lists all the functions defined in a given file
- * 
- * Arguments:
- *    file - the file to look in
- * Tcl Result:
- *    A list of two element lists, the first element is
- *    the symbol name, and the second is a boolean indicating
- *    whether the symbol is demangled (1 for yes).
- */
+* It lists all the functions defined in a given file
+* 
+* Arguments:
+*    file - the file to look in
+* Tcl Result:
+*    A list of two element lists, the first element is
+*    the symbol name, and the second is a boolean indicating
+*    whether the symbol is demangled (1 for yes).
+*/
 
 static int
 gdb_listfuncs (clientData, interp, objc, objv)
@@ -1488,7 +1431,7 @@ gdb_listfuncs (clientData, interp, objc, objv)
   if (!symtab)
     {
       gdbtk_set_result (interp, "No such file (%s)", 
-		  Tcl_GetStringFromObj (objv[1], NULL));
+			Tcl_GetStringFromObj (objv[1], NULL));
       return TCL_ERROR;
     }
   
@@ -1554,14 +1497,11 @@ gdb_listfuncs (clientData, interp, objc, objv)
    fputs hook out of the way to specially trap output, and if
    we get an error which we weren't expecting, it won't get put
    back, so we run this at idle time as insurance.
- */
+*/
 
 static int
-gdb_restore_fputs (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_restore_fputs (ClientData clientData, Tcl_Interp *interp,
+		   int objc, Tcl_Obj *CONST objv[])
 {
   gdbtk_disable_fputs = 0;
   return TCL_OK;
@@ -1586,11 +1526,8 @@ gdb_restore_fputs (clientData, interp, objc, objv)
  */
 
 static int
-gdb_disassemble (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_disassemble (ClientData clientData, Tcl_Interp *interp,
+		 int objc, Tcl_Obj *CONST objv[])
 {
   CORE_ADDR low, high;
   char *arg_ptr;
@@ -1621,7 +1558,7 @@ gdb_disassemble (clientData, interp, objc, objv)
     high = string_to_core_addr (Tcl_GetStringFromObj (objv[3], NULL));
 
   return gdb_disassemble_driver (low, high, mixed_source_and_assembly, NULL,
-			  gdbtk_print_source, gdbtk_print_asm);
+				 gdbtk_print_source, gdbtk_print_asm);
 
 }
 
@@ -1686,11 +1623,11 @@ gdb_load_disassembly (ClientData clientData, Tcl_Interp *interp,
   /* As we populate the text widget, we will also create an array in the
      caller's scope.  The name is given by objv[3].
      Each source line gets an entry or the form:
-         array($prefix,srcline=$src_line_no) = $widget_line_no
+     array($prefix,srcline=$src_line_no) = $widget_line_no
 
      Each assembly line gets two entries of the form:
-         array($prefix,pc=$pc) = $widget_line_no
-         array($prefix,line=$widget_line_no) = $src_line_no
+     array($prefix,pc=$pc) = $widget_line_no
+     array($prefix,line=$widget_line_no) = $src_line_no
 
      Where prefix is objv[4].
   */
@@ -1703,10 +1640,11 @@ gdb_load_disassembly (ClientData clientData, Tcl_Interp *interp,
       int prefix_len;
       
       client_data.map_arr = "map_array";
-      if (Tcl_UpVar (interp, "1", map_name, client_data.map_arr, 0) != TCL_OK) {
-	gdbtk_set_result (interp, "Can't link map array.");
-	return TCL_ERROR;
-      }
+      if (Tcl_UpVar (interp, "1", map_name, client_data.map_arr, 0) != TCL_OK)
+	{
+	  gdbtk_set_result (interp, "Can't link map array.");
+	  return TCL_ERROR;
+	}
 
       prefix = Tcl_GetStringFromObj (objv[4], &prefix_len);
       
@@ -1714,7 +1652,7 @@ gdb_load_disassembly (ClientData clientData, Tcl_Interp *interp,
       Tcl_DStringAppend (&client_data.src_to_line_prefix,
 			 prefix, prefix_len);
       Tcl_DStringAppend (&client_data.src_to_line_prefix, ",srcline=",
-				 sizeof (",srcline=") - 1);
+			 sizeof (",srcline=") - 1);
 			      
       Tcl_DStringInit(&client_data.pc_to_line_prefix);
       Tcl_DStringAppend (&client_data.pc_to_line_prefix,
@@ -1788,14 +1726,14 @@ gdb_load_disassembly (ClientData clientData, Tcl_Interp *interp,
     }
   
   ret_val = gdb_disassemble_driver (low, high, mixed_source_and_assembly, 
-			  (ClientData) &client_data,
-			  gdbtk_load_source, gdbtk_load_asm);
+				    (ClientData) &client_data,
+				    gdbtk_load_source, gdbtk_load_asm);
 
   /* Now clean up the opened file, and the Tcl data structures */
   
-  if (client_data.file_opened_p == 1) {
+  if (client_data.file_opened_p == 1) 
     fclose(client_data.fp);
-  }
+  
   if (*client_data.map_arr != '\0')
     {
       Tcl_DStringFree(&client_data.src_to_line_prefix);
@@ -1811,29 +1749,28 @@ gdb_load_disassembly (ClientData clientData, Tcl_Interp *interp,
   /* Finally, if we were successful, stick the low & high addresses
      into the Tcl result. */
 
-  if (ret_val == TCL_OK) {
-    char *buffer;
-    Tcl_Obj *limits_obj[2];
-
-    xasprintf (&buffer, "0x%s", paddr_nz (low));
-    limits_obj[0] = Tcl_NewStringObj (buffer, -1);
-    free(buffer);
-    
-    xasprintf (&buffer, "0x%s", paddr_nz (high));
-    limits_obj[1] = Tcl_NewStringObj (buffer, -1);
-    free(buffer);
-
-    Tcl_DecrRefCount (result_ptr->obj_ptr);
-    result_ptr->obj_ptr = Tcl_NewListObj (2, limits_obj);
-    
-  }
+  if (ret_val == TCL_OK) 
+    {
+      char *buffer;
+      Tcl_Obj *limits_obj[2];
+      
+      xasprintf (&buffer, "0x%s", paddr_nz (low));
+      limits_obj[0] = Tcl_NewStringObj (buffer, -1);
+      free(buffer);
+      
+      xasprintf (&buffer, "0x%s", paddr_nz (high));
+      limits_obj[1] = Tcl_NewStringObj (buffer, -1);
+      free(buffer);
+      
+      Tcl_DecrRefCount (result_ptr->obj_ptr);
+      result_ptr->obj_ptr = Tcl_NewListObj (2, limits_obj);
+    }
   return ret_val;
-
 }
 
 static void
-gdbtk_load_source (ClientData clientData, struct symtab *symtab, int
-		      start_line, int end_line)
+gdbtk_load_source (ClientData clientData, struct symtab *symtab, 
+		   int start_line, int end_line)
 {
   struct disassembly_client_data *client_data =
     (struct disassembly_client_data *) clientData;
@@ -1885,18 +1822,18 @@ gdbtk_load_source (ClientData clientData, struct symtab *symtab, int
 	  
 	  sprintf (line_number + 1, "%d", start_line);
 	  
-	  if (found_carriage_return) {
-	    char *p;
-	    
-	    p = strrchr(line, '\0') - 2;
-	    if (*p == '\r') {
-	      *p = '\n';
-	      *(p + 1) = '\0';
-	    } else {
-	      found_carriage_return = 0;
+	  if (found_carriage_return)
+	    {
+	      char *p = strrchr(line, '\0') - 2;
+	      if (*p == '\r')
+		{
+		  *p = '\n';
+		  *(p + 1) = '\0';
+		}
+	      else 
+		found_carriage_return = 0;
 	    }
-	  }
-
+	  
 	  /* Run the command, then add an entry to the map array in
 	     the caller's scope, if requested. */
 	  
@@ -1912,12 +1849,12 @@ gdbtk_load_source (ClientData clientData, struct symtab *symtab, int
 	      /* FIXME: Convert to Tcl_SetVar2Ex when we move to 8.2.  This
 		 will allow us avoid converting widget_line_no into a string. */
 	      
-            xasprintf (&buffer, "%d", client_data->widget_line_no);
+	      xasprintf (&buffer, "%d", client_data->widget_line_no);
 	      
 	      Tcl_SetVar2 (client_data->interp, client_data->map_arr,
 			   Tcl_DStringValue (&client_data->src_to_line_prefix),
 			   buffer, 0);
-            free(buffer);
+	      free(buffer);
 	      
 	      Tcl_DStringSetLength (&client_data->src_to_line_prefix, index_len);
 	    }
@@ -1956,20 +1893,17 @@ gdbtk_load_source (ClientData clientData, struct symtab *symtab, int
 	  gdbtk_load_source (clientData, symtab, start_line, end_line);
 	}
     }
-  else {
-    /* If we couldn't open the file, or got some prior error, just exit. */
-    
-    return;
-  }
-
+  else 
+    {
+      /* If we couldn't open the file, or got some prior error, just exit. */
+      return;
+    }
 }
 
 
 static CORE_ADDR
-gdbtk_load_asm (clientData, pc, di)
-     ClientData clientData;
-     CORE_ADDR pc;
-     struct disassemble_info *di;
+gdbtk_load_asm (ClientData clientData, CORE_ADDR pc, 
+		struct disassemble_info *di)
 {
   struct disassembly_client_data * client_data
     = (struct disassembly_client_data *) clientData;
@@ -2015,7 +1949,7 @@ gdbtk_load_asm (clientData, pc, di)
   text_argv[11] = Tcl_GetStringFromObj (client_data->result_obj[2], NULL);
 
   client_data->cmd.proc (client_data->cmd.clientData, 
-				     client_data->interp, 14, text_argv);
+			 client_data->interp, 14, text_argv);
 
   if (*client_data->map_arr != '\0')
     {
@@ -2055,21 +1989,16 @@ gdbtk_load_asm (clientData, pc, di)
 }
 
 static void
-gdbtk_print_source (clientData, symtab, start_line, end_line)
-     ClientData clientData;
-     struct symtab *symtab;
-     int start_line;
-     int end_line;
+gdbtk_print_source (ClientData clientData, struct symtab *symtab,
+		    int start_line, int end_line)
 {
   print_source_lines (symtab, start_line, end_line, 0);
   gdb_flush (gdb_stdout);
 }
 
 static CORE_ADDR
-gdbtk_print_asm (clientData, pc, di)
-     ClientData clientData;
-     CORE_ADDR pc;
-     struct disassemble_info *di;
+gdbtk_print_asm (ClientData clientData, CORE_ADDR pc,
+		 struct disassemble_info *di)
 {
   fputs_unfiltered ("    ", gdb_stdout);
   print_address (pc, gdb_stdout);
@@ -2081,15 +2010,11 @@ gdbtk_print_asm (clientData, pc, di)
 }
 
 static int
-gdb_disassemble_driver (low, high, mixed_source_and_assembly,
-			clientData, print_source_fn, print_asm_fn)
-     CORE_ADDR low;
-     CORE_ADDR high;
-     int mixed_source_and_assembly;
-     ClientData clientData; 
-     void (*print_source_fn) (ClientData, struct symtab *, int, int);
-     CORE_ADDR (*print_asm_fn) (ClientData, CORE_ADDR,
-				struct disassemble_info *);
+gdb_disassemble_driver (CORE_ADDR low, CORE_ADDR high, 
+			int mixed_source_and_assembly,
+			ClientData clientData, 
+			void (*print_source_fn) (ClientData, struct symtab *, int, int),
+			CORE_ADDR (*print_asm_fn) (ClientData, CORE_ADDR, struct disassemble_info *))
 {
   CORE_ADDR pc;
   static disassemble_info di;
@@ -2131,7 +2056,7 @@ gdb_disassemble_driver (low, high, mixed_source_and_assembly,
      determine where to disassemble from.  There should be a target vector
      entry for this or something.
      
-   */
+  */
 
   if (disassemble_from_exec == -1)
     {
@@ -2292,11 +2217,8 @@ gdb_disassemble_driver (low, high, mixed_source_and_assembly,
    disassembling from the exec file. */
 
 static int
-gdbtk_dis_asm_read_memory (memaddr, myaddr, len, info)
-     bfd_vma memaddr;
-     bfd_byte *myaddr;
-     unsigned int len;
-     disassemble_info *info;
+gdbtk_dis_asm_read_memory (bfd_vma memaddr, bfd_byte *myaddr,
+			   unsigned int len, disassemble_info *info)
 {
   extern struct target_ops exec_ops;
   int res;
@@ -2315,9 +2237,7 @@ gdbtk_dis_asm_read_memory (memaddr, myaddr, len, info)
 /* This will be passed to qsort to sort the results of the disassembly */
 
 static int
-compare_lines (mle1p, mle2p)
-     const PTR mle1p;
-     const PTR mle2p;
+compare_lines (const PTR mle1p, const PTR mle2p)
 {
   struct my_line_entry *mle1, *mle2;
   int val;
@@ -2335,12 +2255,12 @@ compare_lines (mle1p, mle2p)
 
 /* This implements the TCL command `gdb_loc',
 
- * Arguments:
- *    ?symbol? The symbol or address to locate - defaults to pc
- * Tcl Return:
- *    a list consisting of the following:                                  
- *       basename, function name, filename, line number, address, current pc
- */
+* Arguments:
+*    ?symbol? The symbol or address to locate - defaults to pc
+* Tcl Return:
+*    a list consisting of the following:                                  
+*       basename, function name, filename, line number, address, current pc
+*/
 
 static int
 gdb_loc (ClientData clientData, Tcl_Interp *interp, int objc, Tcl_Obj *CONST objv[])
@@ -2439,11 +2359,8 @@ gdb_loc (ClientData clientData, Tcl_Interp *interp, int objc, Tcl_Obj *CONST obj
    entry point address.  */
 
 static int
-gdb_entry_point (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_entry_point (ClientData clientData, Tcl_Interp *interp,
+		 int objc, Tcl_Obj *CONST objv[])
 {
   char *addrstr;
 
@@ -2519,11 +2436,8 @@ hex2bin (const char *hex, char *bin, int count)
  *   len:    number of bytes of data to set
  */
 static int
-gdb_set_mem (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_set_mem (ClientData clientData, Tcl_Interp *interp,
+	     int objc, Tcl_Obj *CONST objv[])
 {
   CORE_ADDR addr;
   char buf[128];
@@ -2813,9 +2727,9 @@ gdb_loadfile (ClientData clientData, Tcl_Interp *interp, int objc,
     }
 
   if (symtab && symtab->objfile && symtab->objfile->obfd)
-      mtime = bfd_get_mtime(symtab->objfile->obfd);
+    mtime = bfd_get_mtime(symtab->objfile->obfd);
   else if (exec_bfd)
-      mtime = bfd_get_mtime(exec_bfd);
+    mtime = bfd_get_mtime(exec_bfd);
  
   if (mtime && mtime < st.st_mtime)
     {
@@ -2892,15 +2806,14 @@ gdb_loadfile (ClientData clientData, Tcl_Interp *interp, int objc,
 	  
 	  if (found_carriage_return)
 	    {
-	      char *p;
-	      
-	      p = strrchr(line, '\0') - 2;
-	      if (*p == '\r') {
-		*p = '\n';
-		*(p + 1) = '\0';
-	      } else {
+	      char *p = strrchr(line, '\0') - 2;
+	      if (*p == '\r')
+		{
+		  *p = '\n';
+		  *(p + 1) = '\0';
+		} 
+	      else 
 		found_carriage_return = 0;
-	      }
 	    }
 	  
           sprintf (line_num_buf+2, "%d", ln);
@@ -2925,17 +2838,17 @@ gdb_loadfile (ClientData clientData, Tcl_Interp *interp, int objc,
             
       while (fgets (line + 1, 9980, fp))
         {
-	  if (found_carriage_return) {
-	    char *p;
-	    
-	    p = strrchr(line, '\0') - 2;
-	    if (*p == '\r') {
-	      *p = '\n';
-	      *(p + 1) = '\0';
-	    } else {
-	      found_carriage_return = 0;
+	  if (found_carriage_return)
+	    {
+	      char *p = strrchr(line, '\0') - 2;
+	      if (*p == '\r')
+		{
+		  *p = '\n';
+		  *(p + 1) = '\0';
+		} 
+	      else
+		found_carriage_return = 0;
 	    }
-	  }
 
           if (ltable[ln >> 3] & (1 << (ln % 8)))
             {
@@ -2964,21 +2877,18 @@ gdb_loadfile (ClientData clientData, Tcl_Interp *interp, int objc,
 
 /* This implements the tcl command gdb_path_conv
 
- * On Windows, it canonicalizes the pathname,
- * On Unix, it is a no op.
- *
- * Arguments:
- *    path
- * Tcl Result:
- *    The canonicalized path.
- */
+* On Windows, it canonicalizes the pathname,
+* On Unix, it is a no op.
+*
+* Arguments:
+*    path
+* Tcl Result:
+*    The canonicalized path.
+*/
 
 static int
-gdb_path_conv (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_path_conv (ClientData clientData, Tcl_Interp *interp,
+	       int objc, Tcl_Obj *CONST objv[])
 {
   if (objc != 2)
     {
@@ -3012,8 +2922,7 @@ gdb_path_conv (clientData, interp, objc, objv)
  */
 
 static int
-perror_with_name_wrapper (args)
-     PTR args;
+perror_with_name_wrapper (PTR args)
 {
   perror_with_name (args);
   return 1;
@@ -3025,8 +2934,7 @@ perror_with_name_wrapper (args)
    If no symbol is found, it returns an empty string. In either
    case, memory is owned by gdb. Do not attempt to free it. */
 char *
-pc_function_name (pc)
-     CORE_ADDR pc;
+pc_function_name (CORE_ADDR pc)
 {
   struct symbol *sym;
   char *funcname = NULL;
