@@ -335,9 +335,9 @@ itcl::body  VarTree::_but3 {x y X Y} {
   $pop add command -label "Delete" -command [code $this remove $var]
   $pop add separator
   if {$type == "local"} {
-    $pop add command -label "Help" -command "HtmlViewer::open_help watch.html"
+    $pop add command -label "Help" -command "open_help watch.html"
   } else {
-    $pop add command -label "Help" -command "HtmlViewer::open_help locals.html"
+    $pop add command -label "Help" -command "open_help locals.html"
   }
   $pop add separator
   $pop add command -label "Close" -command "destroy [winfo toplevel $itk_interior]"
@@ -356,9 +356,9 @@ itcl::body  VarTree::_do_default_menu {X Y} {
   $pop add separator
   $pop add command -label "Sort" -command [code $this _sort]
   if {$type == "local"} {
-    $pop add command -label "Help" -command "HtmlViewer::open_help watch.html"
+    $pop add command -label "Help" -command "open_help watch.html"
   } else {
-    $pop add command -label "Help" -command "HtmlViewer::open_help locals.html"
+    $pop add command -label "Help" -command "open_help locals.html"
   }
   $pop add separator
   $pop add command -label "Close" -command "destroy [winfo toplevel $itk_interior]"

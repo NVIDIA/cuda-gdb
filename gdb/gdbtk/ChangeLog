@@ -1,8 +1,24 @@
+2002-11-11  Martin M. Hunt  <hunt@redhat.com>	
+
+	* library/helpviewer.tcl: New file. Finds
+	an appropriate help browser and displays the help files.
+
+	* library/vartree.itb: Fix open_help calls.
+	
+	* library/helpviewer.ith: Deleted.
+	* library/helpviewer.itb: Deleted.
+	
+	* library/prefs.tcl (pref_set_defaults): Remove 
+	pref gdb/help/browser. Add pref gdb/help/browsername.  
+	We couldn't simply rename because it would break older 
+	versions of Insight that expect gdb/help/browser to be 
+	a number.
+
 2002-11-08  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/prefs.tcl (pref_save): Fix GDBtkInitVersion.
 	(pref_save): Check that value is not null before writing.
-
+	
 2002-11-07  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/util.tcl (CygScrolledListbox): Delete.

@@ -385,7 +385,7 @@ proc pref_set_defaults {} {
   pref define gdb/bp/show_threads         0
 
   # Help
-  pref define gdb/help/browser		  0
+  pref define gdb/help/browsername	""
 
   # Kernel Objects (kod)
   pref define gdb/kod/show_icon           0
