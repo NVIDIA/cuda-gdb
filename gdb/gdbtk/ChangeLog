@@ -1,5 +1,10 @@
 2001-01-28  Fernando Nasser  <fnasser@redhat.com>
 
+	* library/gdbmenubar.itcl (menu_list): Add missing declararion for
+	global variable.
+
+2001-01-28  Fernando Nasser  <fnasser@redhat.com>
+
 	* library/gdbmenubar.itcl (set_class_state): Turn off verbose debug
 	messages.
 	* library/gdbtoolbar.itcl (set_class_state): Ditto.

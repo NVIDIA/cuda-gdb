@@ -222,6 +222,9 @@ class GDBMenuBar {
   # and the value is the list of menus belonging to this class.
   private variable menu_classes
 
+  # This array holds the pathname that corresponds to a menu name
+  private variable menu_list
+
   private variable item_number -1
   private variable current_menu {}
 
