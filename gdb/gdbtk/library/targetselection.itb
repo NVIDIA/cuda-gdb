@@ -93,7 +93,7 @@ body TargetSelection::init_target_db {} {
   # Remote
   set gdb_target(remote,pretty-name) "Remote/Serial"
   set gdb_target(remote,defbaud) "9600"
-  set gdb_target(remote,baud-rates) {9600 19200 38400 57600}
+  set gdb_target(remote,baud-rates) {9600 19200 38400 57600 115200}
   set gdb_target(remote,cmd) "remote com1"
   set gdb_target(remote,runlist) {1 1 0 1}
   set gdb_target(remote,after_attaching) {}

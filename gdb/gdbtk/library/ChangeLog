@@ -1,5 +1,10 @@
 2000-08-10  Fernando Nasser  <fnasser@cygnus.com>
 
+	* targetselection.itb (init_target_db): Add 115200 baud option to
+	target remote.
+
+2000-08-10  Fernando Nasser  <fnasser@cygnus.com>
+
 	* targetselection.itb (change_baud): Don't set baud for ETX.
 
 2000-08-10  Fernando Nasser  <fnasser@cygnus.com>
