@@ -54,7 +54,7 @@ proc pref_read {} {
     set file_opened 0
     if {[file exists $prefs_init_filename]} {
       if {[catch {open $prefs_init_filename r} fd]} {
-	debug "$fd"
+	dbug E "$fd"
 	return
       }
       set file_opened 1
@@ -62,7 +62,7 @@ proc pref_read {} {
       set name [file join $home $prefs_init_filename]
       if {[file exists $name]} {
 	if {[catch {open $name r} fd]} {
-	  debug "$fd"
+	  dbug E "$fd"
 	  return
 	}
 	set prefs_init_filename $name
@@ -98,28 +98,35 @@ proc pref_read {} {
 	  }
 
 	  default {
+	    set a ""
+	    set name ""
+	    set val ""
 	    regexp "\[ \t\n\]*\(.+\)=\(.+\)" $line a name val
-	    # Must unescape equal signs in val
-	    set val [unescape_value $val $version]
-	    if {$section == "gdb"} {
-	      pref setd gdb/$name $val
-	    } elseif {$section == "global" && [regexp "^font/" $name]} {
-	      set name [split $name /]
-	      set f global/
-	      append f [join [lrange $name 1 end] /]
-	      if {[lsearch [font names] $f] == -1} {
-		# new font
-		eval define_font $f $val
-	      } else {
-		# existing font
-		pref set global/font/[join [lrange $name 1 end] /] $val
-	      }
-	    } elseif {$section == "global"} {
-	      pref setd $section/$name $val
+	    if {$a == "" || $name == ""} {
+	      dbug W "Cannot parse line: $line"
 	    } else {
-	      # backwards compatibility. recognize old src-font name
-	      if {$val == "src-font"} {set val "global/fixed"}
-	      pref setd gdb/$section/$name $val
+	      # Must unescape equal signs in val
+	      set val [unescape_value $val $version]
+	      if {$section == "gdb"} {
+		pref setd gdb/$name $val
+	      } elseif {$section == "global" && [regexp "^font/" $name]} {
+		set name [split $name /]
+		set f global/
+		append f [join [lrange $name 1 end] /]
+		if {[lsearch [font names] $f] == -1} {
+		  # new font
+		  eval define_font $f $val
+		} else {
+		  # existing font
+		  pref set global/font/[join [lrange $name 1 end] /] $val
+		}
+	      } elseif {$section == "global"} {
+		pref setd $section/$name $val
+	      } else {
+		# backwards compatibility. recognize old src-font name
+		if {$val == "src-font"} {set val "global/fixed"}
+		pref setd gdb/$section/$name $val
+	      }
 	    }
 	  }
 	}

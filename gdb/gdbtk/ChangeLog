@@ -1,3 +1,8 @@
+2002-05-31  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/prefs.tcl (pref_read): If the regular expression
+	cannot parse line, print debug message and skip it.
+
 2002-05-15  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/help/register.html: Rewrite docs.
