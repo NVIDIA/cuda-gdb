@@ -42,7 +42,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.42 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.43 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3103,6 +3103,13 @@ Returns non-zero if stack address @var{lhs} is inner than (nearer to the
 stack top) stack address @var{rhs}. Define this as @code{lhs < rhs} if
 the target's stack grows downward in memory, or @code{lhs > rsh} if the
 stack grows upward.
+
+@item gdbarch_in_function_epilogue_p (@var{gdbarch}, @var{pc})
+@findex gdbarch_in_function_epilogue_p
+Returns non-zero if the given @var{pc} is in the epilogue of a function.
+The epilogue of a function is defined as the part of a function where
+the stack frame of the function already has been destroyed up to the
+final `return from function call' instruction.
 
 @item IN_SIGTRAMP (@var{pc}, @var{name})
 @findex IN_SIGTRAMP
