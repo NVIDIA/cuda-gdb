@@ -158,9 +158,11 @@ gdb_regnames (clientData, interp, objc, objv)
     {
       char *s = Tcl_GetStringFromObj (objv[0], NULL);
       if (STREQ (s, "-numbers"))
-	numbers = 1;
-      objc--;
-      objv++;
+	{
+	  numbers = 1;
+	  objc--;
+	  objv++;
+	}
     }
 
   return map_arg_registers (objc, objv, get_register_name, &numbers);
