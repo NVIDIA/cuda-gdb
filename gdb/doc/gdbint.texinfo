@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.59 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.60 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3479,12 +3479,6 @@ current sources.)
 The ordering of bytes in the target.  This must be either
 @code{BFD_ENDIAN_BIG} or @code{BFD_ENDIAN_LITTLE}.  This macro replaces
 @code{TARGET_BYTE_ORDER} which is deprecated.
-
-@item TARGET_BYTE_ORDER_SELECTABLE_P
-@findex TARGET_BYTE_ORDER_SELECTABLE_P
-Non-zero if the target has both @code{BIG_ENDIAN} and
-@code{BFD_ENDIAN_LITTLE} variants.  This macro replaces
-@code{TARGET_BYTE_ORDER_SELECTABLE} which is deprecated.
 
 @item TARGET_CHAR_BIT
 @findex TARGET_CHAR_BIT
