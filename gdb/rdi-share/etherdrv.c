@@ -8,8 +8,8 @@
 
 /* -*-C-*-
  *
- * $Revision: 1.8 $
- *     $Date: 1999/11/01 15:32:58 $
+ * $Revision: 1.9 $
+ *     $Date: 2000/01/04 15:24:18 $
  *
  *
  * etherdrv.c - Ethernet Driver for Angel.
@@ -266,9 +266,12 @@ static int open_socket(void)
 static void fetch_ports(void)
 {
     int i;
-    const char ctrlpacket[] = CTRL_MAGIC;
-        CtrlResponse response;
+    char ctrlpacket[10];
+    CtrlResponse response;
 
+    memset (ctrlpacket, 0, 10);
+    strcpy (ctrlpacket, CTRL_MAGIC);
+    memset (response, 0, sizeof(CtrlResponse));
     /*
      * we will try 3 times to elicit a response from the target
      */

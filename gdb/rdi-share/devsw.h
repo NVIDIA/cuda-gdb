@@ -8,8 +8,8 @@
 
 /* -*-C-*-
  *
- * $Revision: 1.3 $
- *     $Date: 1999/11/01 12:11:37 $
+ * $Revision: 1.4 $
+ *     $Date: 2000/01/04 14:49:02 $
  *
  */
 #ifndef angsd_devsw_h
@@ -160,7 +160,7 @@ AdpErrs DevSW_Match(const DeviceDescr *device, const char *name,
  *          OK: adp_ok
  *       Error: adp_device_not_open
  */
-AdpErrs DevSW_Close(const DeviceDescr *device, const DevChanID type);
+AdpErrs DevSW_Close(DeviceDescr *device, const DevChanID type);
 
 /*
  *  Function: DevSW_Read
