@@ -1,5 +1,5 @@
 # Interface between GDB and Insight.
-# Copyright 1997, 1998, 1999, 2001, 2002 Red Hat, Inc.
+# Copyright 1997, 1998, 1999, 2001, 2002, 2004 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -418,7 +418,7 @@ proc gdbtk_tcl_fputs {message} {
   # Restore the fputs hook, in case anyone forgot to put it back...
   gdb_restore_fputs
 
-  if {$gdbtk_state(console) != ""} {
+  if {[info exists gdbtk_state(console)] &&   $gdbtk_state(console) != ""} {
     $gdbtk_state(console) insert $message
   }
 }
@@ -434,7 +434,7 @@ proc echo {args} {
 # PROC: gdbtk_tcl_fputs_error - write an error message
 # ------------------------------------------------------------------
 proc gdbtk_tcl_fputs_error {message} {
-  if {$::gdbtk_state(console) != ""} {
+  if {[info exists gdbtk_state(console)] && $::gdbtk_state(console) != ""} {
     $::gdbtk_state(console) insert $message err_tag
     update
   }
@@ -444,7 +444,7 @@ proc gdbtk_tcl_fputs_error {message} {
 # PROC: gdbtk_tcl_fputs_log - write a log message
 # ------------------------------------------------------------------
 proc gdbtk_tcl_fputs_log {message} {
-  if {$::gdbtk_state(console) != ""} {
+  if {[info exists gdbtk_state(console)] && $::gdbtk_state(console) != ""} {
     $::gdbtk_state(console) insert $message log_tag
     update
   }
@@ -1512,7 +1512,7 @@ proc gdbtk_stop {} {
 
   if {$_gdbtk_stop(timer) == ""} {
     add_hook gdb_idle_hook gdbtk_stop_idle_callback
-    set _gdbtk_stop(timer) [after 3000 gdbtk_detach]
+    set _gdbtk_stop(timer) [after 15000 gdbtk_detach]
     catch {gdb_stop}
   }
 }
