@@ -1,3 +1,10 @@
+2000-04-01  Jim Blandy  <jimb@redhat.com>
+
+	* gdbtk-hooks.c (gdbtk_restore_result_ptr): New function.
+	* gdbtk.h (gdbtk_restore_result_ptr): Declare it.
+	* gdbtk-cmds.c (gdbtk_load_asm): Use it to restore the old value
+	of result_ptr, in case we get errors while disassembling things.
+
 2000-03-28  Jim Blandy  <jimb@redhat.com>
 
 	Handle the fact that there are holes in the register numbering.
