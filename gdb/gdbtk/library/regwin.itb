@@ -635,8 +635,7 @@ itcl::body RegWin::_but3 {x y X Y} {
       # Help
       $itk_component(popup) add separator
       $itk_component(popup) add command    \
-	-label "Help" \
-	-command {ManagedWin::open HtmlViewer -force -file register.html}
+	-label "Help" -command {open_help register.html}
 
       tk_popup $itk_component(popup) $X $Y
     }
@@ -1122,17 +1121,31 @@ itcl::body RegWin::update {event} {
     set _change_list $changed
   }
 
+  # Problem: if the register was invalid (i.e, we were not running),
+  # its old value will probably be "0x0". Now if we run and its real
+  # value is "0x0", then it will appear as a blank in the register
+  # window. Safegaurd against that here by adding any such register
+  # which is not already in the change list.
+  foreach r $_reg_display_list {
+    if {$_data($_cell($r)) == "" && [lsearch $_change_list $r] == -1} {
+      lappend _change_list $r
+    }
+  }
+
   # Tag the changed cells and resize the columns
   set cols {}
   foreach r $_change_list {
     _update_register $r
-    $itk_component(table) tag cell highlight $_cell($r)
+
+    if {$_data($_cell($r)) != ""} {
+      $itk_component(table) tag cell highlight $_cell($r)
+    }
     set col [lindex [split $_cell($r) ,] 1]
     if {[lsearch $cols $col] == -1} {
       lappend cols $col
     }
   }
-
+  
   foreach col $cols {
     set col [string trim $col ()]
     _size_column $col 0

@@ -1,5 +1,17 @@
+2002-12-05  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/regwin.itb (update): Revert previous patch to this
+	function. But also don't tag blank cells.
+	(_but3): Fix help call.
+
 2002-12-04  Martin M. Hunt  <hunt@redhat.com>
 
+	* library/regwin.itb (_but3): Fix help call. 
+
+	* library/helpviewer.tcl (open_help): Fix KDE apps list.
+
+	* library/debugwin.itb (build_win): Fix help call.
+	
 	* library/regwin.itb (update): Remove some old code
 	that marked registers as changed when the target started.
 	(_build_win): Make changed registers more visible by
