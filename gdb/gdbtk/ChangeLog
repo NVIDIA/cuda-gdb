@@ -1,5 +1,10 @@
 2002-08-14  Keith Seitz  <keiths@redhat.com>
 
+	* README.GDBTK: Updated and renamed to README.
+	* README: "New" file.
+
+2002-08-14  Keith Seitz  <keiths@redhat.com>
+
 	* library/srcbar.itcl (create_plugin_menu): Deal with
 	multi plugin directories.
 	Catch any errors that might occur reading plugin.tcl.

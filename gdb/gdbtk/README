@@ -2,14 +2,15 @@
 			   Written by Stu Grossman
 	      Updated 9/26/95 by Fred Fish for gdb 4.15 release
               Updated 4/18/97 by Martin Hunt
+	      Updated 8/14/02 by Keith Seitz
 
-This file describes how to build, install, use and hack on GDBtk, a TK based
-GUI for GDB, the GNU debugger.
+This file describes how to build, install, use and hack on Insight (formerly
+GDBtk), a TK-based GUI for GDB, the GNU debugger.
 
 Introduction
 ============
 
-GDBtk is a version of GDB that uses Tcl/Tk to implement a graphical
+Insight is a version of GDB that uses Tcl/Tk to implement a graphical
 user inter-face.  It is a fully integrated GUI, not a separate
 front-end program.  The interface consists of several separate
 windows, which use standard elements like buttons, scrollbars, entry
@@ -19,95 +20,161 @@ individually.  The windows contain things like the current source
 file, a disassembly of the current function, text commands (for things
 that aren't accessible via a button), and so forth.
 
-Building and installing
+Building and Installing
 =======================
 
-Building GDBtk is very straightforward.  The main difference is that you will
-need to use the `--enable-gdbtk' option when you run configure in the top level
-directory.  You will also need to install Tcl version 7.6 and Tk version 4.2.
+Building Insight is very straightforward.  It is configured/built by
+default when you checkout or download Insight. Right now, Insight must
+be built using the versions of Tcl, Tk, Itcl, and Tix that come with
+the sources. We're working to fix that, but it is going to take a lot
+of time. (Want to help?)
 
 On Unix machines, you will also need to have X11 (R4/R5/R6) installed 
 (this is a prerequisite to installing Tk).  
 
-For Windows, you can obtain Tcl/Tk from ftp://ftp.smli.com:/pub/tcl/win76p2.exe.
-There is a bug in this version of Tcl/tk that requires you to set the
-environmental variable TK_LIBRARY to where the tk library directory is installed.
-There is also a problem with the colors in images on 16-bit displays under
-Windows, so some icons may look strange.  
+Insight inherits much of GDB's configuration options (like where it is
+to be installed). See the GDB README file for more details on configure
+options and such for GDB.
 
-[See the GDB README file for more details on configure options and such.]
+It is recommended that Insight, like GDB, be built outside of the source
+directory in order to preserve the integrity of the source directory. This
+is very useful, for example, when building GDB/Insight for multiple hosts
+or targets.
 
 For example:
 
-	host> cd gdbtk
-	host> ./configure --enable-gdbtk
+	host> ls
+	src/
+	host> mkdir insight; cd insight
+	host> ../src/configure
 	host> make
 	host> make install
 
-Using GDBtk
-===========
+Using Insight
+=============
 
 Just run it like you would a normal GDB (in fact, it's actually called `gdb').
 If everything goes well, you should have several windows pop up.  To get going,
-hit the start button, and go exploring.
+hit the Run button, and go exploring.
 
 If you want to use GDB in command line mode, just use the -nw option.  Or, you
 can undefine the DISPLAY environment variable.
 
-In the current version, you can have up to 6 windows active at once.  They are:
+Insight comes with all your standard debugger windows, including:
 
-	1) Command
-	2) Source
-	3) Assembly
-	4) Register
-	5) Auto Command
-	6) Expression
+	o Console Window
+	o Source Window
+	o Register Window
+	o Memory Window
+	o Locals Window
+	o Watch Window
+	o Stack Window
+	o Thread/Process Window
+	o Function Browser Window
+	o Debug Window (for developers)
 
 Most windows have a similar layout consisting of a menubar, display area,
 scrollbar, status box and window-specific buttons.
 
-The menubar contains the following items:
+Source Window
+-------------
+This contains the current source file.  The margin displays line
+numbers, and has an indicator for lines that actually contain code (and
+therefore can have breakpoints as well).  When a breakpoint is set at
+that line, the indicator is replaced with a "break dot", which can be
+different colors, depending on its function and status.
 
-	File	- General file control.  Also has window close and quit buttons.
-	Options - Window specific options.
-	Window	- A menu of other windows that can be popped up or created.
-	Help	- Mostly unimplemented.
+The buttons are:
 
-The status box indicates things like the current file and function, or the
-current PC and function depending upon the window.
+Start - Put a breakpoint at main, and then run.
+Stop - Stop the program (only active when program is running).
+Step, Next, Cont[inue], Finish, Up, Down - Same as the corresponding
+      GDB command.  (Finish runs the current subroutine until it's done.)
+Bottom - Does a `frame 0' to put you at the innermost call frame.
 
-Command window:
+There are also accelerators for various buttons (just type the letter
+without any control/meta/alt/shift in the text frame):
+
+s - Step
+n - Next
+c - Continue
+f - Finish
+u - Up
+d - Down
+
+The mouse can also be used to set and clear breakpoints when clicked
+in the margin (on a breakpoint indicator).
+
+The menubar contains the following items (which may be slightly different
+for different host/target versions of Insight):
+
+	  Menu			Meaning
+	---------               --------------------
+	  File			General file control
+	     Open...		Open an executable for debugging
+	     Close		Close the current debug session
+	     Source...		Read in and source a GDB command script
+	     1 Recent1		List of most recently opened projects
+	     2 Recent2
+	     3 Recent3
+	     4 Recent4
+	     5 Recent5
+	     Print Source... 	Print the source in the Source Window
+	     Target Settings... Set various options about the target
+				(arguments, baud, etc.)
+	     Exit		Close the session and exit the debugger
+
+	  Run         		Generic running options
+	     Attach to Process  Attach to a running process
+	     Run		Do whatever is necessary to run an executable
+				in the debugger (same as Run button on toolbar)
+	     Detach		Detach from the process and end the session
+	     Kill		End the current run session
+
+	  View	      		A menu of other windows that can be popped up
+				or created
+	     Stack		Opens the Stack Window
+	     Registers		Opens the Register Window
+	     Memory		Opens the Memory Window
+	     Watch Expressions	Opens the Watch Expressions Window
+	     Local Variables	Opens the Local Variables Window
+	     Breakpoints	Opens the Breakpoints Window
+	     Console		Opens the Console Window
+	     Function Browser	Opens the Function Browser Window
+	     Thread List	Opens the Threads Window
+	     
+	  Control		Menu of commands to control the inferior
+	     Step		Step by one source line
+	     Next		Step by one source line, proceeding through
+				subroutine calls
+	     Finish		Execute until the stack frame returns
+	     Continue		Continue execution
+	     Step Asm Inst	Step by one assembler instruction
+	     Next Asm Inst	Step by one assembler instruction, proceeding
+				through subroutine calls
+
+	  PlugIn		A list of all installed (and usable) plugins
+
+	  Preferences		Change the way Insight looks or behaves
+	     Global...		Opens the Global Preferences Dialog
+	     Source...		Opens the Source Window Preferences Dialog
+
+	  Help			For online help system
+				(May be out of date -- Want to help?)
+	     Help Topics	Opens the online help system browser
+				or displays online help in internet browser
+				if Global preference set
+	     About GDB		Displays information about this version of
+				Insight/GDB
+
+The status box indicates things like the current execution status of the inferior,
+errors, and such. The current PC, line number, file name, and function are
+also displayed in the source window.
+
+Console window:
 
 	This can be used to type commands at GDB (useful for when there isn't a
 	button for what you want to do).
-
-Source window:
-
-	This contains the current source file.  The margin displays line
-	numbers, and has an indicator for lines that actually contain code (and
-	therefore can have breakpoints as well).  When a breakpoint is set at
-	that line, the indicator is replaced with a stop sign icon.
-
-	The buttons are:
-
-	Start - Put a breakpoint at main, and then run.
-	Stop - Stop the program (only active when program is running).
-	Step, Next, Cont[inue], Finish, Up, Down - Same as the corresponding
-	      GDB command.  (Finish runs the current subroutine until it's done.)
-	Bottom - Does a `frame 0' to put you at the innermost call frame.
-
-	There are also accelerators for various buttons (just type the letter
-	without any control/meta/alt/shift in the text frame):
-
-	s - Step
-	n - Next
-	c - Continue
-	f - Finish
-	u - Up
-	d - Down
-
-	The mouse can also be used to set and clear breakpoints when clicked
-	in the margin (on a breakpoint indicator).
 
 Assembly window:
 
