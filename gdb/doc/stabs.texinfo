@@ -39,7 +39,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.5 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.6 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Support\par
 \hfill \manvers\par
@@ -287,6 +287,12 @@ Indicate that this type is a string instead of an array of characters,
 or a bitstring instead of a set.  It doesn't change the layout of the
 data being represented, but does enable the debugger to know which type
 it is.
+
+@item V
+Indicate that this type is a vector instead of an array.  The only 
+major difference between vectors and arrays is that vectors are
+passed by value instead of by reference (vector coprocessor extension).
+
 @end table
 
 All of this can make the string field quite long.  All versions of GDB,
