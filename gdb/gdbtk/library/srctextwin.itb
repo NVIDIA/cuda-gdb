@@ -2310,27 +2310,39 @@ body SrcTextWin::showBPBalloon {win x y} {
   }
 
   set str ""
-  set need_lf 0
   foreach b $bps {
     set bpinfo [gdb_get_breakpoint_info $b]
     lassign $bpinfo file func linenum addr type enabled disposition \
       ignore_count commands cond thread hit_count user_specification
-    if {$thread == "-1"} {set thread "all"}
     set file [lindex [file split $file] end]
     if {$enabled} {
       set enabled "ENA"
     } else {
       set enabled "DIS"
     }
-    if {$cond == ""} {set cond "none"}
-    if {$need_lf} {
-      append str \n
-    } else {
-      set need_lf 1
+
+    append str [format "breakpoint %d at %s:%d (%#x)\n   %s %s %s" \
+		  $b $file $linenum $addr $enabled $type $disposition]
+
+    if {$thread != "-1"} {
+      append str "\n   threads: $thread"
     }
-    append str [format "breakpoint %d at %s:%d (%#x)\n\t%s %s %s %s %s" \
-		  $b $file $linenum $addr $enabled $type $disposition \
-		  threads=$thread cond=$cond]
+
+    if {$ignore_count != 0} {
+      append str "\n   ignore: $ignore_count"
+    }
+
+    if {$cond != ""} {
+      append str "\n   condition: $cond"
+    }
+
+    if {$commands != ""} {
+      if {[string length $commands] > 50} {
+	append str "\n   commands: [string range $commands 0 50] ..."
+      } else {
+	append str "\n   commands: $commands"
+      }
+    }
   }
 
   # Scope out which break type is set here, and use the tag to get

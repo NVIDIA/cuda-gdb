@@ -1,5 +1,16 @@
 2002-03-06  Martin M. Hunt  <hunt@redhat.com>
 
+	* library/srctextwin.itb (SrcTextWin::showBPBalloon):
+	Reformat output. Add conditions, ignore count, commands.
+
+	* library/interface.tcl (gdbtk_tcl_readline): Remove
+	call to "command::insert" and instead insert the command
+	into the console window.
+	(gdbtk_tcl_readline_end): Catch the unsets and do not call
+	non-existent function command::end_multi_line_input.
+
+2002-03-06  Martin M. Hunt  <hunt@redhat.com>
+	
 	* library/bpwin.itb: Left-justify the labels in
 	the table.
 
