@@ -34,16 +34,14 @@ body ProcessWin::constructor {args} {
 #  METHOD:  build_win - build the main process window
 # ------------------------------------------------------------------
 body ProcessWin::build_win {} {
-  global tixOption tcl_platform
+  global tcl_platform
 
   if {$tcl_platform(platform) == "windows"} {
-    #tixScrolledListBox $itk_interior.s -scrollbar both -sizebox 1
     set hsmode static
     set vsmode static
     ide_sizebox $itk_interior.sbox
     place $itk_interior.sbox -relx 1.0 -rely 1.0 -anchor se
   } else {
-    #tixScrolledListBox $itk_interior.s -scrollbar auto
     set hsmode dynamic
     set vsmode dynamic
   }

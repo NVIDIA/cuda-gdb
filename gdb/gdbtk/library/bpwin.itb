@@ -357,7 +357,7 @@ body BpWin::bp_restore {} {
 #  METHOD:  bp_select - select a row in the grid
 # ------------------------------------------------------------------
 body BpWin::bp_select { r } {
-  global tixOption _bp_en _bp_disp
+  global _bp_en _bp_disp
 
   set zz [list addr file func line]
   if {$tracepoints} {lappend zz num pass}
@@ -367,7 +367,7 @@ body BpWin::bp_select { r } {
     set i $selected
     
     foreach thing $zz {
-      $twin.${thing}${i}  configure -fg $tixOption(fg) -bg $bg1
+      $twin.${thing}${i}  configure -fg [pref get gdb/font/select_fg] -bg $bg1
       bind $twin.${thing}${i} <3> break
     }
   }
@@ -394,7 +394,8 @@ body BpWin::bp_select { r } {
   }
 
   foreach thing $zz {
-    $twin.${thing}${r}  configure -fg $tixOption(select_fg) -bg $tixOption(select_bg)
+    $twin.${thing}${r} configure -fg [pref get gdb/font/select_fg] \
+      -bg [pref get gdb/font/select_bg]
     bind $twin.${thing}${r}  <3> "tk_popup $Menu %X %Y"
   }
   

@@ -1,5 +1,13 @@
 2001-08-28  Keith Seitz  <keiths@redhat.com>
 
+	* library/bpwin.itb (bp_select): Use standard preferences
+	for selection fg & bg, not tixOption database.
+
+	* process.itb, tracedlg.tcl: Remove all traces of those
+	three evil little letters, "t", "i", "x".
+
+2001-08-28  Keith Seitz  <keiths@redhat.com>
+
 	* library/tracedlg.tcl (build_win): Use libgui's
 	Labelledframe instead of tixLabelFrame.
 	Use iwidgets::scrolledlistbox instead of tixScrolledListbox.

@@ -301,7 +301,6 @@ class TraceDlg {
     pack $pass_frame.ent -side right -padx 10 -pady 5
 
     # Actions
-    #tixScrolledListBox $act_frame.lb -scrollbar auto 
     set ActionLB $act_frame.lb
     iwidgets::scrolledlistbox $act_frame.lb -hscrollmode dynamic \
       -vscrollmode dynamic -selectmode multiple -exportselection 0 \
