@@ -1,3 +1,16 @@
+2001-01-04  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
+
+	* library/interface.tcl (gdbtk_connect): New proc. Connects to ai
+	 remote target (code previously at library/gdbmenubar.itcl).
+	(disconnect): Rename to...
+	(gdbtk_disconnect): New name for proc disconnect.
+	* library/gdbmenubar.itcl (do_connect): Remove the code mentioned
+	above and call the new interface proc gdbtk_connect.
+	Also, call ::update idletasks after changing the state of the
+	menu entries.
+	(do_detach): Call gdbtk_disconnect, not ::disconnect (old name).
+	(do_disconnect): Call gdbtk_disconnect, not disconnect (old name).
+
 2001-01-03  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
 
 	* library/prefs.tcl (pref_set_defaults): Define gdb/src/top_control

@@ -1209,6 +1209,66 @@ proc gdbtk_attach_remote {} {
 }
 
 # ------------------------------------------------------------------
+# PROC:  gdbtk_connect: connect to a remote target 
+#                      in asynch mode if async is 1
+# ------------------------------------------------------------------
+proc gdbtk_connect {{async 0}} {
+  global file_done
+
+  debug "async=$async"
+
+  gdbtk_busy
+
+  set result [gdbtk_attach_remote]
+  switch $result {
+    ATTACH_ERROR {
+      set successful 0
+    }
+
+    ATTACH_TARGET_CHANGED {
+	if {[pref get gdb/load/check] && $file_done} {
+	  set err [catch {gdb_cmd "compare-sections"} errTxt]
+	  if {$err} {
+	    set successful 0
+	    tk_messageBox -title "Error" -message $errTxt \
+	      -icon error -type ok
+	    break
+	  }
+	}
+
+	tk_messageBox -title "GDB" -message "Successfully connected" \
+	  -icon info -type ok
+	set successful 1
+    }
+
+    ATTACH_CANCELED {
+	tk_messageBox -title "GDB" -message "Connection Canceled" -icon info \
+	  -type ok
+	set successful 0
+    }
+
+    ATTACH_TARGET_UNCHANGED {
+	tk_messageBox -title "GDB" -message "Successfully connected" \
+	  -icon info -type ok
+	set successful 1
+    }
+
+    default {
+	dbug E "Unhandled response from gdbtk_attach_remote: \"$result\""
+	set successful 0
+    }
+  }
+
+  gdbtk_idle
+
+  # Whenever we attach, we need to do an update
+  if {$successful} {
+    gdbtk_attached
+  }
+  return $successful
+}
+
+# ------------------------------------------------------------------
 #  PROC: gdbtk_step - step the target
 # ------------------------------------------------------------------
 proc gdbtk_step {} {
@@ -1407,9 +1467,9 @@ proc do_state_hook {varname ind op} {
 }
 
 # ------------------------------------------------------------------
-# PROC: disconnect -
+# PROC: gdbtk_disconnect -
 # ------------------------------------------------------------------
-proc disconnect {{async 0}} {
+proc gdbtk_disconnect {{async 0}} {
    global gdb_loaded gdb_target_changed
    catch {gdb_cmd "detach"}
    # force a new target command to do something
