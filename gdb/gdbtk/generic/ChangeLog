@@ -1,3 +1,11 @@
+Thu Jun  8 17:59:01 2000  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	(gdb_load_info): Use make_cleanup_bfd_close.
+	(gdb_search): Use make_cleanup_free_search_symbols.
+	* gdbtk.c (cleanup_init): Change signature to match make_cleanups.
+	(gdbtk_init): Discard make_cleanup_func cast.
+	* gdbtk-cmds.c (gdb_eval): Ditto.
+
 2000-06-06  Elena Zannoni  <ezannoni@kwikemart.cygnus.com>
 
 	* gdbtk.c: Remove CYGWIN32 conditional around timer machinery.

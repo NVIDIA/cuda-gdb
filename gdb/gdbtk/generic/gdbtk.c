@@ -98,7 +98,7 @@ static void gdbtk_init PARAMS ((char *));
 
 void gdbtk_interactive PARAMS ((void));
 
-static void cleanup_init PARAMS ((int));
+static void cleanup_init (void *ignore);
 
 static void tk_command PARAMS ((char *, int));
 
@@ -239,8 +239,7 @@ TclDebug (char level, const char *fmt,...)
  */
 
 static void
-cleanup_init (ignored)
-     int ignored;
+cleanup_init (void *ignore)
 {
   if (gdbtk_interp != NULL)
     Tcl_DeleteInterp (gdbtk_interp);
@@ -371,7 +370,7 @@ gdbtk_init (argv0)
     return;
 #endif
 
-  old_chain = make_cleanup ((make_cleanup_func) cleanup_init, 0);
+  old_chain = make_cleanup (cleanup_init, 0);
 
   /* First init tcl and tk. */
   Tcl_FindExecutable (argv0);
