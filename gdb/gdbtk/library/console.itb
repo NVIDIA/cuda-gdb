@@ -34,12 +34,19 @@ body Console::destructor {} {
 }
   
 body Console::_build_win {} {
-  iwidgets::scrolledtext $itk_interior.stext -hscrollmode dynamic \
+  set wrap [pref get gdb/console/wrap]
+
+  if { $wrap } {
+    set hsm none
+  } else {
+    set hsm dynamic
+  }
+  iwidgets::scrolledtext $itk_interior.stext -hscrollmode $hsm \
     -vscrollmode dynamic -textbackground white
 
   set _twin [$itk_interior.stext component text]
 
-  if {[pref get gdb/console/wrap]} {
+  if {$wrap} {
     $_twin configure -wrap word
   } else {
     $_twin configure -wrap none

@@ -189,13 +189,20 @@ body GlobalPref::build_win {} {
     pack $frame.use_icons.cb -pady 10 -side left -fill none 
   }
 
+  # console wrap
+  frame $frame.consolewrap
+  checkbutton $frame.consolewrap.cw -text "wrap text in console window" \
+    -variable [pref varname gdb/console/wrap]
+  pack $frame.consolewrap.cw -pady 10 -side left -fill none
+
   pack $frame.icons.lab $frame.icons.cb -side left
   pack $frame.icons -side top -padx 10 -pady 10
   pack $frame.tracing -side top -fill x -expand 0 -side bottom
   pack $frame.browser -side top -fill x -expand 0 -side bottom
   if {$tcl_platform(platform) == "unix"} {
-  pack $frame.use_icons -side top -fill x -expand 0 -side bottom
+    pack $frame.use_icons -side top -fill x -expand 0 -side bottom
   }
+  pack $frame.consolewrap -side top -fill x -expand 0 -side bottom
   pack $frame.d -side top -fill both -expand yes
 
   # make buttons

@@ -1,3 +1,11 @@
+2000-11-01  Larry Smith  <lsmith@redhat.com>
+
+        * console.itb (_build_win): Added code to remove horizontal
+        scrollbar by setting -hscrollmode none, which enables the
+        console widget to wrap text properly.
+        * globalpref.itb (build_win): added checkbutton to enable
+        wrapping text in the console window.
+
 2000-10-31  Larry Smith  <lsmith@redhat.com>
 
         * targetselection.ith (run_method): Add variable for
