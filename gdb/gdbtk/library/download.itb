@@ -147,6 +147,7 @@ body Download::download_it { } {
   global gdb_exe_name gdb_downloading gdb_loaded
   global gdb_target_name gdb_pretty_name
   global gdb_running
+  global tcl_platform
   
   debug "exe=$gdb_exe_name downloading=$gdb_downloading"
   debug "    loaded=$gdb_loaded target=$gdb_target_name running=$gdb_running"
@@ -185,7 +186,10 @@ body Download::download_it { } {
     }
   }
   
-  if {! [file exists $gdb_exe_name]} {
+  if {[string compare $tcl_platform(platform) "windows"] == 0} {
+    set f [ide_cygwin_path to_win32 $gdb_exe_name]
+  }
+  if {! [file exists $f]} {
     tk_messageBox -icon error -title GDB -type ok -modal task\
       -message "Request to download non-existent executable $gdb_exe_name"
     set gdb_downloading 0

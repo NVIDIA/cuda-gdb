@@ -865,12 +865,21 @@ body SrcTextWin::ClearTags {} {
 #                          has changed.
 # ------------------------------------------------------------------
 body SrcTextWin::_mtime_changed {filename} {
+  global tcl_platform
+
   set f [gdb_find_file $filename]
 
   if {$f == ""} {
     set r 1
   } else {
-    set mtime [file mtime $f]
+    if {[string compare $tcl_platform(platform) "windows"] == 0} {
+      set f [ide_cygwin_path to_win32 $f]
+    }
+    if {[catch {file mtime $f} mtime]} {
+      debug "Could not stat file \"$f\" - \"$mtime\""
+      # The return code is not of much significance in this case
+      return 1
+    }
     if {![info exists Stwc($filename:mtime)]} {
       debug "no mtime. resetting to zero"
       set Stwc($filename:mtime) 0
@@ -953,7 +962,7 @@ body SrcTextWin::FillSource {w tagname filename funcname line addr pc_addr lib} 
     return
   }
   # no source; switch to assembly
-#  debug "no source file; switch to assembly"
+  dbug W "no source file; switch to assembly"
   
   # We have to update this data here (it is also done by the caller)
   # because we want to call mode, which calls mode_set, which calls
@@ -1206,7 +1215,7 @@ body SrcTextWin::LoadFile {w name lib mtime_changed} {
     return 0
   } elseif {$result == 1 || $mtime_changed} {
     $win delete 0.0 end
-#    debug "READING $name"
+    debug "READING $name"
     if {[catch {gdb_loadfile $win $name $Linenums} msg]} {
       dbug W "Error opening $name:  $msg"
       #if {$msg != ""} {
@@ -2068,7 +2077,7 @@ body SrcTextWin::mode_get {} {
 #  METHOD:  mode_set - change the source mode
 # ------------------------------------------------------------------
 body SrcTextWin::mode_set {new_mode {go 1}} {
-#  debug "$new_mode"
+  debug "$new_mode"
 
   if {$new_mode != $current(mode)} {
 
@@ -2510,8 +2519,10 @@ body SrcTextWin::search {exp direction} {
 # NOTES:	If you call this and a new widget is created which cannot be
 #		filled in later due to errors, call UnLoadFromCache.
 # -----------------------------------------------------------------------------
+
 body SrcTextWin::LoadFromCache {w name asm lib} {
   debug "LoadFromCache $w $name $asm"
+  global tcl_platform
   upvar ${w}win win
   upvar _${w}pane pane
 
@@ -2525,7 +2536,7 @@ body SrcTextWin::LoadFromCache {w name asm lib} {
 
   set oldpane $pane
   if {[info exists Stwc($full_name:pane)]} {
-    #debug "READING CACHE $full_name->$Stwc($full_name:pane)"
+    debug "READING CACHE $full_name->$Stwc($full_name:pane)"
     set pane $Stwc($full_name:pane)
     if {$oldpane != ""} {
       $itk_interior.p replace $oldpane $pane
@@ -2557,8 +2568,11 @@ body SrcTextWin::LoadFromCache {w name asm lib} {
     # out.
 
     if {$loadingSource} {
-      if {[catch {file mtime $name} file_time]} {
-	debug "Could not stat file \"$name\" - \"$file_time\""
+      if {[string compare $tcl_platform(platform) "windows"] == 0} {
+        set f [ide_cygwin_path to_win32 $name]
+      }
+      if {[catch {file mtime $f} file_time]} {
+	debug "Could not stat file \"$f\" - \"$file_time\""
 	return -1
       } else {
         set Stwc($full_name:pane) pane$filenum

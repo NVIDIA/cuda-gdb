@@ -1,3 +1,10 @@
+2000-10-04  Fernando Nasser  <fnasser@totem.to.cygnus.com>
+
+	* download.itb (download_it): Convert filename to native before
+	passing it to a Tcl command.
+	* srctextwin.itb (_mtime_changed): Ditto.
+	(LoadFromCache): Ditto.
+
 2000-09-18  Fernando Nasser  <fnasser@cygnus.com>
 
 	* watch.tcl (build_win): Use code when setting callback.
