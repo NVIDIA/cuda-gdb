@@ -370,7 +370,10 @@ gdbtk_init (argv0)
 
 #ifndef _WIN32
   if (getenv ("DISPLAY") == NULL)
-    return;
+    {
+      init_ui_hook = NULL;
+      return;
+    }
 #endif
 
   old_chain = make_cleanup (cleanup_init, 0);
