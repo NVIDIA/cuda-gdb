@@ -525,13 +525,13 @@ gdbtk_call_command (struct cmd_list_element *cmdblk,
       running_now = 1;
       if (!No_Update)
 	Tcl_Eval (gdbtk_interp, "gdbtk_tcl_busy");
-      (*cmdblk->function.cfunc) (arg, from_tty);
+      cmd_func (cmdblk, arg, from_tty);
       running_now = 0;
       if (!No_Update)
 	Tcl_Eval (gdbtk_interp, "gdbtk_tcl_idle");
     }
   else
-    (*cmdblk->function.cfunc) (arg, from_tty);
+    cmd_func (cmdblk, arg, from_tty);
 }
 
 /* Called after a `set' command succeeds.  Runs the Tcl hook
