@@ -265,8 +265,8 @@ get_register (int regnum, void *arg)
   CORE_ADDR addr;
   enum lval_type lval;
   struct type *reg_vtype;
-  char *raw_buffer = alloca (MAX_REGISTER_RAW_SIZE);
-  char *virtual_buffer = alloca (MAX_REGISTER_VIRTUAL_SIZE);
+  char raw_buffer[MAX_REGISTER_SIZE];
+  char virtual_buffer[MAX_REGISTER_SIZE];
   int optim, format;
   struct cleanup *old_chain = NULL;
   struct ui_file *stb;
@@ -439,19 +439,19 @@ map_arg_registers (Tcl_Interp *interp, int objc, Tcl_Obj **objv,
 static void
 register_changed_p (int regnum, void *argp)
 {
-  char *raw_buffer = alloca (MAX_REGISTER_RAW_SIZE);
+  char raw_buffer[MAX_REGISTER_SIZE];
 
   if (deprecated_selected_frame == NULL
       || !frame_register_read (deprecated_selected_frame, regnum, raw_buffer))
     return;
 
-  if (memcmp (&old_regs[regnum * MAX_REGISTER_RAW_SIZE], raw_buffer,
+  if (memcmp (&old_regs[regnum * MAX_REGISTER_SIZE], raw_buffer,
 	      REGISTER_RAW_SIZE (regnum)) == 0)
     return;
 
   /* Found a changed register.  Save new value and return its number. */
 
-  memcpy (&old_regs[regnum * MAX_REGISTER_RAW_SIZE], raw_buffer,
+  memcpy (&old_regs[regnum * MAX_REGISTER_SIZE], raw_buffer,
 	  REGISTER_RAW_SIZE (regnum));
 
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, Tcl_NewIntObj (regnum));
@@ -464,7 +464,7 @@ setup_architecture_data ()
   xfree (regformat);
   xfree (regtype);
 
-  old_regs = xcalloc (1, (NUM_REGS + NUM_PSEUDO_REGS) * MAX_REGISTER_RAW_SIZE + 1);
+  old_regs = xcalloc (1, (NUM_REGS + NUM_PSEUDO_REGS) * MAX_REGISTER_SIZE + 1);
   regformat = (int *)xcalloc ((NUM_REGS + NUM_PSEUDO_REGS) , sizeof(int));
   regtype = (struct type **)xcalloc ((NUM_REGS + NUM_PSEUDO_REGS), sizeof(struct type **));
 }

@@ -1,3 +1,10 @@
+2003-05-08  Andrew Cagney  <cagney@redhat.com>
+
+	* generic/gdbtk-register.c (get_register): Replace
+	MAX_REGISTER_VIRTUAL_SIZE and MAX_REGISTER_RAW_SIZE with
+	MAX_REGISTER_SIZE.
+	(register_changed_p, setup_architecture_data): Ditto.
+
 2003-04-30  Andrew Cagney  <cagney@redhat.com>
 
 	* generic/gdbtk-cmds.c (gdb_disassemble_driver): Instead of
