@@ -1,3 +1,9 @@
+2000-03-28  James Ingham  <jingham@leda.cygnus.com>
+
+	* managedwin.itb (ManagedWin::startup): Open the SrcWin, this does 
+	two things, 1) Makes sure that there IS a SrcWin, and 2) brings
+	the first such window to the foreground...
+
 2000-03-28  Jim Blandy  <jimb@redhat.com>
 
 	Handle the fact that there are holes in the register numbering.

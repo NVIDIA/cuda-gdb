@@ -86,7 +86,8 @@ body ManagedWin::startup {} {
 
   foreach cmd [pref get gdb/window/active] {
     eval $cmd
-  }  
+  }
+  ManagedWin::open SrcWin
 }
 
 body ManagedWin::open_dlg {class args} {
