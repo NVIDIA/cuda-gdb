@@ -1,3 +1,10 @@
+2001-03-15  Martin Hunt  <hunt@redhat.com>
+	* library/browserwin.itb: Change all references to freeze_me,
+	thaw_me and Top to _freeze_me, _thaw_me, and _top to match 
+	changes to managedwin.
+	
+	* library/kod.itb: Ditto.  
+
 2001-03-15  Tom Tromey  <tromey@redhat.com>
 
 	* library/mempref.itb (MemPref::build_win): Correctly set initial

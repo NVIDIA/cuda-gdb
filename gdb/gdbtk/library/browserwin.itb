@@ -1,5 +1,5 @@
-# Browswer window for GDBtk.
-# Copyright 1998, 1999 Cygnus Solutions
+# Browswer window for Insight.
+# Copyright 1998, 1999, 2001 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -426,7 +426,7 @@ body BrowserWin::search {} {
     return
   }
 
-  freeze_me
+  _freeze_me
 
   set filt_pat [format $filter_regexp($cur_filter_mode) \
 		  [pref get gdb/search/last_symbol]]
@@ -441,7 +441,7 @@ body BrowserWin::search {} {
 
   if {$err} {
     debug "ERROR searching for [pref get gdb/search/last_symbol]: $matches"
-    thaw_me
+    _thaw_me
     return
   }
 
@@ -454,7 +454,7 @@ body BrowserWin::search {} {
     $itk_component(func_box) insert end [lindex $func 0]
     set index_to_file([incr i]) [lindex $func 1]
   }
-  thaw_me
+  _thaw_me
 }
 
 # ------------------------------------------------------------------
@@ -467,8 +467,8 @@ body BrowserWin::_toggle_more {{in_constructor 0}} {
   # Temporarily disable the resize bindings before opening the window.
   _bind_toplevel 0
 
-  set topHeight [winfo height $Top]
-  set topWidth  [winfo width $Top]
+  set topHeight [winfo height $_top]
+  set topWidth  [winfo width $_top]
 
   if {!$MoreVisible} {
 
@@ -481,18 +481,18 @@ body BrowserWin::_toggle_more {{in_constructor 0}} {
     # screen.  Otherwise, figure out how big to make it...
 
     set height [pref get gdb/browser/view_height]
-    set bottom [expr {[winfo y $Top] + $topHeight}]
+    set bottom [expr {[winfo y $_top] + $topHeight}]
 
-    set extra [expr {[winfo screenheight $Top] - $bottom - 20}]
+    set extra [expr {[winfo screenheight $_top] - $bottom - 20}]
     
     if {$height < 0} {
-      set default [winfo pixels $Top 3i]
+      set default [winfo pixels $_top 3i]
       set height [expr {$extra > $default ? $default : $extra}]
     } else {
       set height [expr {$extra > $height ? $height : $extra}]
     }
 
-    wm geometry $Top ${topWidth}x[expr {$topHeight + $height}]
+    wm geometry $_top ${topWidth}x[expr {$topHeight + $height}]
     grid rowconfigure $itk_component(hull) $componentToRow(view_hidden) \
       -weight 1
     grid rowconfigure $itk_component(hull) $componentToRow(browser) -weight 0
@@ -542,7 +542,7 @@ body BrowserWin::_toggle_more {{in_constructor 0}} {
 
     set newTopHeight [expr {$topHeight - \
 			      [winfo height $itk_component(view_hidden)]}]
-    wm geometry $Top ${topWidth}x$newTopHeight
+    wm geometry $_top ${topWidth}x$newTopHeight
 
     if {!$in_constructor} {
       grid rowconfigure $itk_component(hull) $componentToRow(browser) -weight 1
@@ -574,12 +574,12 @@ body BrowserWin::_toggle_more {{in_constructor 0}} {
 # ------------------------------------------------------------------
 body BrowserWin::_bind_toplevel {install} {
 
-  set bindings [bindtags $Top]
+  set bindings [bindtags $_top]
   if {$install} {
-    bindtags $Top [linsert $bindings 0 Configure_Browser_$this]    
+    bindtags $_top [linsert $bindings 0 Configure_Browser_$this]
   } else {
     set bindLoc [lsearch $bindings Configure_Browser_$this]
-    bindtags $Top [lreplace $bindings $bindLoc $bindLoc]
+    bindtags $_top [lreplace $bindings $bindLoc $bindLoc]
   }
 }
 
@@ -610,7 +610,7 @@ body BrowserWin::_do_resize {} {
   }
 
   eval $labelUpdateCode
-  pack propagate $Top 1
+  pack propagate $_top 1
 
   set resize_after ""
 
@@ -622,7 +622,7 @@ body BrowserWin::_do_resize {} {
 # ------------------------------------------------------------------
 body BrowserWin::_resize {} {
 
-  pack propagate $Top 0
+  pack propagate $_top 0
 
   if {$MoreVisible} {
     grid rowconfigure $itk_component(hull) $componentToRow(view_hidden) \
@@ -697,7 +697,7 @@ body BrowserWin::_process_func_selection {y} {
 body BrowserWin::do_all_bp {onp} {
 
   set funcs [$itk_component(func_box) getcurselection]
-  freeze_me
+  _freeze_me
 
   foreach f $funcs {
     if {[catch {gdb_loc $f} linespec]} {
@@ -715,7 +715,7 @@ body BrowserWin::do_all_bp {onp} {
       catch {gdb_cmd "delete $bpnum"}
     }
   }
-  thaw_me
+  _thaw_me
 }
 
 # ------------------------------------------------------------------
@@ -810,14 +810,14 @@ body BrowserWin::_fill_source {f {funcp 1} {filename ""}} {
     if {$file_changed} {
       # Set the file name label:
       $itk_component(view_name) configure -text $name:
-      freeze_me
+      _freeze_me
     }
 
     $itk_component(view_src) location BROWSE_TAG $name $funcname \
       $line $addr $pc_addr lib
 
     if {$file_changed} {
-      thaw_me
+      _thaw_me
     }
 
     set Current(function) $funcname

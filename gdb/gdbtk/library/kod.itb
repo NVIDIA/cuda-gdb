@@ -1,5 +1,5 @@
-# Kernel Object Display Window for GDBtk.
-# Copyright (C) 1998, 1999 Cygnus Solutions
+# Kernel Object Display Window for Insight.
+# Copyright (C) 1998, 1999, 2001 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -139,7 +139,7 @@ body KodWin::build_win {} {
   pack $tp.tf -side top -expand yes -fill both -padx 5 -pady 5
   pack $tp.bf -side top -expand no -fill x -padx 5 -pady 5
   pack $itk_interior.pw -side bottom -expand yes -fill both
-  wm minsize $Top 450 500
+  wm minsize $_top 450 500
 
   # Initialize button state variables for idle (called before update)
   set BState(BDisplay) disabled
@@ -453,7 +453,7 @@ body KodWin::idle {} {
 #        pointer to the given glyph.
 # ------------------------------------------------------------------
 body KodWin::cursor {glyph} {
-  $Top configure -cursor $glyph
+  $_top configure -cursor $glyph
 }
 
 # ------------------------------------------------------------------
