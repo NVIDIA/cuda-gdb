@@ -1,5 +1,5 @@
 /* Tcl/Tk command definitions for Insight.
-   Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2001, 2002, 2003
+   Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2001, 2002, 2003, 2004
    Free Software Foundation, Inc.
 
    Written by Stu Grossman <grossman@cygnus.com> of Cygnus Support.
@@ -896,7 +896,7 @@ gdb_load_info (ClientData clientData, Tcl_Interp *interp,
     {
       if (s->flags & SEC_LOAD)
 	{
-	  bfd_size_type size = bfd_get_section_size_before_reloc (s);
+	  bfd_size_type size = bfd_get_section_size (s);
 	  if (size > 0)
 	    {
 	      ob[0] = Tcl_NewStringObj ((char *)
