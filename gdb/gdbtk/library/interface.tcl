@@ -255,8 +255,23 @@ proc gdbtk_quit_check {} {
 # ------------------------------------------------------------------
 proc gdbtk_quit {} {
   if {[gdbtk_quit_check]} {
-    gdb_force_quit
+    gdbtk_force_quit
   }
+}
+
+# ------------------------------------------------------------------
+#  PROCEDURE:  gdbtk_force_quit - Quit the debugger immediately
+# ------------------------------------------------------------------
+proc gdbtk_force_quit {} {
+  # If we don't delete source windows, GDB hooks will
+  # try to update them as we exit
+  foreach win [ManagedWin::find SrcWin] {
+    delete object $win
+  }
+  # Calling gdb_force_quit is probably not necessary here
+  # because it should have been called when the source window(s)
+  # were deleted, but just in case...
+  gdb_force_quit
 }
 
 # ------------------------------------------------------------------
