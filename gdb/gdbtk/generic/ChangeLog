@@ -1,3 +1,8 @@
+2000-09-15  Fernando Nasser  <fnasser@totem.to.cygnus.com>
+
+	* gdbtk-varobj.c (variable_value): Send back the error text issued
+	by gdb so it can be displayed in a pop-up box.
+
 2000-07-25  Elena Zannoni  <ezannoni@kwikemart.cygnus.com>
 
         * gdbtk-cmds.c (map_arg_registers): Set numregs to include the

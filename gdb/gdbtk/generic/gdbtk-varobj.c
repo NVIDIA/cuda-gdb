@@ -588,7 +588,12 @@ variable_value (interp, objc, objv, var)
 
 	  s = Tcl_GetStringFromObj (objv[2], NULL);
 	  if (!varobj_set_value (var, s))
-	    return TCL_ERROR;
+            {
+              r = error_last_message ();
+              Tcl_SetObjResult (interp, Tcl_NewStringObj (r, -1));
+              FREEIF (r);
+	      return TCL_ERROR;
+            }
 	}
 
       Tcl_ResetResult (interp);
