@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.76 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.77 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3043,10 +3043,6 @@ pointer.  It examines the current state of the machine as needed.
 @findex get_saved_register
 Define this if you need to supply your own definition for the function
 @code{get_saved_register}.
-
-@item HAVE_REGISTER_WINDOWS
-@findex HAVE_REGISTER_WINDOWS
-Define this if the target has register windows.
 
 @item REGISTER_IN_WINDOW_P (@var{regnum})
 @findex REGISTER_IN_WINDOW_P
