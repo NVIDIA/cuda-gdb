@@ -282,10 +282,8 @@ proc find_iwidgets_library {} {
       }
     } else {
       append errMsg "\nCould not find in-place versions of the Iwidgets files\n"
-      append errMsg "Looked at: [file join [file dirname\
-                     [file dirname $::tcl_library]] itcl iwidgets*]\n"
-      append errMsg "and: [file join [file dirname \
-                    [info nameofexecutable]] itcl iwidgets*]\n"
+      append errMsg "Looked at: $iwidgetsSrcDir\n"
+      append errMsg "and: $iwidgetsBuildDir\n"
     }
 
   }

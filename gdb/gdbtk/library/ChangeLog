@@ -1,3 +1,8 @@
+2000-10-23  Fernando Nasser  <fnasser@cygnus.com>
+
+	* util.tcl (find_iwidgets_library): Use the directories that were
+	actually searched in the error message.
+
 2000-10-13  Fernando Nasser  <fnasser@cygnus.com>
 
 	With Steven Johnson <sbjohnson@ozemail.com.au>
