@@ -58,7 +58,7 @@ namespace import itcl::*
 
 namespace import debug::*
 
-if {![find_iwidgets_library]} {
+if {[catch {package require Iwidgets 3.0} errMsg]} {
   set msg "Could not find the Iwidgets libraries.\n\nGot nameofexec: [info nameofexecutable]\nError(s) were: \n$errMsg"
 
   if {![info exists ::env(GDBTK_TEST_RUNNING)] || $::env(GDBTK_TEST_RUNNING) == 0} {
