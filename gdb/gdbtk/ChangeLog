@@ -1,4 +1,28 @@
+2003-02-10  Andrew Cagney  <ac131313@redhat.com>
+
+	* generic/gdbtk-varobj.c (gdb_variable_command): Ditto for
+	`commands'.
+	(variable_type): Ditto for `first'.
+	(variable_obj_command): Ditto.
+	(variable_create): Ditto for create_options.
+	(variable_type): Ditto for `last'.  Use `string' and not `first'
+	when modifying the buffer.
+	(struct disassembly_client_data ): Ditto for `asm_argv'
+	* generic/gdbtk-register.c (gdb_register_info): Ditto for
+	`commands'.
+	* generic/gdbtk-hooks.c (tk_command_loop): Ditto for `msg'.
+	* generic/gdbtk-cmds.c (gdb_search): Ditto for `switches'.
+	(gdbtk_load_source): Ditto for `text_argv'.
+	(struct disassembly_client_data ): Ditto for `source_argv'.
+	(gdbtk_load_asm): Ditto for `text_argv'.
+	(struct disassembly_client_data ): Ditto for `asm_argv'
+	(gdb_loadfile): Ditto for `text_argv'.
+	* generic/gdbtk.c (TclDebug): Make `v' a constant pointer.
+	(gdbtk_init): Ditto for `old_chain', `src_path', `msg', and
+	`lib_path'.
+
 2003-02-10  Martin M. Hunt  <hunt@redhat.com>
+
 	* library/browserwin.itb: Set textbackground option to
 	$::Colors(textbg) instead of "white".
 

@@ -374,7 +374,7 @@ tk_command_loop ()
 
   if (Tcl_Eval (gdbtk_interp, "gdbtk_tcl_preloop") != TCL_OK)
     {
-      char *msg;
+      const char *msg;
 
       /* Force errorInfo to be set up propertly.  */
       Tcl_AddErrorInfo (gdbtk_interp, "");

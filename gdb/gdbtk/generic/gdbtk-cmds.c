@@ -100,8 +100,8 @@ struct disassembly_client_data
   Tcl_Interp *interp;
   char *widget;
   Tcl_Obj *result_obj[3];
-  char *asm_argv[14];
-  char *source_argv[7];
+  const char *asm_argv[14];
+  const char *source_argv[7];
   char *map_arr;
   Tcl_DString src_to_line_prefix;
   Tcl_DString pc_to_line_prefix;
@@ -1226,9 +1226,9 @@ gdb_search (ClientData clientData, Tcl_Interp *interp,
   int static_only, nfiles;
   Tcl_Obj **file_list;
   char **files;
-  static char *search_options[] =
+  static const char *search_options[] =
     {"functions", "variables", "types", (char *) NULL};
-  static char *switches[] =
+  static const char *switches[] =
     {"-files", "-filename", "-static", (char *) NULL};
   enum search_opts
     {
@@ -1784,7 +1784,7 @@ gdbtk_load_source (ClientData clientData, struct symtab *symtab,
   
   if (client_data->file_opened_p == 1)
     {
-      char **text_argv;
+      const char **text_argv;
       char line[10000], line_number[18];
       int found_carriage_return = 1;
 
@@ -1910,7 +1910,7 @@ gdbtk_load_asm (ClientData clientData, CORE_ADDR pc,
 {
   struct disassembly_client_data * client_data
     = (struct disassembly_client_data *) clientData;
-  char **text_argv;
+  const char **text_argv;
   int i, pc_to_line_len, line_to_pc_len;
   gdbtk_result new_result;
   struct cleanup *old_chain = NULL;
@@ -2745,7 +2745,7 @@ gdb_loadfile (ClientData clientData, Tcl_Interp *interp, int objc,
   long mtime = 0;
   struct stat st;
   char line[10000], line_num_buf[18];
-  char *text_argv[9];
+  const char *text_argv[9];
   Tcl_CmdInfo text_cmd;
 
  

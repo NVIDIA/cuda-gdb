@@ -121,7 +121,7 @@ gdb_register_info (ClientData clientData, Tcl_Interp *interp, int objc,
   int index;
   void *argp;
   void (*func)(int, void *);
-  static char *commands[] = {"changed", "name", "size", "value", "type", 
+  static const char *commands[] = {"changed", "name", "size", "value", "type", 
 			     "format", "group", "grouplist", NULL};
   enum commands_enum { REGINFO_CHANGED, REGINFO_NAME, REGINFO_SIZE, REGINFO_VALUE, 
 		       REGINFO_TYPE, REGINFO_FORMAT, REGINFO_GROUP, REGINFO_GROUPLIST };

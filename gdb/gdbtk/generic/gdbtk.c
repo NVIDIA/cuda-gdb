@@ -185,7 +185,10 @@ void
 TclDebug (char level, const char *fmt,...)
 {
   va_list args;
-  char *buf, *v[3], *merge, *priority;
+  char *buf;
+  const char *v[3];
+  char *merge;
+  char *priority;
 
   switch (level)
     {
@@ -348,7 +351,7 @@ gdbtk_init (char *argv0)
   struct cleanup *old_chain;
   char *s;
   int element_count;
-  char **exec_path;
+  const char **exec_path;
   CONST char *internal_exec_name;
 
   /* If there is no DISPLAY environment variable, Tk_Init below will fail,
@@ -439,8 +442,8 @@ gdbtk_init (char *argv0)
 	{
 	  int i, count;
 	  char *src_dir = SRC_DIR;
-	  char **src_path;
-	  char **lib_path;
+	  const char **src_path;
+	  const char **lib_path;
 	  Tcl_DString lib_dstring;
 
 	  Tcl_DStringInit (&lib_dstring);
@@ -454,7 +457,7 @@ gdbtk_init (char *argv0)
 	  Tcl_SplitPath (src_dir, &count, &src_path);
 
 	  /* Append tcl/library to src_dir (src_dir=/foo/bar/gdb) */
-	  lib_path = (char **) alloca ((count + 2) * sizeof (char *));
+	  lib_path = (const char **) alloca ((count + 2) * sizeof (char *));
 	  for (i = 0; i < count - 1; i++)
 	    lib_path[i] = src_path[i];
 	  lib_path[i++] = "tcl";
@@ -629,7 +632,7 @@ gdbtk_find_main";
     
     if (Tcl_GlobalEval (gdbtk_interp, (char *) script) != TCL_OK)
       {
-	char *msg;
+	const char *msg;
 
 	/* Force errorInfo to be set up propertly.  */
 	Tcl_AddErrorInfo (gdbtk_interp, "");
