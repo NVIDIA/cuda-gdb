@@ -609,7 +609,12 @@ variable_value (interp, objc, objv, var)
   r = varobj_get_value (var);
 
   if (r == NULL)
-    return TCL_ERROR;
+    {
+      char *err = error_last_message ();
+      gdbtk_set_result (interp, "%s", err);
+      xfree (err);
+      return TCL_ERROR;
+    }
   else
     {
       Tcl_SetObjResult (interp, Tcl_NewStringObj (r, -1));
