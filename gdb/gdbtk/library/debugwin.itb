@@ -338,9 +338,9 @@ itcl::body DebugWinDOpts::build_win {} {
   wm title [winfo toplevel $itk_interior] "Debug Display Options"
   # initialize here so we can resource this file and update the list
   set _classes {DebugWin RegWin SrcBar SrcWin ToolBar WatchWin EmbeddedWin \
-		  ManagedWin GDBWin StackWin SrcTextWin VariableWin global \
+		  ManagedWin GDBWin StackWin SrcTextWin global \
 		  BpWin TargetSelection ModalDialog ProcessWin \
-		  GDBEventHandler MemWin}
+		  GDBEventHandler MemWin VarTree}
   set _classes [concat [lsort $_classes] others]
 
   set f [frame $itk_interior.f]

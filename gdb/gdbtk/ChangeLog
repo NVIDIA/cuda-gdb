@@ -1,5 +1,8 @@
 2002-11-06  Martin M. Hunt  <hunt@redhat.com>
 
+	* library/debugwin.itb: Remove VariableWin.  Add VarTree.
+
+2002-11-06  Martin M. Hunt  <hunt@redhat.com>	
 	* library/watch.tcl: Completely rewritten to use VarTree.
 	* library/locals.tcl: Completely rewritten to use VarTree.
 	* library/variables.tcl: Deleted.
