@@ -1,3 +1,14 @@
+2001-04-20  Keith Seitz  <keiths@cygnus.com>
+
+	* library/interface.tcl (gdbtk_tcl_set_variable): New proc.
+	* library/gdbevent.ith (SetVariableEvent): New event.
+	* library/gdbevent.itb (SetVariableEvent::get): Override
+	GDBEvent::get.
+	* library/ehandler.ith (set_variable): New public method.
+	* generic/gdbtk-hooks.c (gdbtk_set_hook): Let inteface function
+	gdbtk_tcl_set_variable do all the work.
+	* tclIndex: Regenerated.
+
 2001-04-19  Keith Seitz  <keiths@cygnus.com>
 
 	* library/gdbevent.ith: New file. Defines new event model.

@@ -134,3 +134,39 @@ body TracepointEvent::_init {} {
 configbody TracepointEvent::number {
   _init
 }
+
+# ------------------------------------------------------------
+#  PUBLIC METHOD:  get - Retrieve data about the event
+# ------------------------------------------------------------
+body TracepointEvent::get {what} {
+
+  switch $what {
+    action     { return $action }
+    number     { return $number }
+    file       { return $_file }
+    function   { return $_function }
+    line       { return $_line }
+    address    { return $_address }
+    enabled    { return $_enabled }
+    pass_count { return $_pass_count }
+    step_count { return $_step_count }
+    thread     { return $_thread }
+    hit_count  { return $_hit_count }
+    actions    { return $_actions }
+
+    default { error "unknown event data \"$what\": should be: action|number|file|function|line|address|pass_count|step_count|thread|hit_count|actions" }
+  }
+}
+
+# ------------------------------------------------------------
+#  PUBLIC METHOD:  get - Retrieve data about the event
+# ------------------------------------------------------------
+body SetVariableEvent::get {what} {
+
+  switch $what {
+    variable { return $variable }
+    value    { return $value }
+
+    default { error "unknown event data \"$what\": should be: variable|value" }
+  }
+}

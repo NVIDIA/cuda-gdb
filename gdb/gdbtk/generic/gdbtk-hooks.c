@@ -556,8 +556,7 @@ gdbtk_set_hook (struct cmd_list_element *cmdblk)
   char *buffer = NULL;
 
   Tcl_DStringInit (&cmd);
-  Tcl_DStringAppendElement (&cmd, "run_hooks");
-  Tcl_DStringAppendElement (&cmd, "gdb_set_hook");
+  Tcl_DStringAppendElement (&cmd, "gdbtk_tcl_set_variable");
 
   /* Append variable name as sublist.  */
   Tcl_DStringStartSublist (&cmd);

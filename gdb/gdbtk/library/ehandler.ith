@@ -29,5 +29,8 @@ class GDBEventHandler {
     # Breakpiont/tracepoint events
     method breakpoint {event} {}
     method tracepoint {event} {}
+
+    # Set variable
+    method set_variable {event} {}
   }
 }

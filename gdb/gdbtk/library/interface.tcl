@@ -21,10 +21,22 @@ set gdbtk_state(busyCount) 0
 # action, the breakpoint number, and the breakpoint info.
 #define_hook gdb_breakpoint_change_hook
 
+# *** DEPRECATED: Use GDBEventHandler::set_variable instead.
 # This is run when a `set' command successfully completes in gdb.  The
 # first argument is the gdb variable name (as a Tcl list).  The second
 # argument is the new value.
-define_hook gdb_set_hook
+#define_hook gdb_set_hook
+
+# ------------------------------------------------------------
+#  PROC:  gdbtk_tcl_set_variable - A "set" command was issued
+#          in gdb to change an internal variable. Notify
+#          gui.
+# ------------------------------------------------------------
+proc gdbtk_tcl_set_variable {var val} {
+  set e [SetVariableEvent \#auto -variable $var -value $val]
+  GDBEventHandler::dispatch $e
+  delete object $e
+}
 
 ####################################################################
 #                                                                  #
@@ -442,7 +454,8 @@ proc gdbtk_tcl_end_variable_annotation {} {
 }
 
 # ------------------------------------------------------------------
-# PROC: gdbtk_tcl_breakpoint -
+# PROC: gdbtk_tcl_breakpoint - A breakpoint was changed -- notify
+#                               gui.
 # ------------------------------------------------------------------
 proc gdbtk_tcl_breakpoint {action bpnum} {
 #  debug "BREAKPOINT: $action $bpnum"
@@ -452,7 +465,8 @@ proc gdbtk_tcl_breakpoint {action bpnum} {
 }
 
 # ------------------------------------------------------------------
-# PROC: gdbtk_tcl_tracepoint -
+# PROC: gdbtk_tcl_tracepoint - A tracepoint was changed -- notify
+#                               gui.
 # ------------------------------------------------------------------
 proc gdbtk_tcl_tracepoint {action tpnum} {
 #  debug "TRACEPOINT: $action $tpnum"

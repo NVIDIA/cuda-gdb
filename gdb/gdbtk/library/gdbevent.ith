@@ -23,6 +23,9 @@ class GDBEvent {
 
 # BREAKPOINT EVENT
 #
+# This event is created/dispatched whenever a breakpoint is created,
+# deleted, or modified.
+#
 # action ....... what type of BP event ("create", "delete", "modify")
 # number ....... gdb's internal token for the BP
 # file ......... filename in which event occurred
@@ -37,7 +40,6 @@ class GDBEvent {
 # condition .... BP condition
 # thread ....... thread in which BP is set (or -1 for all threads) 
 # hit_count .... number of times BP has been hit
-
 class BreakpointEvent {
   inherit GDBEvent
 
@@ -75,6 +77,9 @@ class BreakpointEvent {
 
 # TRACEPOINT EVENT
 #
+# This event is created/dispatched whenever a tracepoint is created,
+# deleted, or modified.
+#
 # action ....... what type of BP event ("create", "delete", "modify")
 # number ....... gdb's internal token for the BP
 # file ......... filename in which event occurred
@@ -108,7 +113,6 @@ class TracepointEvent {
   public method get {what}
   public method handler {} { return "tracepoint" }
 
-
   private variable _file       {}
   private variable _function   {}
   private variable _line       {}
@@ -121,4 +125,25 @@ class TracepointEvent {
   private variable _actions    {}
 
   private method _init {}
+}
+
+# SET VARIABLE EVENT
+#
+# This event is created/dispatched whenever a "set" command successfully
+# completes in gdb's command interpreter.
+#
+# variable ..... the variable that was changed
+# value ........ the variable's new value
+class SetVariableEvent {
+  inherit GDBEvent
+
+  public variable variable
+  public variable value
+
+  constructor {args} {
+    eval configure $args
+  }
+  #destructor { dbug I "" }
+  public method get {what}
+  public method handler {} { return "set_variable" }
 }
