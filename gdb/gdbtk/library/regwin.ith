@@ -56,6 +56,7 @@ class RegWin {
     method but3 {rn X Y}
     method display_all {} 
     method delete_from_display_list {rn} 
+    method addToWatch {reg}
     method edit {r} 
     method acceptEdit {r} 
     method unedit {} 

@@ -534,6 +534,10 @@ class VariableWin {
 	    $Editing.ent selection to end
 	} else {
 	    UnEdit
+
+            # We may have changed a register or something else that is 
+            # being displayed in another window
+            gdbtk_update
 	    
 	    # Get rid of entry... and replace it with new value
 	    focus $Tree
