@@ -1,3 +1,8 @@
+2002-06-12  Keith Seitz  <keiths@redhat.com>
+
+	* library/gdbmenubar.itcl (add): Add new "cascade" type.
+	(menubar_add_cascade): New method to build cascading menus.
+
 2002-06-07  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/prefs.tcl (pref_set_colors): New function.  Set up colors
