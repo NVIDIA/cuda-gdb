@@ -1,3 +1,7 @@
+2000-10-23  Fernando Nasser  <fnasser@totem.to.cygnus.com>
+
+	* gdbtk-variable.c: Removed. Obsolete file.
+
 2000-10-13  Fernando Nasser  <fnasser@totem.to.cygnus.com>
 
 	* gdbtk.c (target_is_native): The "multi-thread" target is native.
