@@ -150,7 +150,11 @@ body SrcWin::_build_win {} {
   # If this is a new widget and the program is
   # not yet being debugged, load the file with "main" in it.
   if {$gdb_running} {
-    update
+    if {[catch {gdb_loc} loc]} {
+      # Nothing we can do but leave the window empty.
+    } else {
+      _update $loc
+    }
   } else {
     if {[set linespec [gdbtk_locate_main]] != ""} {
       location BROWSE_TAG $linespec
@@ -229,7 +233,7 @@ body SrcWin::download_progress { section num tot {msg ""} } {
   if {$last_done == $tot || $section == "CANCEL"} {
     $_toolbar configure -runstop normal
     if {!$gdb_loaded} {
-      update
+      ::update
       # errored or canceled
       if {$msg != ""} {
 	set_status "DOWNLOAD FAILED: $msg"

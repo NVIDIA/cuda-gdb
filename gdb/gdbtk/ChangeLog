@@ -1,5 +1,12 @@
 2001-01-02  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
 
+	* library/srcwin.itb (_build_win): If gdb is running a program, load
+	the window with source for that location (if available).
+	(download_progress): Calls to "update" must refer to the global
+	namespace.
+
+2001-01-02  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
+
 	* library/interface.tcl (gdbtk_quit_check): Save session whenever
 	possible.
 
