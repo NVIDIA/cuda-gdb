@@ -2096,7 +2096,7 @@ body SrcTextWin::do_source_popup { X Y x y } {
     $popups(source) add command -label "Open Source in external editor" \
       -command [list $parent edit]
   }
-  
+
   tk_popup $popups(source) $X $Y 
 }
 

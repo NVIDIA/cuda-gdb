@@ -1,5 +1,12 @@
 2000-12-07  Tom Tromey  <tromey@redhat.com>
 
+	* tclIndex: Rebuilt.
+	* interface.tcl (set_exe_name): Save session.
+	(gdbtk_quit_check): Save session.
+	* session.tcl: New file.
+	* srcbar.tcl (create_menu_items): Add menu items to recall old
+	sessions.
+
 	* bpwin.itb (BpWin::goto_bp): Handle multiple source windows.
 	* srctextwin.itb (SrcTextWin::get_file): New method.
 	(SrcTextWin::set_tag_to_stack): New method.
