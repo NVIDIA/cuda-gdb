@@ -289,7 +289,7 @@ get_register (int regnum, void *arg)
       return;
     }
 
-  frame_register (get_selected_frame (), regnum, &optim, &lval, 
+  frame_register (get_selected_frame (NULL), regnum, &optim, &lval, 
 		  &addr, &realnum, buffer);
 
   if (optim)

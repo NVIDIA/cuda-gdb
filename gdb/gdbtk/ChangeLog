@@ -1,3 +1,7 @@
+2004-10-31  David Lecomber <dsl@sources.redhat.com>
+	* generic/gdbtk-register.c: Add message parameter
+	to call of get_selected_frame.
+
 2004-08-27  Martin Hunt  <hunt@redhat.com>
 
 	* library/ipc.tcl: New file.
