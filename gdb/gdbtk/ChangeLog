@@ -1,3 +1,8 @@
+2002-03-14  Keith Seitz  <keiths@redhat.com>
+
+	* library/bpwin.itb (constructor): Set some sane initial
+	size.
+
 2002-03-07  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/srctextwin.itb (SrcTextWin::showBPBalloon): Put 

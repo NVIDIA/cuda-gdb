@@ -25,6 +25,12 @@ body BpWin::constructor {args} {
   debug "Ready to build"
   build_win
   eval itk_initialize $args 
+
+  # The scrolledframe uses a canvas, which doesn't properly
+  # calculate an initial size, so we must set a default
+  # window size here. ManagedWin could override this still
+  # if there is a user preference for the geometry.
+  wm geometry $_top 350x165
   debug "done building"
 }
 
