@@ -416,7 +416,17 @@ x_event (signo)
   static volatile int in_x_event = 0;
   static Tcl_Obj *varname = NULL;
   static int count = 0;
+
+  /* Do nor re-enter this code or enter it while collecting gdb output. */
   if (in_x_event || in_fputs)
+    return 0;
+
+  /* Also, only do things while the target is running (stops and redraws).
+     FIXME: We wold like to at least redraw at other times but this is bundled
+     together in the TCL_WINDOW_EVENTS group and we would also process user
+     input.  We will have to prevent (unwanted)  user input to be generated
+     in order to be able to redraw (removing this test here). */
+  if (!running_now)
     return 0;
 
   in_x_event = 1;
