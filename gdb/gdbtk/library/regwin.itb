@@ -1,5 +1,5 @@
 # Register display window for Insight.
-# Copyright 1998, 1999, 2001 Red Hat
+# Copyright 1998, 1999, 2001 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -35,9 +35,6 @@ body RegWin::constructor {args} {
   add_hook gdb_update_hook "$this update"
   add_hook gdb_busy_hook [list $this busy]
   add_hook gdb_idle_hook [list $this idle]
-  if {[get_disassembly_flavor] != ""} {
-    add_hook gdb_set_hook [code $this handle_set_hook]
-  }
 }
 
 # ------------------------------------------------------------------
@@ -49,9 +46,6 @@ body RegWin::destructor {} {
   remove_hook gdb_update_hook "$this update"
   remove_hook gdb_busy_hook [list $this busy]
   remove_hook gdb_idle_hook [list $this idle]
-  if {[get_disassembly_flavor] != ""} {
-    remove_hook gdb_set_hook [code $this handle_set_hook]
-  }
 }
   
 
@@ -258,8 +252,8 @@ body RegWin::init_reg_display_vars {args} {
   set reg_names_dirty 0
 }
 
-body RegWin::handle_set_hook {var value} {
-  switch $var {
+body RegWin::set_variable {event} {
+  switch [$event get variable] {
     disassembly-flavor {
         disassembly_changed
     } 

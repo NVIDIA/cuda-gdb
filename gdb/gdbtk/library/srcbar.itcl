@@ -29,7 +29,7 @@
 # ----------------------------------------------------------------------
 
 class SrcBar {
-  inherit itk::Widget
+  inherit itk::Widget GDBEventHandler
 
   # ------------------------------------------------------------------
   #  CONSTRUCTOR - create widget
@@ -68,7 +68,6 @@ class SrcBar {
     add_hook gdb_idle_hook "$this enable_ui 1"
     add_hook gdb_busy_hook "$this enable_ui 0"
     add_hook gdb_no_inferior_hook "$this enable_ui 2"
-    add_hook gdb_set_hook "$this set_hook"
     add_hook gdb_trace_find_hook "$this handle_trace_find_hook"
   }
 
@@ -82,7 +81,6 @@ class SrcBar {
     remove_hook gdb_idle_hook "$this enable_ui 1"
     remove_hook gdb_busy_hook "$this enable_ui 0"
     remove_hook gdb_no_inferior_hook "$this enable_ui 2"
-    remove_hook gdb_set_hook "$this set_hook"
     remove_hook gdb_trace_find_hook "$this handle_trace_find_hook"
 
     #destroy $this
@@ -804,12 +802,14 @@ class SrcBar {
   }
 
   # ------------------------------------------------------------------
-  #  METHOD:  set_hook - run when user enters a `set' command.
+  #  METHOD:  set_variable - run when user enters a `set' command.
   #
   #  FIXME: Should not be accessing the base class internal data
   #         As the spec says, one must clear the menu and recreate it.
   # ------------------------------------------------------------------  
-  method set_hook {varname value} {
+  public method set_variable {event} {
+    set varname [$event get variable]
+    set value   [$event get value]
     debug "Got $varname = $value"
 
     if {$varname == "os"} {

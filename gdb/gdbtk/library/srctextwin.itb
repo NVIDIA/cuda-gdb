@@ -65,10 +65,6 @@ body SrcTextWin::constructor {args} {
     add_hook gdb_trace_find_hook "$this trace_find_hook"
   }
   
-  if {[get_disassembly_flavor] != ""} {
-    add_hook gdb_set_hook [code $this handle_set_hook]
-  }
-
   if {$UseVariableBalloons} {
     add_hook gdb_idle_hook "$this updateBalloon"
   }
@@ -86,9 +82,6 @@ body SrcTextWin::destructor {} {
   }
   if {$UseVariableBalloons} {
     remove_hook gdb_idle_hook "$this updateBalloon"
-  }
-  if {[get_disassembly_flavor] != ""} {
-    remove_hook gdb_set_hook [code $this handle_set_hook]
   }
 }
 
@@ -714,10 +707,12 @@ body SrcTextWin::addPopup {menu label command {abg {}} {browse 1} {run 1}} {
 }
 
 # ------------------------------------------------------------------
-#  METHOD:  handle_set_hook - Handle changes in the gdb variables
+#  PUBLIC METHOD:  set_variable - Handle changes in the gdb variables
 #           changed through the "set" gdb command.
 # ------------------------------------------------------------------
-body SrcTextWin::handle_set_hook {var val} {
+body SrcTextWin::set_variable {event} {
+  set var [$event get variable]
+  set val [$event get value]
   debug "Set hook got called with $var $val"
   switch $var {
     disassembly-flavor {

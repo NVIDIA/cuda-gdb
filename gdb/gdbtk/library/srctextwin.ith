@@ -93,11 +93,9 @@ class SrcTextWin {
     # GDB Events
     method breakpoint {event}
     method tracepoint {event}
+    method set_variable {event}
   }
 
-  protected {
-    method handle_set_hook {var val}
-  }
   private {
     variable top	;# toplevel window
     variable twin	;# top text window of pane

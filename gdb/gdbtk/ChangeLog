@@ -1,5 +1,25 @@
 2001-04-20  Keith Seitz  <keiths@cygnus.com>
 
+	* library/srctextwin.ith (handle_set_hook): Rename to set_variable.
+	* library/srctextwin.itb (set_variable): Handle SetVariableEvent.
+	(constructor): Remove gdb_set_hook.
+	(destructor): Ditto.
+	* library/srcbar.itcl: Inherit from GDBEventHandler.
+	(set_hook): Rename to set_variable and handle SetVariableEvent.
+	(constructor): Remove gdb_set_hook.
+	(destructor): Ditto.
+	* library/regwin.ith (handle_set_hook): Renamed to set_variable.
+	* library/regwin.itb (set_variable): Handle SetVariableEvent.
+	(constructor): Remove gdb_set_hook.
+	(destructor): Ditto.
+	* library/kod.ith (set_os): Renamed to "set_variable".
+	* library/kod.itb (set_variable): Handle SetVariableEvent.
+	(constructor): Remove gdb_set_hook.
+	(destructor): Ditto.
+	* library/tclIndex: Regenerated.
+
+2001-04-20  Keith Seitz  <keiths@cygnus.com>
+
 	* library/interface.tcl (gdbtk_tcl_set_variable): New proc.
 	* library/gdbevent.ith (SetVariableEvent): New event.
 	* library/gdbevent.itb (SetVariableEvent::get): Override
