@@ -8,8 +8,8 @@
 
 /* -*-C-*-
  *
- * $Revision: 1.2 $
- *     $Date: 1998/01/08 11:12:24 $
+ * $Revision: 1.3 $
+ *     $Date: 1999/11/01 13:31:39 $
  *
  *
  *   Project: ANGEL
@@ -19,7 +19,7 @@
 
 #include "params.h"
 
-#include "endian.h"
+#include "angel_endian.h"
 #include "logging.h"
 
 

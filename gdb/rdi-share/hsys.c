@@ -9,8 +9,8 @@
 /*
  * Host C Library support functions.
  *
- * $Revision: 1.2 $
- *     $Date: 1998/01/08 11:12:14 $
+ * $Revision: 1.3 $
+ *     $Date: 1999/11/01 13:31:36 $
  */
 
 #ifdef DEBUG
@@ -29,7 +29,7 @@
 #include "ardi.h"
 #include "buffers.h"
 #include "channels.h"        /* Channel interface. */
-#include "endian.h"
+#include "angel_endian.h"
 #include "logging.h"         /* Angel support functions. */
 #include "msgbuild.h"
 #include "sys.h"    

@@ -8,8 +8,8 @@
 
 /*-*-C-*-
  *
- * $Revision: 1.2 $
- *     $Date: 1998/01/08 11:12:27 $
+ * $Revision: 1.3 $
+ *     $Date: 1999/11/01 13:31:40 $
  *
  *
  *   Project: ANGEL
@@ -19,7 +19,7 @@
 
 #include <stdarg.h>    /* ANSI varargs support */
 #include "angel.h"     /* Angel system definitions */
-#include "endian.h"    /* Endian independant memory access macros */
+#include "angel_endian.h"    /* Endian independant memory access macros */
 #include "crc.h"       /* crc generation definitions and headers */
 #include "rxtx.h"
 #include "channels.h"

@@ -8,8 +8,8 @@
 
 /* -*-C-*-
  *
- * $Revision: 1.5 $
- *     $Date: 1999/01/28 03:50:16 $
+ * $Revision: 1.6 $
+ *     $Date: 1999/11/01 12:11:39 $
  *
  */
 #ifndef angsd_hostchan_h
@@ -90,6 +90,13 @@ extern void Adp_addToQueue(Packet **head, Packet *newpkt);
  */
 
 extern Packet *Adp_removeFromQueue(Packet **head);
+
+/*
+ * Set log file and Enable/disable logging of ADP packets to file.
+ */
+
+void Adp_SetLogfile(const char *filename);
+void Adp_SetLogEnable(int logEnableFlag);
 
 /*
  *  Function: Adp_OpenDevice

@@ -8,8 +8,8 @@
 
 /* -*-C-*-
  *
- * $Revision: 1.2 $
- *     $Date: 1998/01/08 11:12:21 $
+ * $Revision: 1.3 $
+ *     $Date: 1999/11/01 13:31:38 $
  *
  *
  * msgbuild.c - utilities for assembling and interpreting ADP messages
@@ -28,7 +28,7 @@
 
 #include "channels.h"
 #include "buffers.h"
-#include "endian.h"     /* Endianness support macros */
+#include "angel_endian.h"     /* Endianness support macros */
 #include "msgbuild.h"   /* Header file for this source code */
 
 #ifndef UNUSED

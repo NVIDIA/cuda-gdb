@@ -8,8 +8,8 @@
 
 /* -*-C-*-
  *
- * $Revision: 1.6 $
- *     $Date: 1999/01/28 03:50:15 $
+ * $Revision: 1.8 $
+ *     $Date: 1999/11/01 15:32:59 $
  *
  *
  * hostchan.c - Semi Synchronous Host side channel interface for Angel.
@@ -230,7 +230,7 @@ void Adp_addToQueue(Packet **head, Packet *newpkt)
      */
     ASSERT(&(((Packet *)0)->pk_next) == 0, "bad struct Packet layout");
 
-#if DEBUG && 0
+#if defined(DEBUG) && 0
     printf("Adp_addToQueue(%p, %p)\n", head, newpkt);
 #endif
 
@@ -263,6 +263,16 @@ Packet *Adp_removeFromQueue(Packet **head)
         *head = pk->pk_next;
 
     return pk;
+}
+
+void Adp_SetLogEnable(int logEnableFlag)
+{
+  DevSW_SetLogEnable(logEnableFlag);
+}
+
+void Adp_SetLogfile(const char *filename)
+{
+  DevSW_SetLogfile(filename);
 }
 
 AdpErrs Adp_OpenDevice(const char *name, const char *arg,

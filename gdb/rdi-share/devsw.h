@@ -8,8 +8,8 @@
 
 /* -*-C-*-
  *
- * $Revision: 1.2 $
- *     $Date: 1998/01/08 11:12:00 $
+ * $Revision: 1.3 $
+ *     $Date: 1999/11/01 12:11:37 $
  *
  */
 #ifndef angsd_devsw_h
@@ -259,6 +259,13 @@ AdpErrs DevSW_Ioctl(const DeviceDescr *device, const int opcode, void *args);
  */
 bool DevSW_WriteFinished(const DeviceDescr *device);
 
+      
+/*
+ * set filename and enable/disable logginf of ADP packets
+ */
+void DevSW_SetLogfile(const char *filename);
+void DevSW_SetLogEnable(int logEnableFlag);
+      
 #ifdef __cplusplus
     }
 #endif
