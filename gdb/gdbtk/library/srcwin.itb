@@ -636,7 +636,7 @@ body SrcWin::set_execution_status { {line ""} {pc ""}} {
       switch [$twin mode_get] {
 	ASSEMBLY {set message [gdb_cmd "printf \"$msg at 0x%lx\",$pc"] }
 	MIXED {set message [gdb_cmd "printf \"$msg at line $line, 0x%lx\",$pc"] }
-	SRC+ASM {set message [gb_cmd "printf \"$msg at line $line, 0x%lx\",$pc"] }
+	SRC+ASM {set message [gdb_cmd "printf \"$msg at line $line, 0x%lx\",$pc"] }
 	default {set message "$msg at line $line" }
       }
     }
