@@ -1,3 +1,11 @@
+2002-11-07  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/util.tcl (CygScrolledListbox): Delete.
+
+	* library/srctextwin.itb: Change from CygScrolledListbox
+	to iwidgets::scrolledlistbox. Set foreground and background.
+	Center popup over source window.
+
 2002-11-06  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/locals.tcl (build_win): Fix so window opens

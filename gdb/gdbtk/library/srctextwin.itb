@@ -2822,8 +2822,11 @@ itcl::body SrcTextWin::ask_thread_bp {} {
   
   set a [toplevel .[gensym]]
   wm title $a "Thread Selection"
-  CygScrolledListbox $a.slb -selectmode multiple -height $num_threads
-  
+
+  iwidgets::scrolledlistbox $a.slb \
+    -vscrollmode dynamic -hscrollmode dynamic \
+    -selectmode multiple -textfont global/fixed
+
   set i [expr $num_threads - 1]
   set width 0
   foreach line $threads {
@@ -2837,19 +2840,21 @@ itcl::body SrcTextWin::ask_thread_bp {} {
       if {[string length $line] > $width} {
 	set width [string length $line]
       }
-      $a.slb.list insert 0 $line 
+      $a.slb insert 0 $line 
       incr i -1
     }
   }
-  $a.slb.list configure -width $width
+  $a.slb configure -visibleitems ${width}x$num_threads 
+  [$a.slb component listbox] configure -bg $::Colors(textbg) -fg $::Colors(textfg)
 
   frame $a.b
   button $a.b.ok -text OK -underline 0 -width 7 \
-    -command "$this do_thread_bp $a.slb.list"
+    -command "$this do_thread_bp $a.slb"
   button $a.b.cancel -text Cancel -width 7 -underline 0 -command "destroy $a"
   pack $a.b.ok $a.b.cancel -side left
   standard_button_box $a.b
   pack $a.b -fill x -expand yes -side bottom -padx 5 -pady 5
+  center_window $a -over [winfo toplevel [namespace tail $this]]
   pack $a.slb -side top -fill both -expand yes
   bind $a.b.ok <Return> "$a.b.ok flash; $a.b.ok invoke"
   focus $a.b.ok

@@ -185,28 +185,6 @@ proc bp_exists {linespec} {
 }
 
 
-# Scrolled Listbox - this could be in libgui,
-# but we'll probably just start using new iwidgets stuff 
-# soon so keep it here temporarily.  This is based on
-# code from Welch's book.
-
-proc CygScrolledListbox { win args } {
-  frame $win
-  # Create listbox attached to scrollbars, pass thru $args
-  eval {listbox $win.list -yscrollcommand [list $win.sy set]} $args
-  scrollbar $win.sy -orient vertical -command [list $win.list yview]
-  
-  # Create padding based on the scrollbar width and border
-  set pad [expr [$win.sy cget -width] + 2* \
-	     ([$win.sy cget -bd] + \
-		[$win.sy cget -highlightthickness])]
-
-  frame $win.pad -width $pad -height $pad
-  pack $win.sy -side right -fill y
-  pack $win.list -side left -fill both -expand true
-  return $win.list
-}
-
 # gridCGet - This provides the missing grid cget
 # command.
 
