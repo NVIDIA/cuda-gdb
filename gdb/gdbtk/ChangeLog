@@ -1,5 +1,10 @@
 2001-08-21  Keith Seitz  <keiths@redhat.com>
 
+	* generic/gdbtk.c (gdbtk_init): Gdb just fixed this. No
+	need for the workaround I just checked in anymore.
+
+2001-08-21  Keith Seitz  <keiths@redhat.com>
+
 	* generic/gdbtk.c (gdbtk_init): Reinitialize disassemle info's
 	stream parameter: we just deleted the one it saved when we
 	re-routed gdb_stdout to our own gdb_stdout.

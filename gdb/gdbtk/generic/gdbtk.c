@@ -586,10 +586,6 @@ gdbtk_init (argv0)
   gdb_stdtarg = gdbtk_fileopen ();
   uiout = cli_out_new (gdb_stdout);
 
-  /* We need to re-register the standard disassembler's
-     output, since we just changed gdb_stdout. */
-  tm_print_insn_info.stream = gdb_stdout;
-
 #ifdef __CYGWIN32__
       (void) FreeConsole ();
 #endif
