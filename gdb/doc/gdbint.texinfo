@@ -38,7 +38,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.222 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.223 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -1372,7 +1372,7 @@ Finally, here's an example of printing an address.  The original code:
 @smallexample
   annotate_field (4);
   printf_filtered ("%s ",
-        local_hex_string_custom ((unsigned long) b->address, "08l"));
+        hex_string_custom ((unsigned long) b->address, 8));
 @end smallexample
 
 It became:
