@@ -40,11 +40,12 @@ body ManagedWin::reveal {} {
   set top [winfo toplevel [namespace tail $this]]
   raise $top
   wm deiconify $top
-  
-  # I don't understand this next line and no one commented it, so it's gone.
-  #focus -force [focus -lastfor $top]
-  
-  focus $top
+
+  # There used to be a `focus -force' here, but using -force is
+  # unfriendly, so it was removed.  It was then replaced with a simple
+  # `focus $top'.  However, this has no useful effect -- it just
+  # resets the subwindow of $top which has the `potential' focus.
+  # This can actually be confusing to the user.
 }
 
 body ManagedWin::restart {} {

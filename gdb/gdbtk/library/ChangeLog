@@ -1,5 +1,7 @@
 2000-12-07  Tom Tromey  <tromey@redhat.com>
 
+	* managedwin.itb (ManagedWin::reveal): Don't set focus.
+
 	* tclIndex: Rebuilt.
 	* interface.tcl (set_exe_name): Save session.
 	(gdbtk_quit_check): Save session.
