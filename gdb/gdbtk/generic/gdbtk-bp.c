@@ -21,6 +21,7 @@
 #include "defs.h"
 #include "symtab.h"
 #include "symfile.h"
+#include "source.h"
 #include "linespec.h"
 #include "breakpoint.h"
 #include "tracepoint.h"
@@ -312,7 +313,7 @@ gdb_get_breakpoint_info (ClientData clientData, Tcl_Interp *interp, int objc,
 
   sal = find_pc_line (b->loc->address, 0);
 
-  filename = symtab_to_filename (sal.symtab);
+  filename = symtab_to_fullname (sal.symtab);
   if (filename == NULL)
     filename = "";
 
@@ -825,7 +826,7 @@ gdb_get_tracepoint_info (ClientData clientData, Tcl_Interp *interp,
 
   Tcl_SetListObj (result_ptr->obj_ptr, 0, NULL);
   sal = find_pc_line (tp->address, 0);
-  filename = symtab_to_filename (sal.symtab);
+  filename = symtab_to_fullname (sal.symtab);
   if (filename == NULL)
     filename = "N/A";
   Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,

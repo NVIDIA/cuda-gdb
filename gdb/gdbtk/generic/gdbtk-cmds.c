@@ -1079,7 +1079,7 @@ gdb_find_file_command (ClientData clientData, Tcl_Interp *interp,
 	}
 
       fullname =
-	(st->fullname == NULL ? symtab_to_filename (st) : st->fullname);
+	(st->fullname == NULL ? symtab_to_fullname (st) : st->fullname);
     }
   
   /* We may not be able to open the file (not available). */
@@ -2189,7 +2189,7 @@ gdb_loc (ClientData clientData, Tcl_Interp *interp, int objc, Tcl_Obj *CONST obj
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
 			    Tcl_NewStringObj (fname, -1));
 
-  filename = symtab_to_filename (sal.symtab);
+  filename = symtab_to_fullname (sal.symtab);
   if (filename == NULL)
     filename = "";
 
@@ -2647,7 +2647,7 @@ gdb_loadfile (ClientData clientData, Tcl_Interp *interp, int objc,
       return TCL_ERROR;
     }
 
-  file = symtab_to_filename ( symtab );
+  file = symtab_to_fullname ( symtab );
   if ((fp = fopen ( file, "r" )) == NULL)
     {
       gdbtk_set_result (interp, "Can't open file for reading");

@@ -1,3 +1,15 @@
+2004-06-11  Martin Hunt  <hunt@redhat.com>
+
+	* generic/gdbtk-cmds.c (gdb_find_file_command): Use
+	symtab_to_fullname() instead of symtab_to_filename().
+	(gdb_loc): Ditto.
+	(gdb_loadfile): Ditto.
+	* generic/gdbtk-bp.c (gdb_get_breakpoint_info): Ditto.
+	(gdb_get_tracepoint_info): Ditto.	
+
+	* generic/gdbtk-register.c (get_register): Simplify and remove
+	references to DEPRECATED_REGISTER_CONVERT_TO_VIRTUAL.
+
 2004-05-27  Martin Hunt  <hunt@redhat.com>
 
 	* library/tdump.tcl (build_win): Remove old nonworking
