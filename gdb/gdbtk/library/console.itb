@@ -566,10 +566,10 @@ body Console::_complete {} {
     # is one match, complete the command and print a space.
     # If two or more matches, complete the command and beep.
     # If no match, just beep.
-    switch {[llength $choices]} {
+    switch [llength $choices] {
       0 {}
       1 {
-	_twin insert end "$completion "
+	$_twin insert end "$completion "
 	set _saw_tab 0
 	return
       }

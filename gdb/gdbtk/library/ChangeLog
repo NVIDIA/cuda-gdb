@@ -1,3 +1,13 @@
+2000-04-13  Tom Tromey  <tromey@cygnus.com>
+
+	* console.itb (Console::_complete): Dequoted first argument to
+	switch.  Window name is `$_twin', not `_twin'.
+
+2000-04-10  Tom Tromey  <tromey@cygnus.com>
+
+	* srctextwin.itb (SrcTextWin::build_popups): Don't set actibe
+	background on popup menu item.
+
 2000-04-08  Tom Tromey  <tromey@cygnus.com>
 
 	* console.itb (Console::_build_win): Make Control-a, Control-u,
