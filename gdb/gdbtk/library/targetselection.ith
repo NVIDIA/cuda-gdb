@@ -66,7 +66,6 @@ class TargetSelection {
     method config_dialog {t}
     method fill_rates {}
     method fill_targets {}
-    method get_target_list {}
     method get_target {name}
     method help {}
     method _init {}
@@ -88,6 +87,7 @@ class TargetSelection {
     method constructor {args} 
     method reconfig {}
 
+    proc get_target_list {}
     proc native_debugging {}
     proc getname {target name}
     proc init_target_db {}

@@ -1,5 +1,8 @@
 2000-03-10  James Ingham  <jingham@leda.cygnus.com>
 
+	* targetselection.ith (get_target_list): Should be a proc, since
+	it does nothing instance-specific.
+
 	* util.tcl (keep_raised): For some reason raising a window, then
 	deiconifying it is MUCH faster on "e" & WindowMaker under XFree.  
 	Go figure.  Other WM's don't seem to care, so do it this way...
