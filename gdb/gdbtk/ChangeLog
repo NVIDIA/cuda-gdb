@@ -1,5 +1,27 @@
 2002-12-17  Martin M. Hunt  <hunt@redhat.com>
 
+	* library/interface.tcl (gdbtk_tcl_fputs_target_err):
+ 	New function.
+	(gdbtk_tcl_fputs_target): Open console window if it is 
+	not already open.	
+	(gdbtk_gets): New function.
+	Opens a console window if necessary and calls Console::gets.
+
+	* library/console.ith (gets): Declare method.
+	(_input_mode): New private variable.
+	(_input_result): Ditto.
+	(_input_error): Ditto.
+	(_cancel): New private method
+	(invoke): Add arg.
+
+	* library/console.itb (_setprompt): Allow setting prompt
+	to nothing.  Delete to beginning of line before writing prompt.
+	(gets): New public method to prompt user for input.
+	(_cancel): New private method to handle ^C when inputting data.
+	(invoke): Check for ^d when in input mode.
+
+2002-12-17  Martin M. Hunt  <hunt@redhat.com>
+
 	* library/regwin.itb (_load_prefs): Get list of registers from
 	the group name.
 	(_build_win): Remove old menu system.  Replace with an optionmenu

@@ -454,10 +454,22 @@ proc gdbtk_tcl_fputs_log {message} {
 # PROC: gdbtk_tcl_fputs_target - write target output
 # ------------------------------------------------------------------
 proc gdbtk_tcl_fputs_target {message} {
-  if {$::gdbtk_state(console) != ""} {
-    $::gdbtk_state(console) insert $message target_tag
-    update
+  if {$::gdbtk_state(console) == ""} {
+    ManagedWin::open Console -force
   }
+  $::gdbtk_state(console) insert $message target_tag
+  update
+}
+
+
+# ------------------------------------------------------------------
+# PROC: gdbtk_tcl_fputs_target_err - write target error output
+# ------------------------------------------------------------------
+proc gdbtk_tcl_fputs_target_err {message} {
+  if {$::gdbtk_state(console) == ""} {
+    ManagedWin::open Console -force
+  }  
+  $::gdbtk_state(console) insert $message err_tag
 }
 
 # ------------------------------------------------------------------
@@ -1789,4 +1801,15 @@ proc gdbtk_tcl_architecture_changed {} {
   set e [ArchChangedEvent \#auto]
   GDBEventHandler::dispatch $e
   delete object $e
+}
+
+proc gdbtk_console_read {} {
+  if {$::gdbtk_state(console) == ""} {
+    ManagedWin::open Console -force
+  } else {
+    raise [namespace tail $::gdbtk_state(console)]
+  }
+  set result [$::gdbtk_state(console) gets]
+  debug "result=$result"
+  return $result
 }

@@ -369,15 +369,14 @@ itcl::body Console::_first {} {
 #  METHOD:  _setprompt - put a prompt at the beginning of a line
 # ------------------------------------------------------------------
 itcl::body Console::_setprompt {{prompt {}}} {
-  if {$_invoking} {
-    set prompt ""
-  } elseif {"$prompt" != ""} {
-    # nothing
-  } else {
+  if {$prompt == ""} {
     #set prompt [pref get gdb/console/prompt]
     set prompt [gdb_prompt]
+  } elseif {$prompt == "none"} {
+    set prompt ""
   }
-
+  
+  $_twin delete {insert linestart} {insert lineend}
   $_twin insert {insert linestart} $prompt prompt_tag
   $_twin mark set cmdmark "insert -1 char"
   $_twin see insert
@@ -386,6 +385,44 @@ itcl::body Console::_setprompt {{prompt {}}} {
     set _histElement $_pendingHistElement
     set _pendingHistElement -1
     _next
+  }
+}
+
+#-------------------------------------------------------------------
+#  METHOD:  gets - get a line of input from the console
+# ------------------------------------------------------------------
+itcl::body Console::gets {} {
+  set _input_mode 1
+#  _setprompt "(input) "
+  _setprompt none
+  $_twin delete insert end
+  $_twin mark set cmdmark {insert -1 char}
+
+  bind_plain_key $_twin Control-d "$this invoke 1; break"
+  bind_plain_key $_twin Control-c "[code $this _cancel]; break"
+
+  vwait [scope _input_result]
+  set _input_mode 0
+  bind_plain_key $_twin Control-c "event generate $_twin <<Copy>>"
+  activate
+  if {$_input_error} {
+    set _input_error 0
+    return -code error ""
+  }
+  return $_input_result
+}
+
+#-------------------------------------------------------------------
+#  METHOD:  cancel - cancel input when ^C is hit
+# ------------------------------------------------------------------
+itcl::body Console::_cancel {} {
+  if {$_input_mode} {
+    set _needNL 1
+    $_twin mark set insert {insert lineend}
+    $_twin insert {insert lineend} "^C\n"
+    incr _invoking
+    set _input_error 1
+    set _input_result ""
   }
 }
 
@@ -402,7 +439,7 @@ itcl::body Console::activate {{prompt {}}} {
 #-------------------------------------------------------------------
 #  METHOD:  invoke - invoke a command
 # ------------------------------------------------------------------
-itcl::body Console::invoke {} {
+itcl::body Console::invoke {{controld 0}} {
   global gdbtk_state
 
   set text [$_twin get {cmdmark + 1 char} end ]
@@ -433,6 +470,13 @@ itcl::body Console::invoke {} {
     }
   }
 
+  if {$_input_mode} {
+    if {!$controld} {append text \n}
+    set _input_result $text
+    set _needNL 1
+    return
+  }
+  
   # Only push new nonempty history items.
   if {$text != "" && [lindex $_history 0] != $text} {
     lvarpush _history $text
