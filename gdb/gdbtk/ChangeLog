@@ -1,3 +1,8 @@
+2001-03-08  Andrew Cagney  <ac131313@redhat.com>
+
+	* generic/gdbtk-cmds.c (map_arg_registers): Use REG_NUM instead of
+	ARCH_REG_NUM.
+
 2001-03-01  Nicholas Duffek  <nsd@redhat.com>
 
 	* README.GDBTK: Minor spelling, grammar, and formatting fixes.
