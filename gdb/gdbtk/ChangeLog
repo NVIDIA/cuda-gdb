@@ -1,3 +1,8 @@
+2002-05-05  Alexandre Oliva  <aoliva@redhat.com>
+
+	* generic/gdbtk-register.c (get_register, register_changed_p):
+	Don't depend on variable-sized automatic arrays.
+
 2002-05-04  Andrew Cagney  <ac131313@redhat.com>
 
 	* generic/gdbtk-wrapper.h (GDB_select_frame): Delete declaration.

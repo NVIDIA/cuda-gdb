@@ -204,8 +204,8 @@ static void
 get_register (int regnum, void *fp)
 {
   struct type *reg_vtype;
-  char raw_buffer[MAX_REGISTER_RAW_SIZE];
-  char virtual_buffer[MAX_REGISTER_VIRTUAL_SIZE];
+  char *raw_buffer = alloca (MAX_REGISTER_RAW_SIZE);
+  char *virtual_buffer = alloca (MAX_REGISTER_VIRTUAL_SIZE);
   int format = (int) fp;
   int optim;
 
@@ -348,7 +348,7 @@ map_arg_registers (int objc, Tcl_Obj *CONST objv[],
 static void
 register_changed_p (int regnum, void *argp)
 {
-  char raw_buffer[MAX_REGISTER_RAW_SIZE];
+  char *raw_buffer = alloca (MAX_REGISTER_RAW_SIZE);
 
   if (!frame_register_read (selected_frame, regnum, raw_buffer))
     return;
