@@ -2189,18 +2189,15 @@ gdb_tracepoint_exists_command (clientData, interp, objc, objv)
 }
 
 static int
-gdb_get_tracepoint_info (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_get_tracepoint_info (ClientData clientData, Tcl_Interp *interp,
+			 int objc, Tcl_Obj *CONST objv[])
 {
   struct symtab_and_line sal;
   int tpnum;
   struct tracepoint *tp;
   struct action_line *al;
   Tcl_Obj *action_list;
-  char *filename, *funcname, *fname;
+  char *filename, *funcname;
 
   if (objc != 2)
     {
@@ -2463,16 +2460,12 @@ gdb_disassemble (clientData, interp, objc, objv)
  */
 
 static int
-gdb_load_disassembly (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_load_disassembly (ClientData clientData, Tcl_Interp *interp,
+		      int objc, Tcl_Obj *CONST objv[])
 {
   CORE_ADDR low, high;
   struct disassembly_client_data client_data;
   int mixed_source_and_assembly, ret_val, i;
-  char *widget;
   char *arg_ptr;
   char *map_name;
 
@@ -3167,15 +3160,10 @@ compare_lines (mle1p, mle2p)
  */
 
 static int
-gdb_loc (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_loc (ClientData clientData, Tcl_Interp *interp, int objc, Tcl_Obj *CONST objv[])
 {
   char *filename;
   struct symtab_and_line sal;
-  struct symbol *sym;
   char *fname;
   CORE_ADDR pc;
 
@@ -3467,11 +3455,8 @@ gdb_get_mem (clientData, interp, objc, objv)
  * Additional memory will be allocated if needed. */
 #define LTABLE_SIZE 20000
 static int
-gdb_loadfile (clientData, interp, objc, objv)
-  ClientData clientData;
-  Tcl_Interp *interp;
-  int objc;
-  Tcl_Obj *CONST objv[];
+gdb_loadfile (ClientData clientData, Tcl_Interp *interp, int objc,
+	      Tcl_Obj *CONST objv[])
 {
   char *file, *widget;
   int linenumbers, ln, lnum, ltable_size;
@@ -3482,8 +3467,7 @@ gdb_loadfile (clientData, interp, objc, objv)
   long mtime = 0;
   struct stat st;
   char line[10000], line_num_buf[18];
-  int prefix_len_1, prefix_len_2, cur_prefix_len, widget_len;
-  char *text_argv[8];
+  char *text_argv[9];
   Tcl_CmdInfo text_cmd;
 
  
@@ -3604,25 +3588,24 @@ gdb_loadfile (clientData, interp, objc, objv)
       
       while (fgets (line + 1, 9980, fp))
         {
-	  char *p;
-
 	  /* Look for DOS style \r\n endings, and if found,
 	   * strip off the \r.  We assume (for the sake of
 	   * speed) that ALL lines in the file have DOS endings,
 	   * or none do.
 	   */
 	  
-	  if (found_carriage_return) {
-	    char *p;
-	    
-	    p = strrchr(line, '\0') - 2;
-	    if (*p == '\r') {
-	      *p = '\n';
-	      *(p + 1) = '\0';
-	    } else {
-	      found_carriage_return = 0;
+	  if (found_carriage_return)
+	    {
+	      char *p;
+	      
+	      p = strrchr(line, '\0') - 2;
+	      if (*p == '\r') {
+		*p = '\n';
+		*(p + 1) = '\0';
+	      } else {
+		found_carriage_return = 0;
+	      }
 	    }
-	  }
 	  
           sprintf (line_num_buf+2, "%d", ln);
           if (ltable[ln >> 3] & (1 << (ln % 8)))
@@ -3831,15 +3814,12 @@ gdb_set_bp (clientData, interp, objc, objv)
  */
 
 static int
-gdb_set_bp_addr (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
-
+gdb_set_bp_addr (ClientData clientData, Tcl_Interp *interp, int objc,
+		 Tcl_Obj *CONST objv[])
+     
 {
   struct symtab_and_line sal;
-  int line, ret, thread = -1;
+  int ret, thread = -1;
   long addr;
   struct breakpoint *b;
   char *filename, *typestr, *buf;
@@ -4030,11 +4010,8 @@ gdb_find_bp_at_addr (clientData, interp, objc, objv)
  */
 
 static int
-gdb_get_breakpoint_info (clientData, interp, objc, objv)
-     ClientData clientData;
-     Tcl_Interp *interp;
-     int objc;
-     Tcl_Obj *CONST objv[];
+gdb_get_breakpoint_info (ClientData clientData, Tcl_Interp *interp, int objc,
+			 Tcl_Obj *CONST objv[])
 {
   struct symtab_and_line sal;
   struct command_line *cmd;
@@ -4042,7 +4019,7 @@ gdb_get_breakpoint_info (clientData, interp, objc, objv)
   struct breakpoint *b;
   extern struct breakpoint *breakpoint_chain;
   char *funcname, *filename;
-  struct symbol *sym;
+
   Tcl_Obj *new_obj;
 
   if (objc != 2)
@@ -4242,10 +4219,7 @@ gdb_stack (clientData, interp, objc, objv)
  * This is stolen from print_frame_info in stack.c.
  */
 static void
-get_frame_name (interp, list, fi)
-     Tcl_Interp *interp;
-     Tcl_Obj *list;
-     struct frame_info *fi;
+get_frame_name (Tcl_Interp *interp, Tcl_Obj *list, struct frame_info *fi)
 {
   struct symtab_and_line sal;
   struct symbol *func = NULL;
@@ -4302,8 +4276,6 @@ get_frame_name (interp, list, fi)
 
   if (sal.symtab)
     {
-      char *name = NULL;
-
       objv[0] = Tcl_NewStringObj (funname, -1);
       Tcl_ListObjAppendElement (interp, list, objv[0]);
     }

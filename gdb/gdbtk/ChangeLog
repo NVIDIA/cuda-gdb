@@ -1,3 +1,15 @@
+2001-04-02  Martin M. Hunt  <hunt@redhat.com>
+
+	* generic/gdbtk-cmds.c (gdb_loadfile): Adjust size of text_argv
+	array to prevent writing out of range. Remove unused variables.
+	Fix formatting.
+	(gdb_get_tracepoint_info): Remove unused variable "fname".
+	(gdb_load_disassembly): Remove unused variable "widget".
+	(gdb_loc): Remove unused variable "sym".
+	(gdb_set_bp_addr): Remove unused variable "line".
+	(gdb_get_breakpoint_info): Remove unused variable "sym".
+	(get_frame_name): Remove unused variable "name".
+
 2001-03-29  Fernando Nasser  <fnasser@redhat.com>
 
 	* library/variable.tcl (update): Cope with varobj type changes.
