@@ -34,7 +34,6 @@ class VariableWin {
 	build_win $itk_interior
 	gdbtk_idle
 
-	add_hook gdb_update_hook "$this update"
 	add_hook gdb_no_inferior_hook "$this no_inferior"
 	add_hook gdb_clear_file_hook [code $this clear_file]
         # FIXME: This is too harsh.  We must add to varobj a method
@@ -109,7 +108,7 @@ class VariableWin {
 
 
 	# Update the tree display
-	update
+	update dummy
 	pack $Tree -expand yes -fill both
 
 	# Create the popup menu for this widget
@@ -163,7 +162,6 @@ class VariableWin {
 	destroy $DisabledTextStyle
 
 	# Remove this window and all hooks
-	remove_hook gdb_update_hook "$this update"
 	remove_hook gdb_no_inferior_hook "$this no_inferior"
 	remove_hook gdb_clear_file_hook [code $this clear_file]
 	remove_hook file_changed_hook [code $this clear_file]
@@ -816,7 +814,7 @@ class VariableWin {
     # METHOD:   update
     # OVERRIDE THIS METHOD and call it from there
     # ------------------------------------------------------------------
-    method update {} {
+    method update {event} {
 	global Update
 	debug
 

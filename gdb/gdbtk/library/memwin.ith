@@ -60,7 +60,6 @@ class MemWin {
     method changed_cell {from to}
     method edit {cell}
     method toggle_enabled {}
-    method update {}
     method newsize {height}
     method update_address_cb {}
     method update_address { {ae ""} }
@@ -79,5 +78,6 @@ class MemWin {
     #
     method busy {event}
     method idle {event}
+    method update {event}
   }
 }

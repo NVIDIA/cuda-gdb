@@ -27,7 +27,6 @@ body ProcessWin::constructor {args} {
   gdbtk_idle
 
   # Add hooks for this object
-  add_hook gdb_update_hook [code $this update]
   add_hook gdb_no_inferior_hook [code $this idle]
 }
 
@@ -48,7 +47,7 @@ body ProcessWin::build_win {} {
     -selectforeground black \
     -font src-font          \
     -exportselection false
-  update
+  update dummy
   balloon register $lb "Click on a line to change context"
 
   # bind mouse button 1 to change the current context
@@ -62,7 +61,7 @@ body ProcessWin::build_win {} {
 # ------------------------------------------------------------------
 #  METHOD:  update - update widget when something changes
 # ------------------------------------------------------------------
-body ProcessWin::update {} {
+body ProcessWin::update {event} {
   if {!$protect_me} {
 
     $lb delete 0 end
@@ -126,7 +125,6 @@ body ProcessWin::change_context {y} {
 #  DESTRUCTOR - destroy window containing widget
 # ------------------------------------------------------------------
 body ProcessWin::destructor {} {
-  remove_hook gdb_update_hook [code $this update]
   remove_hook gdb_no_inferior_hook [code $this no_inferior]
 }
 

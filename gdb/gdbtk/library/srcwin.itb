@@ -38,10 +38,6 @@ body SrcWin::constructor {args} {
   wm protocol $top WM_DELETE_WINDOW "[code $this _exit]"
 
   # add hooks
-  if {! $update_hook_init} then {
-    set update_hook_init 1
-    add_hook gdb_update_hook "SrcWin::choose_and_update"
-  }
   add_hook gdb_no_inferior_hook "$this no_inferior"
   add_hook download_progress_hook "$this download_progress"
   add_hook state_hook [code $this _set_state]
@@ -318,11 +314,6 @@ body SrcWin::_name {w {val ""}} {
 #  PRIVATE PUBLIC METHOD:  toggle_updates - update toggle callback
 # ------------------------------------------------------------------
 body SrcWin::toggle_updates {value} {
-  if {$value} {
-    add_hook gdb_update_hook "$this update"
-  } else {
-    remove_hook gdb_update_hook "$this update"
-  }
   # save state in do_updates so it will be preserved
   # in window reconfigs
   set do_updates $value
@@ -556,6 +547,22 @@ body SrcWin::busy {event} {
     } else {
       $_toolbar configure -runstop busy
     }
+  }
+}
+
+# ------------------------------------------------------------------
+#   PUBLIC METHOD:  update - The inferior's state has changed.
+# ------------------------------------------------------------------
+body SrcWin::update {event} {
+
+  # FIXME: This is kinda lame. We need to run this only once
+  # as it is now written, so only the first window in the list
+  # will actually call choose_and_update.
+  # This is still better than before, since it will not
+  # matter if this window is destroyed: as long as _a_
+  # SrcWin exists, this will get called.
+  if {[lindex $window_list 0] == $this} {
+    choose_and_update
   }
 }
 

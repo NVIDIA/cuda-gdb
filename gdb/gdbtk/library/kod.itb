@@ -31,9 +31,6 @@ body KodWin::constructor {args} {
   gdbtk_busy
   build_win
   gdbtk_idle
-
-  # Add hooks for this object
-  add_hook gdb_update_hook [code $this update]
 }
 
 # ------------------------------------------------------------------
@@ -146,13 +143,13 @@ body KodWin::build_win {} {
 
   #    window_name "Kernel Objects"
 
-  update
+  update dummy
 }
 
 # ------------------------------------------------------------------
 #  METHOD:  update - update widget when something changes
 # ------------------------------------------------------------------
-body KodWin::update {} {
+body KodWin::update {event} {
 
   debug "updating kod window"
 
@@ -182,7 +179,7 @@ body KodWin::display {} {
     set LevelCmd($level) $LevelCmd([expr $level-1])
     append LevelCmd($level) $object
     debug "kod command for level $level is now: $LevelCmd($level)"
-    update
+    update dummy
     # Run idle hooks and cause all other widgets to update
     gdbtk_idle
   }
@@ -368,7 +365,7 @@ body KodWin::top {} {
   debug "going to top from level $level"
   if {$level > 0} {
     set level 0
-    update
+    update dummy
   }
 }
 
@@ -380,7 +377,7 @@ body KodWin::up {} {
   if {$level > 0} {
     incr level -1
     debug "...to level $level"
-    update
+    update dummy
   }
 }
 
@@ -395,8 +392,6 @@ body KodWin::destructor {} {
   catch {unset pane1_vals}
   catch {unset pane2_vals}
   catch {unset kodActivePane}
-
-  remove_hook gdb_update_hook [code $this update]
 }
 
 # ------------------------------------------------------------------
@@ -409,7 +404,7 @@ body KodWin::set_variable {event} {
   if {[$event get variable] == "os" && $value != ""} {
     set LevelCmd(0) "info $value "
     set level 0
-    update
+    update dummy
   }
 }
 

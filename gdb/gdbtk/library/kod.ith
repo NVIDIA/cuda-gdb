@@ -36,7 +36,6 @@ class KodWin {
     variable BState
     variable Running 0
     method build_win {}
-    method update {}
     method display {}
     method display_list {}
     method display_object {{cmd ""} {obj ""}}
@@ -59,5 +58,6 @@ class KodWin {
     method set_variable {event}
     method busy {event}
     method idle {event}
+    method update {event}
   }
 }

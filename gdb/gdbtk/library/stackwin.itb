@@ -20,7 +20,6 @@ body StackWin::constructor {args} {
   build_win
   gdbtk_idle
   
-  add_hook gdb_update_hook [code $this update]
   add_hook gdb_no_inferior_hook [code $this no_inferior]
 }
 
@@ -28,7 +27,6 @@ body StackWin::constructor {args} {
 #  DESTRUCTOR - destroy window containing widget
 # ------------------------------------------------------------------
 body StackWin::destructor {} {
-  remove_hook gdb_update_hook [code $this update]
   remove_hook gdb_no_inferior_hook [code $this no_inferior]
 }
 
@@ -48,7 +46,7 @@ body StackWin::build_win {} {
     -selectforeground black \
     -font src-font          \
     -exportselection false
-  update
+  update dummy
   $lb configure -width $maxwidth
 
   # bind mouse button 1 to change the stack frame
@@ -64,7 +62,7 @@ body StackWin::build_win {} {
 # ------------------------------------------------------------------
 #  METHOD:  update - update widget when PC changes
 # ------------------------------------------------------------------
-body StackWin::update {} {
+body StackWin::update {event} {
   global gdb_selected_frame_level
 
   if {!$protect_me} {

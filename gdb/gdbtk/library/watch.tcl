@@ -197,11 +197,11 @@ class WatchWin {
     return $list
   }
 
-  method update {} {
+  method update {event} {
     global Update Display
     debug "START WATCH UPDATE CALLBACK"
     catch {populate {}} msg
-    catch {VariableWin::update} msg
+    catch {VariableWin::update dummy} msg
     debug "Did VariableWin::update with return \"$msg\""
 
     # Make sure all variables are marked as _not_ Openable?
@@ -255,7 +255,7 @@ class WatchWin {
 	  set var [gdb_variable create -expr $name]
 	  set ::Update($this,$var) 1
 	  lappend Watched $var
-	  update
+	  update dummy
 	  return 1
       }
     }

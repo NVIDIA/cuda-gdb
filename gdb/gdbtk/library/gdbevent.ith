@@ -171,3 +171,37 @@ class IdleEvent {
 
   public method handler {} { return "idle" }
 }
+
+# UPDATE EVENT
+#
+# This event is created/dispatched whenever the target's state
+# has changed. When an UpdateEvent is received, widgets should
+# update their contents to reflect the inferior's new state.
+#
+# Right now, this just holds the output of gdb_loc...
+#
+# compile_filename - Filename stored in the symtab
+# full_filename    - Full filename of file, if found in source search dir
+# function         - Function name
+# line             - Line number
+# frame_pc         - Frame's PC
+# pc               - Real stop PC
+# shlib            - Shared library stopped in
+#
+# FIXME: Should probably put frame_pc and pc into different
+# types of update events...
+class UpdateEvent {
+  inherit GDBEvent
+
+  constructor {args} {}
+  public method get {what}
+  public method handler {} { return "update" }
+
+  private variable _compile_filename {}
+  private variable _function         {}
+  private variable _full_filename    {}
+  private variable _line             {}
+  private variable _frame_pc         {}
+  private variable _pc               {}
+  private variable _shlib            {}
+}

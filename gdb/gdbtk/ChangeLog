@@ -1,3 +1,56 @@
+2001-06-04  Keith Seitz  <keiths@redhat.com>
+
+	* library/interface.tcl (gdb_update_hook): Mark as deprecated.
+	(gdbtk_update): Dispatch and UpdateEvent, too.
+	* library/ehandler.ith (update): New event handler.
+	* library/gdbevent.ith (UpdateEvent): New event.
+	* library/gdbevent.itb (UpdateEvent::constructor): New method.
+	(UpdateEvent::get): New method.
+	* library/kod.ith (udpate): Match event handler definition.
+	* library/kod.itb (update): Ditto.
+	(build_win): Pass dummy argument to update method.
+	(top): Ditto.
+	(up): Ditto.
+	(set_variable): Ditto.
+	* library/memwin.ith (update): Match event handler definition.
+	* library/memwin.itb (update): Ditto.
+	(constructor): Remove gdb_update_hook.
+	(destructor): Ditto.
+	* library/process.ith (update): Match event handler definition.
+	* library/process.itb (update): Ditto.
+	(constructor): Remove gdb_update_hook.
+	(destructor): Ditto.
+	(build_win): Pass dummy argument to update method.
+	* library/regwin.ith (update): Match event handler definition.
+	* library/regwin.itb (update): Ditto.
+	(constructor): Remove gdb_update_hook.
+	(destructor): Ditto.
+	(build_win): Pass dummy argument to update method.
+	(but3): Ditto.
+	(unedit): Ditto.
+	* library/stackwin.ith (update): Match event handler definition.
+	* library/stackwin.itb (update): Ditto.
+	(constructor): Remove gdb_update_hook.
+	(destructor): Ditto.
+	(build_win): Pass dummy argument to update method.
+	* library/tdump.tcl (update): Match event handler definition.
+	(constructor): Remove gdb_update_hook.
+	(destructor): Ditto.
+	(build_win): Pass dummy argument to update method.
+	* library/variables.tcl (update): Match event handler definition.
+	(build_win): Pass dummy argument to update method.
+	* library/locals.tcl (update): Match event handler definition.
+	(constructor): Pass dummy argument to update method.
+	* library/watch.tcl (update): Match event handler definition.
+	Pass dummy argument to VariableWin::update.
+	(add): Pass dummy argument to update method.
+	* library/srcwin.ith (update): New method.
+	(update_hook_init): Remove.
+	* library/srcwin.itb (update): New method.
+	(constructor): Remove gdb_update_hook.
+	(destructor): Ditto.
+	* tclIndex: Regenerate.
+
 2001-06-01  Keith Seitz  <keiths@redhat.com>
 
 	* library/console.itb (constructor): Pass dummy argument

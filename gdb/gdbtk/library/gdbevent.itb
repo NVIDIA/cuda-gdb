@@ -170,3 +170,33 @@ body SetVariableEvent::get {what} {
     default { error "unknown event data \"$what\": should be: variable|value" }
   }
 }
+
+# ------------------------------------------------------------
+#  CONSTRUCTOR: Create an UpdateEvent
+# ------------------------------------------------------------
+body UpdateEvent::constructor {args} {
+  if {[catch {gdb_loc} loc]} {
+    dbug E "could not get current location: $loc"
+  } else {
+    lassign $loc _compile_filename _function _full_filename \
+      _line _frame_pc _pc _shlib
+  }
+}
+
+# ------------------------------------------------------------
+#  PUBLIC METHOD:  get - Retrieve data about the event
+# ------------------------------------------------------------
+body UpdateEvent::get {what} {
+
+  switch $what {
+    compile_filename { return $_compile_filename }
+    full_filename    { return $_full_filename }
+    function         { return $_function }
+    line             { return $_line }
+    frame_pc         { return $_frame_pc }
+    pc               { return $_pc }
+    shlib            { return $_shlib }
+
+    default { error "unknown event data \"$what\": should be: variable|value" }
+  }
+}

@@ -67,10 +67,11 @@ proc gdbtk_tcl_set_variable {var val} {
 #   time delays when enabling the UI.
 define_hook gdb_idle_hook
 
+# *** DEPRECATED: Use GDBEventHandler::update instead.
 # GDB_UPDATE_HOOK
 #   This hook is used to register a callback to update the widget
 #   when debugger state has changed.
-define_hook gdb_update_hook
+#define_hook gdb_update_hook
 
 # GDB_NO_INFERIOR_HOOK
 #   This hook is used to register a callback which should be invoked
@@ -148,10 +149,10 @@ proc gdbtk_busy {} {
 #          that could change target state.
 # ------------------------------------------------------------------
 proc gdbtk_update {} {
-  set err [catch {run_hooks gdb_update_hook} txt]
-  if {$err} { 
-    dbug E "$txt" 
-  }
+
+  set e [UpdateEvent \#auto]
+  GDBEventHandler::dispatch $e
+  delete object $e
   
   # Force the screen to update
   update

@@ -48,8 +48,6 @@ body MemWin::constructor {args} {
   init_addr_exp
   build_win
   gdbtk_idle
-
-  add_hook gdb_update_hook "$this update"
 }
 
 # ------------------------------------------------------------------
@@ -59,7 +57,6 @@ body MemWin::destructor {} {
   if {[winfo exists $prefs_win]} {
     $prefs_win cancel
   }
-  remove_hook gdb_update_hook "$this update"
 }
 
 
@@ -368,7 +365,7 @@ body MemWin::toggle_enabled {} {
 # ------------------------------------------------------------------
 #  METHOD:  update - update widget after every PC change
 # ------------------------------------------------------------------
-body MemWin::update {} {
+body MemWin::update {event} {
   global _mem
   if {$_mem($this,enabled)} {
     update_address

@@ -27,7 +27,6 @@ class ProcessWin {
     method change_context {y}
     method cursor {glyph}
     method change_frame {y}
-    method update {}
   }
 
   public {
@@ -36,9 +35,10 @@ class ProcessWin {
     method destructor {}
 
     #
-    # Event
+    # GDB Events
     #
     method busy {event}    
     method idle {event}
+    method update {event}
   }
 }

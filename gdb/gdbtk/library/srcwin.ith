@@ -61,6 +61,7 @@ class SrcWin {
     #
     method busy {event}
     method idle {event}
+    method update {event}
   }
 
   private {
@@ -96,7 +97,6 @@ class SrcWin {
     # source windows.
     common window_list ""
     common pc_window ""
-    common update_hook_init 0
 
     # fenceposts
     variable Running 0

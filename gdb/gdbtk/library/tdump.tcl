@@ -48,7 +48,6 @@ itcl_class TdumpWin {
     wm withdraw $top
 
     build_win
-    add_hook gdb_update_hook "$this update"
     after idle [list wm deiconify $top]
 
   }
@@ -66,14 +65,14 @@ itcl_class TdumpWin {
     $twin configure -insertwidth 0 
 
     pack append  [namespace tail $this] [namespace tail $this].stext {left expand fill}
-    update
+    update dummy
   }
 
 
   # ------------------------------------------------------------------
   #  METHOD:  update - update widget when PC changes
   # ------------------------------------------------------------------
-  method update {} {
+  method update {event} {
     #debug "tdump: update"
     gdbtk_busy
     set tframe_num [gdb_get_trace_frame_num]
@@ -99,7 +98,6 @@ itcl_class TdumpWin {
   #  DESTRUCTOR - destroy window containing widget
   # ------------------------------------------------------------------
   destructor {
-    remove_hook gdb_update_hook "$this update"
     set top [winfo toplevel [namespace tail $this]]
     destroy $this
     destroy $top

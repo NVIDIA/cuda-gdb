@@ -19,7 +19,7 @@ class LocalsWin {
     #  CONSTRUCTOR - create new locals window
     # ------------------------------------------------------------------
     constructor {args} {
-	update
+	update dummy
     }
 
     # ------------------------------------------------------------------
@@ -65,7 +65,7 @@ class LocalsWin {
 	return [$_frame variables]
     }
 
-    method update {} {
+    method update {event} {
 	global Update Display
 
 	debug "START LOCALS UPDATE CALLBACK"
@@ -115,7 +115,7 @@ class LocalsWin {
 	}
 
 	# Update variables in window
-	VariableWin::update
+	VariableWin::update dummy
 
 	debug "END LOCALS UPDATE CALLBACK"
     }

@@ -59,7 +59,6 @@ class RegWin {
     method edit {r} 
     method acceptEdit {r} 
     method unedit {} 
-    method update {}
     method reconfig {}
 
     #
@@ -68,6 +67,7 @@ class RegWin {
     method set_variable {event}
     method busy {event}
     method idle {event}
+    method update {event}
   }
 
 
