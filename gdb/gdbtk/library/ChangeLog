@@ -1,6 +1,17 @@
+2000-10-31  Larry Smith  <lsmith@redhat.com>
+
+        * targetselection.ith (run_method): Add variable for
+        "Run Program" and "Continue..." buttons
+        * targetselection.itb (build_win): put "Run Program" and
+        "Continue From..." buttons into a frame and save them in new
+        run_method variable.
+        * change targetselection.itb (change_target) disables "Run
+        Program" and "Continue..." buttons when the target is "exec",
+        enables them for all others.
+
 2000-10-26  Larry Smith  <lsmith@redhat.com>
 
-        * change targetselection.itb: Run Program and Continue From Last Stop
+        * targetselection.itb: Run Program and Continue From Last Stop
         are now radio buttons rather than checkbuttons
 
 2000-10-26  Mo DeJong  <mdejong@redhat.com>

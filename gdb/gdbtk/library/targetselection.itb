@@ -487,21 +487,33 @@ body TargetSelection::build_win {} {
   set var [pref varname gdb/src/run_load]
   checkbutton $frame.load -text {Download Program} -variable $var
 
+  set rm_frame [iwidgets::labeledframe $frame.run_method -labelpos nw -labeltext "Run Method" ]
+  set RunMethod [ $rm_frame childsite ]
+
+  set rm_label [label $frame.label -text "Run Method:"]
   set var [pref varname gdb/src/run_cont]
-  radiobutton $frame.cont -text {Continue from Last Stop} -value 1 -variable $var \
+  radiobutton $RunMethod.cont -text {Continue from Last Stop} -value 1 -variable $var \
     -command [code $this set_run run]
   
   set var [pref varname gdb/src/run_run]
-  radiobutton $frame.run -text {Run Program} -value 1 -variable $var \
+  radiobutton $RunMethod.run -text {Run Program} -value 1 -variable $var \
     -command [code $this set_run cont]
 
   # The after attaching command entry
   set _after_entry [entry $frame.aftere]
   label $frame.afterl -text {Command to issue after attaching:}
-  grid $frame.attach $frame.run -sticky w
-  grid $frame.load   $frame.cont -sticky w
-  grid $frame.afterl -sticky we -columnspan 2
-  grid $frame.aftere -sticky we -columnspan 2
+
+  grid $frame.label -column 1 -row 0 -sticky w
+  grid $frame.attach -column 0 -row 1 -ipady 2
+  grid $frame.load -column 0 -row 2 -ipady 2
+
+  grid $RunMethod.run -column 0 -row 1 -sticky w -ipady 2
+  grid $RunMethod.cont -column 0 -row 2 -sticky w -ipady 2
+  
+  grid $rm_frame -column 1 -row 1 -rowspan 2 -sticky nsew -ipady 2
+
+  grid $frame.afterl -row 4 -sticky we -columnspan 2 -ipady 2
+  grid $frame.aftere -sticky we -columnspan 2 -ipady 2
   grid columnconfigure $frame 0 -weight 1
   grid columnconfigure $frame 1 -weight 1
 
@@ -722,6 +734,15 @@ body TargetSelection::config_dialog {t} {
 body TargetSelection::change_target {w {name ""}} {
   if {$name == ""} {return}
   set target [get_target $name]
+
+  if { "$target" == "exec" } {
+    $RunMethod.run configure -state disabled -value 1
+    $RunMethod.cont configure -state disabled
+  } else {
+    $RunMethod.run configure -state normal
+    $RunMethod.cont configure -state normal
+  }
+
   debug "$target"
   set defbaud $gdb_target($target,defbaud)
   pref define gdb/load/$target-baud $defbaud

@@ -55,6 +55,8 @@ class TargetSelection {
     variable MoreButton
     variable MoreFrame
     variable MoreLabel
+
+    variable RunMethod
     
     proc _init_prefs {}
     proc default_port {}
