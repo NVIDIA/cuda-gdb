@@ -205,6 +205,7 @@ body Console::_build_win {} {
 
 body Console::idle {event} {
   set _running 0
+  $_top configure -cursor {}
 }
 
 # ------------------------------------------------------------------
@@ -212,6 +213,7 @@ body Console::idle {event} {
 # ------------------------------------------------------------------
 body Console::busy {event} {
   set _running 1
+  $_top configure -cursor watch
 }
 
 # ------------------------------------------------------------------
