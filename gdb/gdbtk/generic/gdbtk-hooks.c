@@ -73,7 +73,7 @@ extern void gdbtk_create_tracepoint (int);
 extern void gdbtk_delete_tracepoint (int);
 extern void gdbtk_modify_tracepoint (int);
 
-extern void (*pre_add_symbol_hook) (char *);
+extern void (*pre_add_symbol_hook) (const char *);
 extern void (*post_add_symbol_hook) (void);
 extern void (*selected_frame_level_changed_hook) (int);
 extern int (*ui_loop_hook) (int);
@@ -158,7 +158,7 @@ gdbtk_add_hooks (void)
   trace_start_stop_hook = gdbtk_trace_start_stop;
 
   attach_hook            = gdbtk_attach;
-  detach_hook            = gdbtk_detach; 
+  detach_hook            = gdbtk_detach;
 
   register_changed_hook = gdbtk_register_changed;
   memory_changed_hook = gdbtk_memory_changed;
@@ -257,7 +257,7 @@ gdbtk_fputs (const char *ptr, struct ui_file *stream)
 {
   if (gdbtk_disable_fputs)
     return;
-  
+
   in_fputs = 1;
 
   if (stream == gdb_stdlog)
@@ -341,7 +341,7 @@ gdbtk_ignorable_warning (const char *class, const char *warning)
   xasprintf (&buf, "gdbtk_tcl_ignorable_warning {%s} {%s}", class, warning);
   if (Tcl_Eval (gdbtk_interp, buf) != TCL_OK)
     report_error ();
-  free(buf); 
+  free(buf);
 }
 
 static void
@@ -576,7 +576,7 @@ gdbtk_set_hook (struct cmd_list_element *cmdblk)
     report_error ();
 
   Tcl_DStringFree (&cmd);
-   
+
   if (buffer != NULL)
     {
       free(buffer);
@@ -590,8 +590,8 @@ gdbtk_load_hash (const char *section, unsigned long num)
   xasprintf (&buf, "Download::download_hash %s %ld", section, num);
   if (Tcl_Eval (gdbtk_interp, buf) != TCL_OK)
     report_error ();
-  free(buf); 
-   
+  free(buf);
+
   return atoi (gdbtk_interp->result);
 }
 
@@ -599,7 +599,7 @@ gdbtk_load_hash (const char *section, unsigned long num)
 /* This hook is called whenever we are ready to load a symbol file so that
    the UI can notify the user... */
 static void
-gdbtk_pre_add_symbol (char *name)
+gdbtk_pre_add_symbol (const char *name)
 {
   gdbtk_two_elem_cmd ("gdbtk_tcl_pre_add_symbol", name);
 }
@@ -630,7 +630,7 @@ gdbtk_wait (ptid_t ptid, struct target_waitstatus *ourstatus)
  * This handles all queries from gdb.
  * The first argument is a printf style format statement, the rest are its
  * arguments.  The resultant formatted string is passed to the Tcl function
- * "gdbtk_tcl_query".  
+ * "gdbtk_tcl_query".
  * It returns the users response to the query, as well as putting the value
  * in the result field of the Tcl interpreter.
  */
@@ -766,7 +766,7 @@ gdbtk_annotate_signal ()
 	     target_signal_to_string (stop_signal));
   if (Tcl_Eval (gdbtk_interp, buf) != TCL_OK)
     report_error ();
-  free(buf);  
+  free(buf);
 }
 
 static void
