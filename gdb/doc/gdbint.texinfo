@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.120 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.121 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3231,10 +3231,6 @@ If not defined, @code{EXTRACT_RETURN_VALUE} is used.
 @item EXTRACT_STRUCT_VALUE_ADDRESS_P()
 @findex EXTRACT_STRUCT_VALUE_ADDRESS_P
 Predicate for @code{EXTRACT_STRUCT_VALUE_ADDRESS}.
-
-@item FLOAT_INFO
-@findex FLOAT_INFO
-Deprecated in favor of @code{PRINT_FLOAT_INFO}.
 
 @item FP_REGNUM
 @findex FP_REGNUM
