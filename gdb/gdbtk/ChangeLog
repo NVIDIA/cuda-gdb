@@ -1,3 +1,8 @@
+2003-05-12  Elena Zannoni  <ezannoni@redhat.com>
+
+        * generic/gdbtk-cmds.c (gdb_search): Replace namespace_enum
+        with domain_emum, and *_NAMESPACE with *_DOMAIN.
+
 2003-05-08  Andrew Cagney  <cagney@redhat.com>
 
 	* generic/gdbtk-register.c (get_register): Replace

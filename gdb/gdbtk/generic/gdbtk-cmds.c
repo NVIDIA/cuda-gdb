@@ -1199,7 +1199,7 @@ gdb_search (ClientData clientData, Tcl_Interp *interp,
   struct cleanup *old_chain = NULL;
   Tcl_Obj *CONST * switch_objv;
   int index, switch_objc, i, show_files = 0;
-  namespace_enum space = 0;
+  domain_enum space = 0;
   char *regexp;
   int static_only, nfiles;
   Tcl_Obj **file_list;
@@ -1236,13 +1236,13 @@ gdb_search (ClientData clientData, Tcl_Interp *interp,
   switch ((enum search_opts) index)
     {
     case SEARCH_FUNCTIONS:
-      space = FUNCTIONS_NAMESPACE;
+      space = FUNCTIONS_DOMAIN;
       break;
     case SEARCH_VARIABLES:
-      space = VARIABLES_NAMESPACE;
+      space = VARIABLES_DOMAIN;
       break;
     case SEARCH_TYPES:
-      space = TYPES_NAMESPACE;
+      space = TYPES_DOMAIN;
       break;
     }
 
