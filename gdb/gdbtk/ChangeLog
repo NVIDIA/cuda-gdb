@@ -1,3 +1,8 @@
+2001-01-02  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
+
+	* library/interface.tcl (gdbtk_quit_check): Save session whenever
+	possible.
+
 2001-01-01  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
 
 	* library/ChangeLog-2000: New file. Entries dated 2000 moved here

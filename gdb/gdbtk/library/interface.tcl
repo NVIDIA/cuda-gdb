@@ -222,7 +222,10 @@ proc gdbtk_quit_check {} {
     if {![gdbtk_tcl_query $msg no]} {
       return 0
     }
-  } elseif {$gdb_exe_name != ""} {
+  }
+  
+  # If we have an executable file loaded, save a session associated to it
+  if {$gdb_exe_name != ""} {
     session_save
   }
   return 1
