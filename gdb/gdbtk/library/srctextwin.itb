@@ -1026,7 +1026,7 @@ body SrcTextWin::FillAssembly {w tagname filename funcname line addr pc_addr lib
     set oldpane $pane
     set result [LoadFromCache $w $addr A $lib]
     if {$result == 1} {
-      #debug [format "Disassembling at %x" $addr]
+      #debug "Disassembling at $addr"
       #debug "cf=$current(filename) name=$filename"
       if {[catch {gdb_load_disassembly $win nosource \
 			     [scope _map] $Cname $addr} mess]} {
@@ -2324,7 +2324,7 @@ body SrcTextWin::showBPBalloon {win x y} {
 
     if {$need_lf} {append str \n}
 
-    append str [format "breakpoint %d at %s:%d (%#x)\n   %s %s %s" \
+    append str [format "breakpoint %d at %s:%d (%s)\n   %s %s %s" \
 		  $b $file $linenum $addr $enabled $type $disposition]
 
     if {$thread != "-1"} {
