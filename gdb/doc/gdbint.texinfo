@@ -46,7 +46,7 @@ regarded as a program in the language TeX).
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.10 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.11 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3144,7 +3144,7 @@ appear anywhere else in the directory.
 
 @menu
 * Getting Started::		Getting started working on @value{GDBN}
-* Debugging @value{GDBN}::		Debugging @value{GDBN} with itself
+* Debugging GDB::		Debugging @value{GDBN} with itself
 @end menu
 
 @node Getting Started,,, Hints
@@ -3227,7 +3227,7 @@ wondering if anyone could give me some tips about understanding
 @value{GDBN}''---if we had some magic secret we would put it in this manual.
 Suggestions for improving the manual are always welcome, of course.
 
-@node Debugging @value{GDBN},,,Hints
+@node Debugging GDB,,,Hints
 
 @section Debugging @value{GDBN} with itself
 
