@@ -9,7 +9,7 @@
 	This change fixes part of the possible scenarios where a race condition
 	would cause core dumps if there were commands changing registers or
 	other target resources in a startup script.
-	The remaining scenarios are fixed by a patch to generic.gdbtk.c
+	The remaining scenarios are fixed by a patch to generic/gdbtk-hooks.c
 	* interface.tcl (gdbtk_update_safe): New function. Like gdbtk_update
 	but does nothing if target is running.
 	(gdbtk_register_changed): Call the above safe version.
