@@ -1,3 +1,9 @@
+2003-11-11  David Carlton  <carlton@kealia.com>
+
+	* generic/gdbtk-bp.c (gdb_find_bp_at_addr): Replace use of
+	BREAKPOINT->address by BREAKPOINT->loc->address.
+	(gdb_get_breakpoint_info): Ditto.
+
 2003-10-06  David Carlton  <carlton@kealia.com>
 
 	* generic/gdbtk-register.c (get_register_size): Replace

@@ -220,7 +220,7 @@ gdb_find_bp_at_addr (ClientData clientData, Tcl_Interp *interp,
   for (i = 0; i < breakpoint_list_size; i++)
     {
       if (breakpoint_list[i] != NULL
-	  && breakpoint_list[i]->address == addr)
+	  && breakpoint_list[i]->loc->address == addr)
 	Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
 				  Tcl_NewIntObj (i));
     }
@@ -310,7 +310,7 @@ gdb_get_breakpoint_info (ClientData clientData, Tcl_Interp *interp, int objc,
       return TCL_ERROR;
     }
 
-  sal = find_pc_line (b->address, 0);
+  sal = find_pc_line (b->loc->address, 0);
 
   filename = symtab_to_filename (sal.symtab);
   if (filename == NULL)
@@ -320,14 +320,16 @@ gdb_get_breakpoint_info (ClientData clientData, Tcl_Interp *interp, int objc,
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
 			    Tcl_NewStringObj (filename, -1));
 
-  funcname = pc_function_name (b->address);
+  funcname = pc_function_name (b->loc->address);
   new_obj = Tcl_NewStringObj (funcname, -1);
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, new_obj);
 
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
 			    Tcl_NewIntObj (b->line_number));
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-			    Tcl_NewStringObj (core_addr_to_string (b->address), -1));
+			    Tcl_NewStringObj (core_addr_to_string
+					      (b->loc->address),
+					      -1));
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
 			    Tcl_NewStringObj (bptypes[b->type], -1));
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
