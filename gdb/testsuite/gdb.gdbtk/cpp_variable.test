@@ -143,7 +143,7 @@ proc delete_all_variables {} {
 
 # run to "do_simple_class_tests"
 gdb_cmd "break do_simple_class_tests"
-gdb_cmd "run"
+gdbtk_test_run
 
 # Test:  cpp_variable-1.1
 # Desc:  stopped in do_simple_class_tests
