@@ -58,6 +58,7 @@ class SrcTextWin {
     method report_source_location {}
     method lookup_line {win y}
     method continue_to_here {{win {}} {y -1} {threads -1}}
+    method jump_to_here {{win {}} {y -1} {threads -1}}
     method set_bp_at_line {{type N} {win {}} {y -1} {threads "-1"}}
     method remove_bp_at_line {{win {}} {y -1}}
     method set_tp_at_line {{win {}} {y -1}}

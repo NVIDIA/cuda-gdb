@@ -189,6 +189,8 @@ body SrcTextWin::build_popups {} {
       
       addPopup break_rgn "Continue to Here" "$this continue_to_here" \
 	[pref get gdb/src/PC_TAG] 0 0
+      addPopup break_rgn "Jump to Here" "$this jump_to_here" \
+	[pref get gdb/src/PC_TAG] 0 0
       $popups(break_rgn) add separator
       
       addPopup break_rgn "Set Breakpoint" "$this set_bp_at_line" $bp_fg 
@@ -216,6 +218,7 @@ body SrcTextWin::build_popups {} {
     
     if {!$Browsing && [pref get gdb/control_target]} {
       addPopup bp "Continue to Here" "$this continue_to_here" {} 0 0
+      addPopup bp "Jump to Here" "$this jump_to_here" {} 0 0
       $popups(bp) add separator    
     }
     
@@ -236,6 +239,7 @@ body SrcTextWin::build_popups {} {
     if {[pref get gdb/control_target]} {
       
       addPopup tp "Continue to Here" "$this continue_to_here" green 0 0
+      addPopup bp "Jump to Here" "$this jump_to_here" {} 0 0
       #	$popups(tp) add separator    
 
       # Currently you cannot set a tracepoint and a breakpoint at the same line...
@@ -267,6 +271,8 @@ body SrcTextWin::build_popups {} {
     
     if {!$Browsing && [pref get gdb/control_target]} {
       addPopup bp_and_tp "Continue to Here" "$this continue_to_here" \
+	green 0 0
+      addPopup bp "Jump to Here" "$this jump_to_here" \
 	green 0 0
       $popups(bp_and_tp) add separator    
     }
@@ -1685,6 +1691,52 @@ body SrcTextWin::continue_to_here {{win {}} {y -1} {threads -1}} {
   gdb_cmd "disable"
   eval $set_cmd temp $threads
   gdb_immediate "continue"
+  gdb_cmd "enable"
+  foreach i [gdb_get_breakpoint_list] {
+    if {![info exists enabled($i)]} {
+      gdb_cmd "delete $i"
+    } elseif {!$enabled($i)} {
+      gdb_cmd "disable $i"
+    }
+  }
+  set dont_change_appearance 0
+}
+
+# ------------------------------------------------------------------
+#  METHOD:  jump_to_here - Advance to the line pointed to by the
+#  y coordinate in the window win.  If win is {} or y is -1, the values
+#  saved in the popups array are used.  
+#
+#  The threads parameter is not currently used.
+# ------------------------------------------------------------------
+body SrcTextWin::jump_to_here {{win {}} {y -1} {threads -1}} {
+  
+  # Look up the line...  This foreach is an lassign...
+  foreach {name line addr type set_cmd} [lookup_line $win $y] {
+    break
+  }
+
+  # Unfortunately we cant set the pc to a linespec and we have to do a
+  # trick with a temporary breakpoint and the jump command.
+  # FIXME: Get the address from the linespec.
+  # FIXME: Even in the case we do have an address, I was not able to just
+  # change the PC and get things updated wright.  While I work on that,
+  # I will use the temp breakpoint and jump trick for that case as well.
+  
+  set dont_change_appearance 1
+  
+  foreach i [gdb_get_breakpoint_list] {
+    set enabled($i) [lindex [gdb_get_breakpoint_info $i] 5]
+  }	    
+  gdb_cmd "disable"
+  
+  if {$type == "asm"} {
+    gdb_immediate "tbreak *$addr"
+    gdb_immediate "jump *$addr"
+  } else {
+    eval $set_cmd temp $threads
+    gdb_immediate "jump $name:$line"
+  }
   gdb_cmd "enable"
   foreach i [gdb_get_breakpoint_list] {
     if {![info exists enabled($i)]} {
