@@ -22,6 +22,18 @@ body Console::constructor {args} {
   add_hook gdb_busy_hook [list $this busy]
   add_hook gdb_idle_hook [list $this idle]
   add_hook gdb_no_inferior_hook [list $this idle]
+
+  # Right now the preferences window directly uses preference
+  # variables.  This means that if we track the preference changes
+  # here, things will appear weird to the user -- the console window
+  # will change before the user chooses Accpet in the prefs window.
+  # Until the preference window is fixed we can't enable this
+  # dynamic tracking.  FIXME.
+  # foreach option {gdb/console/wrap gdb/console/prompt_fg \
+  #		    gdb/console/error_fg gdb/console/font} {
+  #  pref add_hook $option [code $this _update_option]
+  # }
+
   set gdbtk_state(console) $this
 }
 
@@ -31,26 +43,20 @@ body Console::destructor {} {
   remove_hook gdb_busy_hook [list $this busy]
   remove_hook gdb_idle_hook [list $this idle]
   remove_hook gdb_no_inferior_hook [list $this idle]
-}
-  
-body Console::_build_win {} {
-  set wrap [pref get gdb/console/wrap]
 
-  if { $wrap } {
-    set hsm none
-  } else {
-    set hsm dynamic
-  }
-  iwidgets::scrolledtext $itk_interior.stext -hscrollmode $hsm \
+  # foreach option {gdb/console/wrap gdb/console/prompt_fg \
+  # 		    gdb/console/error_fg gdb/console/font} {
+  #   pref remove_hook $option [code $this _update_option]
+  # }
+}
+
+body Console::_build_win {} {
+  iwidgets::scrolledtext $itk_interior.stext \
     -vscrollmode dynamic -textbackground white
 
   set _twin [$itk_interior.stext component text]
 
-  if {$wrap} {
-    $_twin configure -wrap word
-  } else {
-    $_twin configure -wrap none
-  }
+  _set_wrap [pref get gdb/console/wrap]
 
   $_twin tag configure prompt_tag -foreground [pref get gdb/console/prompt_fg]
   $_twin tag configure err_tag -foreground [pref get gdb/console/error_fg]
@@ -613,4 +619,44 @@ body Console::_complete {} {
 body Console::_reset_tab {} {
   bind $_twin <KeyPress> {}
   set _saw_tab 0
+}
+
+
+# ------------------------------------------------------------------
+#  METHOD:  _set_wrap - Set wrap mode
+# ------------------------------------------------------------------
+body Console::_set_wrap {wrap} {
+  if { $wrap } {
+    set hsm none
+    set wv char
+  } else {
+    set hsm dynamic
+    set wv none
+  }
+
+  $itk_interior.stext configure -hscrollmode $hsm
+  $_twin configure -wrap $wv
+}
+
+# ------------------------------------------------------------------
+#  METHOD:  _update_option - Update in response to preference change
+# ------------------------------------------------------------------
+body Console::_update_option {name value} {
+  switch -- $name {
+    gdb/console/wrap {
+      _set_wrap $value
+    }
+
+    gdb/console/prompt_fg {
+      $_twin tag configure prompt_tag -foreground $value
+    }
+
+    gdb/console/error_fg {
+      $_twin tag configure err_tag -foreground $value
+    }
+
+    gdb/console/font {
+      $_twin configure -font $value
+    }
+  }
 }

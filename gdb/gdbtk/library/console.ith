@@ -61,5 +61,7 @@ class Console {
     method _search_history {}
     method _rsearch_history {}
     method _setprompt {{prompt {}}}
+    method _set_wrap {wrap}
+    method _update_option {name value}
   }
 }

@@ -1,3 +1,14 @@
+2000-12-02  Tom Tromey  <tromey@redhat.com>
+
+	* console.ith (_set_wrap): Declare.
+	(_update_option): Likewise.
+	* console.itb (Console::constructor): Install preference hooks
+	(commented out pending a bug fix).
+	(Console::destructor): Remove preference hooks.
+	(Console::_set_wrap): New method.
+	(Console::_update_option): New method.
+	(Console::_build_win): Use _set_wrap.
+
 2000-11-30  Tom Tromey  <tromey@cygnus.com>
 
 	* srctextwin.ith (enable_disable_at_line): Declare.
