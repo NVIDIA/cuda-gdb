@@ -1,5 +1,14 @@
 2002-08-14  Keith Seitz  <keiths@redhat.com>
 
+	* library/srcbar.itcl (create_plugin_menu): Deal with
+	multi plugin directories.
+	Catch any errors that might occur reading plugin.tcl.
+	* library/main.tcl: Add plugins from new default directory.
+	(INSIGHT_PLUGINS): New environment variable to point to other
+	plugin directories.
+
+2002-08-14  Keith Seitz  <keiths@redhat.com>
+
 	* library/plugins: Removed.
 	* plugins/: New folder to hold plugins.
 	* Makefile.am, Makefile.in, aclocal.m4, configure,

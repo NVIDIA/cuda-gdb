@@ -428,16 +428,19 @@ class SrcBar {
   private method create_plugin_menu {} {
     global gdb_plugins
 
-    if {$gdb_plugins != ""} {
-      $Menu add menubutton plugin "PlugIn" 4
-      set plugins_available 0
-      source [file join $gdb_plugins plugins.tcl]
-      if {! $plugins_available} {
-        # No plugins are available for this configuration,
-        # so remove the menu
-        debug "No plugins configured, go remove the PlugIn menu..."
-        $Menu delete plugin
+    $Menu add menubutton plugin "PlugIn" 4
+    set plugins_available 0
+    foreach plugin_dir $gdb_plugins {
+      if {[catch {source [file join $plugin_dir plugins.tcl]} txt]} {
+	dbug E $txt
       }
+    }
+
+    if {! $plugins_available} {
+      # No plugins are available for this configuration,
+      # so remove the menu
+      debug "No plugins configured, go remove the PlugIn menu..."
+      $Menu delete plugin
     }
   }
 
