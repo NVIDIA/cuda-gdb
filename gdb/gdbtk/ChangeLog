@@ -1,3 +1,14 @@
+2001-05-06  Kevin Buettner  <kevinb@redhat.com>
+
+	* generic/gdbtk-cmds.c (gdb_target_has_execution_command)
+	(get_clear_file): Use ptid_equal() for comparing ptid values. 
+	Use ``null_ptid'' instead of 0 in comparisons against
+	``inferior_ptid''.
+
+	From Phil Edwards <pedwards@disaster.jaj.com>:
+	* generic/gdbtk-cmds.c (gdb_target_has_execution_command)
+	(get_clear_file): Rename ``inferior_pid'' to ``inferior_ptid''.
+
 2001-05-01  Keith Seitz  <keiths@cygnus.com>
 
         * gdbtk.c (gdbtk_init): Include the command "warp_pointer"

@@ -624,7 +624,7 @@ gdb_clear_file (clientData, interp, objc, objv)
       return TCL_ERROR;
     }
 
-  if (inferior_pid != 0 && target_has_execution)
+  if (! ptid_equal (inferior_ptid, null_ptid) && target_has_execution)
     {
       if (attach_flag)
 	target_detach (NULL, 0);
@@ -981,7 +981,7 @@ gdb_target_has_execution_command (clientData, interp, objc, objv)
 {
   int result = 0;
 
-  if (target_has_execution && inferior_pid != 0)
+  if (target_has_execution && ! ptid_equal (inferior_ptid, null_ptid))
     result = 1;
 
   Tcl_SetBooleanObj (result_ptr->obj_ptr, result);
