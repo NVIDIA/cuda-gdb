@@ -1,5 +1,4 @@
 class RHAbout {
-#  inherit PluginWindow ModalDialog
   inherit PluginWindow
   constructor {args} {
     global gdb_ImageDir
@@ -43,10 +42,20 @@ class RHAbout {
     # Here we call a command procedure that we created, if it exists
     catch {append text [rhabout_extra_text]}
 
+    # Now add the text
     message $f.m -bg white -fg black -text $text -aspect 500 -relief flat
+
+    # Add a status bar so we can show some dynamic information
+    set _status [label $f.stat -relief sunken -bd 3 \
+                   -font global/status -height 1]
+
+    # pack everything
     pack $f.image1 $f.m -fill both -expand yes
+    pack $f.stat -expand 1 -fill both
     pack  $itk_interior
-    window_name "About Red Hat Insight"
+
+    # Give our sample window a name
+    window_name "About Red Hat Insight Plug-In"
   }
 
   # Don't quit if this is the last window.  The only way that this can
@@ -56,5 +65,30 @@ class RHAbout {
     return 0
   }
 
-}
+  # You can overload the base class running method, but make sure
+  # to call it as well or the menu and button status will not be updated
+  # (unless this is what you want)
+  private method running {} {
+    debug
+    # Call the baseclass version
+    PluginWindow::running
 
+    # Display something in the status area
+    $_status configure -text "Running..."
+  }
+
+  # You can overload the base class stopped method, but make sure
+  # to call it as well or the menu and button status will not be updated
+  # (unless this is what you want)
+  private method stopped {} {
+    debug
+    # First call the baseclass version
+    PluginWindow::stopped
+
+    # Display something in the status area
+    $_status configure -text "Stopped."
+  }
+
+  # Path to the status area
+  private variable _status
+}

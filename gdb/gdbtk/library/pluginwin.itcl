@@ -52,18 +52,18 @@ class PluginWindow {
     pack $child -expand 1 -fill both
 
     eval itk_initialize $args
-    add_hook gdb_idle_hook "$this stopped"
-    add_hook gdb_busy_hook "$this running"
-    add_hook gdb_no_inferior_hook "$this no_inferior"
+    add_hook gdb_idle_hook [code $this stopped]
+    add_hook gdb_busy_hook [code $this running]
+    add_hook gdb_no_inferior_hook [code $this no_inferior]
   }
 
   # ------------------------------------------------------------------
   #  DESTRUCTOR - destroy window containing widget
   # ------------------------------------------------------------------
   destructor {
-    remove_hook gdb_idle_hook "$this stopped"
-    remove_hook gdb_busy_hook "$this running"
-    remove_hook gdb_no_inferior_hook "$this no_inferior"
+    remove_hook gdb_idle_hook [code $this stopped]
+    remove_hook gdb_busy_hook [code $this running]
+    remove_hook gdb_no_inferior_hook [code $this no_inferior]
 
     #destroy $this
   }
@@ -71,7 +71,7 @@ class PluginWindow {
   # ------------------------------------------------------------------
   #  ACCESSOR METHOD - Retrieve childsite
   # ------------------------------------------------------------------
-  method childsite {} {
+  public method childsite {} {
     return $child
   }
 
@@ -85,8 +85,8 @@ class PluginWindow {
   #  METHOD:  stopped
   #             Invoked when there is an inferior and it has stopped
   # ------------------------------------------------------------------
-  method stopped {} {
-    debug 
+  protected method stopped {} {
+    debug "PluginWindow::stopped"
     enable_ui 1
   }
 
@@ -94,8 +94,8 @@ class PluginWindow {
   #  METHOD:  running
   #             Invoked when gdb is going to run the inferior
   # ------------------------------------------------------------------
-  method running {} {
-    debug 
+  protected method running {} {
+    debug "PluginWindow::running"
     enable_ui 0
   }
 
@@ -103,7 +103,7 @@ class PluginWindow {
   #  METHOD:  no_inferior
   #             Invoked when gdb detects the inferior is gone 
   # ------------------------------------------------------------------
-  method no_inferior {} {
+  protected method no_inferior {} {
     debug 
     enable_ui 2
   }

@@ -1,3 +1,14 @@
+2001-02-01  Fernando Nasser  <fnasser@redhat.com>
+
+	* library/pluginwin.itcl (contrucdtor, destructor): Use "code" to
+	specify callbacks.
+	(running, stopped, no_inferior): Make it a protected method.
+	(childsite): Explicitly mark as a public method.
+	* library/plugins/rhabout/rhabout.itcl (constructor): Add a label
+	widget to show status messages.
+	(running, stopped): Overload versions of the base class; display
+	status messages as an example.
+
 2001-01-31  Fernando Nasser  <fnasser@redhat.com>
 
 	* library/pluginwin.itcl: New file.  Implements the PluginWindow
