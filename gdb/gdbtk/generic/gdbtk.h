@@ -151,14 +151,14 @@ extern int gdbtk_force_detach;
  */
 
 extern int Gdbtk_Init (Tcl_Interp * interp);
-extern void gdbtk_stop_timer PARAMS ((void));
-extern void gdbtk_start_timer PARAMS ((void));
-extern void gdbtk_ignorable_warning PARAMS ((const char *, const char *));
-extern void gdbtk_interactive PARAMS ((void));
-extern int x_event PARAMS ((int));
-extern int gdbtk_two_elem_cmd PARAMS ((char *, char *));
-extern int call_wrapper PARAMS ((ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]));
-extern int target_is_native PARAMS ((struct target_ops *t));
+extern void gdbtk_stop_timer (void);
+extern void gdbtk_start_timer (void);
+extern void gdbtk_ignorable_warning (const char *, const char *);
+extern void gdbtk_interactive (void);
+extern int x_event (int);
+extern int gdbtk_two_elem_cmd (char *, char *);
+extern int call_wrapper (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+extern int target_is_native (struct target_ops *t);
 extern void gdbtk_fputs (const char *, struct ui_file *);
 
 #ifdef _WIN32

@@ -60,7 +60,7 @@
 #include "annotate.h"
 #include <sys/time.h>
 
-static void setup_architecture_data PARAMS ((void));
+static void setup_architecture_data (void);
 static int tracepoint_exists (char *args);
 
 /* This structure filled in call_wrapper and passed to
@@ -166,156 +166,142 @@ extern int breakpoint_count;
  */
 int disassemble_from_exec = -1;
 
-extern int gdb_variable_init PARAMS ((Tcl_Interp * interp));
+extern int gdb_variable_init (Tcl_Interp * interp);
 
 /*
  * Declarations for routines exported from this file
  */
 
 int Gdbtk_Init (Tcl_Interp * interp);
-int call_wrapper PARAMS ((ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]));
+int call_wrapper (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 
 /*
  * Declarations for routines used only in this file.
  */
 
-static int compare_lines PARAMS ((const PTR, const PTR));
-static int comp_files PARAMS ((const void *, const void *));
-static int gdb_actions_command PARAMS ((ClientData, Tcl_Interp *, int,
-					Tcl_Obj * CONST objv[]));
-static int gdb_changed_register_list PARAMS ((ClientData, Tcl_Interp *, int,
-					      Tcl_Obj * CONST[]));
-static int gdb_clear_file PARAMS ((ClientData, Tcl_Interp * interp, int,
-				   Tcl_Obj * CONST[]));
-static int gdb_cmd PARAMS ((ClientData, Tcl_Interp *, int,
-			    Tcl_Obj * CONST[]));
-static int gdb_confirm_quit PARAMS ((ClientData, Tcl_Interp *, int,
-				     Tcl_Obj * CONST[]));
-static int gdb_disassemble PARAMS ((ClientData, Tcl_Interp *, int,
-				    Tcl_Obj * CONST[]));
-static int gdb_eval PARAMS ((ClientData, Tcl_Interp *, int,
-			     Tcl_Obj * CONST[]));
-static int gdb_fetch_registers PARAMS ((ClientData, Tcl_Interp *, int,
-					Tcl_Obj * CONST[]));
-static int gdb_find_file_command PARAMS ((ClientData, Tcl_Interp *, int,
-					  Tcl_Obj * CONST objv[]));
-static int gdb_force_quit PARAMS ((ClientData, Tcl_Interp *, int,
-				   Tcl_Obj * CONST[]));
-static struct symtab *full_lookup_symtab PARAMS ((char *file));
-static int gdb_get_args_command PARAMS ((ClientData, Tcl_Interp *, int,
-					 Tcl_Obj * CONST objv[]));
-static int gdb_get_breakpoint_info PARAMS ((ClientData, Tcl_Interp *, int,
-					    Tcl_Obj * CONST[]));
-static int gdb_get_breakpoint_list PARAMS ((ClientData, Tcl_Interp *, int,
-					    Tcl_Obj * CONST[]));
-static int gdb_get_file_command PARAMS ((ClientData, Tcl_Interp *, int,
-					 Tcl_Obj * CONST objv[]));
-static int gdb_get_function_command PARAMS ((ClientData, Tcl_Interp *, int,
-					     Tcl_Obj * CONST objv[]));
-static int gdb_get_line_command PARAMS ((ClientData, Tcl_Interp *, int,
-					 Tcl_Obj * CONST objv[]));
-static int gdb_get_locals_command PARAMS ((ClientData, Tcl_Interp *, int,
-					   Tcl_Obj * CONST objv[]));
-static int gdb_get_mem PARAMS ((ClientData, Tcl_Interp *, int,
-				Tcl_Obj * CONST[]));
-static int gdb_get_trace_frame_num PARAMS ((ClientData, Tcl_Interp *, int,
-					    Tcl_Obj * CONST objv[]));
-static int gdb_get_tracepoint_list PARAMS ((ClientData, Tcl_Interp *, int,
-					    Tcl_Obj * CONST objv[]));
-static int gdb_get_vars_command PARAMS ((ClientData, Tcl_Interp *, int,
-					 Tcl_Obj * CONST objv[]));
-static int gdb_immediate_command PARAMS ((ClientData, Tcl_Interp *, int,
-					  Tcl_Obj * CONST[]));
-static int gdb_listfiles PARAMS ((ClientData, Tcl_Interp *, int,
-				  Tcl_Obj * CONST[]));
-static int gdb_listfuncs PARAMS ((ClientData, Tcl_Interp *, int,
-				  Tcl_Obj * CONST[]));
-static int gdb_loadfile PARAMS ((ClientData, Tcl_Interp *, int,
-				 Tcl_Obj * CONST objv[]));
-static int gdb_load_disassembly PARAMS ((ClientData clientData, Tcl_Interp
-					 *interp,
-					 int objc, Tcl_Obj *CONST objv[]));
-static int gdb_load_info PARAMS ((ClientData, Tcl_Interp *, int,
-				  Tcl_Obj * CONST objv[]));
-static int gdb_loc PARAMS ((ClientData, Tcl_Interp *, int,
-			    Tcl_Obj * CONST[]));
-static int gdb_path_conv PARAMS ((ClientData, Tcl_Interp *, int,
-				  Tcl_Obj * CONST[]));
-static int gdb_prompt_command PARAMS ((ClientData, Tcl_Interp *, int,
-				       Tcl_Obj * CONST objv[]));
-static int gdb_regnames PARAMS ((ClientData, Tcl_Interp *, int,
-				 Tcl_Obj * CONST[]));
-static int gdb_restore_fputs PARAMS ((ClientData, Tcl_Interp *, int,
-				 Tcl_Obj * CONST[]));
-static int gdb_search PARAMS ((ClientData, Tcl_Interp *, int,
-			       Tcl_Obj * CONST objv[]));
-static int gdb_set_bp PARAMS ((ClientData, Tcl_Interp *, int,
-			       Tcl_Obj * CONST objv[]));
-static int gdb_set_bp_addr PARAMS ((ClientData, Tcl_Interp *, int,
-				    Tcl_Obj * CONST objv[]));
-static int gdb_find_bp_at_line PARAMS ((ClientData, Tcl_Interp *, int,
-					Tcl_Obj * CONST objv[]));
-static int gdb_find_bp_at_addr PARAMS ((ClientData, Tcl_Interp *, int,
-					Tcl_Obj * CONST objv[]));
-static int gdb_stop PARAMS ((ClientData, Tcl_Interp *, int,
-			     Tcl_Obj * CONST[]));
-static int gdb_target_has_execution_command PARAMS ((ClientData,
-						     Tcl_Interp *, int,
-						     Tcl_Obj * CONST[]));
-static int gdb_trace_status PARAMS ((ClientData, Tcl_Interp *, int,
-				     Tcl_Obj * CONST[]));
-static int gdb_tracepoint_exists_command PARAMS ((ClientData, Tcl_Interp *,
-						  int,
-						  Tcl_Obj * CONST objv[]));
-static int gdb_get_tracepoint_info PARAMS ((ClientData, Tcl_Interp *, int,
-					    Tcl_Obj * CONST objv[]));
-static int gdbtk_dis_asm_read_memory PARAMS ((bfd_vma, bfd_byte *, unsigned int,
-					      disassemble_info *));
-static void gdbtk_load_source PARAMS ((ClientData clientData,
-				       struct symtab *symtab,
-					int start_line, int end_line));
-static CORE_ADDR gdbtk_load_asm PARAMS ((ClientData clientData, CORE_ADDR pc,
-			 struct disassemble_info *di));
-static void gdbtk_print_source PARAMS ((ClientData clientData,
-					struct symtab *symtab,
-					int start_line, int end_line));
-static CORE_ADDR gdbtk_print_asm PARAMS ((ClientData clientData, CORE_ADDR pc,
-			 struct disassemble_info *di));
-static int gdb_disassemble_driver PARAMS ((CORE_ADDR low, CORE_ADDR high,
-				int mixed_source_and_assembly,
-				ClientData clientData,
-				void (*print_source_fn) (ClientData, struct
-							 symtab *, int, int),
-				CORE_ADDR (*print_asm_fn) (ClientData,
-							   CORE_ADDR,
-							   struct disassemble_info *)));
-static int get_pc_register PARAMS ((ClientData, Tcl_Interp *, int,
-				    Tcl_Obj *CONST []));
-static int gdb_stack PARAMS ((ClientData, Tcl_Interp *, int,
-			      Tcl_Obj *CONST []));
-static int gdb_selected_frame PARAMS ((ClientData clientData,
-				       Tcl_Interp *interp, int argc,
-				       Tcl_Obj *CONST objv[]));
-static int gdb_selected_block PARAMS ((ClientData clientData,
-				       Tcl_Interp *interp, int argc,
-				       Tcl_Obj *CONST objv[]));
-static int gdb_get_blocks PARAMS ((ClientData clientData,
-				   Tcl_Interp *interp, int objc,
-				   Tcl_Obj *CONST objv[]));
-static int gdb_block_vars PARAMS ((ClientData clientData,
-				   Tcl_Interp *interp, int objc,
-				   Tcl_Obj *CONST objv[]));
-char * get_prompt PARAMS ((void));
-static void get_register PARAMS ((int, void *));
-static void get_register_name PARAMS ((int, void *));
-static int map_arg_registers PARAMS ((int, Tcl_Obj * CONST[],
-				      void (*)(int, void *), void *));
-static int perror_with_name_wrapper PARAMS ((PTR args));
-static void register_changed_p PARAMS ((int, void *));
+static int compare_lines (const PTR, const PTR);
+static int comp_files (const void *, const void *);
+static int gdb_actions_command (ClientData, Tcl_Interp *, int,
+				Tcl_Obj * CONST objv[]);
+static int gdb_changed_register_list (ClientData, Tcl_Interp *, int,
+				      Tcl_Obj * CONST[]);
+static int gdb_clear_file (ClientData, Tcl_Interp * interp, int,
+			   Tcl_Obj * CONST[]);
+static int gdb_cmd (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+static int gdb_confirm_quit (ClientData, Tcl_Interp *, int,
+			     Tcl_Obj * CONST[]);
+static int gdb_disassemble (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+static int gdb_eval (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+static int gdb_fetch_registers (ClientData, Tcl_Interp *, int,
+				Tcl_Obj * CONST[]);
+static int gdb_find_file_command (ClientData, Tcl_Interp *, int,
+				  Tcl_Obj * CONST objv[]);
+static int gdb_force_quit (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+static struct symtab *full_lookup_symtab (char *file);
+static int gdb_get_args_command (ClientData, Tcl_Interp *, int,
+				 Tcl_Obj * CONST objv[]);
+static int gdb_get_breakpoint_info (ClientData, Tcl_Interp *, int,
+				    Tcl_Obj * CONST[]);
+static int gdb_get_breakpoint_list (ClientData, Tcl_Interp *, int,
+				    Tcl_Obj * CONST[]);
+static int gdb_get_file_command (ClientData, Tcl_Interp *, int,
+				 Tcl_Obj * CONST objv[]);
+static int gdb_get_function_command (ClientData, Tcl_Interp *, int,
+				     Tcl_Obj * CONST objv[]);
+static int gdb_get_line_command (ClientData, Tcl_Interp *, int,
+				 Tcl_Obj * CONST objv[]);
+static int gdb_get_locals_command (ClientData, Tcl_Interp *, int,
+				   Tcl_Obj * CONST objv[]);
+static int gdb_get_mem (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+static int gdb_get_trace_frame_num (ClientData, Tcl_Interp *, int,
+				    Tcl_Obj * CONST objv[]);
+static int gdb_get_tracepoint_list (ClientData, Tcl_Interp *, int,
+				    Tcl_Obj * CONST objv[]);
+static int gdb_get_vars_command (ClientData, Tcl_Interp *, int,
+				 Tcl_Obj * CONST objv[]);
+static int gdb_immediate_command (ClientData, Tcl_Interp *, int,
+				  Tcl_Obj * CONST[]);
+static int gdb_listfiles (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+static int gdb_listfuncs (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+static int gdb_loadfile (ClientData, Tcl_Interp *, int,
+			 Tcl_Obj * CONST objv[]);
+static int gdb_load_disassembly (ClientData clientData, Tcl_Interp
+				 * interp, int objc, Tcl_Obj * CONST objv[]);
+static int gdb_load_info (ClientData, Tcl_Interp *, int,
+			  Tcl_Obj * CONST objv[]);
+static int gdb_loc (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+static int gdb_path_conv (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+static int gdb_prompt_command (ClientData, Tcl_Interp *, int,
+			       Tcl_Obj * CONST objv[]);
+static int gdb_regnames (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+static int gdb_restore_fputs (ClientData, Tcl_Interp *, int,
+			      Tcl_Obj * CONST[]);
+static int gdb_search (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST objv[]);
+static int gdb_set_bp (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST objv[]);
+static int gdb_set_bp_addr (ClientData, Tcl_Interp *, int,
+			    Tcl_Obj * CONST objv[]);
+static int gdb_find_bp_at_line (ClientData, Tcl_Interp *, int,
+				Tcl_Obj * CONST objv[]);
+static int gdb_find_bp_at_addr (ClientData, Tcl_Interp *, int,
+				Tcl_Obj * CONST objv[]);
+static int gdb_stop (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+static int gdb_target_has_execution_command (ClientData,
+					     Tcl_Interp *, int,
+					     Tcl_Obj * CONST[]);
+static int gdb_trace_status (ClientData, Tcl_Interp *, int,
+			     Tcl_Obj * CONST[]);
+static int gdb_tracepoint_exists_command (ClientData, Tcl_Interp *,
+					  int, Tcl_Obj * CONST objv[]);
+static int gdb_get_tracepoint_info (ClientData, Tcl_Interp *, int,
+				    Tcl_Obj * CONST objv[]);
+static int gdbtk_dis_asm_read_memory (bfd_vma, bfd_byte *, unsigned int,
+				      disassemble_info *);
+static void gdbtk_load_source (ClientData clientData,
+			       struct symtab *symtab,
+			       int start_line, int end_line);
+static CORE_ADDR gdbtk_load_asm (ClientData clientData, CORE_ADDR pc,
+				 struct disassemble_info *di);
+static void gdbtk_print_source (ClientData clientData,
+				struct symtab *symtab,
+				int start_line, int end_line);
+static CORE_ADDR gdbtk_print_asm (ClientData clientData, CORE_ADDR pc,
+				  struct disassemble_info *di);
+static int gdb_disassemble_driver (CORE_ADDR low, CORE_ADDR high,
+				   int mixed_source_and_assembly,
+				   ClientData clientData,
+				   void (*print_source_fn) (ClientData, struct
+							    symtab *, int,
+							    int),
+				   CORE_ADDR (*print_asm_fn) (ClientData,
+							      CORE_ADDR,
+							      struct
+							      disassemble_info
+							      *));
+static int get_pc_register (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+static int gdb_stack (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+static int gdb_selected_frame (ClientData clientData,
+			       Tcl_Interp * interp, int argc,
+			       Tcl_Obj * CONST objv[]);
+static int gdb_selected_block (ClientData clientData,
+			       Tcl_Interp * interp, int argc,
+			       Tcl_Obj * CONST objv[]);
+static int gdb_get_blocks (ClientData clientData,
+			   Tcl_Interp * interp, int objc,
+			   Tcl_Obj * CONST objv[]);
+static int gdb_block_vars (ClientData clientData,
+			   Tcl_Interp * interp, int objc,
+			   Tcl_Obj * CONST objv[]);
+char *get_prompt (void);
+static void get_register (int, void *);
+static void get_register_name (int, void *);
+static int map_arg_registers (int, Tcl_Obj * CONST[],
+			      void (*)(int, void *), void *);
+static int perror_with_name_wrapper (PTR args);
+static void register_changed_p (int, void *);
 static int wrapped_call (PTR opaque_args);
-static void get_frame_name PARAMS ((Tcl_Interp * interp, Tcl_Obj * list,
-				    struct frame_info * fi));
-char *pc_function_name PARAMS ((CORE_ADDR pc));
+static void get_frame_name (Tcl_Interp * interp, Tcl_Obj * list,
+			    struct frame_info *fi);
+char *pc_function_name (CORE_ADDR pc);
 
 
 /* Gdbtk_Init

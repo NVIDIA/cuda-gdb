@@ -30,7 +30,7 @@
  * Public functions defined in this file
  */
 
-int gdb_variable_init PARAMS ((Tcl_Interp *));
+int gdb_variable_init (Tcl_Interp *);
 
 /*
  * Private functions defined in this file
@@ -38,36 +38,36 @@ int gdb_variable_init PARAMS ((Tcl_Interp *));
 
 /* Entries into this file */
 
-static int gdb_variable_command PARAMS ((ClientData, Tcl_Interp *, int,
-					 Tcl_Obj * CONST[]));
+static int gdb_variable_command (ClientData, Tcl_Interp *, int,
+				 Tcl_Obj * CONST[]);
 
-static int variable_obj_command PARAMS ((ClientData, Tcl_Interp *, int,
-					 Tcl_Obj * CONST[]));
+static int variable_obj_command (ClientData, Tcl_Interp *, int,
+				 Tcl_Obj * CONST[]);
 
 /* Variable object subcommands */
 
-static int variable_create PARAMS ((Tcl_Interp *, int, Tcl_Obj * CONST[]));
+static int variable_create (Tcl_Interp *, int, Tcl_Obj * CONST[]);
 
-static void variable_delete PARAMS ((Tcl_Interp *, struct varobj *, int));
+static void variable_delete (Tcl_Interp *, struct varobj *, int);
 
-static Tcl_Obj *variable_children PARAMS ((Tcl_Interp *, struct varobj *));
+static Tcl_Obj *variable_children (Tcl_Interp *, struct varobj *);
 
-static int variable_format PARAMS ((Tcl_Interp *, int, Tcl_Obj * CONST[],
-				    struct varobj *));
+static int variable_format (Tcl_Interp *, int, Tcl_Obj * CONST[],
+			    struct varobj *);
 
-static int variable_type PARAMS ((Tcl_Interp *, int, Tcl_Obj * CONST[],
-				  struct varobj *));
+static int variable_type (Tcl_Interp *, int, Tcl_Obj * CONST[],
+			  struct varobj *);
 
-static int variable_value PARAMS ((Tcl_Interp *, int, Tcl_Obj * CONST[],
-				   struct varobj *));
+static int variable_value (Tcl_Interp *, int, Tcl_Obj * CONST[],
+			   struct varobj *);
 
-static Tcl_Obj *variable_update PARAMS ((Tcl_Interp * interp, struct varobj * var));
+static Tcl_Obj *variable_update (Tcl_Interp * interp, struct varobj *var);
 
 /* Helper functions for the above subcommands. */
 
-static void install_variable PARAMS ((Tcl_Interp *, char *, struct varobj *));
+static void install_variable (Tcl_Interp *, char *, struct varobj *);
 
-static void uninstall_variable PARAMS ((Tcl_Interp *, char *));
+static void uninstall_variable (Tcl_Interp *, char *);
 
 /* String representations of gdb's format codes */
 char *format_string[] =

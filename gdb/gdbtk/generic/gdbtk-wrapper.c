@@ -26,112 +26,112 @@
  * Wrapper functions exported to the world
  */
 
-gdb_result GDB_value_fetch_lazy PARAMS ((value_ptr));
+gdb_result GDB_value_fetch_lazy (value_ptr);
 
-gdb_result GDB_evaluate_expression PARAMS ((struct expression *, value_ptr *));
+gdb_result GDB_evaluate_expression (struct expression *, value_ptr *);
 
-gdb_result GDB_type_print PARAMS ((value_ptr, char *, struct ui_file *, int));
+gdb_result GDB_type_print (value_ptr, char *, struct ui_file *, int);
 
-gdb_result GDB_val_print PARAMS ((struct type * type, char *valaddr,
-				  CORE_ADDR address, struct ui_file * stream,
-				  int format, int deref_ref, int recurse,
-				  enum val_prettyprint pretty));
+gdb_result GDB_val_print (struct type *type, char *valaddr,
+			  CORE_ADDR address, struct ui_file *stream,
+			  int format, int deref_ref, int recurse,
+			  enum val_prettyprint pretty);
 
-gdb_result GDB_select_frame PARAMS ((struct frame_info *, int));
+gdb_result GDB_select_frame (struct frame_info *, int);
 
-gdb_result GDB_value_equal PARAMS ((value_ptr, value_ptr, int *));
+gdb_result GDB_value_equal (value_ptr, value_ptr, int *);
 
-gdb_result GDB_parse_exp_1 PARAMS ((char **stringptr, struct block * block, int comma,
-				    struct expression ** result));
+gdb_result GDB_parse_exp_1 (char **stringptr, struct block *block, int comma,
+			    struct expression **result);
 
-gdb_result GDB_evaluate_type PARAMS ((struct expression * exp, value_ptr * result));
+gdb_result GDB_evaluate_type (struct expression *exp, value_ptr * result);
 
-gdb_result GDB_block_for_pc PARAMS ((CORE_ADDR pc, struct block ** result));
+gdb_result GDB_block_for_pc (CORE_ADDR pc, struct block **result);
 
-gdb_result GDB_block_innermost_frame PARAMS ((struct block * block,
-					      struct frame_info ** result));
+gdb_result GDB_block_innermost_frame (struct block *block,
+				      struct frame_info **result);
 
-gdb_result GDB_reinit_frame_cache PARAMS ((void));
+gdb_result GDB_reinit_frame_cache (void);
 
-gdb_result GDB_find_frame_addr_in_frame_chain PARAMS ((CORE_ADDR addr,
-					      struct frame_info ** result));
+gdb_result GDB_find_frame_addr_in_frame_chain (CORE_ADDR addr,
+					       struct frame_info **result);
 
-gdb_result GDB_value_ind PARAMS ((value_ptr val, value_ptr * rval));
+gdb_result GDB_value_ind (value_ptr val, value_ptr * rval);
 
-gdb_result GDB_value_slice PARAMS ((value_ptr val, int low, int num,
-				    value_ptr * rval));
+gdb_result GDB_value_slice (value_ptr val, int low, int num,
+			    value_ptr * rval);
 
-gdb_result GDB_value_coerce_array PARAMS ((value_ptr val, value_ptr * rval));
+gdb_result GDB_value_coerce_array (value_ptr val, value_ptr * rval);
 
-gdb_result GDB_value_struct_elt PARAMS ((value_ptr * argp, value_ptr * args,
-					 char *name, int *static_memfunc,
-					 char *err, value_ptr * rval));
+gdb_result GDB_value_struct_elt (value_ptr * argp, value_ptr * args,
+				 char *name, int *static_memfunc,
+				 char *err, value_ptr * rval);
 
-gdb_result GDB_value_cast PARAMS ((struct type * type, value_ptr val, value_ptr * rval));
+gdb_result GDB_value_cast (struct type *type, value_ptr val,
+			   value_ptr * rval);
 
-gdb_result GDB_get_frame_block PARAMS ((struct frame_info * fi, struct block ** rval));
+gdb_result GDB_get_frame_block (struct frame_info *fi, struct block **rval);
 
-gdb_result GDB_get_prev_frame PARAMS ((struct frame_info *fi,
-				       struct frame_info **result));
+gdb_result GDB_get_prev_frame (struct frame_info *fi,
+			       struct frame_info **result);
 
-gdb_result GDB_get_next_frame PARAMS ((struct frame_info *fi,
-				       struct frame_info **result));
+gdb_result GDB_get_next_frame (struct frame_info *fi,
+			       struct frame_info **result);
 
-gdb_result GDB_find_relative_frame PARAMS ((struct frame_info *fi,
-					    int *start,
-					    struct frame_info **result));
+gdb_result GDB_find_relative_frame (struct frame_info *fi,
+				    int *start, struct frame_info **result);
 
-gdb_result GDB_get_current_frame PARAMS ((struct frame_info **result));
+gdb_result GDB_get_current_frame (struct frame_info **result);
 
 /*
  * Private functions for this file
  */
-static gdb_result call_wrapped_function PARAMS ((catch_errors_ftype *,
-					   struct gdb_wrapper_arguments *));
+static gdb_result call_wrapped_function (catch_errors_ftype *,
+					 struct gdb_wrapper_arguments *);
 
-static int wrap_type_print PARAMS ((char *));
+static int wrap_type_print (char *);
 
-static int wrap_evaluate_expression PARAMS ((char *));
+static int wrap_evaluate_expression (char *);
 
-static int wrap_value_fetch_lazy PARAMS ((char *));
+static int wrap_value_fetch_lazy (char *);
 
-static int wrap_val_print PARAMS ((char *));
+static int wrap_val_print (char *);
 
-static int wrap_select_frame PARAMS ((char *));
+static int wrap_select_frame (char *);
 
-static int wrap_value_equal PARAMS ((char *));
+static int wrap_value_equal (char *);
 
-static int wrap_parse_exp_1 PARAMS ((char *opaque_arg));
+static int wrap_parse_exp_1 (char *opaque_arg);
 
-static int wrap_evaluate_type PARAMS ((char *opaque_arg));
+static int wrap_evaluate_type (char *opaque_arg);
 
-static int wrap_block_for_pc PARAMS ((char *opaque_arg));
+static int wrap_block_for_pc (char *opaque_arg);
 
-static int wrap_block_innermost_frame PARAMS ((char *opaque_arg));
+static int wrap_block_innermost_frame (char *opaque_arg);
 
-static int wrap_reinit_frame_cache PARAMS ((char *opaque_arg));
+static int wrap_reinit_frame_cache (char *opaque_arg);
 
-static int wrap_find_frame_addr_in_frame_chain PARAMS ((char *opaque_arg));
+static int wrap_find_frame_addr_in_frame_chain (char *opaque_arg);
 
-static int wrap_value_ind PARAMS ((char *opaque_arg));
+static int wrap_value_ind (char *opaque_arg);
 
-static int wrap_value_slice PARAMS ((char *opaque_arg));
+static int wrap_value_slice (char *opaque_arg);
 
-static int wrap_value_coerce_array PARAMS ((char *opaque_arg));
+static int wrap_value_coerce_array (char *opaque_arg);
 
-static int wrap_value_struct_elt PARAMS ((char *opaque_arg));
+static int wrap_value_struct_elt (char *opaque_arg);
 
-static int wrap_value_cast PARAMS ((char *opaque_arg));
+static int wrap_value_cast (char *opaque_arg);
 
-static int wrap_get_frame_block PARAMS ((char *opaque_arg));
+static int wrap_get_frame_block (char *opaque_arg);
 
-static int wrap_get_prev_frame PARAMS ((char *opaque_arg));
+static int wrap_get_prev_frame (char *opaque_arg);
 
-static int wrap_get_next_frame PARAMS ((char *opaque_arg));
+static int wrap_get_next_frame (char *opaque_arg);
 
-static int wrap_find_relative_frame PARAMS ((char *opaque_arg));
+static int wrap_find_relative_frame (char *opaque_arg);
 
-static int wrap_get_current_frame PARAMS ((char *opaque_arg));
+static int wrap_get_current_frame (char *opaque_arg);
 
 static gdb_result
 call_wrapped_function (fn, arg)

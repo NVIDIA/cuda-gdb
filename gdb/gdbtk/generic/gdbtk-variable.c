@@ -159,7 +159,7 @@ enum vsections { v_public = 0, v_private, v_protected };
  * Public functions defined in this file
  */
 
-int gdb_variable_init PARAMS ((Tcl_Interp *));
+int gdb_variable_init (Tcl_Interp *);
 
 /*
  * Private functions defined in this file
@@ -167,145 +167,144 @@ int gdb_variable_init PARAMS ((Tcl_Interp *));
 
 /* Entries into this file */
 
-static int gdb_variable_command PARAMS ((ClientData, Tcl_Interp *, int,
-                                         Tcl_Obj *CONST[]));
+static int gdb_variable_command (ClientData, Tcl_Interp *, int,
+				 Tcl_Obj * CONST[]);
 
-static int variable_obj_command PARAMS ((ClientData, Tcl_Interp *, int,
-                                         Tcl_Obj *CONST[]));
+static int variable_obj_command (ClientData, Tcl_Interp *, int,
+				 Tcl_Obj * CONST[]);
 
 /* Variable object subcommands */
-static int variable_create PARAMS ((Tcl_Interp *, int, Tcl_Obj *CONST[]));
+static int variable_create (Tcl_Interp *, int, Tcl_Obj * CONST[]);
 
-static void variable_delete PARAMS ((Tcl_Interp *, gdb_variable *));
+static void variable_delete (Tcl_Interp *, gdb_variable *);
 
-static Tcl_Obj *variable_children PARAMS ((Tcl_Interp *, gdb_variable *));
+static Tcl_Obj *variable_children (Tcl_Interp *, gdb_variable *);
 
-static int variable_format PARAMS ((Tcl_Interp *, int, Tcl_Obj *CONST[],
-                                         gdb_variable *));
+static int variable_format (Tcl_Interp *, int, Tcl_Obj * CONST[],
+			    gdb_variable *);
 
-static int variable_type PARAMS ((Tcl_Interp *, int, Tcl_Obj *CONST[],
-                                         gdb_variable *));
+static int variable_type (Tcl_Interp *, int, Tcl_Obj * CONST[],
+			  gdb_variable *);
 
-static int variable_value PARAMS ((Tcl_Interp *, int, Tcl_Obj *CONST[],
-                                         gdb_variable *));
+static int variable_value (Tcl_Interp *, int, Tcl_Obj * CONST[],
+			   gdb_variable *);
 
-static int variable_editable PARAMS ((gdb_variable *));
+static int variable_editable (gdb_variable *);
 
-static int my_value_of_variable PARAMS ((gdb_variable *var, Tcl_Obj **obj));
+static int my_value_of_variable (gdb_variable * var, Tcl_Obj ** obj);
 
-static Tcl_Obj *variable_update PARAMS ((Tcl_Interp *interp, gdb_variable *var));
+static Tcl_Obj *variable_update (Tcl_Interp * interp, gdb_variable * var);
 
 /* Helper functions for the above subcommands. */
 
-static gdb_variable *create_variable PARAMS ((char *name, CORE_ADDR frame));
+static gdb_variable *create_variable (char *name, CORE_ADDR frame);
 
-static void delete_children PARAMS ((Tcl_Interp *, gdb_variable *, int));
+static void delete_children (Tcl_Interp *, gdb_variable *, int);
 
-static void install_variable PARAMS ((Tcl_Interp *, char *, gdb_variable *));
+static void install_variable (Tcl_Interp *, char *, gdb_variable *);
 
-static void uninstall_variable PARAMS ((Tcl_Interp *, gdb_variable *));
+static void uninstall_variable (Tcl_Interp *, gdb_variable *);
 
-static gdb_variable *child_exists PARAMS ((gdb_variable *, char *));
+static gdb_variable *child_exists (gdb_variable *, char *);
 
-static gdb_variable *create_child PARAMS ((Tcl_Interp *, gdb_variable *,
-                                           int, char *));
-static char *name_of_child PARAMS ((gdb_variable *, int));
+static gdb_variable *create_child (Tcl_Interp *, gdb_variable *, int, char *);
+static char *name_of_child (gdb_variable *, int);
 
-static int number_of_children PARAMS ((gdb_variable *));
+static int number_of_children (gdb_variable *);
 
-static enum display_format variable_default_display PARAMS ((gdb_variable *));
+static enum display_format variable_default_display (gdb_variable *);
 
-static void save_child_in_parent PARAMS ((gdb_variable *, gdb_variable *));
+static void save_child_in_parent (gdb_variable *, gdb_variable *);
 
-static void remove_child_from_parent PARAMS ((gdb_variable *, gdb_variable *));
+static void remove_child_from_parent (gdb_variable *, gdb_variable *);
 
 /* Utility routines */
 
-static struct type *get_type PARAMS ((gdb_variable *var));
+static struct type *get_type (gdb_variable * var);
 
-static struct type *get_type_deref PARAMS ((gdb_variable *var));
+static struct type *get_type_deref (gdb_variable * var);
 
-static struct type *get_target_type PARAMS ((struct type *));
+static struct type *get_target_type (struct type *);
 
-static Tcl_Obj *get_call_output PARAMS ((void));
+static Tcl_Obj *get_call_output (void);
 
-static void clear_gdb_output PARAMS ((void));
+static void clear_gdb_output (void);
 
-static int call_gdb_type_print PARAMS ((value_ptr));
+static int call_gdb_type_print (value_ptr);
 
-static int call_gdb_val_print PARAMS ((value_ptr, int));
+static int call_gdb_val_print (value_ptr, int);
 
 static void variable_fputs (const char *, struct ui_file *);
 
 static void null_fputs (const char *, struct ui_file *);
 
-static int my_value_equal PARAMS ((gdb_variable *, value_ptr));
+static int my_value_equal (gdb_variable *, value_ptr);
 
-static void vpush PARAMS ((struct vstack **pstack, gdb_variable *var));
+static void vpush (struct vstack **pstack, gdb_variable * var);
 
-static gdb_variable *vpop PARAMS ((struct vstack **pstack));
+static gdb_variable *vpop (struct vstack **pstack);
 
 /* Language-specific routines. */
 
-static value_ptr value_of_child PARAMS ((gdb_variable *parent, int index));
+static value_ptr value_of_child (gdb_variable * parent, int index);
 
-static value_ptr value_of_root PARAMS ((gdb_variable *var));
+static value_ptr value_of_root (gdb_variable * var);
 
-static struct type *type_of_child PARAMS ((gdb_variable *var));
+static struct type *type_of_child (gdb_variable * var);
 
-static int type_changeable PARAMS ((gdb_variable *var));
+static int type_changeable (gdb_variable * var);
 
-static int c_number_of_children PARAMS ((gdb_variable *var));
+static int c_number_of_children (gdb_variable * var);
 
-static char *c_name_of_child PARAMS ((gdb_variable *parent, int index));
+static char *c_name_of_child (gdb_variable * parent, int index);
 
-static value_ptr c_value_of_root PARAMS ((gdb_variable *var));
+static value_ptr c_value_of_root (gdb_variable * var);
 
-static value_ptr c_value_of_child PARAMS ((gdb_variable *parent, int index));
+static value_ptr c_value_of_child (gdb_variable * parent, int index);
 
-static struct type *c_type_of_child PARAMS ((gdb_variable *parent, int index));
+static struct type *c_type_of_child (gdb_variable * parent, int index);
 
-static int c_variable_editable PARAMS ((gdb_variable *var));
+static int c_variable_editable (gdb_variable * var);
 
-static int c_value_of_variable PARAMS ((gdb_variable *var, Tcl_Obj **obj));
+static int c_value_of_variable (gdb_variable * var, Tcl_Obj ** obj);
 
-static int cplus_number_of_children PARAMS ((gdb_variable *var));
+static int cplus_number_of_children (gdb_variable * var);
 
-static void cplus_class_num_children PARAMS ((struct type *type, int children[3]));
+static void cplus_class_num_children (struct type *type, int children[3]);
 
-static char *cplus_name_of_child PARAMS ((gdb_variable *parent, int index));
+static char *cplus_name_of_child (gdb_variable * parent, int index);
 
-static value_ptr cplus_value_of_root PARAMS ((gdb_variable *var));
+static value_ptr cplus_value_of_root (gdb_variable * var);
 
-static value_ptr cplus_value_of_child PARAMS ((gdb_variable *parent, int index));
+static value_ptr cplus_value_of_child (gdb_variable * parent, int index);
 
-static struct type *cplus_type_of_child PARAMS ((gdb_variable *parent, int index));
+static struct type *cplus_type_of_child (gdb_variable * parent, int index);
 
-static int cplus_variable_editable PARAMS ((gdb_variable *var));
+static int cplus_variable_editable (gdb_variable * var);
 
-static int cplus_value_of_variable PARAMS ((gdb_variable *var, Tcl_Obj **obj));
+static int cplus_value_of_variable (gdb_variable * var, Tcl_Obj ** obj);
 
-static int java_number_of_children PARAMS ((gdb_variable *var));
+static int java_number_of_children (gdb_variable * var);
 
-static char *java_name_of_child PARAMS ((gdb_variable *parent, int index));
+static char *java_name_of_child (gdb_variable * parent, int index);
 
-static value_ptr java_value_of_root PARAMS ((gdb_variable *var));
+static value_ptr java_value_of_root (gdb_variable * var);
 
-static value_ptr java_value_of_child PARAMS ((gdb_variable *parent, int index));
+static value_ptr java_value_of_child (gdb_variable * parent, int index);
 
-static struct type *java_type_of_child PARAMS ((gdb_variable *parent, int index));
+static struct type *java_type_of_child (gdb_variable * parent, int index);
 
-static int java_variable_editable PARAMS ((gdb_variable *var));
+static int java_variable_editable (gdb_variable * var);
 
-static int java_value_of_variable PARAMS ((gdb_variable *var, Tcl_Obj **obj));
+static int java_value_of_variable (gdb_variable * var, Tcl_Obj ** obj);
 
-static enum vlanguage variable_language PARAMS ((gdb_variable *var));
+static enum vlanguage variable_language (gdb_variable * var);
 
-static gdb_variable *new_variable PARAMS ((void));
+static gdb_variable *new_variable (void);
 
 static gdb_variable *new_root_variable (void);
 
-static void free_variable PARAMS ((gdb_variable *var));
+static void free_variable (gdb_variable * var);
 
 /* String representations of gdb's format codes */
 char *format_string[] = {"natural", "binary", "decimal", "hexadecimal", "octal"};

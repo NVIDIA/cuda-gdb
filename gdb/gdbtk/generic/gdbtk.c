@@ -73,7 +73,7 @@ static sigset_t nullsigmask;
 static struct sigaction act1, act2;
 static struct itimerval it_on, it_off;
 
-static void x_event_wrapper PARAMS ((int));
+static void x_event_wrapper (int);
 static void
 x_event_wrapper (signo)
      int signo;
@@ -92,21 +92,21 @@ int enable_external_editor = 0;
 char *external_editor_command = "tk_dialog .warn-external \\\n\
 \"No command is specified.\nUse --tclcommand <tcl/file> or --external-editor <cmd> to specify a new command\" 0 Ok";
 
-extern int Tktable_Init PARAMS ((Tcl_Interp * interp));
+extern int Tktable_Init (Tcl_Interp * interp);
 
-static void gdbtk_init PARAMS ((char *));
+static void gdbtk_init (char *);
 
-void gdbtk_interactive PARAMS ((void));
+void gdbtk_interactive (void);
 
 static void cleanup_init (void *ignore);
 
-static void tk_command PARAMS ((char *, int));
+static void tk_command (char *, int);
 
-static int target_should_use_timer PARAMS ((struct target_ops * t));
+static int target_should_use_timer (struct target_ops *t);
 
-int target_is_native PARAMS ((struct target_ops *t));
+int target_is_native (struct target_ops *t);
 
-int gdbtk_test PARAMS ((char *));
+int gdbtk_test (char *);
 
 /* Handle for TCL interpreter */
 Tcl_Interp *gdbtk_interp = NULL;
