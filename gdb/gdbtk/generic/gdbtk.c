@@ -321,10 +321,11 @@ target_is_native (struct target_ops *t)
 {
   char *name = t->to_shortname;
 
-  if (STREQ (name, "exec") || STREQ (name, "hpux-threads")
-      || STREQ (name, "child") || STREQ (name, "procfs")
-      || STREQ (name, "solaris-threads") || STREQ (name, "linuxthreads")
-      || STREQ (name, "multi-thread"))
+  if (strcmp (name, "exec") == 0 || strcmp (name, "hpux-threads") == 0
+      || strcmp (name, "child") == 0 || strcmp (name, "procfs") == 0
+      || strcmp (name, "solaris-threads") == 0
+      || strcmp (name, "linuxthreads") == 0
+      || strcmp (name, "multi-thread") == 0)
     return 1;
 
   return 0;

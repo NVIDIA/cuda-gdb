@@ -474,15 +474,15 @@ variable_format (Tcl_Interp *interp, int objc,
       /* Set the format of VAR to given format */
       int len;
       char *fmt = Tcl_GetStringFromObj (objv[2], &len);
-      if (STREQN (fmt, "natural", len))
+      if (strncmp (fmt, "natural", len) == 0)
 	varobj_set_display_format (var, FORMAT_NATURAL);
-      else if (STREQN (fmt, "binary", len))
+      else if (strncmp (fmt, "binary", len) == 0)
 	varobj_set_display_format (var, FORMAT_BINARY);
-      else if (STREQN (fmt, "decimal", len))
+      else if (strncmp (fmt, "decimal", len) == 0)
 	varobj_set_display_format (var, FORMAT_DECIMAL);
-      else if (STREQN (fmt, "hexadecimal", len))
+      else if (strncmp (fmt, "hexadecimal", len) == 0)
 	varobj_set_display_format (var, FORMAT_HEXADECIMAL);
-      else if (STREQN (fmt, "octal", len))
+      else if (strncmp (fmt, "octal", len) == 0)
 	varobj_set_display_format (var, FORMAT_OCTAL);
       else
 	{

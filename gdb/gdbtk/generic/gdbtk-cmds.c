@@ -547,7 +547,7 @@ gdb_stop (ClientData clientData, Tcl_Interp *interp,
   if (objc > 1)
     {
       s = Tcl_GetStringFromObj (objv[1], NULL);
-      if (STREQ (s, "detach"))
+      if (strcmp (s, "detach") == 0)
 	force = 1;
     }
 
@@ -1365,8 +1365,9 @@ gdb_search (ClientData clientData, Tcl_Interp *interp,
 
       /* Strip off some C++ special symbols, like RTTI and global
          constructors/destructors. */
-      if ((p->symbol != NULL && !STREQN (DEPRECATED_SYMBOL_NAME (p->symbol), "__tf", 4)
-	   && !STREQN (DEPRECATED_SYMBOL_NAME (p->symbol), "_GLOBAL_", 8))
+      if ((p->symbol != NULL
+	   && strncmp (SYMBOL_LINKAGE_NAME (p->symbol), "__tf", 4) != 0
+	   && strncmp (SYMBOL_LINKAGE_NAME (p->symbol), "_GLOBAL_", 8) != 0)
 	  || p->msymbol != NULL)
 	{
 	  elem = Tcl_NewListObj (0, NULL);
