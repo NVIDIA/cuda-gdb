@@ -420,7 +420,7 @@ body DebugWinDOpts::_all {} {
       #enable class buttons
       set num 0
       foreach class $_classes {
-	$itk_interior.f.classes.childsite.$num configure -state normal
+	[$itk_interior.f.classes childsite].$num configure -state normal
 	incr num
       }
     }
@@ -430,7 +430,7 @@ body DebugWinDOpts::_all {} {
       #enable class buttons
       set num 0
       foreach class $_classes {
-	$itk_interior.f.classes.childsite.$num configure -state normal
+	[$itk_interior.f.classes childsite].$num configure -state normal
 	incr num
       }
     }
@@ -440,7 +440,7 @@ body DebugWinDOpts::_all {} {
       # disable class buttons
       set num 0
       foreach class $_classes {
-	$itk_interior.f.classes.childsite.$num configure -state disabled
+	[$itk_interior.f.classes childsite].$num configure -state disabled
 	incr num
       }
     }
