@@ -1060,7 +1060,7 @@ body SrcTextWin::FillAssembly {w tagname filename funcname line addr pc_addr lib
   }
   
   # highlight proper line number
-  _highlightAsmLine $win $addr $pc_addr $tagname $filename
+  _highlightAsmLine $win $addr $pc_addr $tagname $filename $funcname
 
   display_line $win $current(asm_line)
 }
@@ -1119,7 +1119,7 @@ body SrcTextWin::FillMixed {w tagname filename funcname line addr pc_addr lib} {
   }
 
   # highlight proper line number
-  _highlightAsmLine $win $addr $pc_addr $tagname $filename
+  _highlightAsmLine $win $addr $pc_addr $tagname $filename $funcname
   display_line $win $current(asm_line)
 }
 
@@ -1127,7 +1127,7 @@ body SrcTextWin::FillMixed {w tagname filename funcname line addr pc_addr lib} {
 # METHOD: _highlightAsmLine - highlight the current execution line
 #         in one of the assembly modes
 # ------------------------------------------------------------------
-body SrcTextWin::_highlightAsmLine {win addr pc_addr tagname filename} {
+body SrcTextWin::_highlightAsmLine {win addr pc_addr tagname filename funcname} {
   global gdb_running
 
   # Some architectures allow multiple instructions in each asm source
