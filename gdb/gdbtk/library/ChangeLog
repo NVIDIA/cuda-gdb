@@ -4,6 +4,11 @@
 
 2000-05-01  Fernando Nasser  <fnasser@cygnus.com>
 
+        * variables.tcl (edit): Make changes to a variable which is a register
+        to be reflected on the register window by running the update hook.
+
+2000-05-01  Fernando Nasser  <fnasser@cygnus.com>
+
 	* regwin.itb (build_win): Adjust size of columns independently, force
 	typed registers to raw mode and check if values can be edited.
 	Also, add "Add to Watch" option to the menu.
