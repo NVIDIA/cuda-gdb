@@ -1,3 +1,9 @@
+2001-06-01  Keith Seitz  <keiths@redhat.com>
+
+	* library/console.itb (constructor): Pass dummy argument
+	to idle method.
+	(destructor): Ditto.
+
 2001-05-31  Keith Seitz  <keiths@redhat.com>
 
 	* library/interface.tcl (gdbtk_idle): Run hooks, too,

@@ -19,7 +19,7 @@ body Console::constructor {args} {
   debug "$args"
   _build_win
   eval itk_initialize $args
-  add_hook gdb_no_inferior_hook [list $this idle]
+  add_hook gdb_no_inferior_hook [list $this idle dummy]
 
   # Right now the preferences window directly uses preference
   # variables.  This means that if we track the preference changes
@@ -38,7 +38,7 @@ body Console::constructor {args} {
 body Console::destructor {} {
   global gdbtk_state
   set gdbtk_state(console) ""
-  remove_hook gdb_no_inferior_hook [list $this idle]
+  remove_hook gdb_no_inferior_hook [list $this idle dummy]
 
   # foreach option {gdb/console/wrap gdb/console/prompt_fg \
   # 		    gdb/console/error_fg gdb/console/font} {
