@@ -1,3 +1,11 @@
+2002-04-21  Andrew Cagney  <ac131313@redhat.com>
+
+	* generic/gdbtk-wrapper.c (GDB_find_frame_addr_in_frame_chain):
+	Delete function.
+	(wrap_find_frame_addr_in_frame_chain): Delete function.
+	* generic/gdbtk-wrapper.h (GDB_find_frame_addr_in_frame_chain):
+	Delete declaration.
+
 2002-04-17  Andrew Cagney  <cagney@redhat.com>
 
 	* generic/gdbtk.c (gdbtk_init): Use error or throw_exception to

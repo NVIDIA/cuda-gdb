@@ -1,5 +1,5 @@
 /* longjmp-free interface between gdb and gdbtk.
-   Copyright 1999-2000 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2002 Free Software Foundation, Inc.
 
 This file is part of GDB.  It contains routines to safely call common gdb
 functions without the fear of longjmp'ing.
@@ -62,9 +62,6 @@ extern gdb_result GDB_block_for_pc (CORE_ADDR pc, struct block **result);
 extern gdb_result GDB_block_innermost_frame (struct block *block,
 					     struct frame_info **result);
 extern gdb_result GDB_reinit_frame_cache (void);
-extern gdb_result GDB_find_frame_addr_in_frame_chain (CORE_ADDR addr,
-						      struct frame_info
-						      **result);
 extern gdb_result GDB_value_ind (value_ptr val, value_ptr * rval);
 extern gdb_result GDB_value_slice (value_ptr val, int low, int num,
 				   value_ptr * rval);
