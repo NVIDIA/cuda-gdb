@@ -1,8 +1,8 @@
-				 README.GDBTK
+				    README
 			   Written by Stu Grossman
 	      Updated 9/26/95 by Fred Fish for gdb 4.15 release
               Updated 4/18/97 by Martin Hunt
-	      Updated 8/14/02 by Keith Seitz
+	      Updated 8/15/02 by Keith Seitz
 
 This file describes how to build, install, use and hack on Insight (formerly
 GDBtk), a TK-based GUI for GDB, the GNU debugger.
@@ -24,20 +24,20 @@ Building and Installing
 =======================
 
 Building Insight is very straightforward.  It is configured/built by
-default when you checkout or download Insight. Right now, Insight must
+default when you checkout or download Insight.  Right now, Insight MUST
 be built using the versions of Tcl, Tk, Itcl, and Tix that come with
-the sources. We're working to fix that, but it is going to take a lot
-of time. (Want to help?)
+the sources.  We're working to fix that, but it is going to take a lot
+of time.  (Want to help?)
 
 On Unix machines, you will also need to have X11 (R4/R5/R6) installed 
 (this is a prerequisite to installing Tk).  
 
 Insight inherits much of GDB's configuration options (like where it is
-to be installed). See the GDB README file for more details on configure
+to be installed).  See the GDB README file for more details on configure
 options and such for GDB.
 
 It is recommended that Insight, like GDB, be built outside of the source
-directory in order to preserve the integrity of the source directory. This
+directory in order to preserve the integrity of the source directory.  This
 is very useful, for example, when building GDB/Insight for multiple hosts
 or targets.
 
@@ -49,6 +49,33 @@ For example:
 	host> ../src/configure
 	host> make
 	host> make install
+
+Environment Variables
+=====================
+
+Insight and all of its support infrastructure read various environment variables
+for optional startup information. All of these environment variables are
+optional: Insight and its packages know how to find their files in both the
+install and the source trees.
+
+	Name			Description
+	----			-----------
+	TCL_LIBRARY		The location of the Tcl library files
+	TK_LIBRARY		The location of the Tk library files
+	TIX_LIBRARY		The location of the Tix library files
+	REDHAT_GUI_LIBRARY	The location of the libgui library files
+	GDBTK_LIBRARY		The location of the Insight library files
+	INSIGHT_PLUGINS		A colon-separated list of directories
+				to search for plugins (see gdb/gdbtk/plugins/HOW-TO)
+	GDBTK_DEBUG		Controls runtime loading of the Debug Window.
+				(This is the most useful debug option.)
+	GDBTK_TRACE		Controls runtime tracing of the tcl code
+	GDBTK_DEBUGFILE		Filename to send debug output
+	GDBTK_TEST_RUNNING	Testsuite variable. See gdb/testsuite/gdb.gdbtk/README
+				for more information.
+
+All of the environment variables for controlling Insight are well documented
+in gdb/gdbtk/library/main.tcl. Search for "env" to find them all.
 
 Using Insight
 =============
@@ -73,262 +100,133 @@ Insight comes with all your standard debugger windows, including:
 	o Function Browser Window
 	o Debug Window (for developers)
 
-Most windows have a similar layout consisting of a menubar, display area,
-scrollbar, status box and window-specific buttons.
+Insight also has an extensive (if outdated) online help system which describes
+all the windows and explains how to use them.  Users are urged to browse this
+help system for information on using Insight.
 
-Source Window
--------------
-This contains the current source file.  The margin displays line
-numbers, and has an indicator for lines that actually contain code (and
-therefore can have breakpoints as well).  When a breakpoint is set at
-that line, the indicator is replaced with a "break dot", which can be
-different colors, depending on its function and status.
+Hacking Insight
+===============
 
-The buttons are:
-
-Start - Put a breakpoint at main, and then run.
-Stop - Stop the program (only active when program is running).
-Step, Next, Cont[inue], Finish, Up, Down - Same as the corresponding
-      GDB command.  (Finish runs the current subroutine until it's done.)
-Bottom - Does a `frame 0' to put you at the innermost call frame.
-
-There are also accelerators for various buttons (just type the letter
-without any control/meta/alt/shift in the text frame):
-
-s - Step
-n - Next
-c - Continue
-f - Finish
-u - Up
-d - Down
-
-The mouse can also be used to set and clear breakpoints when clicked
-in the margin (on a breakpoint indicator).
-
-The menubar contains the following items (which may be slightly different
-for different host/target versions of Insight):
-
-	  Menu			Meaning
-	---------               --------------------
-	  File			General file control
-	     Open...		Open an executable for debugging
-	     Close		Close the current debug session
-	     Source...		Read in and source a GDB command script
-	     1 Recent1		List of most recently opened projects
-	     2 Recent2
-	     3 Recent3
-	     4 Recent4
-	     5 Recent5
-	     Print Source... 	Print the source in the Source Window
-	     Target Settings... Set various options about the target
-				(arguments, baud, etc.)
-	     Exit		Close the session and exit the debugger
-
-	  Run         		Generic running options
-	     Attach to Process  Attach to a running process
-	     Run		Do whatever is necessary to run an executable
-				in the debugger (same as Run button on toolbar)
-	     Detach		Detach from the process and end the session
-	     Kill		End the current run session
-
-	  View	      		A menu of other windows that can be popped up
-				or created
-	     Stack		Opens the Stack Window
-	     Registers		Opens the Register Window
-	     Memory		Opens the Memory Window
-	     Watch Expressions	Opens the Watch Expressions Window
-	     Local Variables	Opens the Local Variables Window
-	     Breakpoints	Opens the Breakpoints Window
-	     Console		Opens the Console Window
-	     Function Browser	Opens the Function Browser Window
-	     Thread List	Opens the Threads Window
-	     
-	  Control		Menu of commands to control the inferior
-	     Step		Step by one source line
-	     Next		Step by one source line, proceeding through
-				subroutine calls
-	     Finish		Execute until the stack frame returns
-	     Continue		Continue execution
-	     Step Asm Inst	Step by one assembler instruction
-	     Next Asm Inst	Step by one assembler instruction, proceeding
-				through subroutine calls
-
-	  PlugIn		A list of all installed (and usable) plugins
-
-	  Preferences		Change the way Insight looks or behaves
-	     Global...		Opens the Global Preferences Dialog
-	     Source...		Opens the Source Window Preferences Dialog
-
-	  Help			For online help system
-				(May be out of date -- Want to help?)
-	     Help Topics	Opens the online help system browser
-				or displays online help in internet browser
-				if Global preference set
-	     About GDB		Displays information about this version of
-				Insight/GDB
-
-The status box indicates things like the current execution status of the inferior,
-errors, and such. The current PC, line number, file name, and function are
-also displayed in the source window.
-
-Console window:
-
-	This can be used to type commands at GDB (useful for when there isn't a
-	button for what you want to do).
-
-Assembly window:
-
-	This displays a disassembly of the current function.  It's buttons are
-	similar to those of the source window, except that it uses Stepi and
-	Nexti to run one instruction at a time instead of one statement at a
-	time.  The accelerators and mouse actions are also similar.
-
-	Additionally, there is an option to enable mixed source and assembly.
-
-Register window:
-
-	This displays the registers.  It may have to be resized to properly
-	display all the registers.  The displayed registers can be selected
-	via the Options|Config menu item.
-
-Auto Command window:
-
-	Using this window, you can specify a command to be executed frequently.
-	The output will be automatically updated.  Options|Accumulate-output
-	can be used to avoid clearing the window each time so that you can
-	accumulate a history.
-
-Expressions:
-
-	The expression window can be used to just calculate an expression, or
-	to watch the value of an expression (ala the `display' command), using
-	the Update button.  The	expression window will also pop up
-	automatically when an expression is double-clicked in the source window.
-
-Customizing GDBtk
-=================
-
-There are three primary ways to customize GDBtk.  One is to modify the 
-appropriate X resources.  Another is to hack a ~/.gdbtkinit file.  The last 
-is to change the files in gdbtcl, which defines the most basic interface 
-elements.
-
-X resources give you control over things like the choice of fonts, color
-schemes and some geometry info.
-
-For more serious customizations, you will probably need to hack your 
-~/.gdbtkinit or gdbtcl files.
-
-X Resources
-===========
-
-	The class name for GDBtk is `Gdb', and it's appname is `gdb'.  The top-
-level windows have instance names of `src', 'asm', 'reg', and 'cmd'.  The main
-display area in each has the class `Text'.  So, to change the font in all the
-main display areas, something like the following will do:
-
-	Gdb*Text*font:		fixed
-
-To change the font in only the source window:
-
-	Gdb*src*Text*font:		fixed
-
-To find out the names of the widgets do the following (in the command window):
-
-	tk info comm .*
-
-To get the list of resources (and their classes) for a given widget, do some-
-thing like:
-
-	tk .asm.text config
-
-This will return a list of lists, where each sublist looks something like this:
-
-	{-height height Height 24 25}
-
-The first item is the name of the config option used when creating the widget.
-The second item is the instance name of this resource, the third is the class
-name.  The fourth item is the default value, and the last item is the current
-value.
-
-To get info about a single resource, add the config option name to the end of
-the previous command.  I.e.:
-
-	tk .asm.text config -font
-
-will return just the info about the font.
-
-To find out the class of a window, just do:
-
-	tk winfo class .asm.text
-
-Note that some things may be explicitly overridden by gdbtk.tcl.  In
-particular, the `tk colormodel . monochrome' command should probably be
-disabled if you want to use color.
-
-Hacking ~/.gdbtkinit and gdbtcl
-===============================
-~/.gdbtkinit is sourced at the end of gdbtk.tcl.  Currently there is no good
-doc on this.  See gdbtcl/main.tcl to see what you can change.
-
-The GUI is primarily implemented by Tcl/Tk code which lives in gdbtcl and a
-C file called gdbtk.c.  The Tcl/Tk code determines the look and feel, the
-layout, and the functions associated with all of the interface elements.  The C
-code is mostly just glue between GDB internals and Tclland.  In essence, all of
-the policy is implemented in Tcl/Tk, and is easily changed without recompiling.
+The GUI is primarily implemented by Tcl/Tk code which lives in gdb/gdbtk/library
+ and bunch of C files in gdb/gdbtk/generic.  The Tcl/Tk code determines the look
+and feel, the layout, and the functions associated with all of the interface
+elements.  The C code is mostly just glue between GDB internals and Tcl-land.
+In essence, all of the policy is implemented in Tcl/Tk, and is easily changed
+without recompiling.
 
 To make more serious changes to the interface, such as adding a new window or
-changing the framework, you will have to hack the tcl code.  This directory is
-installed in $(libdir) (probably /usr/local/lib/).  But, you will probably want
-to hack on your own private copy before putting it up for the rest of the
-users.  To find the GDB tcl code, GDB first checks for the environment variable
-GDBTK_LIBRARY.  This can be a directory name or a list of directories separated
-by colons (semicolons on Windows). GDB will check each directory in order until
-it finds "main.tcl".  If GDBTK_LIBRARY is not set, GDB will look for 
-"gdbtcl/main.tcl" in the current directory, and finally, it will try to find 
+changing the framework, you will have to hack the tcl code (and probably the C
+code as well).  The tcl library install directory is $(libdir) (probably
+/usr/local/lib/insight1.0).  But, you will probably want to hack on your own
+private copy before putting it up for the rest of the users.  To find the GDB tcl
+code, GDB first checks for the environment variable GDBTK_LIBRARY.  GDB will check
+this directory for the file "main.tcl".  If GDBTK_LIBRARY is not set, GDB will
+look for main.tcl in the install directory, and finally it will try to find 
 the tcl directory in the sources.
 
-Note that the old GDBTK_FILENAME environment variable is no longer used. 
+A word about the different files in Insight is in order.  Insight is a hybrid of
+C code and "Tcl" code (actuall Incr Tcl code).  We use the following conventions
+for naming our tcl files (most of the time!).  Any file with a ".tcl" extension
+is simply vanilla tcl code.  Any file ending with ".itcl" is an Itcl file,
+class definition and implementation all in one.  So far so good.  Now comes the
+toughy: Files ending in ".ith" are Itcl class definition files, and they all
+must have a corresponding implementation file, ending in ".itb".  Why do we do
+this? Simple.  With Itcl, one can reread class implementations at runtime, but
+one cannot change the class definition.  So all those ".itcl" files can only
+be reread be restarting Insight.  The same is not true, though, of the ".itb"
+files.  Those files can be changed and immediately reread and used in Insight
+without having to restart (as long as the class definition doesn't change).  This
+is a nifty Itcl feature which is fully exploited by the Debug Window, which
+has a "ReSource" menu on it to reread the Tcl files.  (To get to the Debug Window,
+hit Ctrl-Alt-F11 in the Source Window or type "tk ManagedWin::open DebugWin" in
+the Console Window.)
 
-Internally, GDBtk is basically GDB, linked with Tcl/Tk, and some glue code that
-interfaces GDB internals to Tclland.  This means that GDBtk operates as a
-single program, not a front-end to GDB.  All GDB commands, and a great deal of
-the target program state are accessible to the Tcl programmer.  In addition,
-there are many callbacks from GDB to notify Tclland of important events.
+Internally, Insight is basically GDB, linked with Tcl/Tk, some Tcl/Tk extensions,
+and some glue code that interfaces GDB internals to Tcl-land.  This means that
+Insight operates as a single program, not a front-end to GDB.  All GDB commands,
+and a great deal of the target program state are accessible to the Tcl programmer.
+In addition, there are many callbacks from GDB to notify Tcl-land of important
+events.  Many of these are accomplished via "hooks" in GDB, and others are
+accomplished using event notifications.  GDB is slowly deprecating the use of
+"hooks" in favor of its new event mechanism.
 
-Here is a brief rundown of the GDB<=>Tcl interfaces:
+All of the below commands have lots of nice comments before them explaining what
+they all do, how they are to be used, etc.  The source code is the definitive
+authority (other than a maintainer) for the definition/usage of a command in
+Insight.  Hackers are urged to read through the source code for any commands
+which may need explaining.
 
-Tcl->GDB calls:
-	gdb_cmd - sends a text command to gdb.  Returns the result
-	gdb_loc - takes PC, and returns a list consisting of a short file name,
-		  the function name, a long file name, the line number and the
-		  PC (in case you didn't supply it).
-	gdb_sourcelines - Takes a filename, and returns a list of lines that
-		  contain code.
-	gdb_listfiles - Returns a list of all of the source files.
-	gdb_stop - Stops the target process.
-	gdb_regnames - Returns a list of all of the register names.
-	gdb_fetch_registers - Returns the contents of the specified registers.
-	gdb_changed_register_list - Returns a list of registers that have
-		  changed since the last call.
-	gdb_disassemble - Takes a function or PC.  Returns the text of a dis-
-		  assembly of the entire function.
-	gdb_eval - Takes an expression.  Returns it's value.
-	gdb_get_breakpoint_list - Does the obvious.
-	gdb_get_breakpoint_info - Takes a breakpoint number.  Returns a list of
-		  info about that breakpoint.
+New Tcl Commands:
 
-GDB->Tcl callbacks:
-	gdb_tcl_fputs - Sends output into Tcl for the command window.
-	gdb_tcl_query - Pops up a query window.
-	gdbtk_tcl_breakpoint - Notifies Tcl of changes to a breakpoint.
-	gdbtk_tcl_idle - Notifies Tcl that debugged process is now idle.
-	gdbtk_tcl_busy - Notifies Tcl that debugged process is now running.
+Here is a brief, if incomplete, summary of the Tcl commands that are created
+by Insight.  These are installed into the Tcl interpreter in the C files.
 
-For details, see the usage in gdbtk.tcl, or the definitions in gdbtk.c.
+	Name			Description
+	----			-----------
+	gdb_cmd			Sends a text command to gdb.  Returns the result.
+				DEPRECATED: Do not use any more.
+	gdb_loc			Returns a list of useful tidbits about the specified
+				GDB linespec
+	gdb_sourcelines		Returns a list of executable lines for a source file
+	gdb_listfiles		Returns a list of all of the source files
+	gdb_stop		Stops the target process (or at least tries to)
+	gdb_reginfo		Returns information about registers (names, numbers,
+	              		values, size, etc.)
+	gdb_disassemble		Returns the text of a disassembly of the entire
+				function.  No longer used.
+	gdb_load_disassembly	Loads the disassembly of a location into a
+				source window's textbox
+	gdb_eval		Returns the value of a given expression
+	gdb_get_breakpoint_list	Returns a list of all breakpoints
+	gdb_get_breakpoint_info Returns a list of info about a breakpoint
 
-Additionally, there is a new GDB command `tk', which can be used to poke at
-Tk/Tcl from the command window.
+Tcl procedures that are hooked into GDB:
+
+This is a list, albeit incomplete, of the "hook" functions that are installed
+into GDB.  The actual "hooks" are installed/initialized in
+gdb/gdbtk/generic/gdbtk-hooks.c (and maybe one or two in gdbtk.c).  The list
+below is the Tcl side of the hook.
+
+	Name			Description
+	----			-----------
+	gdb_tcl_fputs		Sends output into Tcl for the command window
+	gdb_tcl_query		Pops up a query window
+	gdbtk_tcl_breakpoint	Notifies Tcl of changes to a breakpoint
+	gdbtk_tcl_idle		Notifies Tcl that debugged process is now idle
+	gdbtk_tcl_busy		Notifies Tcl that debugged process is now running
+
+Events:
+
+Starting with GDB 5.0, GDB has had an event loop.  Although largely unused right
+now, with it came some useful "baggage", especially event notifications, even
+though they, too, were largely incomplete.  The list of events continues to grow,
+and Insight and GDB often "share" overlapping events, but the list below is
+complete (since there are only a few defined events).  The source for these
+events can be found in gdb/gdbtk/library/gdbevents.it[hb].
+
+	Name			Description
+	----			-----------
+	BreakpointEvent		A breakpoint has been created/modified/deleted
+	TracepointEvent		A tracepoint has been created/modified/deleted
+	SetVariableEvent	User has issued a "set" command in Console
+	BusyEvent		The debugger is "busy"
+	IdleEvent		The debugger is "idle"
+	UpdateEvent		The state of the target has changed (or the
+				GDB's view of the target has changed)
+	ArchChangedEvent	The architecture of the system has changed
+				(this can happen when GDB defaults to using
+				some basic CPU and detects that a more elaborate
+				CPU is actually being used, e.g., SH5)
+
+GDB Commands:
+
+Insight installs a few GDB commands, which are available with the Console Window.
+
+	Name			Description
+	----			-----------
+	tk			Executes the arguments in the Insight Tcl
+				interpreter
+	view			Displays the given linespec in the Source Window
 
 Problems
 ========
@@ -348,120 +246,38 @@ or
 then you haven't installed Tcl or TK properly.  Fix the appropriate environment
 variable to point at the {tcl tk}/library directory, and restart gdb.
 
-If you get the following:
-
-	/usr/local/lib/gdbtk.tcl:1: couldn't read file "/usr/local/lib/gdbtk.tcl": No such file or directory
-	Stack trace:
-	can't unset "auto_index": no such variable
-	    while executing
-	"unset auto_index"
-
-then GDBtk wasn't installed properly.  You can set the GDBTK_FILENAME
-environment variable to point at the gdbtk.tcl in your source directory.  Note
-that the stack trace displayed here is not valid.  If you actually get an error
-in gdbtk.tcl, the stack trace is useful to pinpoint the location.
-
 Known Bugs
 ==========
 
 generic problems
 
-    o	If you open an Assembly window before you have run the program, gdbtk
-	pops up a dialog box titled "Error in Tcl Script" with the contents
-	"Error: No function contains the specified address".  Trying to then
-	do other things brings up a dialog box with the contents "Error:
-	can't read 'current_asm_label': no such variable.
+    o	Using the GDB commands "up"/"down"/"frame" in Console Window
+	can cause GDB and Insight to get out of sync.  If this happens,
+	simply use the Stack Window or the frame navigation buttons on
+	the Source Window's toolbar to resync the two.
 
-	Solution:  Close Assembly window when there is no program running.
-
-    o	If you open Registers window before you have run the program, gdbtk
-	pops up a dialog box titled "Error in Tcl Script" with the contents
-	"Error: No registers".  Trying to then do other things, like use the
-	Start button to run the program, repeatedly produce the same dialog
-	box and the action is not performed.
-
-	Solution:  Close Registers window when there is no program running.
-
-    o	Expressions are sometimes not displayed correctly in the Expression
-	window.  I.E. "argc" works, as does "*(argv+argc)" but not "argv[argc]".
-
-	Solution:  None
-	[ I believe this problem is fixed, but I have not tested it ]
-
-    o	The Breakpoint window does not get automatically updated and changes
-	made in the window are not reflected back in the results from "info br".
-	I.E. the breakpoint count in the window is not updated at each hit and
-	enabling/disabling the breakpoint from the Breakpoint window has no effect.
-
-	Solution:  Use the command interface to control breakpoints and don't
-	open a Breakpoint window.
-
-    o	Sometimes while an expression window is active you get a dialog box
-	that complains "Error: invalid command name ".expr.e5.expr" for 
-	example.  The Tcl stack trace looks something like:
-
-		invalid command name ".expr.e5.expr"
-		    while executing
-		"$e.expr get 0.0 end"
-		    invoked from within
-		"set expr [$e.expr get 0.0 end]..."
-		    (procedure "update_expr" line 17)
-		    invoked from within
-		"update_expr $expr_num"
-		    invoked from within
-		"if $expr_update_list($expr_num) {
-		    update_expr $expr_num
-			.
-			.
-			.
-
-	Solution:  None except close expression window and reopen it.
-	
-    o	If you select the "Down" button in either the Source or Assembly
-	window while in the bottom (innermost) frame, the error message that
-	results goes just to the command window and may be missed if the
-	command window is not open.  This may also apply to other messages
-	as well.  It should probably put up a notification box instead.
-
-	Solution:  Keep Command window open to see error messages.
-
-    o	Not really a problem, but it would be nice to have a backtrace
-	window.
-
-	Solution:  Do bt in command window?
-
-    o	Also not really a problem, but it might be nice to have a frame/stack
+    o	Not really a problem, but it might be nice to have a frame/stack
 	window that displays the last N words on the stack, along with
 	indications about which function owns a particular frame, how the
 	frame pointers are chained, and possibly the names of variables
 	alongside their frame slots.
 
-m68k-hp-hpux9.00:
+host- or target-specific problems
 
-    o	Attempting to use a Register window results in a Tcl Script Error
-	"Error: Erroneous arithmetic operation".  The Tcl stack trace is:
+    o	Windows is hosed. Tk8.3 in sources.redhat.com is not stable
+	on windows. Wanna help?
 
-	    while executing
-	"gdb_fetch_registers $reg_format $regnum"
-	    invoked from within
-	"set regval [gdb_fetch_registers $reg_format $regnum]..."
-	    ("foreach" body line 2)
-	    invoked from within
-	"foreach regnum $reg_display_list {
-				set regval [gdb_fetch_registers $reg_format $regnum]
-				set regval [format "%-*s" $valwidth $regval]
-				$win del ..."
-	    invoked from within
-	"if {$which == "all"} {
-			set lineindex 1
-			foreach regnum $reg_display_list {
-				set regval [gdb_fetch_registers $reg_format $regnum]
-				set regval [f ..."
-	    (procedure "update_registers" line 16)
-	    invoked from within
-	"update_registers all"
-		. 
-		. 
-		. 
+Where to find help
+==================
 
+The first place to turn for help is the online help system.  It may be old, but
+it is still largely correct: it explains what everything does.  If that fails,
+search the mailing list archives for other users who may have had similar problems
+or questions.  The archives are online at
 
+http://sources.redhat.com/insight/mailinglist.htm .
+
+If all else fails, send a note to the mailing list, insight@sources.redhat.com,
+where users and maintainers lurk.  This is a very low traffic list, so don't
+be afraid to join the list.  Instructions for joining are on our homepage,
+http://sources.redhat.com/insight .
