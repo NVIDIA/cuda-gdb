@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.97 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.98 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3098,6 +3098,14 @@ If defined, use this to print the value of a register or all registers.
 #findex PRINT_FLOAT_INFO
 If defined, then the @samp{info float} command will print information about
 the processor's floating point unit.
+
+@item PRINT_VECTOR_INFO()
+@findex PRINT_VECTOR_INFO
+If defined, then the @samp{info vector} command will call this function
+to print information about the processor's vector unit.
+
+By default, the @samp{info vector} command will print all vector
+registers (the register's type having the vector attribute).
 
 @item DWARF_REG_TO_REGNUM
 @findex DWARF_REG_TO_REGNUM
