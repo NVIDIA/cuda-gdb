@@ -108,6 +108,9 @@ class GDBToolBar {
       separator {
         toolbar_add_button_separator
       }
+      custom {
+        eval toolbar_add_custom $args
+      }
       default {
         error "Invalid item type: $type"
       }
@@ -139,6 +142,22 @@ class GDBToolBar {
     eval label $lname -text \$text $args
     balloon register $lname $balloon
     lappend button_list $lname    
+  }
+
+  # ------------------------------------------------------------------
+  #  PRIVATE METHOD:  toolbar_add_custom - Create a user defined widget
+  #                   to be inserted in the toolbar.
+  # ------------------------------------------------------------------
+
+  private method toolbar_add_custom {name createCmd balloon args} {
+    set wname $ButtonFrame.$name
+    set Buttons($name) $wname
+    set Buttons($wname,align) $button_align
+
+    eval $createCmd $wname $args
+    balloon register $wname $balloon
+
+    lappend button_list $wname
   }
 
   # ------------------------------------------------------------------
