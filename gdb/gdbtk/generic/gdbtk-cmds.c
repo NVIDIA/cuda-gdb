@@ -1758,7 +1758,7 @@ map_arg_registers (objc, objv, func, argp)
      case, some entries of REGISTER_NAME will change depending upon
      the particular processor being debugged.  */
 
-  numregs = ARCH_NUM_REGS;
+  numregs = ARCH_NUM_REGS + NUM_PSEUDO_REGS;
   
   if (objc == 0)		/* No args, just do all the regs */
     {
