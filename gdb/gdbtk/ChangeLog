@@ -1,5 +1,12 @@
 2004-07-02  Martin Hunt  <hunt@redhat.com>
 
+	* library/targetselection.itb: Use /dev/comX for
+	cygwin instead of just comX.
+
+	* library/interface.tcl (gdbtk_tcl_preloop): Set baud rate.
+
+2004-07-02  Martin Hunt  <hunt@redhat.com>
+	
 	* generic/gdbtk-cmds.c (symtab_to_filename): New function. Like
 	symtab_to_fullname() but returns the filename if the fullname 
 	cannot be found.

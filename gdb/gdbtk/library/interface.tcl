@@ -119,6 +119,7 @@ proc gdbtk_tcl_preloop { } {
     set current_args [gdb_get_inferior_args]
     set current_dir $gdb_current_directory
     Session::notice_file_change
+    set_baud
     if {[string length $current_args] > 0} {
       gdb_set_inferior_args $current_args
       gdb_cmd "cd $current_dir"
