@@ -1,5 +1,10 @@
 2002-10-10  Martin M. Hunt  <hunt@redhat.com>
 
+	* generic/gdbtk-cmds.c (gdb_update_mem): No results
+	were being returned. Append results to result_ptr_obj_ptr.
+
+2002-10-10  Martin M. Hunt  <hunt@redhat.com>
+	
 	* library/session.tcl (save): Save target_cmd,
 	attach, load, run, and cont as session prefs.
 	(notice_file_change): Load in above session

@@ -2703,12 +2703,9 @@ gdb_update_mem (ClientData clientData, Tcl_Interp *interp,
     }
 
   /* return max_*_len so that column widths can be set */
-  result = Tcl_NewListObj (0, NULL);
-  Tcl_ListObjAppendElement (interp, result, Tcl_NewIntObj (max_label_len + 1));
-  Tcl_ListObjAppendElement (interp, result, Tcl_NewIntObj (max_val_len + 1));
-  Tcl_ListObjAppendElement (interp, result, Tcl_NewIntObj (max_ascii_len + 1));
-  result_ptr->flags |= GDBTK_IN_TCL_RESULT;
-
+  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr, Tcl_NewIntObj (max_label_len + 1));
+  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr, Tcl_NewIntObj (max_val_len + 1));
+  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr, Tcl_NewIntObj (max_ascii_len + 1));
   do_cleanups (old_chain);
   xfree (mbuf);
   return TCL_OK;
