@@ -93,8 +93,8 @@ proc gdbtk_tcl_preloop { } {
   # then we will have called pre_add_symbol, which would set us to busy,
   # but not the corresponding post_add_symbol.  Do this here just in case...
   after idle gdbtk_idle 
-  set src [ManagedWin::open SrcWin]
-  debug "In preloop, with src: \"$src\" & error: \"$::errorInfo\""
+  ManagedWin::startup
+
   SrcWin::point_to_main
   set msg ""
   catch {gdb_cmd "info files"} msg
@@ -102,6 +102,8 @@ proc gdbtk_tcl_preloop { } {
   if {[regexp {Symbols from "(.*)"\.} $line1 dummy name]} {
     set gdb_exe_name $name
   }
+
+  
   gdbtk_update
 }
 
@@ -211,6 +213,7 @@ proc gdbtk_quit_check {} {
 # ------------------------------------------------------------------
 proc gdbtk_quit {} {
   if {[gdbtk_quit_check]} {
+    ManagedWin::shutdown
     pref_save
     gdb_force_quit
   }
@@ -1053,6 +1056,7 @@ proc run_executable { {auto_start 1} } {
       }
     }
 
+    # 
     # Run
 
     if {$auto_start} {

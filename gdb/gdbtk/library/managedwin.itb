@@ -25,6 +25,13 @@ body ManagedWin::window_name {wname {iname ""}} {
   }
 }
 
+# ------------------------------------------------------------
+# pickle - This is the base class pickle method.  It returns a
+#  a command that can be used to recreate this particular window.  
+# ------------------------------------------------------------
+body ManagedWin::pickle {} {
+  return [list ManagedWin::open [namespace tail [info class]]]
+}
 
 body ManagedWin::reveal {} {
   # Do this update to flush all changes before deiconifying the window.
@@ -51,6 +58,35 @@ body ManagedWin::restart {} {
       dbug W "reconfig failed for $obj - $msg"
     } 
   }
+}
+
+# ------------------------------------------------------------------
+#  shutdown - This writes all the active windows to the preferences file,
+#  so they can be restored at startup.
+#  FIXME: Currently assumes only ONE window per type...
+# ------------------------------------------------------------------
+
+body ManagedWin::shutdown {} {
+  set activeWins {}
+  foreach win $manage_active {
+    if {[$win isa ManagedWin]} {
+      lappend activeWins [$win pickle]
+    }
+  }
+  pref set gdb/window/active $activeWins
+}
+
+# ------------------------------------------------------------------
+#  startup - This restores all the windows that were opened at shutdown.
+#  FIXME: Currently assumes only ONE window per type...
+# ------------------------------------------------------------------
+
+body ManagedWin::startup {} {
+  debug "Got active list [pref get gdb/window/active]"
+
+  foreach cmd [pref get gdb/window/active] {
+    eval $cmd
+  }  
 }
 
 body ManagedWin::open_dlg {class args} {

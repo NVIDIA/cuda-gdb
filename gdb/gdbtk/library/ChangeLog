@@ -1,3 +1,19 @@
+2000-03-27  James Ingham  <jingham@leda.cygnus.com>
+
+	* interface.tcl (gdbtk_quit): Let the window manager store away
+	the list of active windows before quitting.
+	(gdbtk_tcl_preloop): Open all the windows that were active in the
+	former session.
+	* prefs.tcl (pref_set_defaults): Set the default value of the
+	"gdb/window/active" pref.  Stores the list of active windows.
+	* managedwin.itb (ManagedWin::pickle): New method - store away
+	instructions to recreate this window.
+	(ManagedWin::shutdown): New Method - run through the active windows
+	pickling them all.
+	(ManagedWin::startup): Restore all the saved active windows.
+	* managedwin.ith: Declare pickle, shutdown & startup.
+	* tclIndex: regenerate.
+
 2000-03-10  James Ingham  <jingham@leda.cygnus.com>
 
 	* targetselection.ith (get_target_list): Should be a proc, since

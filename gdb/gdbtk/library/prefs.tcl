@@ -171,7 +171,8 @@ proc pref_save {{win {}}} {
     }
 
     #now loop through all sections writing out values
-    lappend secs load console src reg stack locals watch bp search process geometry help browser kod
+    lappend secs load console src reg stack locals watch bp search \
+      process geometry help browser kod window
 
     foreach section $secs {
       puts $fd "\[$section\]"
@@ -251,6 +252,9 @@ proc pref_set_defaults {} {
     pref define gdb/load/port "/dev/ttyS0"
   }
 
+  # The list of active windows:
+  pref define gdb/window/active           {}
+
   # Console defaults
   pref define gdb/console/prompt          "(gdb) "
   pref define gdb/console/deleteLeft      1
@@ -263,7 +267,6 @@ proc pref_set_defaults {} {
   pref define gdb/src/PC_TAG              green
   pref define gdb/src/STACK_TAG           gold
   pref define gdb/src/BROWSE_TAG          \#9595e2
-  pref define gdb/src/active              1
   pref define gdb/src/handlebg            red
   pref define gdb/src/bp_fg               red
   pref define gdb/src/temp_bp_fg          orange
@@ -334,6 +337,10 @@ proc pref_set_defaults {} {
 
   # Various possible "main" functions. What's for Java?
   pref define gdb/main_names              [list MAIN___ MAIN__ main]
+
+  # These are the classes of warning dialogs, and whether the user plans
+  # to ignore them.
+  pref define gdb/warnings/signal         0
 }
 
 # This traces the global/fixed font and forces src-font to
