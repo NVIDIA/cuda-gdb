@@ -1,5 +1,8 @@
 2001-06-11  Tom Tromey  <tromey@redhat.com>
 
+	* library/help/session.html: New file.
+	* library/help/index.html: Added link.
+
 	* library/session.tcl (session_save): Save breakpoints.
 	(SESSION_serialize_bps): New proc.
 	(SESSION_recreate_bps): New proc.
