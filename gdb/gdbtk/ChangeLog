@@ -1,3 +1,9 @@
+2001-01-24  Fernando Nasser  <fnasser@redhat.com>
+
+	From  Martin Hunt  <hunt@cygnus.com>
+	* generic/gdbtk-cmds.c (gdbtk_dis_asm_read_memory): Fix call
+	to xfer_memory().
+
 2001-01-19  Fernando Nasser  <fnasser@redhat.com>
 
 	* library/prefs.tcl (pref_set_defaults): Set default value of
