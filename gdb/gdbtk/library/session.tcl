@@ -11,6 +11,23 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
+# An internal function for canonicalizing path names.  This probably
+# should use `realpath', but that is more work.  So for now we neglect
+# the possibility of symlinks.
+proc SESSION_exe_name {path} {
+  global tcl_platform
+
+  # Get real directory.
+  if {[string compare $tcl_platform(platform) "windows"] == 0} {
+    set path [ide_cygwin_path to_win32 $path]
+  }
+  set save [pwd]
+  cd [file dirname $path]
+  set dir [pwd]
+  cd $save
+  return [file join $dir [file tail $path]]
+}
+
 # An internal function used when saving sessions.  Returns a string
 # that can be used to recreate all pertinent breakpoint state.
 proc SESSION_serialize_bps {} {
@@ -110,14 +127,15 @@ proc session_save {} {
   global gdb_current_directory gdb_source_path
 
   # gdb sessions are named after the executable.
-  set name $gdb_exe_name
+  set name [SESSION_exe_name $gdb_exe_name]
   set key gdb/session/$name
 
   # We fill a hash and then use that to set the actual preferences.
 
   # Always set the exe. name in case we later decide to change the
-  # interpretation of the session key.
-  set values(executable) $gdb_exe_name
+  # interpretation of the session key.  Use the full path to the
+  # executable.
+  set values(executable) $name
 
   # Some simple state the user wants.
   set values(args) [gdb_get_inferior_args]
@@ -157,6 +175,39 @@ proc session_load {name} {
     set values($k) [pref getd $key/$k]
   }
 
+  if {[info exists values(executable)]} {
+    gdb_clear_file
+    set_exe_name $values(executable)
+    set_exe
+  }
+}
+
+#
+# This is called from file_changed_hook.  It does all the work of
+# loading a session, if one exists with the same name as the current
+# executable.
+#
+proc session_notice_file_change {} {
+  global gdb_exe_name gdb_target_name
+
+  debug "noticed file change event for $gdb_exe_name"
+
+  # gdb sessions are named after the executable.
+  set name [SESSION_exe_name $gdb_exe_name]
+  set key gdb/session/$name
+
+  # Fetch all keys for this session into an array.
+  foreach k [pref getd $key/all-keys] {
+    set values($k) [pref getd $key/$k]
+  }
+
+  if {! [info exists values(executable)] || $values(executable) != $name} {
+    # No such session.
+    return
+  }
+
+  debug "reloading session for $gdb_exe_name"
+
   if {[info exists values(dirs)]} {
     # FIXME: short-circuit confirmation.
     gdb_cmd "directory"
@@ -169,12 +220,6 @@ proc session_load {name} {
 
   if {[info exists values(args)]} {
     gdb_set_inferior_args $values(args)
-  }
-
-  if {[info exists values(executable)]} {
-    gdb_clear_file
-    set_exe_name $values(executable)
-    set_exe
   }
 
   if {[info exists values(breakpoints)]} {

@@ -1,3 +1,18 @@
+2001-10-27  Tom Tromey  <tromey@redhat.com>
+
+	* tclIndex: Updated.
+	* library/main.tcl: Add session_notice_file_change to
+	file_changed_hook.
+	* library/session.tcl (session_load): Only load the executable.
+	(session_notice_file_change): New proc.
+	(SESSION_exe_name): New proc.
+	(session_save): Use it.
+	(session_notice_file_change): Likewise.
+	* library/interface.tcl (gdbtk_tcl_exec_file_display): Don't call
+	session_save.
+	(gdbtk_tcl_preloop): Don't set executable name or try to find
+	main.  Notice a new session if required.
+
 2001-10-18  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/srcpref.itb (SrcPref::contructor): Move array

@@ -111,14 +111,11 @@ proc gdbtk_tcl_preloop { } {
   after idle gdbtk_idle 
   ManagedWin::startup
 
-  SrcWin::point_to_main
-  set msg ""
-  catch {gdb_cmd "info files"} msg
-  set line1 [string range $msg 0 [string first \n $msg]]  
-  if {[regexp {Symbols from "(.*)"\.} $line1 dummy name]} {
-    set gdb_exe_name $name
+  if {$gdb_exe_name != ""} {
+    # At startup, file_changed_hook is called too late for us, so we
+    # must notice the initial session by hand.
+    session_notice_file_change
   }
-
   
   gdbtk_update
 }
@@ -771,9 +768,6 @@ proc gdbtk_tcl_exec_file_display {filename} {
   }
   set_exe_name $filename
   set gdb_exe_changed 0
-
-  # Add this new session to the session list
-  session_save
 
   SrcWin::point_to_main
 }
