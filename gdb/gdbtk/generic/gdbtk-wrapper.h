@@ -75,7 +75,4 @@ extern gdb_result GDB_find_relative_frame PARAMS ((struct frame_info *fi,
 						   struct frame_info **result));
 extern gdb_result GDB_get_current_frame PARAMS ((struct frame_info **result));
 #endif /* GDBTK_WRAPPER_H */
-
-/* Local variables: */
-/* change-log-default-name: "ChangeLog-gdbtk" */
-/* End: */
+

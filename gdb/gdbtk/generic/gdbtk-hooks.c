@@ -907,6 +907,4 @@ gdbtk_detach ()
       report_error ();
     }
 }
-/* Local variables: */
-/* change-log-default-name: "ChangeLog-gdbtk" */
-/* End: */
+

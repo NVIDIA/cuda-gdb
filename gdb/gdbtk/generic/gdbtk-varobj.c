@@ -629,7 +629,4 @@ uninstall_variable (interp, varname)
 {
   Tcl_DeleteCommand (interp, varname);
 }
-
-/* Local variables: */
-/* change-log-default-name: "ChangeLog-gdbtk" */
-/* End: */
+

@@ -530,7 +530,8 @@ gdbtk_find_main";
 
     fputs_unfiltered_hook = gdbtk_fputs;
 
-    /* set gdb_stdtarg for now until gdbtk is changed to use struct ui_out. */
+    /* FIXME: set gdb_stdtarg for now until gdbtk is changed to use
+       struct ui_out. */
 
     gdb_stdtarg = gdb_stdout;
 
@@ -655,7 +656,4 @@ tk_command (cmd, from_tty)
 
   do_cleanups (old_chain);
 }
-
-/* Local variables: */
-/* change-log-default-name: "ChangeLog-gdbtk" */
-/* End: */
+

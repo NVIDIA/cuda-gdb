@@ -1,3 +1,11 @@
+2000-04-17  Jonathan Larmour  <jlarmour@redhat.co.uk>
+
+	* ChangeLog-gdbtk: Renamed to ChangeLog
+	* ChangeLog: New file
+	* gdbtk-cmds.c, gdbtk-hooks.c, gdbtk-variable.c, gdbtk-varobj.c,
+	gdbtk-wrapper.h, gdbtk-wrapper.c, gdbtk.h, gdbtk.c: No need for
+	changelog-default-name hint for Emacs now
+
 2000-04-14  Jonathan Larmour  <jlarmour@redhat.co.uk>
 
 	* gdbtk.c (gdbtk_init): For now, reset gdb_stdtarg to gdb_stdout

@@ -180,7 +180,3 @@ extern void
    by the startup code to fill in the hooks needed by core gdb. */
 extern void gdbtk_add_hooks (void);
 
-
-/* Local variables: */
-/* change-log-default-name: "ChangeLog-gdbtk" */
-/* End: */

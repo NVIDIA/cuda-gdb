@@ -828,9 +828,4 @@ wrap_get_current_frame (char *opaque_arg)
   (*args)->result = (char *) get_current_frame ();
   return 1;
 }
-
 
-
-/* Local variables: */
-/* change-log-default-name: "ChangeLog-gdbtk" */
-/* End: */

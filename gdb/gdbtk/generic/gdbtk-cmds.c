@@ -4700,8 +4700,4 @@ setup_architecture_data ()
   old_regs = xmalloc (REGISTER_BYTES + 1);
   memset (old_regs, 0, REGISTER_BYTES + 1);
 }
-
 
-/* Local variables: */
-/* change-log-default-name: "ChangeLog-gdbtk" */
-/* End: */

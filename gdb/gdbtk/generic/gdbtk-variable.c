@@ -2411,7 +2411,4 @@ java_value_of_variable (var, obj)
 {
   return cplus_value_of_variable (var, obj);
 }
-
-/* Local variables: */
-/* change-log-default-name: "ChangeLog-gdbtk" */
-/* End: */
+
