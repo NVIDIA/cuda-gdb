@@ -1,3 +1,9 @@
+2001-05-11  Kevin Buettner  <kevinb@redhat.com>
+
+	* generic/gdbtk-bp.c (set_raw_breakpoint): Revise declaration
+	to match the recently changed declaration in breakpoint.c. 
+	Update all callers.
+
 2001-05-11  Keith Seitz  <keiths@cygnus.com>
 
 	* generic/gdbtk-bp.c (gdbtk_create_breakpoint): Safe guard

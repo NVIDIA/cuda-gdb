@@ -66,7 +66,8 @@ char *bpdisp[] =
  * at some point make these static in breakpoint.c and move GUI code there
  */
 
-extern struct breakpoint *set_raw_breakpoint (struct symtab_and_line sal);
+extern struct breakpoint *set_raw_breakpoint (struct symtab_and_line sal,
+					      enum bptype bp_type);
 extern void set_breakpoint_count (int);
 extern int breakpoint_count;
 
@@ -468,10 +469,9 @@ gdb_set_bp (clientData, interp, objc, objv)
     return TCL_ERROR;
 
   sal.section = find_pc_overlay (sal.pc);
-  b = set_raw_breakpoint (sal);
+  b = set_raw_breakpoint (sal, bp_breakpoint);
   set_breakpoint_count (breakpoint_count + 1);
   b->number = breakpoint_count;
-  b->type = bp_breakpoint;
   b->disposition = disp;
   b->thread = thread;
 
@@ -549,10 +549,9 @@ gdb_set_bp_addr (ClientData clientData, Tcl_Interp *interp, int objc,
 
   sal = find_pc_line (addr, 0);
   sal.pc = addr;
-  b = set_raw_breakpoint (sal);
+  b = set_raw_breakpoint (sal, bp_breakpoint);
   set_breakpoint_count (breakpoint_count + 1);
   b->number = breakpoint_count;
-  b->type = bp_breakpoint;
   b->disposition = disp;
   b->thread = thread;
 
