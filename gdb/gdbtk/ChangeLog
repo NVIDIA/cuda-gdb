@@ -1,3 +1,9 @@
+2002-01-10  Keith Seitz  <keiths@redhat.com>
+
+	* library/Makefile (ITCL_SH): Renamed to "ITCLSH".
+	(tclIndex): We no longer have an Itcl shell, so we must use
+	"package require Itcl".
+
 2002-01-08  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-cmds.c (gdb_find_file_command): If the symtab
