@@ -40,7 +40,6 @@ body DebugWin::constructor {args} {
 body DebugWin::destructor {} {
   # notify debug code that window is going away
   ::debug::debugwin ""
-  incr numTopWins -1
 }
 
 # -----------------------------------------------------------------------------
