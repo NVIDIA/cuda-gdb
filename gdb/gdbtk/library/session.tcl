@@ -58,6 +58,8 @@ proc session_save {} {
 # the session, as returned by session_list.
 #
 proc session_load {name} {
+  global gdb_target_name
+
   # gdb sessions are named after the executable.
   set key gdb/session/$name
 
@@ -86,7 +88,10 @@ proc session_load {name} {
     set_exe
   }
 
-  # FIXME: handle target
+  if {[info exists values(target)]} {
+    debug "Restoring Target: $values(target)"
+    set gdb_target_name $values(target)
+  }
 }
 
 #
