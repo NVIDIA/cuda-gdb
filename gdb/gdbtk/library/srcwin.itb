@@ -78,14 +78,12 @@ body SrcWin::destructor {} {
 body SrcWin::_build_win {} {
   global gdb_downloading gdb_running gdb_loaded
 
-  # add a menu to the source window
-  SrcMenuBar $this._menubar $this
-
   # build source toolbar
   set _toolbar [conAdd toolbar -resizable 0]
-  SrcToolBar $_toolbar $this \
+  SrcBar $_toolbar $this \
     -updatecommand [list $this toggle_updates] \
     -updatevalue $do_updates
+  pack $_toolbar -expand 1 -fill both
 
   # if user likes control on bottom...
   if {! [pref get gdb/src/top_control]} {

@@ -1,3 +1,14 @@
+2001-01-25  Fernando Nasser  <fnasser@redhat.com>
+
+	* library/srcbar.itcl: New file. Implement SrcBar, a menu and toolbar
+	for the Source Window (code previously in srcmenubar.itcl and
+	srctoolbar.itcl).
+	* library/srcmenubar.itcl: Remove obsolete file.
+	* library/srctoolbar.itcl: Remove obsolete file.
+	* library/srcbar.tcl: Remove obsolete file.
+        * library/srcwin.itb (_build_win): Use SrcBar.
+	* library/tclIndex: Regenerate.
+
 2001-01-24  Fernando Nasser  <fnasser@redhat.com>
 
 	From  Martin Hunt  <hunt@cygnus.com>
