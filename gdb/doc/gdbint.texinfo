@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.125 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.126 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3505,6 +3505,12 @@ Return the virtual size of @var{reg}.
 @findex REGISTER_VIRTUAL_TYPE
 Return the virtual type of @var{reg}.
 @xref{Target Architecture Definition, , Raw and Virtual Register Representations}.
+
+@item struct type *register_type (@var{gdbarch}, @var{reg})
+@findex register_type
+If defined, return the type of register @var{reg}.  This function
+superseeds @code{REGISTER_VIRTUAL_TYPE}.  @xref{Target Architecture
+Definition, , Raw and Virtual Register Representations}.
 
 @item REGISTER_CONVERT_TO_VIRTUAL(@var{reg}, @var{type}, @var{from}, @var{to})
 @findex REGISTER_CONVERT_TO_VIRTUAL
