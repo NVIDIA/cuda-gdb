@@ -118,6 +118,8 @@ body MemWin::build_win {} {
   scrollbar $itk_interior.sx -command [list $itk_interior.t xview] -orient horizontal
   $itk_interior.t tag config sel -bg [$itk_interior.t cget -bg] -relief sunken
   $itk_interior.t tag config active -bg lightgray -relief sunken -wrap 0
+  $itk_interior.t tag config title -bg [pref get gdb/font/header_bg] \
+    -fg [pref get gdb/font/header_fg]
 
   # rebind all events that use tkTableMoveCell to our local version
   # because we don't want to move into the ASCII column if it exists

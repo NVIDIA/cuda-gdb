@@ -91,7 +91,7 @@ class VariableWin {
 
 	# Get display styles
 	set normal_fg    [$Hlist cget -fg]
-	set highlight_fg [pref get gdb/variable/highlight_fg]
+	set highlight_fg [pref get gdb/font/highlight_fg]
 	set disabled_fg  [pref get gdb/variable/disabled_fg]
 	set NormalTextStyle [tixDisplayStyle text -refwindow $Hlist \
 				 -bg $bg -fg $normal_fg -font src-font]

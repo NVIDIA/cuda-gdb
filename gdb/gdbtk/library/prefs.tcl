@@ -269,6 +269,26 @@ proc pref_set_defaults {} {
   pref define gdb/use_icons		  1;	 # For Unix, use gdbtk_icon.gif as an icon
 						 # some window managers can't deal with it.
 
+  #
+  # Font attributes
+  #
+
+  # "Normal" font attributes
+  pref define gdb/font/normal_fg    black
+  pref define gdb/font/normal_bg    gray92
+
+  # Selection foreground/background
+  pref define gdb/font/select_fg    black
+  pref define gdb/font/select_bg    lightgray
+
+  # Highlight used when something changes (variable value changes, etc)
+  pref define gdb/font/highlight_fg blue
+  pref define gdb/font/highlight_bg gray92
+
+  # "Header" foreground and background. Used by table headers and such.
+  pref define gdb/font/header_fg    gray92
+  pref define gdb/font/header_bg    darkgray
+
   # set download and execution options
   pref define gdb/load/verbose 0
   pref define gdb/load/main 1
@@ -336,14 +356,12 @@ proc pref_set_defaults {} {
 
   # Variable Window defaults
   pref define gdb/variable/font           src-font
-  pref define gdb/variable/highlight_fg   blue
   pref define gdb/variable/disabled_fg    gray
 
   # Stack Window
   pref define gdb/stack/font              src-font
 
   # Register Window
-  pref define gdb/reg/highlight_fg        blue
   pref define gdb/reg/rows                16
 
   # Global Prefs Dialogs
