@@ -1,3 +1,10 @@
+2000-02-29  James Ingham  <jingham@leda.cygnus.com>
+
+	* gdbtk-cmds.c (gdb_disassemble_driver): The to_shortname for
+	Linux is "linuxthreads", not "linux-threads", so we have to change 
+	the heuristic to account for this.  This fixes a crash when trying 
+	to disassemble from shared libraries.
+
 2000-02-23  Keith R Seitz  <kseitz@nwlink.com>
 
 	* gdbtk-wrapper.h: Add declarations for GDB_get_prev_frame, GDB_get_next_frame,

@@ -2867,6 +2867,11 @@ gdb_disassemble_driver (low, high, mixed_source_and_assembly,
      Else, we're debugging a remote process, and should disassemble from the
      exec file for speed.  However, this is no good if the target modifies its
      code (for relocation, or whatever).
+
+     As an aside, it is fairly bogus that there is not a better way to
+     determine where to disassemble from.  There should be a target vector
+     entry for this or something.
+     
    */
 
   if (disassemble_from_exec == -1)
@@ -2874,7 +2879,7 @@ gdb_disassemble_driver (low, high, mixed_source_and_assembly,
       if (strcmp (target_shortname, "child") == 0
           || strcmp (target_shortname, "procfs") == 0
           || strcmp (target_shortname, "vxprocess") == 0
-	  || strstr (target_shortname, "-threads") != NULL)
+	  || strstr (target_shortname, "threads") != NULL)
 	/* It's a child process, read inferior mem */
         disassemble_from_exec = 0; 
       else
