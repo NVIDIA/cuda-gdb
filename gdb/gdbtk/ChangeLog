@@ -1,3 +1,7 @@
+2001-04-04  Christopher Faylor  <cgf@redhat.com>
+
+	* generic/gdbtk.c: Add __CYGWIN__ conditional to WIN32 test.
+
 2001-04-04  Martin M. Hunt  <hunt@redhat.com>
 
 	* generic/gdbtk-hooks.c (gdbtk_fileopen): New function.
