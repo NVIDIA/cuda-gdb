@@ -1,3 +1,10 @@
+2003-06-26  Keith R Seitz  <keiths@redhat.com>
+
+	From Roland Schwingel <Roland.Schwingel@onevision.de>:
+	* generic/gdbtk-cmds.c (gdb_find_file_command): If filename
+	is already an absolute filename, try stat'ing it before searching
+	symtabs.
+
 2003-06-13  Martin Hunt  <hunt@redhat.com>
 
 	* library/prefs.tcl (load_gnome_file): Fix parsing

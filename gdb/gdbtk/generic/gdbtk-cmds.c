@@ -36,6 +36,7 @@
 #include "annotate.h"
 #include "block.h"
 #include "dictionary.h"
+#include "filenames.h"
 
 /* tcl header files includes varargs.h unless HAS_STDARG is defined,
    but gdb uses stdarg.h, so make sure HAS_STDARG is defined.  */
@@ -1037,7 +1038,7 @@ gdb_find_file_command (ClientData clientData, Tcl_Interp *interp,
 		       int objc, Tcl_Obj *CONST objv[])
 {
   struct symtab *st;
-  char *filename, *fullname;
+  char *filename, *fullname = NULL;
 
   if (objc != 2)
     {
@@ -1046,20 +1047,40 @@ gdb_find_file_command (ClientData clientData, Tcl_Interp *interp,
     }
 
   filename = Tcl_GetStringFromObj (objv[1], NULL);
-  st = lookup_symtab (filename);
 
-  /* We should always get a symtab. */
-  if (!st)
+  /* Shortcut: There seems to be some mess in gdb dealing with
+     files. While we should let gdb sort it out, it doesn't hurt
+     to be a little defensive here.
+
+     If the filename is already an absolute filename, just try
+     to stat it. If it's not found, then ask gdb to find it for us. */
+  if (IS_ABSOLUTE_PATH (filename))
     {
-      gdbtk_set_result (interp, "File not found in symtab (2)");
-      return TCL_ERROR;
+      struct stat st;
+      const int status = stat (filename, &st);
+
+      if (status == 0)
+	{
+	  if (S_ISREG (st.st_mode))
+	    fullname = filename;
+	}
     }
-
-  if (st->fullname == NULL)
-    fullname = symtab_to_filename (st);
   else
-    fullname = st->fullname;
+    {
+      /* Ask gdb to find the file for us. */
+      st = lookup_symtab (filename);
 
+      /* We should always get a symtab. */
+      if (!st)
+	{
+	  gdbtk_set_result (interp, "File not found in symtab (2)");
+	  return TCL_ERROR;
+	}
+
+      fullname =
+	(st->fullname == NULL ? symtab_to_filename (st) : st->fullname);
+    }
+  
   /* We may not be able to open the file (not available). */
   if (fullname == NULL)
     {
