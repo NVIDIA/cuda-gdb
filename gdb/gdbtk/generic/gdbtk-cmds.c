@@ -39,7 +39,6 @@
    but gdb uses stdarg.h, so make sure HAS_STDARG is defined.  */
 #define HAS_STDARG 1
 
-#include <tix.h>
 #include <itcl.h>
 
 #include "guitcl.h"

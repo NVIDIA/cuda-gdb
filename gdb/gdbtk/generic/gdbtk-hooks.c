@@ -43,7 +43,6 @@
 #define HAS_STDARG 1
 
 #include <itcl.h>
-#include <tix.h>
 #include "guitcl.h"
 #include "gdbtk.h"
 

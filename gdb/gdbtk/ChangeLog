@@ -1,3 +1,12 @@
+2002-11-27  Martin M. Hunt  <hunt@redhat.com>
+
+	* generic/gdbtk.c (gdbtk_init): Don't call Tix_Init.
+	Don't include tix.h
+
+	* generic/gdbtk-hooks.c: Don't include tix.h.
+
+	* generic/gdbtkj-cmds.c: Don't include tix.h.
+	
 2002-11-27  Andrew Cagney  <cagney@redhat.com>
 
 	* generic/gdbtk-stack.c (get_frame_name): Use get_frame_type

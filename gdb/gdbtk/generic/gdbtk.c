@@ -42,7 +42,6 @@
    but gdb uses stdarg.h, so make sure HAS_STDARG is defined.  */
 #define HAS_STDARG 1
 
-#include <tix.h>
 #include <itcl.h>
 #include <itk.h>
 #include "guitcl.h"
@@ -509,11 +508,6 @@ gdbtk_init (char *argv0)
   if (Itk_Init (gdbtk_interp) == TCL_ERROR)
     error ("Itk_Init failed: %s", gdbtk_interp->result);
   Tcl_StaticPackage (gdbtk_interp, "Itk", Itk_Init,
-		     (Tcl_PackageInitProc *) NULL);
-
-  if (Tix_Init (gdbtk_interp) != TCL_OK)
-    error ("Tix_Init failed: %s", gdbtk_interp->result);
-  Tcl_StaticPackage (gdbtk_interp, "Tix", Tix_Init,
 		     (Tcl_PackageInitProc *) NULL);
 
   if (Tktable_Init (gdbtk_interp) != TCL_OK)
