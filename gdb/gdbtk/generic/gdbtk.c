@@ -1,5 +1,5 @@
 /* Startup code for Insight
-   Copyright 1994, 1995, 1996, 1997, 1998, 2001, 2002
+   Copyright 1994, 1995, 1996, 1997, 1998, 2001, 2002, 2003
    Free Software Foundation, Inc.
 
    Written by Stu Grossman <grossman@cygnus.com> of Cygnus Support.
@@ -410,7 +410,7 @@ gdbtk_init (char *argv0)
 \
 	  if {![info exists env(IWIDGETS_LIBRARY)]} {\n\
 	      set env(IWIDGETS_LIBRARY)\
-                     [file join $srcDir itcl iwidgets3.0.0 generic]\n\
+                     [file join $srcDir itcl iwidgets generic]\n\
 	  }\n\
 \
 	  if {![info exists env(TIX_LIBRARY)]} {\n\
@@ -430,7 +430,7 @@ gdbtk_init (char *argv0)
 \
           # We also need to append the iwidgets library path.\n\
           # Unfortunately, there is no IWIDGETS_LIBRARY.\n\
-          set IWIDGETS_LIBRARY [file join $srcDir itcl iwidgets3.0.0 generic]\n";
+          set IWIDGETS_LIBRARY [file join $srcDir itcl iwidgets generic]\n";
 
       Tcl_Obj *commandObj;
 
@@ -523,8 +523,10 @@ gdbtk_init (char *argv0)
   if (ide_create_messagebox_command (gdbtk_interp) != TCL_OK)
     error ("messagebox command initialization failed");
   /* On Windows, create a sizebox widget command */
+#if 0
   if (ide_create_sizebox_command (gdbtk_interp) != TCL_OK)
     error ("sizebox creation failed");
+#endif
   if (ide_create_winprint_command (gdbtk_interp) != TCL_OK)
     error ("windows print code initialization failed");
   if (ide_create_win_grab_command (gdbtk_interp) != TCL_OK)
