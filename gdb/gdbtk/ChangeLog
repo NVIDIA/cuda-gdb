@@ -1,3 +1,7 @@
+2001-03-01  Nicholas Duffek  <nsd@redhat.com>
+
+	* README.GDBTK: Minor spelling, grammar, and formatting fixes.
+
 2001-03-01  Keith Seitz  <keiths@cygnus.com>
 
 	* library/managedwin.ith: Move all implementations into
