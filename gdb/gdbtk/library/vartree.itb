@@ -344,7 +344,7 @@ itcl::body  VarTree::_but3 {x y X Y} {
   $pop add command -label "Delete" -command [code $this remove $var]
   if {![catch {$var value} value]} {
     $pop add separator   
-    $pop add command -label "Dump Memory at $value" -command [list ManagedWin::open MemWin -force -addr_exp $value]
+    $pop add command -label "Dump Memory at [$var name]" -command [list ManagedWin::open MemWin -force -addr_exp [$var name]]
   }
   $pop add separator
   if {$type == "local"} {

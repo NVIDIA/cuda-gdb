@@ -2,7 +2,7 @@
 
 	* library/vartree.itb (_but3): Add popup menu item to dump
 	memory at the value of the variable.
-	
+
 	* library/vartree.itb (buildlayer): Check for error when updating
 	a variable's value.
 	(update_var): Ditto.
