@@ -358,10 +358,8 @@ gdb_get_breakpoint_info (ClientData clientData, Tcl_Interp *interp, int objc,
 
 /* Helper function for gdb_get_breakpoint_info, this function is
    responsible for figuring out what to type at the "commands" command
-   in gdb's cli in order to get at the same command list passed here.
+   in gdb's cli in order to get at the same command list passed here. */
 
-   NOTE: cannot use sprintf_append_element_to_obj with anything from
-   gdb, since those things could contain unescaped sequences. */
 static Tcl_Obj *
 get_breakpoint_commands (struct command_line *cmd)
 {
@@ -380,12 +378,14 @@ get_breakpoint_commands (struct command_line *cmd)
 
 	case break_control:
 	  /* A loop_break */
-	  sprintf_append_element_to_obj (obj, "loop_break");
+	  Tcl_ListObjAppendElement (NULL, obj,
+				    Tcl_NewStringObj ("loop_break", -1));
 	  break;
 
 	case continue_control:
 	  /* A loop_continue */
-	  sprintf_append_element_to_obj (obj, "loop_continue");
+	  Tcl_ListObjAppendElement (NULL, obj,
+				    Tcl_NewStringObj ("loop_continue", -1));
 	  break;
 
 	case while_control:
@@ -395,7 +395,8 @@ get_breakpoint_commands (struct command_line *cmd)
 	  Tcl_ListObjAppendElement (NULL, obj, tmp);
 	  Tcl_ListObjAppendList (NULL, obj,
 				 get_breakpoint_commands (*cmd->body_list));
-	  sprintf_append_element_to_obj (obj, "end");
+	  Tcl_ListObjAppendElement (NULL, obj,
+				    Tcl_NewStringObj ("end", -1));
 	  break;
 
 	case if_control:
@@ -408,11 +409,13 @@ get_breakpoint_commands (struct command_line *cmd)
 				 get_breakpoint_commands (cmd->body_list[0]));
 	  if (cmd->body_count == 2)
 	    {
-	      sprintf_append_element_to_obj (obj, "else");
+	      Tcl_ListObjAppendElement (NULL, obj,
+					Tcl_NewStringObj ("else", -1));
 	      Tcl_ListObjAppendList (NULL, obj,
 				     get_breakpoint_commands(cmd->body_list[1]));
 	    }
-	  sprintf_append_element_to_obj (obj, "end");
+	  Tcl_ListObjAppendElement (NULL, obj,
+				    Tcl_NewStringObj ("end", -1));
 	  break;
 
 	case invalid_control:

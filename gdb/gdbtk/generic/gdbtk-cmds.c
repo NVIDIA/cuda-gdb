@@ -78,7 +78,7 @@ static Tcl_Obj *mangled, *not_mangled;
 int No_Update = 0;
 int load_in_progress = 0;
 
-/* This Structure is used in gdb_disassemble.
+/* This Structure is used in gdb_disassemble_driver.
    We need a different sort of line table from the normal one cuz we can't
    depend upon implicit line-end pc's for lines to do the
    reordering in this function.  */
@@ -134,7 +134,6 @@ static int gdb_clear_file (ClientData, Tcl_Interp * interp, int,
 static int gdb_cmd (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_confirm_quit (ClientData, Tcl_Interp *, int,
 			     Tcl_Obj * CONST[]);
-static int gdb_disassemble (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_entry_point (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_eval (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_find_file_command (ClientData, Tcl_Interp *, int,
@@ -239,8 +238,6 @@ Gdbtk_Init (Tcl_Interp *interp)
   Tcl_CreateObjCommand (interp, "gdb_stop", gdbtk_call_wrapper, gdb_stop, NULL);
   Tcl_CreateObjCommand (interp, "gdb_restore_fputs", gdbtk_call_wrapper, gdb_restore_fputs,
 			NULL);
-  Tcl_CreateObjCommand (interp, "gdb_disassemble", gdbtk_call_wrapper,
-			gdb_disassemble, NULL);
   Tcl_CreateObjCommand (interp, "gdb_eval", gdbtk_call_wrapper, gdb_eval, NULL);
   Tcl_CreateObjCommand (interp, "gdb_incr_addr", gdbtk_call_wrapper, gdb_incr_addr, NULL);
   Tcl_CreateObjCommand (interp, "gdb_CA_to_TAS", gdbtk_call_wrapper, gdb_CA_to_TAS, NULL);
@@ -422,23 +419,6 @@ wrapped_call (PTR opaque_args)
   return 1;
 }
 
-/* This is a convenience function to sprintf something(s) into a
- * new element in a Tcl list object.
- */
-
-void
-sprintf_append_element_to_obj (Tcl_Obj * objp, char *format,...)
-{
-  va_list args;
-  char *buf;
-
-  va_start (args, format);
-
-  xvasprintf (&buf, format, args);
-
-  Tcl_ListObjAppendElement (NULL, objp, Tcl_NewStringObj (buf, -1));
-  free(buf);
-}
 
 /*
  * This section contains the commands that control execution.
@@ -1513,60 +1493,6 @@ gdb_restore_fputs (ClientData clientData, Tcl_Interp *interp,
   return TCL_OK;
 }
 
-/*
- * This section has commands that handle source disassembly.
- */
-/* This implements the tcl command gdb_disassemble.  It is no longer
- * used in GDBTk, we use gdb_load_disassembly, but I kept it around in
- * case other folks want it.
- *
- * Arguments:
- *    source_with_assm - must be "source" or "nosource"
- *    low_address - the address from which to start disassembly
- *    ?hi_address? - the address to which to disassemble, defaults
- *                   to the end of the function containing low_address.
- * Tcl Result:
- *    The disassembled code is passed to fputs_unfiltered, so it
- *    either goes to the console if result_ptr->obj_ptr is NULL or to
- *    the Tcl result.
- */
-
-static int
-gdb_disassemble (ClientData clientData, Tcl_Interp *interp,
-		 int objc, Tcl_Obj *CONST objv[])
-{
-  CORE_ADDR low, high;
-  char *arg_ptr;
-  int mixed_source_and_assembly;
-
-  if (objc != 3 && objc != 4)
-    {
-      Tcl_WrongNumArgs (interp, 1, objv, "source lowaddr ?highaddr?");
-      return TCL_ERROR;
-    }
-
-  arg_ptr = Tcl_GetStringFromObj (objv[1], NULL);
-  if (*arg_ptr == 's' && strcmp (arg_ptr, "source") == 0)
-    mixed_source_and_assembly = 1;
-  else if (*arg_ptr == 'n' && strcmp (arg_ptr, "nosource") == 0)
-    mixed_source_and_assembly = 0;
-  else
-    error ("First arg must be 'source' or 'nosource'");
-
-  low = string_to_core_addr (Tcl_GetStringFromObj (objv[2], NULL));
-
-  if (objc == 3)
-    {
-      if (find_pc_partial_function (low, NULL, &low, &high) == 0)
-        error ("No function contains specified address");
-    }
-  else
-    high = string_to_core_addr (Tcl_GetStringFromObj (objv[3], NULL));
-
-  return gdb_disassemble_driver (low, high, mixed_source_and_assembly, NULL,
-				 gdbtk_print_source, gdbtk_print_asm);
-
-}
 
 /* This implements the tcl command gdb_load_disassembly
  *
@@ -2203,7 +2129,7 @@ gdb_disassemble_driver (CORE_ADDR low, CORE_ADDR high,
   return TCL_OK;
 }
 
-/* This is the memory_read_func for gdb_disassemble when we are
+/* This is the memory_read_func for gdb_disassemble_driver when we are
    disassembling from the exec file. */
 
 static int
