@@ -386,17 +386,19 @@ body MemWin::idle {event} {
   # Cursor
   cursor {}
 
-  # Enable menus
-  if {$mbar} {
-    for {set i 0} {$i <= [$itk_interior.m.addr index last]} {incr i} {
-      if {[$itk_interior.m.addr type $i] != "separator"} {
-	$itk_interior.m.addr entryconfigure $i -state normal
-      }
+  if {[winfo exists $itk_interior.m.addr]} {
+    # Enable menus
+    if {$mbar} {
+      for {set i 0} {$i <= [$itk_interior.m.addr index last]} {incr i} {
+	if {[$itk_interior.m.addr type $i] != "separator"} {
+	  $itk_interior.m.addr entryconfigure $i -state normal
+	}
     }
+    }
+    
+    # Enable control
+    $itk_interior.f.cntl configure -state normal
   }
-
-  # Enable control
-  $itk_interior.f.cntl configure -state normal
 }
 
 
