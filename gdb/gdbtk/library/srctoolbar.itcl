@@ -549,22 +549,7 @@ Do you want to continue?" \
       }
     }
 
-    debug "Enable list is: $enable_list"
-    foreach {type state} $enable_list {
-      dbug W $type
-      set class_list [toolbar_button_class_find $type]
-      if {[llength $class_list]} {
-        dbug W "$type $state \{$class_list\}"
-	foreach button $class_list {
-          dbug W "$type $button $state"
-	  toolbar_configure_button $button -state $state
-	}
-      }
-#      if {[info exists menu_classes($type)]} {
-#	change_menu_state $menu_classes($type) $state
-#      }
-    }
-
+    set_class_state $enable_list
   }
 
   ####################################################################

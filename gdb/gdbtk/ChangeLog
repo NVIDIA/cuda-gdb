@@ -1,5 +1,20 @@
 2001-01-04  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
 
+	* library/gdbmenubar.itcl (set_class_state): New public method.
+	Standard method to control state by class.
+	(menubar_menu_class_find): Delete public accessor method.
+	(menubar_change_menu_state): Change the state of a menu item
+	not of a whole class list.
+	* library/srcmenubar.itcl (enable_ui): Use set_class_state instead
+	of prying into base class internal data.
+        * library/gdbtoolbar.itcl (set_class_state): New public method.
+        Standard method to control state by class.
+        (toolbar_button_class_find): Delete public accessor method.
+	* library/srctoolbar.itcl (enable_ui): Use set_class_state instead
+	of prying into base class internal data.
+
+2001-01-04  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
+
 	* library/interface.tcl (gdbtk_connect): New proc. Connects to ai
 	 remote target (code previously at library/gdbmenubar.itcl).
 	(disconnect): Rename to...

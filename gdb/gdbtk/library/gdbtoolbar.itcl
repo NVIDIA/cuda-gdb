@@ -62,6 +62,27 @@ class GDBToolBar {
       eval standard_toolbar $ButtonFrame $button_list
     }
   }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  set_class_state - standard method to control state by class
+  # ------------------------------------------------------------------
+  public method set_class_state {enable_list} {
+    debug "Enable list is: $enable_list"
+
+    foreach {type state} $enable_list {
+      dbug W $type
+      if {[info exists button_classes($type)]} {
+        set class_list $button_classes($type)
+        if {[llength $class_list]} {
+          dbug W "$type $state \{$class_list\}"
+	  foreach button $class_list {
+            dbug W "$type $button $state"
+	    toolbar_configure_button $button -state $state
+	  }
+        }
+      }
+    }
+  }
 
   ####################################################################
   # Methods that deal with buttons.
@@ -284,22 +305,6 @@ class GDBToolBar {
       debug "Error in swap_button_list - $first_out not gridded..."
     } else {
       debug "Button $first_out is not in button list"
-    }
-  }
-
-  # ------------------------------------------------------------------
-  #  METHOD:  toolbar_button_class_find - Find a button class and returns
-  #                   its members.
-  # 
-  #  type - the token for the button class sought
-  #
-  #  RETURNS: class members (list) if the class exists, {} otherwise.
-  # ------------------------------------------------------------------
-  method toolbar_button_class_find {type} {
-    if {[info exists button_classes($type)]} {
-      return $button_classes($type)
-    } else {
-      return {}
     }
   }
 

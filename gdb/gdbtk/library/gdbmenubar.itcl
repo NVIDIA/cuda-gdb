@@ -51,6 +51,27 @@ class GDBMenuBar {
 
     #destroy $this
   }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  set_class_state - standard method to control state by class
+  # ------------------------------------------------------------------
+  public method set_class_state {enable_list} {
+    debug "Enable list is: $enable_list"
+
+    foreach {type state} $enable_list {
+      dbug W $type
+      if {[info exists menu_classes($type)]} {
+        set class_list $menu_classes($type)
+        if {[llength $class_list]} {
+          dbug W "$type $state \{$class_list\}"
+          foreach menu $class_list {
+            dbug W "$type $menu $state"
+            menubar_change_menu_state $menu $state
+          }
+        }
+      }
+    }
+  }
 
   ####################################################################
   # Methods that deal with menus.
@@ -103,22 +124,6 @@ class GDBMenuBar {
   method menubar_menu_exists {name} {
     return [info exists menu_list($name)]
 
-  }
-
-  # ------------------------------------------------------------------
-  #  METHOD:  menubar_menu_class_find - Find a menu class and returns
-  #                   its members.
-  # 
-  #  type - the token for the menu class sought
-  #
-  #  RETURNS: class members (list) if the class exists, {} otherwise.
-  # ------------------------------------------------------------------
-  method menubar_menu_class_find {type} {
-    if {[info exists menu_classes($type)]} {
-      return $menu_classes($type)
-    } else {
-      return {}
-    }
   }
 
   # ------------------------------------------------------------------
@@ -185,11 +190,9 @@ class GDBMenuBar {
   #
   # INPUT:  Pass normal or disabled for the state.
   # ------------------------------------------------------------------
-  method menubar_change_menu_state {state menuList} {
+  method menubar_change_menu_state {menu state} {
 
-    foreach elem $menuList {
-      [lindex $elem 0] entryconfigure [lindex $elem 1] -state $state
-    }	
+    [lindex $menu 0] entryconfigure [lindex $menu 1] -state $state
   }
 
   # ------------------------------------------------------------------
