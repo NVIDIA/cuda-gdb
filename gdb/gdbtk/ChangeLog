@@ -1,3 +1,8 @@
+2005-02-25  Keith Seitz  <kseitz@sources.redhat.com>
+
+	* generic/gdbtk.c (gdbtk_source_start_file): In the _WIN32 case,
+	use throw_exception (struct exception).
+
 2005-02-16  Martin Hunt  <hunt@redhat.com>
 
 	* generic/gdbtk-stack.c (get_frame_name): Replace
