@@ -5,7 +5,14 @@ class RHAbout {
     set f [frame $itk_interior.f]
     label $f.image1 -bg white -image \
       [image create photo -file [file join $gdb_ImageDir insight.gif]]
-    message $f.m -bg white -fg black -text [gdb_cmd {show version}] -aspect 500 -relief flat
+
+    # Here we call an interface function provided by GDBTCL
+    set text [gdb_cmd {show version}]
+
+    # Here we call a command procedure that we created, if it exists
+    catch {append text [rhabout_extra_text]}
+
+    message $f.m -bg white -fg black -text $text -aspect 500 -relief flat
     pack $f.image1 $f.m $itk_interior.f -fill both -expand yes
     pack  $itk_interior
     bind $f.image1 <1> [code $this unpost]

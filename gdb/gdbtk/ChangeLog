@@ -1,3 +1,14 @@
+2001-01-31  Fernando Nasser  <fnasser@redhat.com>
+
+	* library/plugins/rhabout.tcl: Add load for optional sample C command 
+	procedure.
+	* library/plugins/rhabout/rhabout.itcl (constructor): Try calling
+	optional sample C command procedure rhabout_extra_text.
+	* library/plugins/rhabout/rhabout.c: New file. Implement an example
+	plug-in shared library with a sample C command procedure.
+	* library/plugins/rhabout/Makefile: New file. Makefile for the sample
+	shared library above (Linux only).
+
 2001-01-28  Fernando Nasser  <fnasser@redhat.com>
 
 	* library/plugins: New directory.  Sample plug-in directory to help
