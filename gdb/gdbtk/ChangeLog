@@ -1,3 +1,8 @@
+2001-07-26  Jonathan Larmour  <jlarmour@redhat.com>
+
+	* library/prefs.tcl (pref_set_defaults): Add additional entry
+	points for eCos if main is not present.
+
 2001-07-21  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/interface.tcl (gdbtk_locate_main): Fix function 
