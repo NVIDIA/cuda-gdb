@@ -97,14 +97,14 @@ itcl::body SrcWin::_build_win {} {
   pack $_statbar -expand 1 -fill both
 
   combobox::combobox $_statbar.name -maxheight 15 -font global/fixed\
-    -command [code $this _name]
+    -command [code $this _name] -bg $::Colors(textbg)
   
   set need_files 1
   
   combobox::combobox $_statbar.func -maxheight 15 -font global/fixed\
-    -command [code $this goto_func]
+    -command [code $this goto_func] -bg $::Colors(textbg)
   combobox::combobox $_statbar.mode -width 9 -editable false \
-    -font global/fixed -command [code $this mode]
+    -font global/fixed -command [code $this mode] -bg $::Colors(textbg)
   
   $_statbar.mode list insert end SOURCE
   $_statbar.mode list insert end ASSEMBLY

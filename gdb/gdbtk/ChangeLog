@@ -1,5 +1,16 @@
 2003-02-03  Martin M. Hunt  <hunt@redhat.com>
 
+	* library/globalpref.itb, library/mempref.itb, library/srcpref.itb,
+	library/srcwin.itb, library/targetselection.itb, library/tracedlg.tcl:
+	Set background color of comboboxes to Colors(textbg).
+
+	* library/main.tcl: Load combobox version 2.2.
+
+	* library/prefs.tcl: Minor optimization. Change order of main_names
+	to have the most common, "main", first.
+	
+2003-02-03  Martin M. Hunt  <hunt@redhat.com>
+	
 	* library/targetselection.itb (TargetSelection::port_list): Keep
 	checking ports on Windows until we can open no more. Replaces
 	fixed limit of 9.

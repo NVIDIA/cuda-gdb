@@ -391,7 +391,7 @@ proc pref_set_defaults {} {
   pref define gdb/kod/show_icon           0
 
   # Various possible "main" functions. What's for Java?
-  pref define gdb/main_names              [list MAIN___ MAIN__ main cyg_user_start cyg_start ]
+  pref define gdb/main_names              [list main MAIN___ MAIN__ cyg_user_start cyg_start ]
 
   # These are the classes of warning dialogs, and whether the user plans
   # to ignore them.
