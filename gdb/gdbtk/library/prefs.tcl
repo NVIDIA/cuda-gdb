@@ -287,6 +287,8 @@ proc pref_set_defaults {} {
   pref define gdb/console/wrap            0
   pref define gdb/console/prompt_fg       DarkGreen
   pref define gdb/console/error_fg        red
+  pref define gdb/console/log_fg          green 
+  pref define gdb/console/target_fg       blue
   pref define gdb/console/font            src-font
 
   # Source window defaults

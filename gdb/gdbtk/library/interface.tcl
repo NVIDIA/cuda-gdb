@@ -389,15 +389,31 @@ proc echo {args} {
 }
 
 # ------------------------------------------------------------------
-# PROC: gdbtk_tcl_fputs_error -
+# PROC: gdbtk_tcl_fputs_error - write an error message
 # ------------------------------------------------------------------
 proc gdbtk_tcl_fputs_error {message} {
-  global gdbtk_state
-  # Restore the fputs hook, in case anyone forgot to put it back...
-  gdb_restore_fputs
+  if {$::gdbtk_state(console) != ""} {
+    $::gdbtk_state(console) einsert $message err_tag
+    update
+  }
+}
 
-  if {$gdbtk_state(console) != ""} {
-    $gdbtk_state(console) einsert $message
+# ------------------------------------------------------------------
+# PROC: gdbtk_tcl_fputs_log - write a log message
+# ------------------------------------------------------------------
+proc gdbtk_tcl_fputs_log {message} {
+  if {$::gdbtk_state(console) != ""} {
+    $::gdbtk_state(console) einsert $message log_tag
+    update
+  }
+}
+
+# ------------------------------------------------------------------
+# PROC: gdbtk_tcl_fputs_target - write target output
+# ------------------------------------------------------------------
+proc gdbtk_tcl_fputs_target {message} {
+  if {$::gdbtk_state(console) != ""} {
+    $::gdbtk_state(console) einsert $message target_tag
     update
   }
 }
@@ -987,7 +1003,7 @@ necessary,\nmodify the port setting with the debugger preferences."
     
     if {![catch {pref get gdb/load/$gdb_target_name-after_attaching} aa] && $aa != ""} {
       if {[catch {gdb_cmd $aa} err]} {
-	catch {[ManagedWin::find Console] einsert $err}
+	catch {[ManagedWin::find Console] einsert $err err_tag}
       }
     }
     set gdb_target_changed 0

@@ -1,5 +1,6 @@
-/* Startup code for gdbtk.
-   Copyright 1994, 1995, 1996, 1997, 1998 Free Software Foundation, Inc.
+/* Startup code for Insight
+   Copyright 1994, 1995, 1996, 1997, 1998, 2001 
+   Free Software Foundation, Inc.
 
    Written by Stu Grossman <grossman@cygnus.com> of Cygnus Support.
 
@@ -32,7 +33,6 @@
 #include "tracepoint.h"
 #include "demangle.h"
 #include "version.h"
-#include "tui/tui-file.h"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -124,6 +124,8 @@ int running_now;
 /* This variable holds the name of a Tcl file which should be sourced by the
    interpreter when it goes idle at startup. Used with the testsuite. */
 static char *gdbtk_source_filename = NULL;
+
+int gdbtk_disable_fputs = 1;
 
 
 #ifndef _WIN32
@@ -348,6 +350,7 @@ gdbtk_cleanup (dummy)
   Tcl_Finalize ();
 }
 
+
 /* Initialize gdbtk.  This involves creating a Tcl interpreter,
  * defining all the Tcl commands that the GUI will use, pointing
  * all the gdb "hooks" to the correct functions,
@@ -362,6 +365,7 @@ gdbtk_init (argv0)
   struct cleanup *old_chain;
   int found_main;
   char *s;
+
   Tcl_Obj *auto_path_elem, *auto_path_name;
 
   /* If there is no DISPLAY environment variable, Tk_Init below will fail,
@@ -375,6 +379,14 @@ gdbtk_init (argv0)
 
   old_chain = make_cleanup (cleanup_init, 0);
 
+  /* close old output and send new to GDBTK */
+  ui_file_delete (gdb_stdout);
+  ui_file_delete (gdb_stderr);
+  gdb_stdout = gdbtk_fileopen ();
+  gdb_stderr = gdbtk_fileopen ();
+  gdb_stdlog = gdbtk_fileopen ();
+  gdb_stdtarg = gdbtk_fileopen ();
+  
   /* First init tcl and tk. */
   Tcl_FindExecutable (argv0);
   gdbtk_interp = Tcl_CreateInterp ();
@@ -472,6 +484,7 @@ gdbtk_init (argv0)
 
   gdbtk_add_hooks ();
 
+
   /* Add a back door to Tk from the gdb console... */
 
   add_com ("tk", class_obscure, tk_command,
@@ -485,6 +498,7 @@ gdbtk_init (argv0)
 	      enable_external_editor ? "1" : "0", 0);
   Tcl_SetVar (gdbtk_interp, "external_editor_command",
 	      external_editor_command, 0);
+
 
   /* find the gdb tcl library and source main.tcl */
 
@@ -516,25 +530,16 @@ proc gdbtk_find_main {} {\n\
 gdbtk_find_main";
 #endif /* NO_TCLPRO_DEBUGGER */
 
-    /* fputs_unfiltered_hook = NULL; *//* Force errors to stdout/stderr */
-
-    fputs_unfiltered_hook = gdbtk_fputs;
-
-    /* FIXME: set gdb_stdtarg for now until gdbtk is changed to use
-       struct ui_out. */
-
-    gdb_stdtarg = gdb_stdout;
-
+    /* now enable gdbtk to parse the output from gdb */
+    gdbtk_disable_fputs = 0;
+    
     if (Tcl_GlobalEval (gdbtk_interp, (char *) script) != TCL_OK)
       {
 	char *msg;
 
 	/* Force errorInfo to be set up propertly.  */
 	Tcl_AddErrorInfo (gdbtk_interp, "");
-
 	msg = Tcl_GetVar (gdbtk_interp, "errorInfo", TCL_GLOBAL_ONLY);
-
-	fputs_unfiltered_hook = NULL;	/* Force errors to stdout/stderr */
 
 #ifdef _WIN32
 	MessageBox (NULL, msg, NULL, MB_OK | MB_ICONERROR | MB_TASKMODAL);
@@ -543,9 +548,9 @@ gdbtk_find_main";
 #endif
 
 	error ("");
-
       }
   }
+
 
   /* Now source in the filename provided by the --tclcommand option.
      This is mostly used for the gdbtk testsuite... */
@@ -558,7 +563,6 @@ gdbtk_find_main";
       free (gdbtk_source_filename);
       free (script);
     }
-
 
   discard_cleanups (old_chain);
 }

@@ -452,12 +452,6 @@ Gdbtk_Init (interp)
   if (gdb_variable_init (interp) != TCL_OK)
     return TCL_ERROR;
   
-  /* Route GDB internal log messages and target output and through
-     stderr instead of stdout.  FIXME: Should have a separate streams
-     for handling these two types of output. */
-  gdb_stdtarg = gdb_stderr;
-  gdb_stdlog = gdb_stderr;
-
   /* Register/initialize any architecture specific data */
   setup_architecture_data ();
   register_gdbarch_swap (&old_regs, sizeof (old_regs), NULL);
@@ -1855,8 +1849,8 @@ gdb_restore_fputs (clientData, interp, objc, objv)
      int objc;
      Tcl_Obj *CONST objv[];
 {
-    fputs_unfiltered_hook = gdbtk_fputs;
-    return TCL_OK;
+  gdbtk_disable_fputs = 0;
+  return TCL_OK;
 }
 
 /* This implements the TCL command `gdb_regnames'.  Its syntax is:

@@ -29,7 +29,7 @@ class Console {
     method idle {}
     method busy {}
     method insert {line}
-    method einsert {line}
+    method einsert {line tag}
     method invoke {}
     method _insertion {args}
     method get_text {}

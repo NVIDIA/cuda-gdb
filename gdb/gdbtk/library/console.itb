@@ -1,5 +1,5 @@
-# Console window for GDBtk
-# Copyright 1998, 1999 Cygnus Solutions
+# Console window for Insight
+# Copyright 1998, 1999, 2001 Cygnus Solutions
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -60,6 +60,8 @@ body Console::_build_win {} {
 
   $_twin tag configure prompt_tag -foreground [pref get gdb/console/prompt_fg]
   $_twin tag configure err_tag -foreground [pref get gdb/console/error_fg]
+  $_twin tag configure log_tag -foreground [pref get gdb/console/log_fg]
+  $_twin tag configure target_tag -foreground [pref get gdb/console/target_fg]
   $_twin configure -font [pref get gdb/console/font]
 
   #
@@ -232,12 +234,12 @@ body Console::insert {line} {
 #-------------------------------------------------------------------
 #  METHOD:  einsert - insert error text in the text widget
 # ------------------------------------------------------------------
-body Console::einsert {line} {
+body Console::einsert {line tag} {
   debug $line
   if {$_needNL} {
     $_twin insert end "\n"
   }
-  $_twin insert end $line err_tag
+  $_twin insert end $line $tag
   $_twin see insert
   set _needNL 0
 }

@@ -1,5 +1,6 @@
 /* Tcl/Tk interface routines header file.
-   Copyright 1994-1998, 2000 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1996, 1997, 1998, 2000, 2001
+   Free Software Foundation, Inc.
 
    Written by Stu Grossman <grossman@cygnus.com> of Cygnus Support.
 
@@ -160,6 +161,8 @@ extern int gdbtk_two_elem_cmd (char *, char *);
 extern int call_wrapper (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 extern int target_is_native (struct target_ops *t);
 extern void gdbtk_fputs (const char *, struct ui_file *);
+extern struct ui_file *gdbtk_fileopen (void);
+extern int gdbtk_disable_fputs;
 
 #ifdef _WIN32
 extern void close_bfds ();

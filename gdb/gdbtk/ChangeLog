@@ -1,3 +1,37 @@
+2001-04-04  Martin M. Hunt  <hunt@redhat.com>
+
+	* generic/gdbtk-hooks.c (gdbtk_fileopen): New function.
+	Initialize ui_file stuff for gdbtk.
+	(gdbtk_fputs): Don't print if gdbtk_disable_fputs. Send
+	stdlog and stdtarg to their handler functions.
+
+	* generic/gdbtk.c (Gdbtk_Init): Don't set gdb_stdlog 
+	and gdb_stdtarg to gdb_stdout, 
+	(gdbtk_init): Unset gdbtk_disable_fputs
+	when ready to accept output from gdb. Remove references to
+	fputs_unfiltered_hook.
+	
+	* generic/gdbtk.h: Declare new flag gdbtk_disable_fputs.
+
+	* generic/gdbtk-cmds.c (gdb_restore_fputs): Instead of setting
+	fputs_unfiltered_hook, set the new flag gdbtk_disable_fputs.
+
+	* library/prefs.tcl (pref_set_defaults): Add defaults
+	for log_fg and target_fg.
+
+	* library/interface.tcl (gdbtk_tcl_fputs_error): Use
+	err_tag.
+	(gdbtk_tcl_fputs_log): New function. Write log messages
+	to console.
+	(gdbtk_tcl_fputs_target): New function.	Write target
+	IO to console.
+
+	* library/console.ith (einsert): Add tag parameter.
+	
+	* library/console.itb (_build_win): Add new tags for log 
+	and target IO.
+	(einsert): Add tag parameter.
+
 2001-04-02  Martin M. Hunt  <hunt@redhat.com>
 
 	* generic/gdbtk-cmds.c (gdb_loadfile): Adjust size of text_argv

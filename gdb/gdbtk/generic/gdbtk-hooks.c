@@ -1,5 +1,6 @@
-/* Startup code for gdbtk.
-   Copyright 1994-1998, 2000 Free Software Foundation, Inc.
+/* Startup code for Insight.
+   Copyright 1994, 1995, 1996, 1997, 1998, 2000, 2001 
+   Free Software Foundation, Inc.
 
    Written by Stu Grossman <grossman@cygnus.com> of Cygnus Support.
 
@@ -193,11 +194,8 @@ gdbtk_restore_result_ptr (void *old_result_ptr)
   result_ptr = (gdbtk_result *) old_result_ptr;
 }
 
-
-
 /* This allows you to Tcl_Eval a tcl command which takes
    a command word, and then a single argument. */
-
 int
 gdbtk_two_elem_cmd (cmd_name, argv1)
      char *cmd_name;
@@ -221,6 +219,14 @@ gdbtk_two_elem_cmd (cmd_name, argv1)
   return result;
 }
 
+struct ui_file *
+gdbtk_fileopen (void)
+{
+  struct ui_file *file = ui_file_new ();
+  set_ui_file_fputs (file, gdbtk_fputs);
+  return file;
+}
+
 /* This handles all the output from gdb.  All the gdb printf_xxx functions
  * eventually end up here.  The output is either passed to the result_ptr
  * where it will go to the result of some gdbtk command, or passed to the
@@ -242,13 +248,18 @@ gdbtk_two_elem_cmd (cmd_name, argv1)
  */
 
 void
-gdbtk_fputs (ptr, stream)
-     const char *ptr;
-     struct ui_file *stream;
+gdbtk_fputs (const char *ptr, struct ui_file *stream)
 {
+  if (gdbtk_disable_fputs)
+    return;
+  
   in_fputs = 1;
 
-  if (result_ptr != NULL)
+  if (stream == gdb_stdlog)
+    gdbtk_two_elem_cmd ("gdbtk_tcl_fputs_log", (char *) ptr);
+  else if (stream == gdb_stdtarg)
+    gdbtk_two_elem_cmd ("gdbtk_tcl_fputs_target", (char *) ptr);
+  else if (result_ptr != NULL)
     {
       if (result_ptr->flags & GDBTK_TO_RESULT)
 	{
