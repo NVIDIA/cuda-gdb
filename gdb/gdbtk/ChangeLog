@@ -1,3 +1,16 @@
+2001-04-23  Keith Seitz  <keiths@cygnus.com>
+
+	* generic/gdbtk-cmds.c (gdb_get_breakpoint_info): If unable
+	to find the requested breakpoint for lookup, check if
+	it is about to be deleted and return information about
+	that breakpoint.
+	(gdb_get_tracepoint_info): Ditto for tracepoints.
+	* generic/gdbtk-hooks.c (gdbtk_deleted_bp): New global.
+	(gdbtk_delete_breakpoint): Remember the deleted breakpoint
+	for gdb_get_breakpoint_info, in case it is called during
+	the event notification.
+	(gdbtk_delete_tracepoints): Ditto for tracepoints.
+
 2001-04-20  Keith Seitz  <keiths@cygnus.com>
 
 	* library/srctextwin.ith (handle_set_hook): Rename to set_variable.

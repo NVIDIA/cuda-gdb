@@ -64,6 +64,7 @@
 
 /* Various globals we reference.  */
 extern char *source_path;
+extern void *gdbtk_deleted_bp;
 
 static void setup_architecture_data (void);
 static int tracepoint_exists (char *args);
@@ -2279,11 +2280,19 @@ gdb_get_tracepoint_info (ClientData clientData, Tcl_Interp *interp,
 
   if (tp == NULL)
     {
-      char *buff;
-      xasprintf (&buff, "Tracepoint #%d does not exist", tpnum);
-      Tcl_SetStringObj (result_ptr->obj_ptr, buff, -1);
-      free(buff);
-      return TCL_ERROR;
+      /* Hack. Check if this TP is being deleted. See comments
+	 around the definition of gdbtk_deleted_bp in
+	 gdbtk-hooks.c. */
+      struct tracepoint *dtp = (struct tracepoint *) gdbtk_deleted_bp;
+      if (dtp != NULL && dtp->number == tpnum)
+	tp = dtp;
+      else {
+	char *buff;
+	xasprintf (&buff, "Tracepoint #%d does not exist", tpnum);
+	Tcl_SetStringObj (result_ptr->obj_ptr, buff, -1);
+	free(buff);
+	return TCL_ERROR;
+      }
     }
 
   Tcl_SetListObj (result_ptr->obj_ptr, 0, NULL);
@@ -4066,11 +4075,20 @@ gdb_get_breakpoint_info (ClientData clientData, Tcl_Interp *interp, int objc,
 
   if (!b || b->type != bp_breakpoint)
     {
-      char *err_buf;
-      xasprintf (&err_buf, "Breakpoint #%d does not exist.", bpnum);
-      Tcl_SetStringObj (result_ptr->obj_ptr, err_buf, -1);
-      free(err_buf);
-      return TCL_ERROR;
+      /* Hack. Check if this BP is being deleted. See comments
+	 around the definition of gdbtk_deleted_bp in
+	 gdbtk-hooks.c. */
+      struct breakpoint *dbp = (struct breakpoint *) gdbtk_deleted_bp;
+      if (dbp && dbp->number == bpnum)
+	b = dbp;
+      else
+	{
+	  char *err_buf;
+	  xasprintf (&err_buf, "Breakpoint #%d does not exist.", bpnum);
+	  Tcl_SetStringObj (result_ptr->obj_ptr, err_buf, -1);
+	  free(err_buf);
+	  return TCL_ERROR;
+	}
     }
 
   sal = find_pc_line (b->address, 0);

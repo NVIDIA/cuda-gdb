@@ -66,6 +66,20 @@ volatile int in_fputs = 0;
    that it should forcibly detach from the target. */
 int gdbtk_force_detach = 0;
 
+/* Set/cleared by gdbtk_delete_breakpoint/tracepoint. Unfortunately,
+   clear_command (in breakpoint.c) takes the breakpoint off of the
+   breakpoint_chain before deleting the breakpoint. The BreakpointEvent
+   which is created as a result of any breakpoint/tracepoint event
+   calls gdb_get_breakpoint_info will, therefore, not find a breakpoint
+   about which to return information. So we keep a handle on the deleted
+   breakpoint when we're deleting it, and teach gdb_get_breakpoint_info
+   to check for this variable whenever a breakpoint lookup fails.
+
+   Why not just change BreakpointEvent? Good question. Answer: I refuse
+   to allow BreakpointEvents to be all public variables. They are not.
+   They ONLY depend on the breakpoint number (gdb's handle for them). */
+void *gdbtk_deleted_bp = NULL;
+
 extern void (*pre_add_symbol_hook) (char *);
 extern void (*post_add_symbol_hook) (void);
 extern void (*selected_frame_level_changed_hook) (int);
@@ -637,7 +651,10 @@ static void
 gdbtk_delete_breakpoint (b)
      struct breakpoint *b;
 {
+  /* Hack. See comments near top of this file. */
+  gdbtk_deleted_bp = b;
   breakpoint_notify (b, "delete");
+  gdbtk_deleted_bp = NULL;
 }
 
 static void
@@ -767,7 +784,10 @@ static void
 gdbtk_delete_tracepoint (tp)
      struct tracepoint *tp;
 {
+  /* Hack. See comments near top of this file. */
+  gdbtk_deleted_bp = tp;
   tracepoint_notify (tp, "delete");
+  gdbtk_deleted_bp = NULL;
 }
 
 static void
