@@ -1,3 +1,9 @@
+2001-08-21  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk.c (gdbtk_init): Reinitialize disassemle info's
+	stream parameter: we just deleted the one it saved when we
+	re-routed gdb_stdout to our own gdb_stdout.
+
 2001-08-20  Keith Seitz  <keiths@redhat.com>
 
 	* library/stackwin.itb (build_win): Use iwidget's scrolled listbox
