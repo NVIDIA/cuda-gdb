@@ -268,7 +268,7 @@ static int gdb_tracepoint_exists_command PARAMS ((ClientData, Tcl_Interp *,
 						  Tcl_Obj * CONST objv[]));
 static int gdb_get_tracepoint_info PARAMS ((ClientData, Tcl_Interp *, int,
 					    Tcl_Obj * CONST objv[]));
-static int gdbtk_dis_asm_read_memory PARAMS ((bfd_vma, bfd_byte *, int,
+static int gdbtk_dis_asm_read_memory PARAMS ((bfd_vma, bfd_byte *, unsigned int,
 					      disassemble_info *));
 static void gdbtk_load_source PARAMS ((ClientData clientData,
 				       struct symtab *symtab,
@@ -3030,7 +3030,7 @@ static int
 gdbtk_dis_asm_read_memory (memaddr, myaddr, len, info)
      bfd_vma memaddr;
      bfd_byte *myaddr;
-     int len;
+     unsigned int len;
      disassemble_info *info;
 {
   extern struct target_ops exec_ops;
