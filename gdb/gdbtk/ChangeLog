@@ -1,3 +1,11 @@
+2002-04-05  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-stack.c (gdb_block_vars): Update get_frame_block to
+	match recent gdb changes.
+	(gdb_get_blocks): Likewise.
+	(gdb_get_vars_command): Likewise.
+	(gdb_selected_block): Likewise.
+
 2002-04-04  Keith Seitz  <keiths@redhat.com>
 
 	* library/download.itb (constructor): Set feedback meter

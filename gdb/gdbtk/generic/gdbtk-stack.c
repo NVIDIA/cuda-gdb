@@ -105,7 +105,7 @@ gdb_block_vars (ClientData clientData, Tcl_Interp *interp,
   start = string_to_core_addr (Tcl_GetStringFromObj (objv[1], NULL));
   end   = string_to_core_addr (Tcl_GetStringFromObj (objv[2], NULL));
   
-  block = get_frame_block (selected_frame);
+  block = get_frame_block (selected_frame, 0);
 
   while (block != 0)
     {
@@ -169,7 +169,7 @@ gdb_get_blocks (ClientData clientData, Tcl_Interp *interp,
   
   if (selected_frame != NULL)
     {
-      block = get_frame_block (selected_frame);
+      block = get_frame_block (selected_frame, 0);
       pc = get_frame_pc (selected_frame);
       while (block != 0)
 	{
@@ -316,7 +316,7 @@ gdb_get_vars_command (ClientData clientData, Tcl_Interp *interp,
       if (selected_frame == NULL)
 	return TCL_OK;
 
-      block = get_frame_block (selected_frame);
+      block = get_frame_block (selected_frame, 0);
     }
 
   while (block != 0)
@@ -389,7 +389,7 @@ gdb_selected_block (ClientData clientData, Tcl_Interp *interp,
   else
     {
       struct block *block;
-      block = get_frame_block (selected_frame);
+      block = get_frame_block (selected_frame, 0);
       xasprintf (&start, "0x%s", paddr_nz (BLOCK_START (block)));
       xasprintf (&end, "0x%s", paddr_nz (BLOCK_END (block)));
     }
