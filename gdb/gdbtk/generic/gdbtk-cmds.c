@@ -1,5 +1,5 @@
-/* Tcl/Tk command definitions for gdbtk.
-   Copyright 1994, 1995, 1996, 1997, 1998, 1999
+/* Tcl/Tk command definitions for Insight.
+   Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2001
    Free Software Foundation, Inc.
 
    Written by Stu Grossman <grossman@cygnus.com> of Cygnus Support.
@@ -2605,7 +2605,7 @@ gdb_load_disassembly (clientData, interp, objc, objv)
       /* client_data.source_argv[3] = line_number; */
       client_data.source_argv[4] = "";
       /* client_data.source_argv[5] = line; */
-      client_data.source_argv[6] = "source_tag";
+      client_data.source_argv[6] = "source_tag2";
     }
   
   ret_val = gdb_disassemble_driver (low, high, mixed_source_and_assembly, 
