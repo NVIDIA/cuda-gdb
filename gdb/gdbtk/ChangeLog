@@ -1,3 +1,9 @@
+2001-12-10  Ian Roxborough  <irox@redhat.com>
+
+	* library/interface.tcl (set_target_name): Call "pref getd"
+	instead of "pref get" to avoid undefined preference error
+	message for default-hostname.
+
 2001-12-07  Keith Seitz  <keiths@redhat.com>
 
 	* library/managedwin.itb (shutdown): Don't save geometry for

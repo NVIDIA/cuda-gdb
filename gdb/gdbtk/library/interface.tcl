@@ -1039,7 +1039,7 @@ proc set_target_name {{prompt 1}} {
       }
       set hostname [pref getd gdb/load/$target-hostname]
       if {$hostname == ""} {
-	set hostname [pref get gdb/load/default-hostname]
+	set hostname [pref getd gdb/load/default-hostname]
       }
       # replace "com1" with the real port name
       set targ [lrep $targ "com1" $port]
