@@ -555,7 +555,7 @@ body MemWin::incr_addr {num} {
   }
   $itk_component(table) config -bg $::Colors(textbg) -state normal
   $itk_interior.f.cntl clear
-  $itk_interior.f.cntl insert 0 [format "0x%x" $current_addr]
+  $itk_interior.f.cntl insert 0 $current_addr
   _update_address 1
 }
 

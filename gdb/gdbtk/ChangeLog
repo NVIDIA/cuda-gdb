@@ -1,3 +1,7 @@
+2002-09-19  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/memwin.itb (incr_addr): Fix 64-bit addresses.
+
 2002-09-18  Keith Seitz  <keiths@redhat.com>
 
 	* library/console.itb (_build_win): Bind control-c and control-v
