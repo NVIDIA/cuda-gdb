@@ -692,6 +692,7 @@ body SrcTextWin::addPopup {menu label command {abg {}} {browse 1} {run 1}} {
   }
   
 }
+
 # ------------------------------------------------------------------
 #  METHOD:  handle_set_hook - Handle changes in the gdb variables
 #           changed through the "set" gdb command.
@@ -1139,6 +1140,22 @@ body SrcTextWin::_highlightAsmLine {win addr pc_addr tagname} {
 }
 
 # ------------------------------------------------------------------
+# METHOD: set_tag - update tag to STACK without making other changes
+# ------------------------------------------------------------------
+body SrcTextWin::set_tag_to_stack {} {
+  foreach window [list $twin $bwin] {
+    if {$window == ""} then {
+      continue
+    }
+    foreach {start end} [$window tag ranges PC_TAG] {
+      $window tag remove PC_TAG $start $end
+      $window tag add STACK_TAG $start $end
+    }
+  }
+  set current(tag) STACK_TAG
+}
+
+# ------------------------------------------------------------------
 # METHOD: location - display a location in a file
 # ------------------------------------------------------------------
 body SrcTextWin::location {tagname filename funcname line addr pc_addr lib} {
@@ -1555,7 +1572,7 @@ body SrcTextWin::hasTP {win line} {
 }
 
 # ------------------------------------------------------------------
-#  METHOD:  report_current_location  
+#  METHOD:  report_source_location
 #    
 #    This function reports the "current" location in the source
 #    window, where current means what gdb_loc would return, if 
@@ -2726,6 +2743,13 @@ body SrcTextWin::test_get {var} {
 }
 
 # ------------------------------------------------------------------
+#  METHOD:  get_file - Return name of current file.
+# ------------------------------------------------------------------
+body SrcTextWin::get_file {} {
+  return $current(filename)
+}
+
+# ------------------------------------------------------------------
 #  METHOD:  clear_file - Clear out state so that user may load
 #              new executable. For the SrcTextWin class, this means:
 #
@@ -2801,5 +2825,3 @@ body SrcTextWin::_clear_cache {} {
     }
   }
 }
-
-

@@ -86,6 +86,8 @@ class SrcTextWin {
     method do_thread_bp {listbox}
     method test_get {var}
     method clear_file {}
+    method get_file {}
+    method set_tag_to_stack {}
   }
 
   protected {

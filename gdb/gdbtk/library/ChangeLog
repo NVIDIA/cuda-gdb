@@ -1,3 +1,11 @@
+2000-11-30  Tom Tromey  <tromey@cygnus.com>
+
+	* prefs.tcl (pref_save): Put version number into file.  Added
+	`session' to list of top-level keys.  Allow keys with many `/'s.
+	(pref_read): Recognize version number.
+	(escape_value): Generate URL-style encoding.
+	(unescape_value): Added `version' argument.  Handle URL decoding.
+
 2000-11-29  Larry Smith <lsmith@redhat.com>
 
         * regwin.itb (build_win,but3): Added "Double" menu entry to

@@ -688,10 +688,5 @@ body BpWin::goto_bp {r} {
   }
   set pc [lindex $bpinfo 3]
 
-  # !! FIXME: multiple source windows?
-  set src [lindex [ManagedWin::find SrcWin] 0]
-  set info [gdb_loc *$pc]
-  $src location BROWSE_TAG $info
+  SrcWin::choose_and_display BROWSE_TAG [gdb_loc *$pc]
 }
-
-

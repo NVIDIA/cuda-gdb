@@ -72,10 +72,15 @@ proc pref_read {} {
 
     if {$file_opened == "1"} {
       set section gdb
+      set version 0
       while {[gets $fd line] >= 0} {
 	switch -regexp -- $line {
 	  {^[ \t\n]*#.*} {
-	    ;# comment; ignore it
+	    # Comment.  We recognize one magic comment that includes
+	    # the version number.
+	    if {[regexp -- "^GDBtkInitVersion: (\[0-9\]+)\$" $line v]} {
+	      set version $v
+	    }
 	  }
 
 	  {^[ \t\n]*$} {
@@ -94,7 +99,7 @@ proc pref_read {} {
 	  default {
 	    regexp "\[ \t\n\]*\(.+\)=\(.+\)" $line a name val
 	    # Must unescape equal signs in val
-	    set val [unescape_value $val]
+	    set val [unescape_value $val $version]
 	    if {$section == "gdb"} {
 	      pref setd gdb/$name $val
 	    } elseif {$section == "global" && [regexp "^font/" $name]} {
@@ -141,6 +146,7 @@ proc pref_save {{win {}}} {
     }
   
     puts $fd "\# GDBtk Init file"
+    puts $fd {# GDBtkInitVersion: 1}
 
     set plist [pref list]
     # write out global options
@@ -170,16 +176,18 @@ proc pref_save {{win {}}} {
       }
     }
 
-    #now loop through all sections writing out values
+    # now loop through all sections writing out values
+    # FIXME: this is broken.  We should discover the list
+    # dynamically.
     lappend secs load console src reg stack locals watch bp search \
-      process geometry help browser kod window
+      process geometry help browser kod window session
 
     foreach section $secs {
       puts $fd "\[$section\]"
       foreach var $plist {
 	set t [split $var /]
 	if {[lindex $t 0] == "gdb" && [lindex $t 1] == $section} {
-	set x [lindex $t 2]
+	  set x [join [lrange $t 2 end] /]
 	  set v [escape_value [pref get $var]]
 	  if {$x != "" && $v != ""} {
 	    puts $fd "\t$x=$v"
@@ -200,22 +208,40 @@ proc pref_save {{win {}}} {
 #         prefs to a file
 # -------------------------------------------------------
 proc escape_value {val} {
-
-  if {[regsub -all -- = $val {!%} newval]} {
-    return $newval
-  }
-
-  return $val
+  # We use a URL-style quoting.  We encode `=', `%', the `[]'
+  # characters and newlines.  We use a cute trick here: we regsub in
+  # command expressions which we then expand using subst.
+  regsub -all -- "(\[\]\[=%\n\])" $val \
+    {[format "%%%02x" [scan {\1} %c x; set x]]} newval
+  return [subst -nobackslashes -novariables $newval]
 }
 
 # -------------------------------------------------------
 #  PROC: unescape_value - unescape all equal signs for
-#         reading prefs from a file
+#         reading prefs from a file.  VERSION is the version
+#         number of the encoding.
+#  version 0 only encoded `='.
+#  version 1 correctly encoded more values
 # -------------------------------------------------------
-proc unescape_value {val} {
+proc unescape_value {val version} {
+  switch -exact -- $version {
+    0 {
+      # Old-style encoding.
+      if {[regsub -all -- {!%} $val = newval]} {
+	return $newval
+      }
+    }
 
-  if {[regsub -all -- {!%} $val = newval]} {
-    return $newval
+    1 {
+      # Version 1 uses URL encoding.
+      regsub -all -- "%(..)" $val \
+	{[format %c 0x\1]} newval
+      return [subst -nobackslashes -novariables $newval]
+    }
+
+    default {
+      error "Unknown encoding version $version"
+    }
   }
 
   return $val  

@@ -40,11 +40,6 @@ body ManagedWin::reveal {} {
   set top [winfo toplevel [namespace tail $this]]
   raise $top
   wm deiconify $top
-  
-  # I don't understand this next line and no one commented it, so it's gone.
-  #focus -force [focus -lastfor $top]
-  
-  focus $top
 }
 
 body ManagedWin::restart {} {

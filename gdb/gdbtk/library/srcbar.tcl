@@ -123,6 +123,17 @@ class GDBSrcBar {
     add_menu_command Other "Source..." \
       "source_file" -underline 0
 
+    set sessions [session_list]
+    if {[llength $sessions]} {
+      add_menu_separator
+      set i 1
+      foreach item $sessions {
+	add_menu_command Other "$i $item" \
+	  [list session_load $item] \
+	  -underline 0
+      }
+    }
+
     add_menu_separator
 
     if {$tcl_platform(platform) == "windows"} {
@@ -136,21 +147,19 @@ class GDBSrcBar {
 	"$this _apply_source print" \
 	-underline 0 -accelerator "Ctrl+P"
       add_menu_separator
-
     }
-    
+
     add_menu_command Other "Target Settings..." "set_target_name" \
       -underline 0
     add_menu_separator
     add_menu_command None "Exit" gdbtk_quit -underline 1
-    
+
     create_run_menu
 
     create_view_menu
 
     if {[pref get gdb/control_target]} {
       create_control_menu
-
     }
 
     if {[pref get gdb/mode]} {
