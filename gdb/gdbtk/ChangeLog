@@ -1,3 +1,12 @@
+2001-01-01  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
+
+	* library/ChangeLog-2000: New file. Entries dated 2000 moved here
+        from library/ChangeLog.
+        * library/ChangeLog: Removed. 
+        * generic/ChangeLog-2000: New file. Entries dated 2000 moved here
+        from library/ChangeLog.
+        * generic/ChangeLog: Removed.
+
 2000-12-14  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
 
 	* library/ChangeLog-1999: New file. Entries dated 1999 moved here
