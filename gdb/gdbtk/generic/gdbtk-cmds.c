@@ -1747,7 +1747,7 @@ static int
 map_arg_registers (objc, objv, func, argp)
      int objc;
      Tcl_Obj *CONST objv[];
-     void (*func) PARAMS ((int regnum, void *argp));
+     void (*func) (int regnum, void *argp);
      void *argp;
 {
   int regnum, numregs;

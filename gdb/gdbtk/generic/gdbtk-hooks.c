@@ -65,10 +65,10 @@ volatile int in_fputs = 0;
    that it should forcibly detach from the target. */
 int gdbtk_force_detach = 0;
 
-extern void (*pre_add_symbol_hook) PARAMS ((char *));
-extern void (*post_add_symbol_hook) PARAMS ((void));
-extern void (*selected_frame_level_changed_hook) PARAMS ((int));
-extern int (*ui_loop_hook) PARAMS ((int));
+extern void (*pre_add_symbol_hook) (char *);
+extern void (*post_add_symbol_hook) (void);
+extern void (*selected_frame_level_changed_hook) (int);
+extern int (*ui_loop_hook) (int);
 
 static void gdbtk_create_tracepoint (struct tracepoint *);
 static void gdbtk_delete_tracepoint (struct tracepoint *);

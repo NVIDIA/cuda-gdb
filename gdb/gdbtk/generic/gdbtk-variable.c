@@ -126,25 +126,25 @@ struct language_specific {
   enum vlanguage language;
 
   /* The number of children of PARENT. */
-  int (*number_of_children) PARAMS ((struct _gdb_variable *parent));
+  int (*number_of_children) (struct _gdb_variable * parent);
 
   /* The name of the INDEX'th child of PARENT. */
-  char *(*name_of_child) PARAMS ((struct _gdb_variable *parent, int index));
+  char *(*name_of_child) (struct _gdb_variable * parent, int index);
 
   /* The value_ptr of the root variable ROOT. */
-  value_ptr (*value_of_root) PARAMS ((struct _gdb_variable *root));
+  value_ptr (*value_of_root) (struct _gdb_variable * root);
 
   /* The value_ptr of the INDEX'th child of PARENT. */
-  value_ptr (*value_of_child) PARAMS ((struct _gdb_variable *parent, int index));
+  value_ptr (*value_of_child) (struct _gdb_variable * parent, int index);
 
   /* The type of the INDEX'th child of PARENT. */
-  struct type *(*type_of_child) PARAMS ((struct _gdb_variable *parent, int index));
+  struct type *(*type_of_child) (struct _gdb_variable * parent, int index);
 
   /* Is VAR editable? */
-  int (*variable_editable) PARAMS ((struct _gdb_variable *var));
+  int (*variable_editable) (struct _gdb_variable * var);
 
   /* The current value of VAR is returned in *OBJ. */
-  int (*value_of_variable) PARAMS ((struct _gdb_variable *var, Tcl_Obj **obj));
+  int (*value_of_variable) (struct _gdb_variable * var, Tcl_Obj ** obj);
 };
 
 struct vstack {
