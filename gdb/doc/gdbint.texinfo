@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.77 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.78 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3414,12 +3414,6 @@ of a branch or jump.
 @findex SKIP_PROLOGUE
 A C expression that returns the address of the ``real'' code beyond the
 function entry prologue found at @var{pc}.
-
-@item SKIP_PROLOGUE_FRAMELESS_P
-@findex SKIP_PROLOGUE_FRAMELESS_P
-A C expression that should behave similarly, but that can stop as soon
-as the function is known to have a frame.  If not defined,
-@code{SKIP_PROLOGUE} will be used instead.
 
 @item SKIP_TRAMPOLINE_CODE (@var{pc})
 @findex SKIP_TRAMPOLINE_CODE
