@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.56 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.57 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -2205,10 +2205,6 @@ is normally faster to define @code{CRLF_SOURCE_FILES} when possible.
 This macro is used as the argument to @code{lseek} (or, most commonly,
 @code{bfd_seek}).  FIXME, should be replaced by SEEK_SET instead,
 which is the POSIX equivalent.
-
-@item MALLOC_INCOMPATIBLE
-Define this if the system's prototype for @code{malloc} differs from the
-@sc{ansi} definition.
 
 @item MMAP_BASE_ADDRESS
 When using HAVE_MMAP, the first mapping should go at this address.
