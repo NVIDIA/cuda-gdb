@@ -115,6 +115,7 @@ class GDBMenuBar {
     set menu_list($name) [$Menu add cascade -menu  $current_menu \
 			     -label $label -underline $underline]
     menu $current_menu -tearoff 0
+    set menu_list($name,label) $label
 
     set item_number -1
     return $current_menu
@@ -152,6 +153,26 @@ class GDBMenuBar {
       return $current_menu
     } else {
       return ""
+    }
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  menubar_delete_menu - Deletes one of the main menu
+  #                   cascade menus. Also makes the previous menu the
+  #                   target menu.
+  # 
+  #  name - the token for the new menu
+  #
+  #  RETURNS: then item number of the menu, or "" if the menu is not found.
+  #
+  #  FIXME: Does not remove the deleted menus from their class lists.
+  # ------------------------------------------------------------------
+  method menubar_delete_menu {name} {
+    if {[info exists menu_list($name)]} {
+      $Menu delete $menu_list($name,label)
+      set current_menu {}
+      unset menu_list($name,label)
+      unset menu_list($name)
     }
   }
 
