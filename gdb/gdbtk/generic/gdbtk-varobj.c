@@ -305,6 +305,7 @@ variable_create (interp, objc, objv)
   char *obj_name;
   int index;
   CORE_ADDR frame = (CORE_ADDR) -1;
+  int how_specified = USE_SELECTED_FRAME;
 
   /* REMINDER: This command may be invoked in the following ways:
      gdb_variable create [NAME] [-expr EXPR] [-frame FRAME]
@@ -356,6 +357,7 @@ variable_create (interp, objc, objv)
 	    char *str;
 	    str = Tcl_GetStringFromObj (objv[1], NULL);
 	    frame = parse_and_eval_address (str);
+	    how_specified = USE_SPECIFIED_FRAME;
 	    objc--;
 	    objv++;
 	  }
@@ -370,7 +372,7 @@ variable_create (interp, objc, objv)
     }
 
   /* Create the variable */
-  var = varobj_create (obj_name, name, frame);
+  var = varobj_create (obj_name, name, frame, how_specified);
 
   if (var != NULL)
     {

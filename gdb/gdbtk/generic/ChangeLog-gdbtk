@@ -1,3 +1,8 @@
+2000-03-13  James Ingham  <jingham@leda.cygnus.com>
+
+	* gdbtk-varobj.c (variable_create): Pass the correct
+	"how_specified" flag to the varobj_create routine.
+
 2000-02-29  James Ingham  <jingham@leda.cygnus.com>
 
 	* gdbtk-cmds.c (gdb_disassemble_driver): The to_shortname for
