@@ -1,5 +1,5 @@
 # Local preferences functions for Insight.
-# Copyright 1997, 1998, 1999, 2002 Red Hat
+# Copyright 1997, 1998, 1999, 2002, 2003 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -376,10 +376,7 @@ proc pref_set_defaults {} {
   pref define gdb/search/filter_mode     "starts with"
 
   pref define gdb/browser/hide_h          0
-  pref define gdb/browser/width           0
-  pref define gdb/browser/top_height       0
-  pref define gdb/browser/view_height      -1
-  pref define gdb/browser/view_is_open    0
+  pref define gdb/browser/layout	2
 
   # BP (breakpoint)
   pref define gdb/bp/show_threads         0

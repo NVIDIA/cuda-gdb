@@ -1,6 +1,39 @@
+2003-02-10  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/prefs.tcl (pref_set_defaults): Remove prefs
+	gdb/browser/width, gdb/browser/top_height, gdb/browser/view_height,
+	gdb/browser/view_is_open. Add gdb/browser/layout.
+
+	* library/browserwin.ith: Update declarations to match 
+	changes in browserwin.itb.
+
+	* library/browserwin.itb (constructor): Don't set toplevel
+	bindings. Set _layout from prefs.
+	(destructor): Don't check $resize_after. Don't save view_is_open.
+	(_build_win): Create a popup menu and bind to button 3.
+	Split the rest into 4 functions; _build_file_frame, 
+	_build_filter_frame, _build_function_frame, and _build_view_frame.
+	Pack these 4 frames according to $_layout.
+	(_toggle_more): Deleted.
+	(_bind_toplevel): Deleted.
+	(_do_resize): Deleted.
+	(_resize): Deleted.
+	(_fill_source): Always fill because source is always visible.
+	(_fill_funcs_combo): Limit width of combo to 40 chars.
+	(_build_filter_frame): New function.
+	(_build_file_frame): New function.
+	(_build_function_frame): New function.
+	(_build_view_frame): New function.
+	(_switch_layout): New function. Toggle between layouts.
+
+	* library/tclIndex: Rebuilt.
+	
+	* library/help/browser.html: Rewrite.
+
 2003-02-03  Martin M. Hunt  <hunt@redhat.com>
 
-	* library/targetselection.itb (TargetSelection::build_win): Remove duplicate label.
+	* library/targetselection.itb (TargetSelection::build_win): Remove 
+	duplicate label.
 
 2003-02-03  Martin M. Hunt  <hunt@redhat.com>	
 
