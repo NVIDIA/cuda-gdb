@@ -1,3 +1,9 @@
+2002-04-12  Andrew Cagney  <cagney@redhat.com>
+
+	* generic/gdbtk-register.c (register_changed_p): Use
+	frame_register_read instead of read_relative_register_raw_bytes.
+	(get_register): Delete out-of-date comment.
+	
 2002-04-08  Andrew Cagney  <ac131313@redhat.com>
 
 	* generic/gdbtk-wrapper.c (wrap_get_frame_block): Add missing NULL
