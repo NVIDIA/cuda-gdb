@@ -1,4 +1,19 @@
+2001-06-07  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-hooks.c (x_event): Remove unused variable "count".
+	(tracepoint_notify): Remove superfluous declaration. This funtion
+	was moved to gdbtk-bp.c.
+
+	* generic/gdbtk-bp.c (gdb_find_bp_at_addr): Remove unused variable
+	"b".
+	(gdb_set_bp): Remove unused variable "cmd".
+	(gdb_set_bp_addr): Remove unused variables "cmd" and "filename".
+
+	* generic/gdbtk.c (gdbtk_init): Remove unused variables
+	"auto_path_name", "auto_path_elem", and "found_main".
+
 2001-06-05  Martin Hunt  <hunt@redhat.com>                                    
+
 	* generic/gdbtk.c (_initialize_gdbtk): Don't close console yet.
 	(gdbtk_init): Wait until after tcl/tk stuff is all initialized
 	to close console (on Windows) and redirect ouput.

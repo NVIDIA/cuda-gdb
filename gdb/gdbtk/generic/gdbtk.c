@@ -364,10 +364,7 @@ gdbtk_init (argv0)
      char *argv0;
 {
   struct cleanup *old_chain;
-  int found_main;
   char *s;
-
-  Tcl_Obj *auto_path_elem, *auto_path_name;
 
   /* If there is no DISPLAY environment variable, Tk_Init below will fail,
      causing gdb to abort.  If instead we simply return here, gdb will

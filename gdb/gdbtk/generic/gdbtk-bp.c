@@ -24,6 +24,7 @@
 #include "linespec.h"
 #include "breakpoint.h"
 #include "tracepoint.h"
+#include "gdb-events.h"
 
 #include <tcl.h>
 #include "gdbtk.h"
@@ -199,7 +200,6 @@ gdb_find_bp_at_addr (clientData, interp, objc, objv)
 {
   int i;
   long addr;
-  struct breakpoint *b;
 
   if (objc != 2)
     {
@@ -419,7 +419,6 @@ gdb_set_bp (clientData, interp, objc, objv)
   int line, thread = -1;
   struct breakpoint *b;
   char *buf, *typestr;
-  Tcl_DString cmd;
   enum bpdisp disp;
 
   if (objc != 4 && objc != 5)
@@ -505,8 +504,7 @@ gdb_set_bp_addr (ClientData clientData, Tcl_Interp *interp, int objc,
   int thread = -1;
   long addr;
   struct breakpoint *b;
-  char *filename, *typestr, *buf;
-  Tcl_DString cmd;
+  char *typestr, *buf;
   enum bpdisp disp;
 
   if (objc != 3 && objc != 4)

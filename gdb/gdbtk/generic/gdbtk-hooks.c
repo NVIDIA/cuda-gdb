@@ -100,7 +100,6 @@ static void gdbtk_print_frame_info (struct symtab *, int, int, int);
 static void gdbtk_post_add_symbol (void);
 static void gdbtk_register_changed (int regno);
 static void gdbtk_memory_changed (CORE_ADDR addr, int len);
-static void tracepoint_notify (struct tracepoint *, const char *);
 static void gdbtk_selected_frame_changed (int);
 static void gdbtk_context_change (int);
 static void gdbtk_error_begin (void);
@@ -436,7 +435,6 @@ x_event (signo)
 {
   static volatile int in_x_event = 0;
   static Tcl_Obj *varname = NULL;
-  static int count = 0;
 
   /* Do nor re-enter this code or enter it while collecting gdb output. */
   if (in_x_event || in_fputs)
