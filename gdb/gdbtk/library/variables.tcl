@@ -340,6 +340,9 @@ class VariableWin {
 
 	set variable [getEntry $X $Y]
 	if {[string length $variable] > 0} {
+	  # First things first: highlight the variable we just selected
+	  $Hlist selection set $variable
+
 	    # Configure menu items
 	    # the title is always first..
 	    #set labelIndex [$Popup index "dummy"]
@@ -374,6 +377,16 @@ class VariableWin {
 		debug "configuring entry $i ([$ViewMenu entrycget $i -label]) to $fmt"
 		$ViewMenu entryconfigure $i \
 		    -command "$this setDisplay \{$variable\} $fmt"
+	    }
+
+	    if {$::tcl_platform(platform) == "windows"} {
+	      # Don't ask me why this works, but it does work around
+	      # a Win98/2000 Tcl bug with deleting entries from popups...
+	      set no [$Popup index end]
+	      for { set k 1 } { $k < $no } { incr k } {
+		$Popup insert 1 command 
+	      }
+	      $Popup delete 1 [expr {$no - 1}]
 	    }
 
 	    tk_popup $Popup $X $Y
