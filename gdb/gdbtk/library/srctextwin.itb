@@ -2489,7 +2489,6 @@ body SrcTextWin::LoadFromCache {w name asm lib} {
 
   } else {
     debug "name=$name"
-    set Stwc($full_name:pane) pane$filenum
     # If we are trying to load a source file, check the time
     # to see if we need to update it.  If we can't stat the
     # file then we probably can't open it either, so error 
@@ -2500,6 +2499,7 @@ body SrcTextWin::LoadFromCache {w name asm lib} {
 	debug "Could not stat file \"$name\" - \"$file_time\""
 	return -1
       } else {
+        set Stwc($full_name:pane) pane$filenum
 	set Stwc($name:mtime) $file_time
       }    
     } else {
@@ -2507,7 +2507,8 @@ body SrcTextWin::LoadFromCache {w name asm lib} {
       # check whether the executable is newer than the cached
       # disassembly.  For mixed files, we need to check BOTH
       # the source file mtime, and the executable time.
-
+      
+      set Stwc($full_name:pane) pane$filenum
       set Stwc($name:mtime) 0
     }
 
