@@ -701,10 +701,10 @@ proc gdbtk_memory_changed {} {
 #         - file_changed_hook                                      #
 #            Called in file_command. The tcl hook is               #
 #            "gdbtk_tcl_file_changed"                              #
-#         - pre_add_symbol_hook                                    #
+#         - deprecated_pre_add_symbol_hook                         #
 #            Called in symbol_file_add before loading. The tcl     #
 #            hook is "gdbtk_tcl_pre_add_symbol"                    #
-#         - post_add_symbol_hook                                   #
+#         - deprecated_post_add_symbol_hook                        #
 #            Called in symbol_file_add when finished loading       #
 #            a symbol file. The tcl hook is                        #
 #            "gdbtk_tcl_post_add_symbol"                           #

@@ -144,8 +144,8 @@ gdbtk_add_hooks (void)
   deprecated_ui_load_progress_hook = gdbtk_load_hash;
 
   ui_loop_hook = x_event;
-  pre_add_symbol_hook = gdbtk_pre_add_symbol;
-  post_add_symbol_hook = gdbtk_post_add_symbol;
+  deprecated_pre_add_symbol_hook = gdbtk_pre_add_symbol;
+  deprecated_post_add_symbol_hook = gdbtk_post_add_symbol;
   deprecated_file_changed_hook = gdbtk_file_changed;
   specify_exec_file_hook (gdbtk_exec_file_display);
 

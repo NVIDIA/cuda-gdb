@@ -1,5 +1,11 @@
 2004-06-24  Andrew Cagney  <cagney@gnu.org>
 
+	* generic/gdbtk-hooks.c (gdbtk_add_hooks): Update references to
+	pre_add_symbol_hook and post_add_symbol_hook, both deprecated.
+	* library/interface.tcl (gdbtk_memory_changed): Update comments.
+	
+2004-06-24  Andrew Cagney  <cagney@gnu.org>
+
 	* generic/gdbtk-hooks.c (ui_loop_hook, pre_add_symbol_hook)
 	(post_add_symbol_hook, selected_frame_level_changed_hook): Delete
 	extern declarations.
