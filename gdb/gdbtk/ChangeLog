@@ -4,7 +4,7 @@
 	 remote target (code previously at library/gdbmenubar.itcl).
 	(disconnect): Rename to...
 	(gdbtk_disconnect): New name for proc disconnect.
-	* library/gdbmenubar.itcl (do_connect): Remove the code mentioned
+	* library/srcmenubar.itcl (do_connect): Remove the code mentioned
 	above and call the new interface proc gdbtk_connect.
 	Also, call ::update idletasks after changing the state of the
 	menu entries.
