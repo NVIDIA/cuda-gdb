@@ -1,3 +1,9 @@
+2002-03-25  Alexandre Oliva  <aoliva@redhat.com>
+
+	* generic/gdbtk.c (HAS_STDARG): Define.
+	* generic/gdbtk-cmds.c (HAS_STDARG): Likewise.
+	* generic/gdbtk-hooks.c (HAS_STDARG): Likewise.
+
 2002-03-14  Keith Seitz  <keiths@redhat.com>
 
 	* library/bpwin.itb (constructor): Set some sane initial

@@ -35,6 +35,10 @@
 #include "top.h"
 #include "annotate.h"
 
+/* tcl header files includes varargs.h unless HAS_STDARG is defined,
+   but gdb uses stdarg.h, so make sure HAS_STDARG is defined.  */
+#define HAS_STDARG 1
+
 #include <tix.h>
 #include <itcl.h>
 
