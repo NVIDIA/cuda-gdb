@@ -2130,7 +2130,7 @@ gdb_disassemble_driver (low, high, mixed_source_and_assembly,
       if (strcmp (target_shortname, "child") == 0
           || strcmp (target_shortname, "procfs") == 0
           || strcmp (target_shortname, "vxprocess") == 0
-	  || strstr (target_shortname, "threads") != NULL)
+	  || strstr (target_shortname, "thread") != NULL)
 	/* It's a child process, read inferior mem */
         disassemble_from_exec = 0; 
       else

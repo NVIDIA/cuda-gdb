@@ -1,5 +1,11 @@
 2001-08-28  Keith Seitz  <keiths@redhat.com>
 
+	* generic/gdbtk-cmds.c (gdb_disassemble_driver): We should be
+	looking for "thread", not "threads" to determine if we have
+	a multi-threaded child process.
+
+2001-08-28  Keith Seitz  <keiths@redhat.com>
+
 	* library/bpwin.itb (build_win): Get rid of tixScrolledWindow
 	and use iwidgets::scrolledframe until something better comes
 	along.
