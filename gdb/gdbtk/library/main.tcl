@@ -127,9 +127,6 @@ if {[info exists env(GDBTK_DEBUG)] && $env(GDBTK_DEBUG) != 0} {
 # For testing
 set _test(interactive) 0
 
-# initialize state variables
-initialize_gdbtk
-
 # set traces on state variables
 trace variable gdb_running w do_state_hook
 trace variable gdb_downloading w do_state_hook
@@ -149,6 +146,9 @@ pref_set_defaults
 pref_read
 
 init_disassembly_flavor
+
+# initialize state variables
+initialize_gdbtk
 
 # Arrange for session code to notice when file changes.
 add_hook file_changed_hook Session::notice_file_change
