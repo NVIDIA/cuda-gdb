@@ -1,3 +1,8 @@
+2000-12-08  Tom Tromey  <tromey@redhat.com>
+
+	* console.itb (Console::invoke): Trim trailing newlines from
+	text.
+
 2000-12-07  Tom Tromey  <tromey@redhat.com>
 
 	* managedwin.itb (ManagedWin::reveal): Don't set focus.

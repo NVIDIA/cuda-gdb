@@ -397,6 +397,7 @@ body Console::invoke {} {
 
   incr _invoking
 
+  set text [string trimright $text \n]
   if {$text == ""} {
     set text [lindex $_history 0]
     $_twin insert {insert lineend} $text
