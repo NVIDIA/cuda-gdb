@@ -139,9 +139,10 @@ proc pref_read {} {
     # now set global options
     set gdb_ImageDir [file join $GDBTK_LIBRARY [pref get gdb/ImageDir]]
 
-    # finally set colors, from system if possible
-    pref_set_colors
   }
+
+  # finally set colors, from system if possible
+  pref_set_colors
 }
 
 # ------------------------------------------------------------------

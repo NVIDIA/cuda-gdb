@@ -1,3 +1,8 @@
+2002-08-01  Keith Seitz  <keiths@redhat.com>
+
+	* library/prefs.tcl (pref_read): Don't suppress setting the default
+	colors if the user has suppressed reading the preferences file.
+
 2002-07-31  Keith Seitz  <keiths@redhat.com>
 
 	* library/browserwin.itb (_full_funcs_combo): Remove "-modal"
