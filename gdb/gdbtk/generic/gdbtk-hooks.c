@@ -32,6 +32,7 @@
 #include "gdbcore.h"
 #include "tracepoint.h"
 #include "demangle.h"
+#include "gdb-events.h"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -66,33 +67,21 @@ volatile int in_fputs = 0;
    that it should forcibly detach from the target. */
 int gdbtk_force_detach = 0;
 
-/* Set/cleared by gdbtk_delete_breakpoint/tracepoint. Unfortunately,
-   clear_command (in breakpoint.c) takes the breakpoint off of the
-   breakpoint_chain before deleting the breakpoint. The BreakpointEvent
-   which is created as a result of any breakpoint/tracepoint event
-   calls gdb_get_breakpoint_info will, therefore, not find a breakpoint
-   about which to return information. So we keep a handle on the deleted
-   breakpoint when we're deleting it, and teach gdb_get_breakpoint_info
-   to check for this variable whenever a breakpoint lookup fails.
-
-   Why not just change BreakpointEvent? Good question. Answer: I refuse
-   to allow BreakpointEvents to be all public variables. They are not.
-   They ONLY depend on the breakpoint number (gdb's handle for them). */
-void *gdbtk_deleted_bp = NULL;
+/* From gdbtk-bp.c */
+extern void gdbtk_create_breakpoint (int);
+extern void gdbtk_delete_breakpoint (int);
+extern void gdbtk_modify_breakpoint (int);
+extern void gdbtk_create_tracepoint (struct tracepoint *);
+extern void gdbtk_delete_tracepoint (struct tracepoint *);
+extern void gdbtk_modify_tracepoint (struct tracepoint *);
 
 extern void (*pre_add_symbol_hook) (char *);
 extern void (*post_add_symbol_hook) (void);
 extern void (*selected_frame_level_changed_hook) (int);
 extern int (*ui_loop_hook) (int);
 
-static void gdbtk_create_tracepoint (struct tracepoint *);
-static void gdbtk_delete_tracepoint (struct tracepoint *);
-static void gdbtk_modify_tracepoint (struct tracepoint *);
 static void gdbtk_trace_find (char *arg, int from_tty);
 static void gdbtk_trace_start_stop (int, int);
-static void gdbtk_create_breakpoint (struct breakpoint *);
-static void gdbtk_delete_breakpoint (struct breakpoint *);
-static void gdbtk_modify_breakpoint (struct breakpoint *);
 static void gdbtk_attach (void);
 static void gdbtk_detach (void);
 static void gdbtk_file_changed (char *);
@@ -115,7 +104,7 @@ static void tracepoint_notify (struct tracepoint *, const char *);
 static void gdbtk_selected_frame_changed (int);
 static void gdbtk_context_change (int);
 static void gdbtk_error_begin (void);
-static void report_error (void);
+void report_error (void);
 static void gdbtk_annotate_signal (void);
 static void gdbtk_set_hook (struct cmd_list_element *cmdblk);
 
@@ -126,7 +115,6 @@ static void gdbtk_set_hook (struct cmd_list_element *cmdblk);
 
 void gdbtk_fputs (const char *, struct ui_file *);
 static int gdbtk_load_hash (const char *, unsigned long);
-static void breakpoint_notify (struct breakpoint *, const char *);
 
 /*
  * gdbtk_add_hooks - add all the hooks to gdb.  This will get called by the
@@ -136,6 +124,15 @@ static void breakpoint_notify (struct breakpoint *, const char *);
 void
 gdbtk_add_hooks (void)
 {
+  static struct gdb_events handlers;
+
+  /* Gdb event handlers */
+  handlers.breakpoint_create = gdbtk_create_breakpoint;
+  handlers.breakpoint_modify = gdbtk_modify_breakpoint;
+  handlers.breakpoint_delete = gdbtk_delete_breakpoint;
+  set_gdb_event_hooks (&handlers);
+
+  /* Hooks */
   command_loop_hook = tk_command_loop;
   call_command_hook = gdbtk_call_command;
   set_hook = gdbtk_set_hook;
@@ -146,10 +143,6 @@ gdbtk_add_hooks (void)
   print_frame_info_listing_hook = gdbtk_print_frame_info;
   query_hook = gdbtk_query;
   warning_hook = gdbtk_warning;
-
-  create_breakpoint_hook = gdbtk_create_breakpoint;
-  delete_breakpoint_hook = gdbtk_delete_breakpoint;
-  modify_breakpoint_hook = gdbtk_modify_breakpoint;
 
   interactive_hook = gdbtk_interactive;
   target_wait_hook = gdbtk_wait;
@@ -335,7 +328,7 @@ gdbtk_warning (warning, args)
 /* pop up a messagebox, or it can silently log the errors through */
 /* the gdbtk dbug command.  */
 
-static void
+void
 report_error ()
 {
   TclDebug ('E', Tcl_GetVar (gdbtk_interp, "errorInfo", TCL_GLOBAL_ONLY));
@@ -635,61 +628,6 @@ gdbtk_set_hook (struct cmd_list_element *cmdblk)
     }
 }
 
-/* The next three functions use breakpoint_notify to allow the GUI 
- * to handle creating, deleting and modifying breakpoints.  These three
- * functions are put into the appropriate gdb hooks in gdbtk_init.
- */
-
-static void
-gdbtk_create_breakpoint (b)
-     struct breakpoint *b;
-{
-  breakpoint_notify (b, "create");
-}
-
-static void
-gdbtk_delete_breakpoint (b)
-     struct breakpoint *b;
-{
-  /* Hack. See comments near top of this file. */
-  gdbtk_deleted_bp = b;
-  breakpoint_notify (b, "delete");
-  gdbtk_deleted_bp = NULL;
-}
-
-static void
-gdbtk_modify_breakpoint (b)
-     struct breakpoint *b;
-{
-  breakpoint_notify (b, "modify");
-}
-
-/* This is the generic function for handling changes in
- * a breakpoint.  It routes the information to the Tcl
- * command "gdbtk_tcl_breakpoint" in the form:
- *   gdbtk_tcl_breakpoint action b_number b_address b_line b_file
- * On error, the error string is written to gdb_stdout.
- */
-
-static void
-breakpoint_notify (b, action)
-     struct breakpoint *b;
-     const char *action;
-{
-  char *buf;
-
-  if (b->type != bp_breakpoint)
-    return;
-
-  /* We ensure that ACTION contains no special Tcl characters, so we
-     can do this.  */
-  xasprintf (&buf, "gdbtk_tcl_breakpoint %s %d", action, b->number);
-
-  if (Tcl_Eval (gdbtk_interp, buf) != TCL_OK)
-    report_error ();
-  free(buf); 
-}
-
 int
 gdbtk_load_hash (const char *section, unsigned long num)
 {
@@ -771,46 +709,6 @@ gdbtk_print_frame_info (s, line, stopline, noerror)
 {
   current_source_symtab = s;
   current_source_line = line;
-}
-
-static void
-gdbtk_create_tracepoint (tp)
-     struct tracepoint *tp;
-{
-  tracepoint_notify (tp, "create");
-}
-
-static void
-gdbtk_delete_tracepoint (tp)
-     struct tracepoint *tp;
-{
-  /* Hack. See comments near top of this file. */
-  gdbtk_deleted_bp = tp;
-  tracepoint_notify (tp, "delete");
-  gdbtk_deleted_bp = NULL;
-}
-
-static void
-gdbtk_modify_tracepoint (tp)
-     struct tracepoint *tp;
-{
-  tracepoint_notify (tp, "modify");
-}
-
-static void
-tracepoint_notify (tp, action)
-     struct tracepoint *tp;
-     const char *action;
-{
-  char *buf;
-
-  /* We ensure that ACTION contains no special Tcl characters, so we
-     can do this.  */
-  xasprintf (&buf, "gdbtk_tcl_tracepoint %s %d", action, tp->number);
-
-  if (Tcl_Eval (gdbtk_interp, buf) != TCL_OK)
-    report_error ();
-  free(buf); 
 }
 
 /*

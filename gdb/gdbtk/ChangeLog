@@ -1,5 +1,39 @@
 2001-05-10  Keith Seitz  <keiths@cygnus.com>
 
+	* generic/gdbtk-bp.c (breakpoint_list, breakpoint_list_size): New
+	variables. Gdb is forcing us to maintain our own breakpoint
+	database.
+	(Gdbtk_Breakpoint_Init): Initialize our breakpoint database.
+	(gdb_find_bp_at_addr): Use our breakpoint database.
+	(gdb_find_bp_at_line): Ditto.
+	(gdb_get_breakpoint_list): Ditto.
+	(gdb_get_breakpoint_info): Remove deleted breakpoint hack.
+	(gdbtk_create_breakpoint): Moved here from gdbtk-hooks.c.
+	Add breakpoint to our breakpoint database.
+	(gdbtk_modify_breakpoint): Ditto the move.
+	(gdbtk_delete_breakpoint): Ditto the move.
+	Remove breakpoint from our database.
+	(gdb_get_tracepoint_info): Remove delete tracepoint hack.
+	It's not needed for tracepoints: they were implemented properly.
+	(gdbtk_create_tracepoint): Moved here from gdbtk-hooks.c.
+	(gdbtk_modify_tracepoint): Ditto.
+	(gdbtk_delete_tracepoint): Ditto.
+	* generic/gdbtk-hooks.c: Include "gdb-events.h".
+	(gdbtk_create_breakpoint): Moved to gdbtk-bp.c
+	(gdbtk_modify_breakpoint): Ditto.
+	(gdbtk_delete_breakpoint): Ditto.
+	(breakpoint_notify): Ditto.
+	(gdbtk_create_tracepoint): Ditto.
+	(gdbtk_modify_tracepoint): Ditto.
+	(gdbtk_delete_tracepoint): Ditto.
+	(tracepoint_notify): Ditto.
+	(report_error): No longer static.
+	(gdbtk_add_hooks): Create our own event handler
+	vector and register breakpoint_create, breakpoint_modify,
+	and breakpoint_delete handlers in gdbtk-bp.c.
+
+2001-05-10  Keith Seitz  <keiths@cygnus.com>
+
 	* generic/gdbtk-cmds.c: Put on diet. All breakpoint-,
 	tracepoint-, register-, and stack-related functions moved
 	into separate files.
