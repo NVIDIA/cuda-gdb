@@ -178,10 +178,10 @@ class TraceDlg {
 
     # The three frames of this dialog
     set bbox [frame $f.bbox];		     # for holding OK,CANCEL DELETE buttons
-    tixLabelFrame $f.exp -label "Experiment"
-    set exp [$f.exp subwidget frame];	     # the "Experiment" frame
-    tixLabelFrame $f.act -label "Actions"
-    set act [$f.act subwidget frame];	     # the "Actions" frame
+    Labelledframe $f.exp -text "Experiment"
+    set exp [$f.exp get_frame];	     # the "Experiment" frame
+    Labelledframe $f.act -text "Actions"
+    set act [$f.act get_frame];	     # the "Actions" frame
 
     # Setup the button box
     button $bbox.ok     -text OK -command "$this ok" -width 6
@@ -301,14 +301,17 @@ class TraceDlg {
     pack $pass_frame.ent -side right -padx 10 -pady 5
 
     # Actions
-    tixScrolledListBox $act_frame.lb -scrollbar auto 
-    set ActionLB [$act_frame.lb subwidget listbox]
-    $ActionLB configure -selectmode multiple -exportselection 0
+    #tixScrolledListBox $act_frame.lb -scrollbar auto 
+    set ActionLB $act_frame.lb
+    iwidgets::scrolledlistbox $act_frame.lb -hscrollmode dynamic \
+      -vscrollmode dynamic -selectmode multiple -exportselection 0 \
+      -dblclickcommand [code $this edit] \
+      -selectioncommand [code $this set_delete_action_state $ActionLB $new_frame.del_but] \
+      -background [pref get gdb/font/normal_bg]
+    [$ActionLB component listbox] configure -background [pref get gdb/font/normal_bg]
     label $act_frame.lbl -text {Actions}
     pack $act_frame.lbl -side top
     pack $act_frame.lb -side bottom -fill both -expand 1 -padx 5 -pady 5
-    $act_frame.lb configure -command "$this edit" \
-      -browsecmd "$this set_delete_action_state $ActionLB $new_frame.del_but"
 
     # New actions
     combobox::combobox $new_frame.combo -maxheight 15 -editable 0 -font src-font \
@@ -621,48 +624,50 @@ class TraceDlg {
   method edit {} {
     
     set Selection [$ActionLB curselection]
-    set action [$ActionLB get $Selection]
-    if [regexp "collect" $action] {
-      scan $action "collect: %s" data
-      set steps 0
-      set whilestepping 0
-    } elseif [regexp "while-stepping" $action] {
-      scan $action "while-stepping (%d): %s" steps data
-      set whilestepping 1
-    } else {
-      debug "unknown action: $action"
-      return
-    }
-    
-    set data [split $data ,] 
-    set len [llength $data]
-    set real_data {}
-    set special 0
-    for {set i 0} {$i < $len} {incr i} {
-      set a [lindex $data $i]
-      if {[string range $a 0 1] == "\$("} {
-	set special 1
-	set b $a
-      } elseif {$special} {
-	lappend b $a
-	if {[string index $a [expr {[string length $a]-1}]] == ")"} {
-	  lappend real_data [join $b ,]
-	  set special 0
-	}
+    if {$Selection != ""} {
+      set action [$ActionLB get $Selection]
+      if [regexp "collect" $action] {
+	scan $action "collect: %s" data
+	set steps 0
+	set whilestepping 0
+      } elseif [regexp "while-stepping" $action] {
+	scan $action "while-stepping (%d): %s" steps data
+	set whilestepping 1
       } else {
-	lappend real_data $a
+	debug "unknown action: $action"
+	return
       }
-    }
     
-    # !! lindex $Lines 0 -- better way?
-    if {$Lines != {}} {
-      ManagedWin::open ActionDlg -File $File -Line [lindex $Lines 0] \
-	-WhileStepping $whilestepping -Number [lindex $Number 0] \
-	-Callback "$this done" -Data $real_data -Steps $steps
-    } else {
-      ManagedWin::open ActionDlg -File $File -Address [lindex $Addresses 0] \
-	-WhileStepping $whilestepping -Number [lindex $Number 0] \
-	-Callback "$this done" -Data $real_data -Steps $steps
+      set data [split $data ,] 
+      set len [llength $data]
+      set real_data {}
+      set special 0
+      for {set i 0} {$i < $len} {incr i} {
+	set a [lindex $data $i]
+	if {[string range $a 0 1] == "\$("} {
+	  set special 1
+	  set b $a
+	} elseif {$special} {
+	  lappend b $a
+	  if {[string index $a [expr {[string length $a]-1}]] == ")"} {
+	    lappend real_data [join $b ,]
+	    set special 0
+	  }
+	} else {
+	  lappend real_data $a
+	}
+      }
+
+      # !! lindex $Lines 0 -- better way?
+      if {$Lines != {}} {
+	ManagedWin::open ActionDlg -File $File -Line [lindex $Lines 0] \
+	  -WhileStepping $whilestepping -Number [lindex $Number 0] \
+	  -Callback [list [code $this done]] -Data $real_data -Steps $steps
+      } else {
+	ManagedWin::open ActionDlg -File $File -Address [lindex $Addresses 0] \
+	  -WhileStepping $whilestepping -Number [lindex $Number 0] \
+	  -Callback [list [code $this done]] -Data $real_data -Steps $steps
+      }
     }
   }
 

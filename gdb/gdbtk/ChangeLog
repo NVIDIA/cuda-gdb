@@ -1,5 +1,16 @@
 2001-08-28  Keith Seitz  <keiths@redhat.com>
 
+	* library/tracedlg.tcl (build_win): Use libgui's
+	Labelledframe instead of tixLabelFrame.
+	Use iwidgets::scrolledlistbox instead of tixScrolledListbox.
+	(edit): Check if there is a selection in the listbox
+	before proceeding.
+	Escape method callbacks before passing to ActionDlg.
+
+	* library/actiondlg.tcl (constructor): Use "gdb_reginfo"
+
+2001-08-28  Keith Seitz  <keiths@redhat.com>
+
 	* library/tdump.tcl (class TdumpWin): Inherit from GDBWin
 	and ManagedWin.
 	(constructor): Remove old itcl2 handling code and name the

@@ -23,7 +23,7 @@ class ActionDlg {
 
     eval itk_initialize $args
 
-    set Registers [gdb_regnames]
+    set Registers [gdb_reginfo name]
     if {$Line != ""} {
       set Locals  [gdb_get_locals "$File:$Line"]
       set Args    [gdb_get_args "$File:$Line"]
