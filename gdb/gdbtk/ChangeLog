@@ -1,3 +1,8 @@
+2003-02-14  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/globalpref.itb (GlobalPref::_change_icons): Fix
+	curselection call for combobox.
+
 2003-02-12  Andrew Cagney  <ac131313@redhat.com>
 
 	* generic/gdbtk-hooks.c (tk_command_loop): Move function ...

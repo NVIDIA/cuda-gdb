@@ -314,8 +314,7 @@ itcl::body GlobalPref::_resize_font_item_height {} {
 #  PRIVATE METHOD:  _change_icons
 # ------------------------------------------------------------------
 itcl::body GlobalPref::_change_icons {w args} {
-  debug
-  set index [$w list curselection]
+  set index [$w curselection]
   if {$index != ""} {
     set _new(gdb/ImageDir) [lindex $_icondirlist $index]
   }
