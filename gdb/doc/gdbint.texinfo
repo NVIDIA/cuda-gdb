@@ -38,7 +38,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.196 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.197 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -2925,12 +2925,6 @@ C@t{++} reference type.
 Define if the compiler promotes a @code{short} or @code{char}
 parameter to an @code{int}, but still reports the parameter as its
 original type, rather than the promoted type.
-
-@item BELIEVE_PCC_PROMOTION_TYPE
-@findex BELIEVE_PCC_PROMOTION_TYPE
-Define this if @value{GDBN} should believe the type of a @code{short}
-argument when compiled by @code{pcc}, but look within a full int space to get
-its value.  Only defined for Sun-3 at present.
 
 @item BITS_BIG_ENDIAN
 @findex BITS_BIG_ENDIAN
