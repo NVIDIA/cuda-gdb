@@ -2128,24 +2128,11 @@ gdb_disassemble_driver (CORE_ADDR low, CORE_ADDR high,
               && le[i].pc == le[i + 1].pc)
             continue;		/* Ignore duplicates */
 
-	  /* GCC sometimes emits line directives with a linenumber
-	     of 0.  It does this to handle live range splitting.
-	     This may be a bug, but we need to be able to handle it.
-	     For now, use the previous instructions line number.
-	     Since this is a bit of a hack anyway, we will just lose
-	     if the bogus sline is the first line of the range.  For
-	     functions, I have never seen this to be the case.  */
-	  
-	  if (le[i].line != 0)
-	    {
-	      mle[newlines].line = le[i].line;
-	    }
-	  else
-	    {
-	      if (newlines > 0)
-		mle[newlines].line = mle[newlines - 1].line;
-	    }
-	  
+	  /* Skip any end-of-function markers.  */
+	  if (le[i].line == 0)
+	    continue;
+
+	  mle[newlines].line = le[i].line;
           if (le[i].line > le[i + 1].line)
             out_of_order = 1;
           mle[newlines].start_pc = le[i].pc;

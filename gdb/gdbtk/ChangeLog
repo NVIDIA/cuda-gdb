@@ -1,3 +1,8 @@
+2002-04-04  Daniel Jacobowitz  <drow@mvista.com>
+
+	* generic/gdbtk-cmds.c (gdb_disassemble_driver): Skip
+	end-of-function markers in the line table.
+
 2002-04-01  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-cmds.c (gdb_load_disassembly): Use string_to_core_addr
