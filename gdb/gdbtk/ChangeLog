@@ -1,3 +1,15 @@
+2002-01-02  Keith Seitz  <keiths@redhat.com>
+
+	* library/console.ith (insert): Add tag parameter.
+	(einsert): Delete.
+	* library/console.itb: (insert): Add tag parameter.
+	(einsert): Delete.
+	* library/interface.tcl (gdbtk_tcl_fputs): Use Console::insert.
+	(gdbtk_tcl_fputs_error): Likewise.
+	(gdbtk_tcl_fputs_log): Likewise.
+	(gdbtk_tcl_fputs_target): Likewise.
+	(set_target): Likewise.
+
 2002-01-02  Ian Roxborough  <irox@redhat.com>
 
 	* library/managedwin.itb (ManagedWin::_create):  When

@@ -219,13 +219,13 @@ body Console::busy {event} {
 # ------------------------------------------------------------------
 #  METHOD:  insert - insert new text in the text widget
 # ------------------------------------------------------------------
-body Console::insert {line} {
+body Console::insert {line {tag ""}} {
   if {$_needNL} {
     $_twin insert {insert linestart} "\n"
   }
   # Remove all \r characters from line.
   set line [join [split $line \r] {}]
-  $_twin insert {insert -1 line lineend} $line
+  $_twin insert {insert -1 line lineend} $line $tag
 
   set nlines [lindex [split [$_twin index end] .] 0]
   if {$nlines > $throttle} {
@@ -236,19 +236,6 @@ body Console::insert {line} {
   $_twin see insert
   set _needNL 0
   ::update idletasks
-}
-
-#-------------------------------------------------------------------
-#  METHOD:  einsert - insert error text in the text widget
-# ------------------------------------------------------------------
-body Console::einsert {line tag} {
-  debug $line
-  if {$_needNL} {
-    $_twin insert end "\n"
-  }
-  $_twin insert end $line $tag
-  $_twin see insert
-  set _needNL 0
 }
 
 # ------------------------------------------------------------------

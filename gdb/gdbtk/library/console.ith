@@ -26,8 +26,7 @@ class Console {
 
     method constructor {args}
     method destructor {}   
-    method insert {line}
-    method einsert {line tag}
+    method insert {line {tag ""}}
     method invoke {}
     method _insertion {args}
     method get_text {}

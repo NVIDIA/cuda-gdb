@@ -418,7 +418,7 @@ proc echo {args} {
 # ------------------------------------------------------------------
 proc gdbtk_tcl_fputs_error {message} {
   if {$::gdbtk_state(console) != ""} {
-    $::gdbtk_state(console) einsert $message err_tag
+    $::gdbtk_state(console) insert $message err_tag
     update
   }
 }
@@ -428,7 +428,7 @@ proc gdbtk_tcl_fputs_error {message} {
 # ------------------------------------------------------------------
 proc gdbtk_tcl_fputs_log {message} {
   if {$::gdbtk_state(console) != ""} {
-    $::gdbtk_state(console) einsert $message log_tag
+    $::gdbtk_state(console) insert $message log_tag
     update
   }
 }
@@ -438,7 +438,7 @@ proc gdbtk_tcl_fputs_log {message} {
 # ------------------------------------------------------------------
 proc gdbtk_tcl_fputs_target {message} {
   if {$::gdbtk_state(console) != ""} {
-    $::gdbtk_state(console) einsert $message target_tag
+    $::gdbtk_state(console) insert $message target_tag
     update
   }
 }
@@ -1106,7 +1106,7 @@ necessary,\nmodify the port setting with the debugger preferences."
     
     if {![catch {pref get gdb/load/$gdb_target_name-after_attaching} aa] && $aa != ""} {
       if {[catch {gdb_cmd $aa} err]} {
-	catch {[ManagedWin::find Console] einsert $err err_tag}
+	catch {[ManagedWin::find Console] insert $err err_tag}
       }
     }
     set gdb_target_changed 0
@@ -1429,7 +1429,7 @@ proc gdbtk_nexti {} {
   catch {gdb_immediate nexti}
 }
 
-  # ------------------------------------------------------------------
+# ------------------------------------------------------------------
 #  PROC: gdbtk_attached
 # ------------------------------------------------------------------
 #
