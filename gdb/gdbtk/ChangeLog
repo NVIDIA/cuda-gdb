@@ -1,3 +1,11 @@
+2001-08-02  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-bp.c (gdb_get_breakpoint_info): Update
+	with recent breakpoint structure changes in gdb.
+	(gdb_set_bp_addr): Likewise.
+	(gdb_get_tracepoint_info): Update with recent tracepoint
+	structure changes in gdb.
+
 2001-07-31  Elena Zannoni  <ezannoni@redhat.com>
 
 	* generic/gdbtk-cmds.c: Don't include regcache.h.

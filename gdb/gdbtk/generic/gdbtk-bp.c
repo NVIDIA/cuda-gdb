@@ -343,7 +343,7 @@ gdb_get_breakpoint_info (ClientData clientData, Tcl_Interp *interp, int objc,
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
 			    Tcl_NewStringObj (bptypes[b->type], -1));
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-			    Tcl_NewBooleanObj (b->enable == enabled));
+			    Tcl_NewBooleanObj (b->enable_state == bp_enabled));
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
 			    Tcl_NewStringObj (bpdisp[b->disposition], -1));
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
@@ -456,9 +456,9 @@ gdb_set_bp (clientData, interp, objc, objv)
       return TCL_ERROR;
     }
   if (strncmp (typestr, "temp", 4) == 0)
-    disp = del;
+    disp = disp_del;
   else if (strncmp (typestr, "normal", 6) == 0)
-    disp = donttouch;
+    disp = disp_donttouch;
   else
     {
       Tcl_SetStringObj (result_ptr->obj_ptr,
@@ -538,9 +538,9 @@ gdb_set_bp_addr (ClientData clientData, Tcl_Interp *interp, int objc,
       return TCL_ERROR;
     }
   if (strncmp (typestr, "temp", 4) == 0)
-    disp = del;
+    disp = disp_del;
   else if (strncmp (typestr, "normal", 6) == 0)
-    disp = donttouch;
+    disp = disp_donttouch;
   else
     {
       Tcl_SetStringObj (result_ptr->obj_ptr,
@@ -817,7 +817,7 @@ gdb_get_tracepoint_info (ClientData clientData, Tcl_Interp *interp,
     free (tmp);
   }
   Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
-			    Tcl_NewIntObj (tp->enabled));
+			    Tcl_NewIntObj (tp->enabled_p));
   Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
 			    Tcl_NewIntObj (tp->pass_count));
   Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
