@@ -1,3 +1,10 @@
+2005-01-19  Keith Seitz  <kseitz@sources.redhat.com>
+
+	* Makefile.in: Regenerate.
+	* aclocal.m4: Regenerate.
+	* plugins/Makefile.in; Regenerate.
+	* plugins/aclocal.m4: Regenerate.
+
 2005-01-17  Keith Seitz  <kseitz@sources.redhat.com>
 
 	* generic/gdbtk-varobj.c (variable_value): Remove all instances
