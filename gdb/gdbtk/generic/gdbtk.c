@@ -98,6 +98,8 @@ int target_is_native (struct target_ops *t);
 
 int gdbtk_test (char *);
 
+static void view_command (char *, int);
+
 /* Handle for TCL interpreter */
 Tcl_Interp *gdbtk_interp = NULL;
 
@@ -568,6 +570,9 @@ gdbtk_init (char *argv0)
   add_com ("tk", class_obscure, tk_command,
 	   "Send a command directly into tk.");
 
+  add_com ("view", class_obscure, view_command,
+	   "View a location in the source window.");
+
   /*
    * Set the variable for external editor:
    */
@@ -740,4 +745,28 @@ tk_command (char *cmd, int from_tty)
   printf_unfiltered ("%s\n", result);
 
   do_cleanups (old_chain);
+}
+
+static void
+view_command (char *args, int from_tty)
+{
+  char *script;
+  struct cleanup *old_chain;
+
+  if (args != NULL)
+    {
+      xasprintf (&script,
+		 "[lindex [ManagedWin::find SrcWin] 0] location BROWSE_TAG [gdb_loc %s]",
+		 args);
+      old_chain = make_cleanup (xfree, script);
+      if (Tcl_Eval (gdbtk_interp, script) != TCL_OK)
+	{
+	  Tcl_Obj *obj = Tcl_GetObjResult (gdbtk_interp);
+	  error (Tcl_GetStringFromObj (obj, NULL));
+	}
+
+      do_cleanups (old_chain);
+    }
+  else
+    error ("Argument required (location to view)");
 }

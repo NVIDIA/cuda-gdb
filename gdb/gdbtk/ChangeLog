@@ -1,3 +1,9 @@
+2002-08-14  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk.c (view_command): New function to display
+	location in source window.
+	(gdbtk_init): Add new gdb "view" command.
+
 2002-08-06  Keith Seitz  <keiths@redhat.com>
 
 	* library/srcwin.itb (_build_win): Anchor status label so that
