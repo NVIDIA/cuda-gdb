@@ -1,5 +1,5 @@
-# Target selection dialog for GDBtk.
-# Copyright 1997, 1998, 1999 Cygnus Solutions
+# Target selection dialog for Insight.
+# Copyright 1997, 1998, 1999, 2000, 2001, 2002 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -253,6 +253,14 @@ body TargetSelection::init_target_db {} {
   set gdb_target(ciscotcp,cmd) "cisco tcpX"
   set gdb_target(ciscotcp,runlist) {1 0 0 0}
   set gdb_target(ciscotcp,after_attaching) "set os cisco"
+
+  # VxWorks
+  set gdb_target(vxworks,pretty-name) "VxWorks RDB"
+  set gdb_target(vxworks,defbaud) "ETH"
+  set gdb_target(vxworks,baud-rates) {}
+  set gdb_target(vxworks,cmd) "vxworks ethX"
+  set gdb_target(vxworks,runlist) { 1 0 1 1}
+  set gdb_target(vxworks,after_attaching) { sym vxWorks.st }
 }
 
 body TargetSelection::default_port {} {

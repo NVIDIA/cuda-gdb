@@ -1,3 +1,10 @@
+2002-02-12  Keith Seitz  <keiths@redhat.com>
+
+	From Don Bowman <don@sandvine.com>:
+	* library/targetselection.itb (init_target_db): Add target
+	vxWorks.
+        Update copyright.
+
 2002-02-10  Daniel Jacobowitz  <drow@mvista.com>
 
 	* generic/gdbtk-cmds.c (gdb_listfuncs): Don't call
