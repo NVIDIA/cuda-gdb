@@ -1,3 +1,9 @@
+2000-03-09  Elena Zannoni  <ezannoni@kwikemart.cygnus.com>
+
+	From: James Ingham <jingham@leda.cygnus.com>: 
+	* attachdlg.itb (build_win): Pack the dialog better, so that when
+ 	window is resized components are not hidden.
+
 2000-03-02  Elena Zannoni  <ezannoni@kwikemart.cygnus.com>
 
         * attachdlg.itb: Give a name to the window.

@@ -101,8 +101,8 @@ body AttachDlg::build_win {} {
 
   pack $itk_component(button_box) -side bottom -fill x \
     -pady 4 -padx 4
+  pack $itk_component(symbol_label) -side bottom -fill x -pady 4 -padx 4
   pack $itk_component(choose_pid) -fill both -expand 1 -pady 4 -padx 4
-  pack $itk_component(symbol_label) -fill x -pady 4 -padx 4
 
   after idle [list update idletasks;  $this list_pids]
 
