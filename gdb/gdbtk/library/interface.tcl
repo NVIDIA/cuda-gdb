@@ -113,8 +113,14 @@ proc gdbtk_tcl_preloop { } {
 
   if {$gdb_exe_name != ""} {
     # At startup, file_changed_hook is called too late for us, so we
-    # must notice the initial session by hand.
+    # must notice the initial session by hand.  If the arguments exist
+    # -- if the user used `gdb --args' -- then we want the new
+    # arguments to override the session's arguments.
+    set current_args [gdb_get_inferior_args]
     session_notice_file_change
+    if {[string length $current_args] > 0} {
+      gdb_set_inferior_args $current_args
+    }
   }
   
   gdbtk_update

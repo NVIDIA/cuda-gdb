@@ -1,3 +1,8 @@
+2001-11-21  Tom Tromey  <tromey@redhat.com>
+
+	* library/interface.tcl (gdbtk_tcl_preloop): Override session's
+	command-line arguments if required.
+
 2001-11-20  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk.c (gdbtk_init): If DISPLAY is not set on Unix,
