@@ -71,6 +71,8 @@ body ManagedWin::shutdown {} {
   set activeWins {}
   foreach win $manage_active {
     if {[$win isa ManagedWin]} {
+      set g [wm geometry [winfo toplevel [namespace tail $win]]]
+      pref setd gdb/geometry/[namespace tail $win] $g
       lappend activeWins [$win pickle]
     }
   }

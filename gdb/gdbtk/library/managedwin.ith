@@ -81,21 +81,11 @@ class ManagedWin {
       set manage_active [lreplace $manage_active $i $i]
     }
 
-    # save geometry
-    set g [wm geometry [winfo toplevel [namespace tail $this]]]
-    pref setd gdb/geometry/[namespace tail $this] $g
-
     # If no toplevels remain, quit.  However, check the quit_if_last
     # flag since we might be doing something like displaying a 
     # splash screen at startup...
 
     if {!$numTopWins && [quit_if_last]} {
-      # save window positions of remaining windows
-      foreach obj $manage_active {
-	set g [wm geometry [winfo toplevel [namespace tail $obj]]]
-	pref setd gdb/geometry/[namespace tail $obj] $g
-      }
-      pref_save
       gdb_force_quit
     } else {
       destroy_toplevel

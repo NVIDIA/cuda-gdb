@@ -1,5 +1,12 @@
 2001-03-01  Nicholas Duffek  <nsd@redhat.com>
 
+	* library/managedwin.itb (ManagedWin::shutdown): Save each
+	managed window's geometry as a preference.
+	* library/managedwin.ith (ManagedWin::destructor): Don't save
+	managed windows' geometries as preferences.
+
+2001-03-01  Nicholas Duffek  <nsd@redhat.com>
+
 	* library/srctextwin.itb (SrcTextWin::location): Clear previous
 	pane's cursor after switching panes.
 
