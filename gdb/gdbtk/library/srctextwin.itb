@@ -500,7 +500,7 @@ body SrcTextWin::config_win {win {asm S}} {
   $win configure -font $font
   
   setTabs $win $asm
-  
+
   # set up some tags.  should probably be done differently
   # !! change bg?
   
@@ -681,8 +681,10 @@ body SrcTextWin::config_win {win {asm S}} {
   bind_plain_key $win Up [list %W yview scroll -1 units]
   bind_plain_key $win Down [list %W yview scroll +1 units]
 
-  # Make key bindings usable immediately (without mouse click in window).
-  focus $win
+  # After loading a new file, focus sometimes gets lost
+  # so point it back to this window if it doesn't already
+  # point elsewhere.
+  if {[focus -displayof $win] == ""} {focus $win}
 }
 
 # ------------------------------------------------------------------

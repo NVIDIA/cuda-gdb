@@ -1,3 +1,8 @@
+2002-01-03  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/srctextwin.itb: Set focus on srcwin only
+	if another window doesn't have the focus.
+
 2002-01-02  Keith Seitz  <keiths@redhat.com>
 
 	* library/interface.tcl (set_exe): Allow users to debug
