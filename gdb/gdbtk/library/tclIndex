@@ -602,3 +602,4 @@ set auto_index(::TargetSelection::set_run) [list source [file join $dir targetse
 set auto_index(::TargetSelection::target_trace) [list source [file join $dir targetselection.itb]]
 set auto_index(::TargetSelection::valid_target) [list source [file join $dir targetselection.itb]]
 set auto_index(::TargetSelection::native_debugging) [list source [file join $dir targetselection.itb]]
+set auto_index(::Editor::edit) [list source [file join $dir editor.tcl]]

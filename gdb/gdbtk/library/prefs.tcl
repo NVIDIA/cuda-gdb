@@ -409,6 +409,9 @@ proc pref_set_defaults {} {
   pref define gdb/mem/ascii_char .
   pref define gdb/mem/bytes_per_row 16
   pref define gdb/mem/color green
+
+  # External editor.
+  pref define gdb/editor ""
 }
 
 # This traces the global/fixed font and forces src-font to

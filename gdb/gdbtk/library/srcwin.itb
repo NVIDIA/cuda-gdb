@@ -684,26 +684,20 @@ body SrcWin::set_execution_status { {line ""} {pc ""}} {
 #  PUBLIC METHOD:  edit - invoke external editor
 # ------------------------------------------------------------------
 body SrcWin::edit {} {
-  global enable_external_editor external_editor_command
+  global external_editor_command
   # If external editor is enabled, pass the file to the specified command
-    
+
   if {$current(filename) == ""} {
     tk_dialog .warn {Edit} {No file is loaded in the source window.} error 0 Ok
     return
   }
-  
+
   if {[catch {$twin report_source_location} loc_info]} {
     tk_dialog .warn "Edit" "No source file selected" error 0 Ok
     return
   }
-  
-  
-  if {[info exists enable_external_editor] && $enable_external_editor} {
-    if {[catch {uplevel \#0 "$external_editor_command edit $loc_info"} ]} {
-      tk_dialog .warn-sn "Edit" $err error 0 Ok
-    }
-    return
-  }  
+
+  Editor::edit $loc_info
 }
 
 # ------------------------------------------------------------------

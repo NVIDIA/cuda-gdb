@@ -2138,10 +2138,8 @@ body SrcTextWin::do_source_popup { X Y x y } {
 
   $popups(source) add command -label "Open Another Source Window" \
     -command {ManagedWin::open SrcWin -force}
-  if {[info exists ::enable_external_editor] && $::enable_external_editor} {
-    $popups(source) add command -label "Open Source in external editor" \
-      -command [list $parent edit]
-  }
+  $popups(source) add command -label "Open Source in external editor" \
+    -command [code $parent edit]
 
   tk_popup $popups(source) $X $Y 
 }

@@ -83,15 +83,10 @@ x_event_wrapper (signo)
 }
 
  /*
-  * These two variables control the interaction with an external editor.
-  * If enable_external_editor is set at startup, BEFORE Gdbtk_Init is run
-  * then the Tcl variable of the same name will be set, and a command will
-  * called external_editor_command will be invoked to call out to the
-  * external editor.  We give a dummy version here to warn if it is not set.
+  * This variable controls the interaction with an external editor.
   */
-int enable_external_editor = 0;
-char *external_editor_command = "tk_dialog .warn-external \\\n\
-\"No command is specified.\nUse --tclcommand <tcl/file> or --external-editor <cmd> to specify a new command\" 0 Ok";
+
+char *external_editor_command = NULL;
 
 extern int Tktable_Init (Tcl_Interp * interp);
 
@@ -585,13 +580,16 @@ gdbtk_init (argv0)
 	   "Send a command directly into tk.");
 
   /*
-   * Set the variables for external editor:
+   * Set the variable for external editor:
    */
 
-  Tcl_SetVar (gdbtk_interp, "enable_external_editor",
-	      enable_external_editor ? "1" : "0", 0);
-  Tcl_SetVar (gdbtk_interp, "external_editor_command",
-	      external_editor_command, 0);
+  if (external_editor_command != NULL)
+    {
+      Tcl_SetVar (gdbtk_interp, "external_editor_command",
+		  external_editor_command, 0);
+      xfree (external_editor_command);
+      external_editor_command = NULL;
+    }
 
   /* close old output and send new to GDBTK */
   ui_file_delete (gdb_stdout);

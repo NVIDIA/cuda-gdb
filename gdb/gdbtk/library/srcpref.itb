@@ -34,6 +34,7 @@ body SrcPref::constructor {args} {
   set saved(gdb/src/source2_fg)       [pref get gdb/src/source2_fg]
   set saved(gdb/src/tab_size)         [pref get gdb/src/tab_size]
   set saved(gdb/mode)                 [pref get gdb/mode]
+  set saved(gdb/editor)		      [pref get gdb/editor]
 }
 
 # ------------------------------------------------------------------
@@ -170,6 +171,13 @@ body SrcPref::build_win {} {
     set current_disassembly_flavor ""
   }
 
+  # External editor.
+  frame $f.exted
+  label $f.exted.l -text "External Editor: "
+  entry $f.exted.e -width 40 -textvariable [pref varname gdb/editor]
+  pack $f.exted.l -side left
+  pack $f.exted.e -side left -padx 4
+
   pack $f.colors -fill both -expand 1
   pack $f.rmv  -fill both -expand yes
   pack $f.x -fill x -expand yes
@@ -177,6 +185,8 @@ body SrcPref::build_win {} {
   if {$have_disassembly_flavor} {
     pack $f.dis -side top -fill x -padx 4
   }
+
+  pack $f.exted -side top -fill x -padx 4 -pady 4
 
   button $itk_interior.f.b.ok -text OK -width 7 -underline 0 -command [code $this _save]
   button $itk_interior.f.b.apply -text Apply -width 7 -underline 0 -command [code $this _apply]

@@ -1,3 +1,20 @@
+2001-10-02  Tom Tromey  <tromey@redhat.com>
+
+	* library/tclIndex: Updated.
+	* library/prefs.tcl (pref_set_defaults): Define gdb/editor
+	preference.
+	* library/srcpref.itb (SrcPref::constructor): Save gdb/editor
+	preference.
+	(SrcPref::build_win): Added external editor control.
+	* library/srctextwin.itb (SrcTextWin::do_source_popup): Always
+	enable external editor.  Use `code' instead of `list'.
+	* library/srcwin.itb (SrcWin::edit): Use Editor::edit.
+	* library/editor.tcl: New file.
+	* generic/gdbtk.c (enable_external_editor): Removed.
+	(external_editor_command): Default to NULL.
+	(gdbtk_init): Don't set enable_external_editor.  Free external
+	editor command when finished with it.
+
 2001-09-28  Tom Tromey  <tromey@redhat.com>
 
 	* library/console.itb (Console::_operate_and_get_next): New method.
