@@ -1,3 +1,10 @@
+2002-01-18  Keith Seitz  <keiths@redhat.com>
+
+	* console.test: Don't rely on "event generate" to do
+	keystrokes. It just doesn't work. Use the console window's
+	"test" method instead.
+	Use Console::test instead of Console::get_text.
+
 2002-01-15  Keith Seitz  <keiths@redhat.com>
 
 	* c_variable.test (1.4,2.14): Remove test for local frame
