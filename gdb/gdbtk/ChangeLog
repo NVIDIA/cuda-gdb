@@ -1,3 +1,79 @@
+2002-05-15  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/help/register.html: Rewrite docs.
+	
+	* library/regwin.ith (_types): New private variable array to save
+	the possible types for each register.
+	(_type): New private variable array to save the selected type for 
+	each register.
+	(_rows): New private variable. Number of rows in the table.
+	(_cols): New private variable. Number of cols in the table.
+	(_load_prefs): New private method.
+	(_open_memory): New private method.
+	(_edit_menu): Deleted:
+	(_select): Deleted.
+	(_change_format): Add optional type argument.
+	
+	* library/regwin.itb (RegWin::_load_prefs): New method. Collects
+	all the prefs stuff here instead of in _layout_table. Prefs
+	code was all rewritten to handle new types and formats.
+	(RegWin::_build_win): Disable Double-1 binding. Bind
+	button 1 to edit the cell. Don't make an Edit menu item.
+	Remove Natural, Binary, Octal, and Raw formats. Add "Open
+	Memory Window" menu item. 
+	(RegWin::_dimensions): This function was being abused so I removed 
+	it. Replaced with inline code in _layout_table which saves its
+	computed values so it doesn't have to be recalculated unless 
+	something changes.
+	(RegWin::_layout_table): Rewritten to be more efficient. Grabs
+	all values in one call to gdb_reginfo instead of one for each register.
+	Uses new types and formats.  Calls _load_prefs.
+	(RegWin::_accept_edit): Use type information when setting value.
+	When done, call _unedit to remove tags.
+	(RegWin::_open_memory): Open memory window with initial value
+	set to the value of a register.	
+	(RegWin::_but3): Add types menu items. Limit format options
+	to reasonable ones. Add "Open Memory Window". Add "Help" 
+	(RegWin::_edit): Just call _select_cell.
+	(RegWin::_edit_menu): Deleted.
+	(RegWin::_move): Don't recompute rows and cols; use _rows and
+	_cols computed by _layout_table.
+	(RegWin::_post_menu): Update types and formats. Disable "Open Memory
+	Window" if register is not integer. Remove Edit.
+	(RegWin::_select): Deleted.
+	(RegWin::_select_cell):	Tag cell as being edited. Then
+	call focus, which is a workaround for a TkTable glitch where
+	the insertion bar sometimes disappeared.
+	(RegWin::_unedit): Clear selection. Call focus. Don't change
+	any bindings.
+	(RegWin::_get_value): Eliminate previous crap and just call 
+	"gdb_reginfo value".
+	(RegWin::_change_format): Add optional type arg.  Call 
+	"gdb_reginfo format".
+	(RegWin::_update): Get a list of all the changed registers
+	instead of checking one at a time.
+
+	* generic/gdbtk-register.c (Gdbtk_Register_Init): Don't
+	create gdb_pc_reg.  It is not used. Call register_gdbarch_swap 
+	with regformat and regtype.
+	(gdb_register_info): Add "type" and "format" options.
+	(get_pc_register): Delete.
+	(get_register_types): New function.  Returns list of valid types 
+	for a list of registers.
+	(get_register): Use saved format and type for each register. Check if
+	there are any registers yet (target not running). Use mem_file 
+	to collect output. Append output to a list.
+	(map_arg_registers): If passed a list, iterate though each element
+	and build a list of values to return.
+	(setup_architecture_data): Memory was not being initialized, so
+	use xcalloc(). Allocate memory for regformat and regtype.
+	(gdb_regformat): New function called by "gdb_reginfo format".
+	
+2002-05-15  Martin M. Hunt  <hunt@redhat.com>
+
+	* generic/gdbtk-cmds.c (gdb_eval): For mem_file stuff, delete
+	the file when done and free memory.
+	
 2002-05-06  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/session.tcl (notice_file_change): Catch the

@@ -2,7 +2,7 @@
 # Copyright 1998, 1999, 2001, 2002 Red Hat, Inc.
 #
 # Written by Keith Seitz (keiths@redhat.com)
-# based on work by Martin Hunt (hunt@redhat.com)
+#        and Martin Hunt (hunt@redhat.com)
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -22,6 +22,8 @@
 #
 # Want really badly:
 # o Multiple selections
+# o Multiple displays
+# o Better resizing
 # o Register groups (gdb and user-defined)
 # o format register values before inserting into table?
 #   (Instead of displaying "0x0", we should use "0x00000000" on
@@ -61,6 +63,80 @@ body RegWin::constructor {args} {
 # ------------------------------------------------------------------
 body RegWin::destructor {} {
   debug
+}
+
+# ------------------------------------------------------------------
+#  NAME:         RegWin::_load_prefs
+#  DESCRIPTION:  Load register preferences
+#
+#  ARGUMENTS:    None
+#  RETURNS:      Nothing
+# ------------------------------------------------------------------
+body RegWin::_load_prefs {} {
+  debug
+
+  # Find out largest register name length.
+  set _max_label_width 0;	# for reg labels
+  set _reg_display_list {}
+  set _register(hidden) {}
+
+  foreach r [gdb_reginfo name -numbers] {
+    set nm [lindex $r 0]
+    set rn [lindex $r 1]
+
+    set size [string length $nm]
+    if {$size > $_max_label_width} {
+      set _max_label_width $size
+    }
+
+    # Set type from prefs or default to first in list of types
+    set _types($rn) [gdb_reginfo type $rn]
+    set tp [pref getd gdb/reg/${nm}-type]
+    set _type($rn,name) ""
+    if {$tp != ""} {
+      foreach t $_types($rn) {
+	if {[lindex $t 0] == $tp} {
+	  set _type($rn,name) $tp
+	  set _type($rn,addr) [lindex $t 1]
+	  set _type($rn,code) [lindex $t 2]
+	  break
+	}
+      }
+    }
+    if {$_type($rn,name) == ""} {
+      # either not set or couldn't find it in list of types
+      set _type($rn,name) [lindex [lindex $_types($rn) 0] 0]
+      set _type($rn,addr) [lindex [lindex $_types($rn) 0] 1]
+      set _type($rn,code) [lindex [lindex $_types($rn) 0] 2]
+    }
+
+    # Check preferences for format
+    set _format($rn) [pref getd gdb/reg/${nm}-format]
+    if {$_format($rn) == ""} {
+      # no preference set.  Set it to hex or float
+      if {$_type($rn,code) == "int"} {
+	set _format($rn) "x"
+      } else {
+	set _format($rn) "f"
+      }
+      pref setd gdb/reg/${nm}-format $_format($rn)
+    }
+    
+    gdb_reginfo format $rn $_type($rn,addr) $_format($rn)
+
+    # Check if the user prefers not to show this register
+    if {[pref getd gdb/reg/$nm] == "no"} {
+      set _cell($rn) hidden
+      lappend _register(hidden) $rn
+    } else {
+      lappend _reg_display_list $rn
+    }
+
+    # assume editable, for now
+    set _editable($rn) 1
+  }
+
+  incr _max_label_width 2;	# padding
 }
 
 
@@ -109,7 +185,8 @@ body RegWin::_build_win {} {
     [format "%s; break" [code $this _move right]]
   bind $itk_component(table) <3>        \
     [code $this _but3 %x %y %X %Y]
-  bind $itk_component(table) <Double-1> \
+  bind $itk_component(table) <Double-1> break 
+  bind $itk_component(table) <1> \
     [code $this _edit %x %y]
   bind $itk_component(table) <Return>   \
     [format "%s; break" [code $this _accept_edit]]
@@ -186,12 +263,6 @@ body RegWin::_build_win {} {
   $itk_component(menubar) add cascade -menu $itk_component(reg_menu) \
     -label "Register" -underline 0
 
-  if {![pref get gdb/mode]} {
-    $itk_component(reg_menu) add command -label "Edit" \
-      -underline 0 -state disabled
-    set _menuitems(edit) [$itk_component(reg_menu) index last]
-  }
-
   # Create register->format cascade menu
   itk_component add reg_format {
     menu $itk_component(reg_menu).format -tearoff false
@@ -207,17 +278,11 @@ body RegWin::_build_win {} {
     -underline 0 -state disabled -command [code $this update dummy]
   $itk_component(reg_format) add radio -label "Unsigned" -value u \
     -underline 0 -state disabled -command [code $this update dummy]
-  $itk_component(reg_format) add radio -label "Natural" -value {} \
-    -underline 0 -state disabled -command [code $this update dummy]
-  $itk_component(reg_format) add radio -label "Binary" -value t \
-    -underline 0 -state disabled -command [code $this update dummy]
-  $itk_component(reg_format) add radio -label "Octal" -value o \
-    -underline 0 -state disabled -command [code $this update dummy]
-  $itk_component(reg_format) add radio -label "Raw" -value r \
-    -underline 0 -state disabled -command [code $this update dummy]
   $itk_component(reg_format) add radio -label "Floating Point" -value f \
     -underline 0 -state disabled -command [code $this update dummy]
-
+  $itk_component(reg_menu) add command -label "Open Memory Window" \
+    -underline 7 -state disabled
+  set _menuitems(open_memory) [$itk_component(reg_menu) index last]
   $itk_component(reg_menu) add command -label "Add to Watch" \
     -underline 7 -state disabled
   set _menuitems(add_to_watch) [$itk_component(reg_menu) index last]
@@ -241,30 +306,6 @@ body RegWin::_build_win {} {
 }
 
 # ------------------------------------------------------------------
-#  NAME:         private method RegWin::_dimensions
-#  DESCRIPTION:  Determine dimensions for the table
-#
-#  ARGUMENTS:    None
-#  RETURNS:      A list of {cols,rows} which may be used to
-#                configure the table
-#
-#  NOTES:        I don't like this. (KRS 20010718)
-# ------------------------------------------------------------------
-body RegWin::_dimensions {} {
-
-  # Always layout the table based on the TOTAL number
-  # of registers (not just the shown ones).
-  set num [llength [gdb_reginfo name]]
-  set rows [pref get gdb/reg/rows]
-  set cols [expr {$num / $rows}]
-  if {[expr {$num % $rows}] != 0} {
-    incr cols
-  }
-
-  return [list [expr {2 * $cols}] $rows]
-}
-
-# ------------------------------------------------------------------
 #  NAME:         private method RegWin::_layout_table
 #  DESCRIPTION:  Configures and lays out the table
 #
@@ -275,102 +316,77 @@ body RegWin::_dimensions {} {
 #                is displayed
 # ------------------------------------------------------------------
 body RegWin::_layout_table {} {
-
-  # Set table dimensions
-  lassign [_dimensions] cols rows
-  $itk_component(table) configure -cols $cols -rows $rows
+  debug
 
   if {[info exists _cell]} {
     unset _cell
     unset _register
   }
-  set _register(hidden) {}
-
-  # Find out largest register name length and register size length.
-  set width 0;				# for reg values
-  set max_width 0;			# for reg labels
-  foreach r [gdb_reginfo name -numbers] {
-    set nm [lindex $r 0]
-    set rn [lindex $r 1]
-
-    set size [string length $nm]
-    if {$size > $max_width} {
-      set max_width $size
-    }
-
-    set size [gdb_reginfo size $rn]
-    if {$size > $width} {
-      set width $size
-    }
-  }
-  incr max_width 2;			# padding
-
-  # Minwidth = size * 2 (hex) + 2 ("0x") + 2 (padding, one space each side)
-  set minwidth [expr {$size * 2 + 2 + 2}]
-
   # Clear any column spans
   foreach span [$itk_component(table) spans] {
     $itk_component(table) spans $span 0,0
   }
+
+  _load_prefs
 
   # Fill data array with register names.
   # 
   # The table is indexed by (row,col). All odd columns will contain
   # register values and all even columns will contain the labels.
   #
-  # This loop will also initialize _typed and _editable arrays.
   set x 0
   set y 0
-  set _reg_display_list {}
-  foreach r [gdb_reginfo name -numbers] {
 
+  # get register list
+  set regs [gdb_reginfo name -numbers $_reg_display_list]
+
+  # Set table dimensions
+  set num [llength $regs]
+  set _rows [pref get gdb/reg/rows]
+  set _cols [expr $num / $_rows]
+  if {[expr $num % $_rows] != 0} { incr _cols }
+  set _cols [expr 2 * $_cols]
+  $itk_component(table) configure -cols $_cols -rows $_rows
+
+  # get values
+  if {[catch {gdb_reginfo value $_reg_display_list} values]} {
+    dbug W "values=$values"
+    set values ""
+  }
+  set i 0
+
+  # now build table
+  foreach r $regs {
     set name [lindex $r 0]
     set rn [lindex $r 1]
 
-    # All registers shall be considered editable
-    # and non-typed until proved otherwise
-    set _typed($rn) 0
-    set _editable($rn) 0
+    set _cell($rn) "$y,[expr {$x+1}]"
+    set _register($_cell($rn)) $rn
+    set _data($y,$x) $name
+    set _data($_cell($rn)) [lindex $values $i]
+    incr i
 
-    # If user has no preference, show register in hex (if we can)
-    set format [pref getd gdb/reg/${name}-format]
-    if {$format == ""} { set format x }
-    set _format($rn) $format
+    # Go to next row/column
+    incr y
+    if {$y == $_rows} {
+      set _col_size([expr {$x+1}]) 0
+      
+      # Size the column
+      if {$::gdb_running} {
+	_size_column [expr {$x+1}] 1
+      }
 
-    # Check if the user prefers not to show this register
-    if {[pref getd gdb/reg/$name] == "no"} {
-      set _cell($rn) hidden
-      lappend _register(hidden) $rn
-    } else {
-      lappend _reg_display_list $rn
-      set _cell($rn) "$y,[expr {$x+1}]"
-      set _register($_cell($rn)) $rn
-      set _data($y,$x) $name
-      _update_register $rn
-
-      $itk_component(table) width $x $max_width
-      $itk_component(table) width [expr {$x+1}] $width
+      $itk_component(table) width $x $_max_label_width
       $itk_component(table) tag col header $x
       $itk_component(table) tag col normal [expr {$x+1}]
-
-      # Go to next row/column
-      incr y
-      if {$y == $rows} {
-	set _col_size([expr {$x+1}]) 0
-
-	# Size the column
-	if {$::gdb_running} {
-	  _size_column [expr {$x+1}] 1
-	}
-
-	set y 0
-	incr x 2
-      }
+      
+      set y 0
+      incr x 2
     }
   }
 
   # Mark empty cells
-  while {$y != $rows && $x != $cols} {
+  while {$y != $_rows && $x != $_cols} {
     set _data($y,$x) ""
     set _data($y,[expr {$x+1}]) ""
     $itk_component(table) spans $y,$x 0,1
@@ -378,11 +394,14 @@ body RegWin::_layout_table {} {
     set _col_size([expr {$x+1}]) 0
 
     incr y
-    if {$y == $rows} {
+    if {$y == $_rows} {
       # Size the column
       if {$::gdb_running} {
 	_size_column [expr {$x+1}] 1
       }
+      $itk_component(table) width $x $_max_label_width
+      $itk_component(table) tag col header $x
+      $itk_component(table) tag col normal [expr {$x+1}]
 
       set y 0
       incr x 2
@@ -510,14 +529,19 @@ body RegWin::_prefs_changed {pref value} {
 #                in table
 # ------------------------------------------------------------------
 body RegWin::_accept_edit {} {
-
+  debug
   set cell [$itk_component(table) tag cell edit]
   if {[llength $cell] == 1 && [info exists _register($cell)]} {
     # Select the same cell again. This forces the table
     # to keep this value. Otherwise, we'll never see it...
     _select_cell $cell
-    set n [gdb_reginfo name $_register($cell)]
+    set rn $_register($cell)
+    set n [gdb_reginfo name $rn]
+    if {[llength $_types($rn)] > 1} {
+      append n ".$_type($rn,name)"
+    }
     set v [string trim [$itk_component(table) curvalue] \ \r\n]
+    debug "n=$n v=$v"
     if {$v != ""} {
       if {[catch {gdb_cmd "set \$${n}=$v"} result]} {
 	tk_messageBox -icon error -type ok -message $result \
@@ -531,9 +555,7 @@ body RegWin::_accept_edit {} {
     _size_cell_column $cell 1
   }
 
-  # Reset the table bindings (see RegWin::_edit comments)
-  bind $itk_component(table) <1> {}
-  bind $itk_component(table) <ButtonRelease-1> {}
+  _unedit
 }
 
 # ------------------------------------------------------------------
@@ -547,6 +569,19 @@ body RegWin::_accept_edit {} {
 # ------------------------------------------------------------------
 body RegWin::_add_to_watch {rn} {
   [ManagedWin::open WatchWin] add "\$[gdb_reginfo name $rn]"
+}
+
+# ------------------------------------------------------------------
+#  NAME:         private method RegWin::_add_to_watch
+#  DESCRIPTION:  Add a register to the watch window
+#
+#  ARGUMENTS:    rn  - the register number to add to the WatchWin
+#  RETURNS:      Nothing
+#
+#  NOTES:        Only works with one WatchWin...
+# ------------------------------------------------------------------
+body RegWin::_open_memory {rn} {
+  ManagedWin::open MemWin -force -addr_exp $_data($_cell($rn))
 }
 
 # ------------------------------------------------------------------
@@ -574,45 +609,43 @@ body RegWin::_but3 {x y X Y} {
       $itk_component(popup) delete 0 end
       $itk_component(popup) add command -label $name -state disabled
       $itk_component(popup) add separator
-      if {!$_typed($rn)} {
-	$itk_component(popup) add radio -label "Hex"            \
-	  -variable [scope _format($rn)] -value x               \
-	  -command [code $this _change_format $rn]
+      if {[llength $_types($rn)] > 1} {
+	foreach t $_types($rn) {
+	  $itk_component(popup) add radio -label [lindex $t 0] \
+	    -variable [scope _type($rn,addr)] \
+	    -value [lindex $t 1] \
+	    -command [code $this _change_format $rn [lindex $t 0]]
+	}
+	$itk_component(popup) add separator
+      }
+
+      $itk_component(popup) add radio -label "Hex"            \
+	-variable [scope _format($rn)] -value x               \
+	-command [code $this _change_format $rn]
+
+      if {$_type($rn,code) == "int"} {
 	$itk_component(popup) add radio -label "Decimal"        \
 	  -variable [scope _format($rn)] -value d               \
 	  -command [code $this _change_format $rn]
 	$itk_component(popup) add radio -label "Unsigned"       \
 	  -variable [scope _format($rn)] -value u               \
 	  -command [code $this _change_format $rn]
-	$itk_component(popup) add radio -label "Natural"        \
-	  -variable [scope _format($rn)] -value {}              \
-	  -command [code $this _change_format $rn]
-	$itk_component(popup) add radio -label "Binary"         \
-	  -variable [scope _format($rn)] -value t               \
-	  -command [code $this _change_format $rn]
-	$itk_component(popup) add radio -label "Octal"          \
-	  -variable [scope _format($rn)] -value o               \
-	  -command [code $this _change_format $rn]
-	$itk_component(popup) add radio -label "Raw"            \
-	  -variable [scope _format($rn)] -value r               \
-	  -command [code $this _change_format $rn]
+      } elseif {$_type($rn,code) == "float"} {
 	$itk_component(popup) add radio -label "Floating Point" \
 	  -variable [scope _format($rn)] -value f               \
 	  -command [code $this _change_format $rn]
-	$itk_component(popup) add separator
       }
+      $itk_component(popup) add separator
+
       if {$_editable($rn)} {
 	set state normal
       } else {
 	set state disabled
       }
       
-      # I'm disabling this, since it doesn't work very well.
-      # All kinds of goofy interactions with the insertion cursor
-      # and focus when editing is invoked from a menu. (KRS 20010717)
-      if {1} {
-	$itk_component(popup) add command  \
-	  -label "Edit" -command "after idle [code $this _edit $x $y]" -state $state
+      if {$_type($rn,code) == "int"} {
+	$itk_component(popup) add command    \
+	  -label "Open Memory Window" -command [code $this _open_memory $rn]
       }
       $itk_component(popup) add command    \
 	-label "Add to Watch" -command [code $this _add_to_watch $rn]
@@ -624,6 +657,13 @@ body RegWin::_but3 {x y X Y} {
 	$itk_component(popup) add command -label "Display all Registers" \
 	  -command [code $this _display_all]
       }
+
+      # Help
+      $itk_component(popup) add separator
+      $itk_component(popup) add command    \
+	-label "Help" \
+	-command {ManagedWin::open HtmlViewer -force -file register.html}
+
       tk_popup $itk_component(popup) $X $Y
     }
   }
@@ -668,6 +708,7 @@ body RegWin::_display_all {} {
   foreach r $_register(hidden) {
     pref setd gdb/reg/[gdb_reginfo name $r] {}
   }
+
   set _register(hidden) {}
 
   # Note which register is active and restore it
@@ -691,47 +732,13 @@ body RegWin::_display_all {} {
 #                y  - the y coordinate of the button press
 #  RETURNS:      Nothing
 #
-#  NOTES:        Event handler for <Double-1> in table.
-#                Sets special bindings for <1> and <ButtonRelease-1>.
+#  NOTES:        Event handler for <1> in table.
+#                
 # ------------------------------------------------------------------
 body RegWin::_edit {x y} {
-  global gdb_running
-
-  focus $itk_component(table)
-
-  # Get and select the cell and set the edit tag on it
-  set cell [_select_cell [$itk_component(table) index @$x,$y]]
-
-  # Ugh. In order to click on the label and keep the value
-  # focused, we need to disrupt the ButtonRelease-1 event.
-  bind $itk_component(table) <ButtonRelease-1> break
-  
-  # Disable the <1> binding while editing
-  bind $itk_component(table) <1> break
-
-  # Now mark the cell as being edited.
-  if {$gdb_running && [info exists _register($cell)]} {
-    $itk_component(table) tag cell edit $cell
-  }
+  _select_cell [$itk_component(table) index @$x,$y]
 }
 
-# ------------------------------------------------------------------
-#  NAME:         private method RegWin::_edit_menu
-#  DESCRIPTION:  Enables a cell for editing when invoked from
-#                a menu
-#
-#  ARGUMENTS:
-#                rn  - the register to edit
-#  RETURNS:      Nothing
-#
-#  NOTES:        
-# ------------------------------------------------------------------
-body RegWin::_edit_menu {rn} {
-
-  set bbox [$itk_component(table) bbox $_cell($rn)]
-  _edit [lindex $bbox 0] [lindex $bbox 1]
-  event generate $_top <Enter>
-}
 
 # ------------------------------------------------------------------
 #  NAME:         private method _move
@@ -749,6 +756,8 @@ body RegWin::_edit_menu {rn} {
 #                if we are editing.
 # ------------------------------------------------------------------
 body RegWin::_move {direction} {
+
+  debug $direction
 
   # If there is no active cell, the table will call error
   if {[catch {$itk_component(table) index active row} row]} {
@@ -790,20 +799,19 @@ body RegWin::_move {direction} {
     # Not editing
 
     set col [$itk_component(table) index active col]
-    lassign [_dimensions] cols rows
 
     switch $direction {
       up {
 	incr row -1
 	if {$row < 0} {
 	  # go to bottom
-	  set row $rows
+	  set row $_rows
 	}
       }
 
       down {
 	incr row 1
-	if {$row == $rows} {
+	if {$row == $_rows} {
 	  # go to top
 	  set row 0
 	}
@@ -813,13 +821,13 @@ body RegWin::_move {direction} {
 	incr col -2
 	if {$col < 0} {
 	  # go to right
-	  set col [expr {$cols -1}]
+	  set col [expr {$_cols -1}]
 	}
       }
 
       right {
 	incr col 2
-	if {$col > $cols} {
+	if {$col > $_cols} {
 	  # go to left
 	  set col 0
 	}
@@ -847,14 +855,14 @@ body RegWin::_post_menu {} {
   # Configure the menu for the active cell
   if {![catch {$itk_component(table) index active} cell]
       && [info exists _register($cell)] && $gdb_running} {
+
+    set code $_type($_register($cell),code)
+
     $itk_component(reg_menu) entryconfigure $_menuitems(remove_from_display) \
       -state normal -command [code $this _delete_from_display $_register($cell)]
 
-    if {$_typed($_register($cell))} {
-      set state disabled
-    } else {
-      set state normal
-    }
+    set state normal
+
     for {set i 0} {$i <= [$itk_component(reg_format) index end]} {incr i} {
       $itk_component(reg_format) entryconfigure $i \
 	-state $state \
@@ -862,15 +870,28 @@ body RegWin::_post_menu {} {
 	-command [code $this _change_format $_register($cell)]
     }
 
+    if {$code == "float"} {
+      # disable decimal and unsigned
+      $itk_component(reg_format) entryconfigure 1 -state disabled
+      $itk_component(reg_format) entryconfigure 2 -state disabled
+    } elseif {$code == "int"} {
+      # disable float
+      $itk_component(reg_format) entryconfigure 3 -state disabled
+    }
+
+    # memory window
+    if {$code == "int"} {
+      $itk_component(reg_menu) entryconfigure $_menuitems(open_memory) \
+	-state normal -command [code $this _open_memory $_register($cell)]
+    } else {
+      $itk_component(reg_menu) entryconfigure $_menuitems(open_memory) \
+	-state disabled
+    }
+
+    # add to watch
     $itk_component(reg_menu) entryconfigure $_menuitems(add_to_watch) \
       -state normal -command [code $this _add_to_watch $_register($cell)]
 
-    # This doesn't seem to work on my linux box. It works fine on
-    # Cygwin, though... (KRS 010806)
-    if {$_editable($_register($cell))} {
-      $itk_component(reg_menu) entryconfigure $_menuitems(edit) \
-	-state normal -command [code $this _edit_menu $_register($cell)]
-    }
   } else {
     # Disable everything
     $itk_component(reg_menu) entryconfigure $_menuitems(remove_from_display) \
@@ -880,6 +901,9 @@ body RegWin::_post_menu {} {
       $itk_component(reg_format) entryconfigure $i -state disabled \
 	-variable {}
     }
+
+    $itk_component(reg_menu) entryconfigure $_menuitems(open_memory) \
+      -state disabled -command {}
 
     $itk_component(reg_menu) entryconfigure $_menuitems(add_to_watch) \
       -state disabled -command {}
@@ -891,18 +915,6 @@ body RegWin::_post_menu {} {
   }
 }
 
-# ------------------------------------------------------------------
-#  NAME:         private method RegWin::_select
-#  DESCRIPTION:  Selects the cell with the given coordinates
-#
-#  ARGUMENTS:
-#                x - the x-coordinate of the cell to select
-#                y - the y-coordinate of the cell to select
-#  RETURNS:      The actual cell selected
-# ------------------------------------------------------------------
-body RegWin::_select {x y} {
-  return [_select_cell [$itk_component(table) index @$x,$y]]
-}
 
 # ------------------------------------------------------------------
 #  NAME:         private method RegWin::_select_cell
@@ -927,6 +939,7 @@ body RegWin::_select_cell {cell} {
     # going onto a label
     incr col 1
   }
+  set cell "$row,$col"
 
   # Make the selected cell the active one
   $itk_component(table) activate $row,$col
@@ -935,9 +948,16 @@ body RegWin::_select_cell {cell} {
   # Select this cell and its label
   # FIXME: multiple selections?
   $itk_component(table) selection clear all
-  $itk_component(table) selection set $row,$col $row,[expr {$col-1}]
+  $itk_component(table) selection set $cell $row,[expr {$col-1}]
 
-  return $row,$col
+  # Now mark the cell as being edited.
+  if {$::gdb_running && [info exists _register($cell)]} {
+    $itk_component(table) tag cell edit $cell
+  }
+
+  focus $itk_component(table)
+
+  return $cell
 }
 
 # ------------------------------------------------------------------
@@ -951,11 +971,12 @@ body RegWin::_unedit {} {
 
   # clear the tag
   set cell [$itk_component(table) tag cell edit]
-  $itk_component(table) tag cell normal $cell
 
-  # Reset the table binding (see RegWin::_edit comments)
-  bind $itk_component(table) <ButtonRelease-1> {}
-  bind $itk_component(table) <1> {}
+  if {$cell != ""} {
+    $itk_component(table) selection clear all
+    $itk_component(table) tag cell normal $cell 
+    focus $itk_component(table)
+  }
 }
 
 #
@@ -970,33 +991,15 @@ body RegWin::_unedit {} {
 #                      fetched
 #  RETURNS:      The register's value or ""
 #
-#  NOTES:        This function uses RegWin::_format to determine
-#                how the value is returned
-#                It also does some other weird stuff...
+#  NOTES:        
 # ------------------------------------------------------------------
 body RegWin::_get_value {rn} {
-
-  # Typed registers natural values start with a brace (escaped by a slash)
-  if {[catch {gdb_reginfo value {} $rn} valtest]} {
+  if {[catch {gdb_reginfo value $rn} value]} {
+    dbug W "\"gdb_reginfo value $rn\" returned $value"
     set value ""
   } else {
-    if {[string index $valtest 1] == "\{"} {
-      # If it is a typed register, we print it raw
-      set format r
-      set _format($rn) r
-      set _typed($rn) 1
-      set _editable($rn) 0
-    } else {
-      set format $_format($rn)
-      set _editable($rn) 1
-    }
-    if {[catch {gdb_reginfo value $format $rn} value]} {
-      set value ""
-    } else {
-      set value [string trim $value \ ]
-    }
+    set value [string trim $value \ ]
   }
-
   return $value
 }
 
@@ -1005,21 +1008,26 @@ body RegWin::_get_value {rn} {
 #  DESCRIPTION:  Change the display format of the register
 #
 #  ARGUMENTS:    rn  - the register number to change
+#		 newtype - type name (optional if just format changed)
+#
 #  RETURNS:      Nothing
 #
-#  NOTES:        Assumes that hex, "x", is the default
+#  NOTES:        
 # ------------------------------------------------------------------
-body RegWin::_change_format {rn} {
+body RegWin::_change_format {rn {newtype {}}} {
 
-  # Set the new format. Hex (x) is the default.
   set name [gdb_reginfo name $rn]
-  if {$_format($rn) == "x"} {
-    set fmt ""
-  } else {
-    set fmt $_format($rn)
-  }
 
-  pref setd gdb/reg/${name}-format $fmt
+  if {$newtype != ""} {
+    set _type($rn,name) $newtype
+    pref setd gdb/reg/${name}-type $newtype
+  }
+  
+  gdb_reginfo format $rn $_type($rn,addr) $_format($rn)
+
+  # Set the new format in prefs. 
+  pref setd gdb/reg/${name}-format $_format($rn)
+
   _update_register $rn
   _size_cell_column $_cell($rn) 1
 
@@ -1038,7 +1046,6 @@ body RegWin::_change_format {rn} {
 #  RETURNS:      Nothing
 # ------------------------------------------------------------------
 body RegWin::_update_register {rn} {
-
   set _data($_cell($rn)) [_get_value $rn]
 }
 
@@ -1138,7 +1145,7 @@ body RegWin::update {event} {
 
   # Now update and highlight the newly changed values
   set _change_list {}
-  if {![catch {eval gdb_reginfo changed $_reg_display_list} changed]} {
+  if {![catch {gdb_reginfo changed $_reg_display_list} changed]} {
     set _change_list $changed
   }
 
