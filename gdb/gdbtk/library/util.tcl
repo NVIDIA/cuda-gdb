@@ -225,6 +225,7 @@ proc gridCGet {slave option} {
 #
 # ------------------------------------------------------------------
 proc find_iwidgets_library {} {
+  global errMsg
 
   set IwidgetsOK 1
 
