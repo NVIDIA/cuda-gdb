@@ -1,3 +1,16 @@
+2000-12-14  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
+
+	* library/ChangeLog-1999: New file. Entries dated 1999 moved here
+	from library/ChangeLog.
+	* library/ChangeLog-1998: New file.  Similar change for 1998.
+	* library/ChangeLog-1997: New file.  Similar change for 1997.
+	* library/ChangeLog: Removed entries previous to 2000.
+	* generic/ChangeLog-1999: New file. Entries dated 1999 moved here
+	from library/ChangeLog.
+	* generic/ChangeLog-1998: New file.  Similar change for 1998.
+	* generic/ChangeLog-1997: New file.  Similar change for 1997.
+	* generic/ChangeLog: Removed entries previous to 2000.
+
 2000-04-17  Jonathan Larmour  <jlarmour@redhat.co.uk>
 
 	* ChangeLog-gdbtk: Renamed to ChangeLog
