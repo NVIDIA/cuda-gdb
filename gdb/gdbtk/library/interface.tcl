@@ -346,7 +346,7 @@ proc gdbtk_tcl_query {message {default yes}} {
     # question.
     set r [tk_messageBox -icon warning -default $default \
 	     -message $message -title $title \
-	     -type yesno -modal $modal -parent .]
+	     -type yesno -parent .]
   }
 
   update idletasks
@@ -398,7 +398,7 @@ proc show_warning {message} {
   } else {
     set r [tk_messageBox -icon warning -default ok \
              -message $message -title $title \
-             -type ok -modal $modal -parent .]
+             -type ok -parent .]
   }
 } 
 
@@ -877,7 +877,7 @@ proc set_exe {} {
       return
     } elseif {[string match {*no debugging symbols found*} $msg]} {
       tk_messageBox -icon error -default ok \
-	-title "GDB" -type ok -modal system \
+	-title "GDB" -type ok \
 	-message "This executable has no debugging information."
     }
 
@@ -1110,7 +1110,7 @@ proc set_target {} {
       set dialog_title "GDB"
       set debugger_name "GDB"
       tk_messageBox -icon error -title $dialog_title -type ok \
-	-modal task -message "$msg\n\n$debugger_name cannot connect to the target board\
+	-message "$msg\n\n$debugger_name cannot connect to the target board\
 using [lindex $gdb_target_cmd 1].\nVerify that the board is securely connected and, if\
 necessary,\nmodify the port setting with the debugger preferences."
       return ERROR

@@ -1,3 +1,17 @@
+2002-07-31  Keith Seitz  <keiths@redhat.com>
+
+	* library/browserwin.itb (_full_funcs_combo): Remove "-modal"
+	option from tk_messageBox call. It was redhat-local in tk8.0,
+	but is no longer in tk8.3.
+	* library/download.itb (download_it): Likewise.
+	* library/interface.tcl (gdbtk_tcl_query): Likewise.
+	(show_warning): Likewise.
+	(set_exe): Likewise.
+	(set_target): Likewise.
+	* library/memwin.itb (error_dialog): Likewise.
+	* library/srcwin.itb (fillFuncCB): Likewise.
+	* library/util.tcl (tfind_cmd): Likewise.
+
 2002-07-03  Martin M. Hunt  <hunt@redhat.com>
 
 	* generic/gdbtk-hooks.c (gdbtk_call_command): Use cmd_func().

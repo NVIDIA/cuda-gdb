@@ -194,7 +194,7 @@ body Download::download_it { } {
     set f $gdb_exe_name
   }
   if {! [file exists $f]} {
-    tk_messageBox -icon error -title GDB -type ok -modal task\
+    tk_messageBox -icon error -title GDB -type ok \
       -message "Request to download non-existent executable $gdb_exe_name"
     set gdb_downloading 0
     gdbtk_idle

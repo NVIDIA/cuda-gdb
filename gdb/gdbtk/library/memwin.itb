@@ -769,6 +769,6 @@ body MemWin::memMoveCell {w x y} {
 body MemWin::error_dialog {msg {modality task} {type ok}} {
   set parent [winfo toplevel [namespace tail $this]]
   tk_messageBox -icon error -title Error -type $type \
-    -modal $modality -message $msg -parent $parent
+    -message $msg -parent $parent
 }
 

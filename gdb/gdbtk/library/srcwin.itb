@@ -388,7 +388,7 @@ body SrcWin::fillFuncCB {name} {
     set maxlen 10
     if {[catch {gdb_listfuncs $name} listfuncs]} {
       tk_messageBox -icon error -default ok \
-	-title "GDB" -type ok -modal system \
+	-title "GDB" -type ok \
 	-message "This file can not be found or does not contain\ndebugging information."
       _set_name ""
       return

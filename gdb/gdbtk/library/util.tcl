@@ -79,7 +79,7 @@ proc tfind_cmd {command} {
   set err [catch {gdb_cmd $command} msg]
   if {$err || [regexp "Target failed to find requested trace frame" $msg]} {
     tk_messageBox -icon error -title "GDB" -type ok \
-      -modal task -message $msg
+      -message $msg
     gdbtk_idle
     return
   } else {
