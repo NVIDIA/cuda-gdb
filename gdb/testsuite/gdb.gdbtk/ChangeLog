@@ -1,3 +1,8 @@
+2002-03-07  Martin M. Hunt  <hunt@redhat.com>
+
+	* srcwin.test (5.1): Adjust line numbers to
+	test now runs correctly.
+
 2002-01-18  Keith Seitz  <keiths@redhat.com>
 
 	* console.test: Don't rely on "event generate" to do
