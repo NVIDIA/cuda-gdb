@@ -1,3 +1,20 @@
+2002-06-07  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/prefs.tcl (pref_set_colors): New function.  Set up colors
+	from Windows system colors or X resource database. Save in array.
+	(pref_set_defaults): Remove gdb/font/normal_fg, etc.
+	(pref_read): Call pref_set_colors.
+
+	* library/main.tcl: Remove call to "tix resetoptions TixGray".
+
+	* library/bpwin.itb, library/browserwin.itb, library/console.itb,
+	library/globalpref.itb, library/memwin.itb, library/process.itb,
+	library/regwin.itb, library/srcpref.itb, library/srctextwin.itb,
+	library/stackwin.itb, library/tdump.tcl, library/tracedlg.tcl,
+	library/variables.tcl: Replace calls to [pref get gdb/fonts/*] 
+	for colors with references to Color array. Remove all tixOptions calls.
+	Fix up colors as necessary.
+	
 2002-05-31  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/prefs.tcl (pref_read): If the regular expression
