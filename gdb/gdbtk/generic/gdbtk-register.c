@@ -437,7 +437,8 @@ register_changed_p (int regnum, void *argp)
 {
   char *raw_buffer = alloca (MAX_REGISTER_RAW_SIZE);
 
-  if (!frame_register_read (deprecated_selected_frame, regnum, raw_buffer))
+  if (deprecated_selected_frame == NULL
+      || !frame_register_read (deprecated_selected_frame, regnum, raw_buffer))
     return;
 
   if (memcmp (&old_regs[regnum * MAX_REGISTER_RAW_SIZE], raw_buffer,

@@ -1,3 +1,9 @@
+2003-02-11  Keith R Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-register.c (register_changed_p): If the selected
+	frame is NULL, do not call frame_register_read, since that will
+	now cause an internal error.
+
 2003-02-10  Andrew Cagney  <ac131313@redhat.com>
 
 	* generic/gdbtk-varobj.c (gdb_variable_command): Ditto for
