@@ -1,3 +1,8 @@
+2002-03-25  Elena Zannoni  <ezannoni@redhat.com>
+
+        * generic/gdbtk-hooks.c: Include cli/cli-decode.h for
+        cmd_list_element.
+
 2002-03-25  Alexandre Oliva  <aoliva@redhat.com>
 
 	* generic/gdbtk.c (HAS_STDARG): Define.
