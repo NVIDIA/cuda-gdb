@@ -508,7 +508,7 @@ gdb_stack (clientData, interp, objc, objv)
       /* Find the outermost frame */
       r  = GDB_get_current_frame (&fi);
       if (r != GDB_OK)
-	return TCL_OK;
+	return TCL_ERROR;
 
       while (fi != NULL)
         {
