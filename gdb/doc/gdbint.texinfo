@@ -42,7 +42,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.34 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.35 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -4395,6 +4395,8 @@ However, use functions with moderation.  A thousand one-line functions
 are just as hard to understand as a single thousand-line function.
 
 @emph{Macros are bad, M'kay.}
+(But if you have to use a macro, make sure that the macro arguments are
+protected with parentheses.)
 
 @cindex types
 
