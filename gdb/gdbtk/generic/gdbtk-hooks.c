@@ -462,7 +462,7 @@ x_event (signo)
       int val;
       if (varname == NULL)
 	{
-#if TCL_MAJOR_VERSION == 8 && TCL_MINOR_VERSION < 1
+#if TCL_MAJOR_VERSION == 8 && (TCL_MINOR_VERSION < 1 || TCL_MINOR_VERSION > 2)
 	  Tcl_Obj *varnamestrobj = Tcl_NewStringObj ("download_cancel_ok", -1);
 	  varname = Tcl_ObjGetVar2 (gdbtk_interp, varnamestrobj, NULL, TCL_GLOBAL_ONLY);
 #else
@@ -733,7 +733,7 @@ gdbtk_trace_find (arg, from_tty)
 			Tcl_NewStringObj ("gdbtk_tcl_trace_find_hook", -1));
   Tcl_ListObjAppendElement (gdbtk_interp, cmdObj, Tcl_NewStringObj (arg, -1));
   Tcl_ListObjAppendElement (gdbtk_interp, cmdObj, Tcl_NewIntObj (from_tty));
-#if TCL_MAJOR_VERSION == 8 && TCL_MINOR_VERSION < 1
+#if TCL_MAJOR_VERSION == 8 && (TCL_MINOR_VERSION < 1 || TCL_MINOR_VERSION > 2)
   if (Tcl_GlobalEvalObj (gdbtk_interp, cmdObj) != TCL_OK)
     report_error ();
 #else

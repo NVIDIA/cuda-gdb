@@ -1,3 +1,11 @@
+2001-08-16  Keith Seitz  <keiths@redhat.com>
+
+	From Ian Roxborough  <irox@redhat.com>
+	* generic/gdbtk-hooks.c (x_event): Deal with Tcl API insanity
+	for Tcl_ObjGetVar2 or Tcl_GetObjVar2.
+	(gdbtk_trace_find): Likewise for Tcl_GlobalEvalObj
+	or Tcl_EvalObj (TCL_EVAL_GLOBAL).
+
 2001-08-15  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk.c (gdbtk_init): Don't assume a particular
