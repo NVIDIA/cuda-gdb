@@ -1,3 +1,18 @@
+2004-07-02  Martin Hunt  <hunt@redhat.com>
+
+	* generic/gdbtk-cmds.c (symtab_to_filename): New function. Like
+	symtab_to_fullname() but returns the filename if the fullname 
+	cannot be found.
+	
+	* generic/gdbtk-cmds.c (gdb_find_file_command): Revert
+	patch of 2004-06-11. Use symtab_to_filename() again.
+	(gdb_loc): Ditto.
+	(gdb_loadfile): Ditto.
+	* generic/gdbtk-bp.c (gdb_get_breakpoint_info): Ditto.
+	(gdb_get_tracepoint_info): Ditto.
+
+	* generic/gdbtk-cmds.h: Declare symtab_to_filename().
+
 2004-06-26  Andrew Cagney  <cagney@gnu.org>
 
 	* generic/gdbtk-hooks.c (gdbtk_add_hooks): Call

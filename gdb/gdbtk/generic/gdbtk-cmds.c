@@ -1079,7 +1079,7 @@ gdb_find_file_command (ClientData clientData, Tcl_Interp *interp,
 	}
 
       fullname =
-	(st->fullname == NULL ? symtab_to_fullname (st) : st->fullname);
+	(st->fullname == NULL ? symtab_to_filename (st) : st->fullname);
     }
   
   /* We may not be able to open the file (not available). */
@@ -2189,7 +2189,7 @@ gdb_loc (ClientData clientData, Tcl_Interp *interp, int objc, Tcl_Obj *CONST obj
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
 			    Tcl_NewStringObj (fname, -1));
 
-  filename = symtab_to_fullname (sal.symtab);
+  filename = symtab_to_filename (sal.symtab);
   if (filename == NULL)
     filename = "";
 
@@ -2647,7 +2647,7 @@ gdb_loadfile (ClientData clientData, Tcl_Interp *interp, int objc,
       return TCL_ERROR;
     }
 
-  file = symtab_to_fullname ( symtab );
+  file = symtab_to_filename ( symtab );
   if ((fp = fopen ( file, "r" )) == NULL)
     {
       gdbtk_set_result (interp, "Can't open file for reading");
@@ -2998,4 +2998,32 @@ gdb_CA_to_TAS (ClientData clientData, Tcl_Interp *interp,
   Tcl_SetStringObj (result_ptr->obj_ptr, paddr_nz (address), -1);
 
   return TCL_OK;
+}
+
+/* Another function that was removed in GDB and replaced
+ * with something similar, but different enough to break
+ * Insight.
+ */
+int find_and_open_source (struct objfile *objfile, const char *filename,
+			  const char *dirname, char **fullname);
+
+char *
+symtab_to_filename (struct symtab *s)
+{
+
+  int r;
+
+  if (!s)
+    return NULL;
+
+  /* Don't check s->fullname here, the file could have been 
+     deleted/moved/..., look for it again */
+  r = find_and_open_source (s->objfile, s->filename, s->dirname,
+			    &s->fullname);
+  if (r)
+    close (r);
+
+  if (s->fullname && *s->fullname)
+      return s->fullname;
+  return s->filename;
 }
