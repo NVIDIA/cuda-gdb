@@ -742,6 +742,10 @@ proc gdbtk_locate_main {} {
       return $linespec
     }
   }
+  if {![catch gdb_entry_point entry_point]
+      && ![catch {gdb_loc "*$entry_point"} linespec]} {
+    return $linespec
+  }
   return {}
 }
 

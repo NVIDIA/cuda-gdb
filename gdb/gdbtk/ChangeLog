@@ -1,3 +1,9 @@
+2001-04-12  Nicholas Duffek  <nsd@redhat.com>
+
+	* generic/gdbtk-cmds.c (gdb_entry_point): New TCL command.
+	* library/interface.tcl (gdbtk_locate_main): Try the program's
+	entry point if no main function is found.
+
 2001-04-10  Keith Seitz  <keiths@cygnus.com>
 
 	From Tom Tromey (tromey@redhat.com):

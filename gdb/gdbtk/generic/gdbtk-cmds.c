@@ -199,6 +199,7 @@ static int gdb_cmd (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_confirm_quit (ClientData, Tcl_Interp *, int,
 			     Tcl_Obj * CONST[]);
 static int gdb_disassemble (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+static int gdb_entry_point (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_eval (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_fetch_registers (ClientData, Tcl_Interp *, int,
 				Tcl_Obj * CONST[]);
@@ -336,6 +337,8 @@ Gdbtk_Init (interp)
 			NULL);
   Tcl_CreateObjCommand (interp, "gdb_listfuncs", call_wrapper, gdb_listfuncs,
 			NULL);
+  Tcl_CreateObjCommand (interp, "gdb_entry_point", call_wrapper,
+			gdb_entry_point, NULL);
   Tcl_CreateObjCommand (interp, "gdb_get_mem", call_wrapper, gdb_get_mem,
 			NULL);
   Tcl_CreateObjCommand (interp, "gdb_stop", call_wrapper, gdb_stop, NULL);
@@ -3243,6 +3246,23 @@ gdb_loc (ClientData clientData, Tcl_Interp *interp, int objc, Tcl_Obj *CONST obj
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
 			    Tcl_NewStringObj ("", -1));
 #endif
+  return TCL_OK;
+}
+
+/* This implements the TCL command gdb_entry_point.  It returns the current
+   entry point address.  */
+
+static int
+gdb_entry_point (clientData, interp, objc, objv)
+     ClientData clientData;
+     Tcl_Interp *interp;
+     int objc;
+     Tcl_Obj *CONST objv[];
+{
+  char *addrstr;
+
+  addrstr = paddr_nz (entry_point_address ());
+  Tcl_SetStringObj (result_ptr->obj_ptr, addrstr, -1);
   return TCL_OK;
 }
 
