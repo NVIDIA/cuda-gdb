@@ -46,7 +46,7 @@ regarded as a program in the language TeX).
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.9 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.10 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -2909,7 +2909,7 @@ all.
 
 Don't put debugging printfs in the code.
 
-@node Porting @value{GDBN}
+@node Porting GDB
 
 @chapter Porting @value{GDBN}
 
