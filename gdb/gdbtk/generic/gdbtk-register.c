@@ -514,7 +514,7 @@ static int
 gdb_reggrouplist (ClientData clientData, Tcl_Interp *interp,
 		  int objc, Tcl_Obj **objv)
 {
-  struct reggroup *const *groups;
+  struct reggroup *group;
   int i = 0;
 
   if (objc != 0)
@@ -523,13 +523,13 @@ gdb_reggrouplist (ClientData clientData, Tcl_Interp *interp,
       return TCL_ERROR;
     }
 
-  groups = reggroups (current_gdbarch);
-
-  while (groups[i] != NULL) {
-    if (reggroup_type (groups[i]) == USER_REGGROUP)
-      Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, Tcl_NewStringObj (reggroup_name(groups[i]), -1));
-    i++;
-  }
+  for (group = reggroup_next (current_gdbarch, NULL);
+       group != NULL;
+       group = reggroup_next (current_gdbarch, group))
+    {
+      if (reggroup_type (group) == USER_REGGROUP)
+	Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, Tcl_NewStringObj (reggroup_name (group), -1));
+    }
   return TCL_OK;
 }
 
@@ -541,7 +541,7 @@ static int
 gdb_reggroup (ClientData clientData, Tcl_Interp *interp,
 	      int objc, Tcl_Obj **objv)
 {
-  struct reggroup *const *group;
+  struct reggroup *group;
   char *groupname;
   int regnum;
 
@@ -558,18 +558,20 @@ gdb_reggroup (ClientData clientData, Tcl_Interp *interp,
       return TCL_ERROR;
     }
 
-  for (group = reggroups (current_gdbarch); *group != NULL; group++)
+  for (group = reggroup_next (current_gdbarch, NULL);
+       group != NULL;
+       group = reggroup_next (current_gdbarch, group))
     {
-      if (strcmp (groupname, reggroup_name (*group)) == 0)
+      if (strcmp (groupname, reggroup_name (group)) == 0)
 	break;
     }
 
-  if (*group == NULL)
+  if (group == NULL)
     return TCL_ERROR;
 
   for (regnum = 0; regnum < NUM_REGS + NUM_PSEUDO_REGS; regnum++)
     {
-      if (gdbarch_register_reggroup_p (current_gdbarch, regnum, *group))
+      if (gdbarch_register_reggroup_p (current_gdbarch, regnum, group))
 	Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, Tcl_NewIntObj (regnum));
     }
   return TCL_OK;
