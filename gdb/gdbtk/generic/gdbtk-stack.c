@@ -522,7 +522,7 @@ get_frame_name (Tcl_Interp *interp, Tcl_Obj *list, struct frame_info *fi)
   enum language funlang = language_unknown;
   Tcl_Obj *objv[1];
 
-  if (deprecated_frame_in_dummy (fi))
+  if (get_frame_type (fi) == DUMMY_FRAME)
     {
       objv[0] = Tcl_NewStringObj ("<function called from gdb>\n", -1);
       Tcl_ListObjAppendElement (interp, list, objv[0]);
@@ -539,7 +539,7 @@ get_frame_name (Tcl_Interp *interp, Tcl_Obj *list, struct frame_info *fi)
     find_pc_line (fi->pc,
 		  fi->next != NULL
 		  && !(get_frame_type (fi) == SIGTRAMP_FRAME)
-		  && !deprecated_frame_in_dummy (fi->next));
+		  && !(get_frame_type (fi) == DUMMY_FRAME));
 
   func = find_pc_function (fi->pc);
   if (func)
