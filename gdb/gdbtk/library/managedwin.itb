@@ -1,4 +1,4 @@
-# Managed window for GDBtk.
+# Managed window for Insight.
 # Copyright 1998, 1999, 2000, 2001 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
@@ -67,8 +67,18 @@ body ManagedWin::reveal {} {
   update idletasks
   
   set top [winfo toplevel [namespace tail $this]]
+  set g [wm geometry $top]
+  #debug "$top geometry=$g state=[wm state $top]"
   raise $top
   wm deiconify $top
+  if {[info exists ::$top._init_geometry]} {
+    upvar ::$top._init_geometry gm
+    if {$::tcl_platform(platform) == "unix"} {
+      wm geometry $top $gm
+    }
+    unset ::$top._init_geometry
+  }
+  #debug "$top geometry=[wm geometry $top] state=[wm state $top]"
 
   # There used to be a `focus -force' here, but using -force is
   # unfriendly, so it was removed.  It was then replaced with a simple
@@ -292,8 +302,9 @@ body ManagedWin::_create { class args } {
 	  set g "${w}x${h}+${x}+${y}"
 	}
 	if {[expr $x+50] < $_screenwidth && [expr $y+20] < $_screenheight} {
-	  wm geometry $top $g
 	  wm positionfrom $top user
+	  wm geometry $top $g
+	  set ::$top._init_geometry $g
 	}
       }
     }
@@ -322,7 +333,6 @@ body ManagedWin::find { win } {
 #  PUBLIC PROC:  init
 # ------------------------------------------------------------
 body ManagedWin::init {} {
-  debug
   wm withdraw .
   set _screenheight [winfo screenheight .]
   set _screenwidth [winfo screenwidth .]

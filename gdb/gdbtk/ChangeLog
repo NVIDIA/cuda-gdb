@@ -1,3 +1,11 @@
+2001-04-09  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/managedwin.itb (ManagedWin::reveal): After
+	deiconifying window for the first time, set its geometry
+	again, if the platform is unix. This fixes a problem with kde.
+	(ManagedWin::_create): Set a variable with the initial
+	geometry.
+
 2001-04-04  Christopher Faylor  <cgf@redhat.com>
 
 	* generic/gdbtk.c: Add __CYGWIN__ conditional to WIN32 test.
