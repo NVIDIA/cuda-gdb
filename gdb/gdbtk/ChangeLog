@@ -1,5 +1,11 @@
 2001-05-10  Keith Seitz  <keiths@cygnus.com>
 
+	* generic/gdbtk-bp.c (gdb_set_bp): Generate a breakpoint event
+	when we create a breakpoint. The hook is no longer used.
+	(gdb_set_bp_addr): Ditto.
+
+2001-05-10  Keith Seitz  <keiths@cygnus.com>
+
 	* generic/gdbtk-bp.c (breakpoint_list, breakpoint_list_size): New
 	variables. Gdb is forcing us to maintain our own breakpoint
 	database.

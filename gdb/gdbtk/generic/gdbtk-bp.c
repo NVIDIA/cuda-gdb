@@ -473,7 +473,7 @@ gdb_set_bp (clientData, interp, objc, objv)
   free(buf);
 
   /* now send notification command back to GUI */
-  create_breakpoint_hook (b);
+  breakpoint_create_event (b->number);
   return TCL_OK;
 }
 
@@ -551,7 +551,7 @@ gdb_set_bp_addr (ClientData clientData, Tcl_Interp *interp, int objc,
   b->addr_string = xstrdup (buf);
 
   /* now send notification command back to GUI */
-  create_breakpoint_hook (b);
+  breakpoint_create_event (b->number);
   return TCL_OK;
 }
 
