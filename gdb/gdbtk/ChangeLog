@@ -1,3 +1,8 @@
+2004-04-19  Roland McGrath  <roland@redhat.com>
+
+	* generic/gdbtk-hooks.c: Update gdbtk_pre_add_symbol forward decl to
+	match defn type change.
+
 2004-04-15  Roland McGrath  <roland@redhat.com>
 
 	* generic/gdbtk-hooks.c (gdbtk_pre_add_symbol): Add const to arg type.
