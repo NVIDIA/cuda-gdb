@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.149 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.150 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3232,10 +3232,6 @@ Unlike @code{STACK_ALIGN}, this function always adjusts the address in
 the direction of stack growth.
 
 By default, no frame based stack alignment is performed.
-
-@item FRAME_ARGS_ADDRESS_CORRECT
-@findex FRAME_ARGS_ADDRESS_CORRECT
-See @file{stack.c}.
 
 @item DEPRECATED_FRAME_CHAIN(@var{frame})
 @findex DEPRECATED_FRAME_CHAIN
