@@ -1,3 +1,8 @@
+2002-05-06  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/session.tcl (notice_file_change): Catch the
+	directory change, in case the directory no longer exists.
+
 2002-05-05  Alexandre Oliva  <aoliva@redhat.com>
 
 	* generic/gdbtk-register.c (get_register, register_changed_p):

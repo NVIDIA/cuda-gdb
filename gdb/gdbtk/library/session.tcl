@@ -244,7 +244,7 @@ namespace eval Session {
     }
 
     if {[info exists values(pwd)]} {
-      gdb_cmd "cd $values(pwd)"
+      catch {gdb_cmd "cd $values(pwd)"}
     }
 
     if {[info exists values(args)]} {
