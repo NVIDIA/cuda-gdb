@@ -1,3 +1,11 @@
+2000-03-24  Jim Blandy  <jimb@redhat.com>
+
+	Handle the fact that there are holes in the register numbering.
+	* gdbtk-cmds.c (gdb_regnames): If given the -numbers option,
+	return the register numbers along with their names.
+ 	(get_register_name): Record both the register name and number, if
+ 	requested.
+
 2000-03-13  James Ingham  <jingham@leda.cygnus.com>
 
 	* gdbtk-varobj.c (variable_create): Pass the correct
