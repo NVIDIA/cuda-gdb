@@ -1,0 +1,149 @@
+1999-09-17  Fernando Nasser  <fnasser@totem.to.cygnus.com>
+
+	* cpp_variable.test: Add test (2.75) to verify
+	that a baseclass member value was effectively changed.
+
+1999-09-17  Fernando Nasser  <fnasser@totem.to.cygnus.com>
+
+	* cpp_variable.test: Update for new variable
+	code.
+
+1999-09-17  Fernando Nasser  <fnasser@totem.to.cygnus.com>
+
+	* c_variable.test: Update for new variable code.
+
+1999-09-17  Fernando Nasser  <fnasser@totem.to.cygnus.com>
+
+	* cpp_variable.h (class V): Add type to virtual function
+	declaration.
+
+1999-06-08  Fernando Nasser  <fnasser@totem.to.cygnus.com>
+
+	* browser.exp: Use untested and not warning when DISPLAY is
+	not found.
+	* c_variable.exp: Same.
+	* console.exp: Same.
+	* cpp_variable.exp: Same.
+	* srcwin.exp: Same.
+
+1999-04-12  Keith Seitz  <keiths@cygnus.com>
+
+	* cpp_variable.exp: Pass the "c++" flag to gdb_compile so
+	that it can grab the right compiler.
+
+1999-03-16  Martin Hunt  <hunt@cygnus.com>
+
+	* srcwin.test (srcwin-4.5): Change variable name
+	to $b so test will run again.
+
+1999-03-03  James Ingham  <jingham@cygnus.com>
+
+	* browser.test: Fixed up to match the new function browser.
+	This is not done yet...
+
+	* srcwin.test: Check for errors when the bbox is called for a text 
+	item that is not on screen (so bbox is "").  Return something more 
+	useful.
+
+1999-03-01  James Ingham  <jingham@cygnus.com>
+
+	Changelog entries merged over from gdb development branch.
+
+	1999-01-12  Martin Hunt  <hunt@cygnus.com>
+	* srcwin.test: Add a bunch of tests for the source
+	window filename and function comboboxes.  Add in stack tests.
+
+	1999-01-11  Martin Hunt  <hunt@cygnus.com>
+	* srcwin.test: New file. Source Window tests.
+	* srcwin.exp: New file. Source Window tests.
+
+	Wed Jan  6 09:22:52 1999  Keith Seitz  <keiths@cygnus.com>
+	* c_variable.test (c_variable-1.9): Add new
+	test to check for creation of a variable that is really a type.
+	(c_variable-7.81): Use "output" instead of "print" to get PC.
+	Include missing bits of test.
+
+	* cpp_variable.test (cpp_variable-1.6): Default format
+	is now "natural", not "hexadecimal"
+	(cpp_variable-2.22): Ditto.
+	(cpp_variable-2.24): Force format to hex before getting value.
+
+	* cpp_variable.exp: Supply missing arg to gdbtk_analyze_results.
+
+	Tue Jan  5 12:40:52 1999  Keith Seitz  <keiths@cygnus.com>
+	* gdb.gdbtk/c_variable.c, c_variable.test, c_variable.exp: New C
+	language tests for variable object interface.
+	
+	* gdb.gdbtk/cpp_variable.h, cpp_variable.cc, cpp_variable.test,
+	cpp_variable.exp: New C++ language tests for variable object
+	interface.
+	
+	* gdb.gdbtk/Makefile.in (EXECUTABLES): Add c_variable and cpp_variable.
+
+	Tue Jan  5 12:33:47 1999  Keith Seitz  <keiths@cygnus.com>
+	lib/gdb.exp (gdbtk_analyze_results): Generic function
+	for outputting results of test run.
+	
+	* gdb.gdbtk/defs (gdbtk_test): Handle xpass and xfail.
+	(gdbtk_test_error): New proc which handles error aborts.
+	
+	* gdb.gdbtk/console.exp: Use gdbtk_analyze_results.
+	Check if we have a valid DISPLAY before running.
+	* gdb.gdbtk/browser.exp: Ditto.
+
+	1998-12-07  Martin M. Hunt  <hunt@cygnus.com>
+	* lib/gdb.exp (gdbtk_start): Fix path for itcl library.
+	* gdb.gdbtk/browser.test: Change "manage open" to ManagedWin::open.
+	* gdb.gdbtk/console.test: Same.
+	* gdb.gdbtk/*: Update from devo.
+
+	Fri Jul 24 14:57:19 1998  Keith Seitz  <keiths@cygnus.com>
+	* gdb.gdbtk/Makefile.in: Add new example program "stack".
+	* gdb.gdbtk/browser.test,browser.exp: Add browser window
+	  tests.
+	* gdb.gdbtk/stack1.c,stack2.c: Test case for browser window.
+
+1999-02-22  Martin Hunt  <hunt@cygnus.com>
+
+	* srcwin.test (move_mouse_to): Fix typo.
+
+1999-02-03  Martin Hunt  <hunt@cygnus.com>
+
+	* console.test (clear_command_line): Add tests 1.5 - 1.8,
+	which test the new Shift-Up and Shift-Down bindings.
+
+1999-02-01  Martin Hunt  <hunt@cygnus.com>
+
+	* srcwin.test (srcwin-4.3): Fix bp test.
+
+1999-01-29  Martin Hunt  <hunt@cygnus.com>
+
+	* srcwin.test (click): New function that generates an event
+	at a location.
+	(srcwin-4.4): New test. Simulate a click on a line and
+	check for breakpoint set.
+	(srcwin-4.5): New test. Right-click on a line and select "Continue
+	to Here" from popup.
+
+	* srcwin.exp: Source srcwin3.test, which will test source window
+	assembly debugging on executables built without "-g".
+	
+1999-01-29  Martin Hunt  <hunt@cygnus.com>	
+
+	* srcwin.exp: Add srcwin2.test, which are basically the same
+	tests as srcwin.test, but run with a missing source file.
+
+	* srcwin2.test: New file.
+
+	* srcwin.test: Add tests for setting breakpoints in the source window,
+	testing BP balloons, variable balloons, and mixed-mode disassembly
+	of include files.
+
+Sun Jun 28 22:34:34 1998  Martin M. Hunt  <hunt@cygnus.com>
+
+	* gdb.gdbtk/simple.c (main): Make main return an
+	int so compiler will stop complaining.
+
+Fri Jun 26 14:27:13 1998  Keith Seitz  <keiths@cygnus.com>
+
+	* gdb.gdbtk/console.{exp, test}: New console window tests.
