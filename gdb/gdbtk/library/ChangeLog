@@ -1,3 +1,10 @@
+2000-03-28  Jim Blandy  <jimb@redhat.com>
+
+	Handle the fact that there are holes in the register numbering.
+	* regwin.itb (RegWin::init_reg_display_vars): Ask gdb_regnames to
+ 	provide the register numbers, too; don't just assume that the Nth
+ 	element is register N.
+
 2000-03-27  James Ingham  <jingham@leda.cygnus.com>
 
 	* interface.tcl (gdbtk_quit): Let the window manager store away
