@@ -2310,6 +2310,7 @@ body SrcTextWin::showBPBalloon {win x y} {
   }
 
   set str ""
+  set need_lf 0
   foreach b $bps {
     set bpinfo [gdb_get_breakpoint_info $b]
     lassign $bpinfo file func linenum addr type enabled disposition \
@@ -2320,6 +2321,8 @@ body SrcTextWin::showBPBalloon {win x y} {
     } else {
       set enabled "DIS"
     }
+
+    if {$need_lf} {append str \n}
 
     append str [format "breakpoint %d at %s:%d (%#x)\n   %s %s %s" \
 		  $b $file $linenum $addr $enabled $type $disposition]
@@ -2343,6 +2346,7 @@ body SrcTextWin::showBPBalloon {win x y} {
 	append str "\n   commands: $commands"
       }
     }
+    set need_lf 1
   }
 
   # Scope out which break type is set here, and use the tag to get

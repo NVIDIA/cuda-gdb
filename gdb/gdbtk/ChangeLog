@@ -1,3 +1,8 @@
+2002-03-07  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/srctextwin.itb (SrcTextWin::showBPBalloon): Put 
+	linefeeds between multiple breakpoints.
+
 2002-03-06  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/srctextwin.itb (SrcTextWin::showBPBalloon):
