@@ -1,3 +1,9 @@
+2001-08-28  Keith Seitz  <keiths@redhat.com>
+
+	* library/bpwin.itb (build_win): Get rid of tixScrolledWindow
+	and use iwidgets::scrolledframe until something better comes
+	along.
+
 2001-08-23  Tom Tromey  <tromey@redhat.com>
 
 	* library/srcwin.itb (SrcWin::fillFuncCB): Sort function names.
