@@ -1,3 +1,8 @@
+2003-02-14  Keith Seitz  <keiths@redhat.com>
+
+	From Chris Faylor <cgf@redhat.com>:
+	* generic/gdbtk-main.c (main): Initialize args.interpreter_p.
+
 2003-02-14  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/globalpref.itb (GlobalPref::_change_icons): Fix
