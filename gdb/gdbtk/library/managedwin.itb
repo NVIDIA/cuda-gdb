@@ -115,7 +115,8 @@ body ManagedWin::restart {} {
 body ManagedWin::shutdown {} {
   set activeWins {}
   foreach win [itcl_info objects -isa ManagedWin] {
-    if {![$win isa ModalDialog] && ![$win isa DebugWin]} {
+    if {![$win isa ModalDialog] && ![$win isa DebugWin] &&
+	! [$win isa DebugWinDopts]} {
       set g [wm geometry [winfo toplevel [namespace tail $win]]]
       pref setd gdb/geometry/[namespace tail $win] $g
       lappend activeWins [$win pickle]

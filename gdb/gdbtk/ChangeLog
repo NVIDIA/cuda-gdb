@@ -1,4 +1,30 @@
-2001-10-18  Martin M. Hunt  <hunt@redhat.com>
+2001-11-05  Martin M. Hunt  <hunt@redhat.com>	
+
+	* library/debugwin.itb (DebugWin::build_win): 
+	Initialize gdbtk_de(ERRORS_ONLY) and gdbtk_de(filter_var)
+	(DebugWin::puts): Rewrite filter to handle new options.
+	(DebugWinDOpts::build_win): Update list of classes. Change 
+	filter dialog so we can not display only errors and warnings
+	or choose between displaying ALL classes except those selected
+	or only selected classes. Fix "OK" button to apply
+	changes before closing dialog.
+	DebugWinOpts::_apply): Now takes an agrument that
+	indicates if dialog should exit after applying filter.
+	
+	* library/debugwin.ith (_apply): Now takes an arg.
+
+	* library/main.tcl: If GDBTK_DEBUGFILE is not set,
+	use "insight.log" as the default. If GDBTK_DEBUG is set
+	and nonzero, start logging debug messages to
+	GDBTK_DEBUGFILE immediately. Never open the debug window
+	automatically.
+
+	* library/managedwin.itb (ManagedWin::shutdown): Don't 
+	save debug window options dialog on active list
+	
+	* library/srcwin.itb: Remove troublesome debug line.
+
+2001-11-05  Martin M. Hunt  <hunt@redhat.com>
 	* library/globalpref.itb (GlobalPref::_init_var):
 	New method to initialize _saved and _new arrays.
 	(GlobalPref::constructor): Call _init_var.

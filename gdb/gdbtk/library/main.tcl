@@ -101,8 +101,12 @@ if {[info exists env(GDBTK_TRACE)] && $env(GDBTK_TRACE) != 0} {
   }
 }
 
-if {[info exists env(GDBTK_DEBUGFILE)]} {
-  ::debug::logfile $env(GDBTK_DEBUGFILE)
+if {[info exists env(GDBTK_DEBUG)] && $env(GDBTK_DEBUG) != 0} {
+  if {[info exists env(GDBTK_DEBUGFILE)]} {
+    ::debug::logfile $env(GDBTK_DEBUGFILE)
+  } else {
+    ::debug::logfile "insight.log"
+  }
 }
 
 if {$tcl_platform(platform) == "unix"} {
@@ -146,13 +150,6 @@ ManagedWin::init
 # Can't do the first bit yet, since we don't get this from gdb...
 # wm command . [concat $argv0 $argv] 
 wm group . . 
-
-# Open debug window if testsuite is not running and GDBTK_DEBUG is set
-if {![info exists env(GDBTK_TEST_RUNNING)] || !$env(GDBTK_TEST_RUNNING)} {
-  if {[info exists env(GDBTK_DEBUG)] && $env(GDBTK_DEBUG) > 1} {
-    ManagedWin::open DebugWin
-  }
-}
 
 # some initial commands to get gdb in the right mode
 gdb_cmd {set height 0}

@@ -356,7 +356,6 @@ body SrcWin::goto_func {w {val ""}} {
 body SrcWin::fillNameCB {} {
   global _files
   set allfiles [gdb_listfiles]
-  debug "gdb_listfiles returned $allfiles"
   foreach f $allfiles {
     # FIXME: If you reactivate this code add a catch as gdb_find_file can err
     # (P.S.: I don't know why this is commented out)
