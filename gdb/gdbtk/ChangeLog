@@ -1,5 +1,12 @@
 2002-08-14  Keith Seitz  <keiths@redhat.com>
 
+	* library/plugins: Removed.
+	* plugins/: New folder to hold plugins.
+	* Makefile.am, Makefile.in, aclocal.m4, configure,
+	configure.in: New files.
+	
+2002-08-14  Keith Seitz  <keiths@redhat.com>
+
 	* generic/gdbtk.c (view_command): New function to display
 	location in source window.
 	(gdbtk_init): Add new gdb "view" command.
