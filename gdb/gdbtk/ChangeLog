@@ -1,5 +1,14 @@
 2001-08-20  Keith Seitz  <keiths@redhat.com>
 
+	* library/stackwin.itb (build_win): Use iwidget's scrolled listbox
+	instead of tix scrolled list box.
+	(update): Update to use iwidget's scrolled list box.
+	(change_frame): Ditto.
+	Remove parameters.
+	* library/stackwin.ith (change_frame): Remove all parameters.
+
+2001-08-20  Keith Seitz  <keiths@redhat.com>
+
 	* generic/gdbtk-cmds.c (gdb_load_disassembly): Save the original
 	address from parse_and_eval_address: if find_pc_partial_function
 	errors, we will lose our original address.

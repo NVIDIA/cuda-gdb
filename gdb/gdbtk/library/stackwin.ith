@@ -25,7 +25,7 @@ class StackWin {
     variable protect_me 0
     method build_win {}
     method cursor {glyph}
-    method change_frame {y}
+    method change_frame {}
     method no_inferior {}
   }
 
