@@ -579,12 +579,20 @@ proc load_gnome_file {fd} {
     } elseif {[regexp "\[ \t\n\]*\(.+\) = \(.+\)" $line a name val] == 0} {
       continue 
     }
-    set res [scan $val "\{ %f, %f, %f \}" r g b]
-    if {$res != 3} {continue}
-    set r [expr int($r*255)]
-    set g [expr int($g*255)]
-    set b [expr int($b*255)]
-    set val [format "\#%02x%02x%02x" $r $g $b]
+
+    if {[regexp "\"#......\"" $val a] == 1} {
+	set val [lindex $a 0]
+    } else {
+	set res [scan $val "\{ %f, %f, %f \}" r g b]
+	if {$res != 3} {
+	    continue
+	}
+	set r [expr int($r*255)]
+	set g [expr int($g*255)]
+	set b [expr int($b*255)]
+	set val [format "\#%02x%02x%02x" $r $g $b]
+    }
+
     debug "name=\"$name\"  val=\"$val\""
 
     # This is a bit of a hack and probably only

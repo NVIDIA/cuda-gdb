@@ -1,3 +1,9 @@
+2003-06-13  Martin Hunt  <hunt@redhat.com>
+
+	* library/prefs.tcl (load_gnome_file): Fix parsing
+	of gtk theme files so Red Hat 9 (and others) GNOME colors 
+	are correct.
+
 2003-06-11  David Carlton  <carlton@bactrian.org>
 
 	* generic/gdbtk-stack.c: Include dictionary.h.
