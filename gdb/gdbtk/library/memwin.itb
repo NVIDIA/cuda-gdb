@@ -1,3 +1,16 @@
+# Memory display window class definition for GDBtk.
+# Copyright 1998, 1999 Cygnus Solutions
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License (GPL) as published by
+# the Free Software Foundation; either version 2 of the License, or (at
+# your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
 # ------------------------------------------------------------------
 #  METHOD:  constructor - build the dialog
 # ------------------------------------------------------------------
@@ -5,28 +18,37 @@ body MemWin::constructor {args} {
   global _mem
   debug $args
   eval itk_initialize $args
-  
+
   set top [winfo toplevel $itk_interior]
   gdbtk_busy
-  
+
   set _mem($this,enabled) 1
   set bg white 
-  
+
   if {![info exists type(1)]} {
     set type(1) char
     set type(2) short
     set type(4) int
     set type(8) "long long"
   }
-  
+
   if {[pref getd gdb/mem/menu] != ""} {
     set mbar 0
   }
-  
+
+  # Load defaults from preferences.
+  set size [pref getd gdb/mem/size]
+  set numbytes [pref getd gdb/mem/numbytes]
+  set format [pref getd gdb/mem/format]
+  set ascii [pref getd gdb/mem/ascii]
+  set ascii_char [pref getd gdb/mem/ascii_char]
+  set bytes_per_row [pref getd gdb/mem/bytes_per_row]
+  set color [pref getd gdb/mem/color]
+
   init_addr_exp
   build_win
   gdbtk_idle
-  
+
   add_hook gdb_update_hook "$this update"
   add_hook gdb_busy_hook [list $this busy]
   add_hook gdb_idle_hook [list $this idle]
@@ -58,7 +80,8 @@ body MemWin::build_win {} {
   if { $mbar } {
     menu $itk_interior.m -tearoff 0
     $top configure -menu $itk_interior.m
-    $itk_interior.m add cascade -menu $itk_interior.m.addr -label "Addresses" -underline 0
+    $itk_interior.m add cascade -menu $itk_interior.m.addr \
+      -label "Addresses" -underline 0
     set m [menu $itk_interior.m.addr]
     $m add check -label " Auto Update" -variable _mem($this,enabled) \
       -underline 1 -command "after idle $this toggle_enabled"
@@ -78,7 +101,7 @@ body MemWin::build_win {} {
     set Numrows [expr {$numbytes / $bytes_per_row}]
   }
   set numrows [expr {$Numrows + 1}]
-  
+
   set Numcols [expr {$bytes_per_row / $size}]
   if {$ascii} {
     set numcols [expr {$Numcols + 2}]
@@ -604,13 +627,14 @@ body MemWin::reconfig {} {
   debug
   set addr_exp [string trimright [string trimleft $addr_exp]]
   set wh [winfo height $top]
-  
+
   if [winfo exists $itk_interior.m] { destroy $itk_interior.m }
   if [winfo exists $itk_interior.cb] { destroy $itk_interior.cb }
   if [winfo exists $itk_interior.f.upd] { destroy $itk_interior.f.upd }
   if [winfo exists $itk_interior.sy] { destroy $itk_interior.sy }  
-  destroy $itk_interior.f.cntl $itk_interior.f $itk_interior.t $itk_interior.sx 
-  
+  destroy $itk_interior.f.cntl $itk_interior.f $itk_interior.t \
+    $itk_interior.sx 
+
   set dont_size 1
 
   # If the fonts change, then you will need to recompute the 
@@ -618,6 +642,15 @@ body MemWin::reconfig {} {
   # depends on size.
 
   set rheight ""
+
+  # Update preferences to reflect new reality
+  pref setd gdb/mem/size $size
+  pref setd gdb/mem/numbytes $numbytes
+  pref setd gdb/mem/format $format
+  pref setd gdb/mem/ascii $ascii
+  pref setd gdb/mem/ascii_char $ascii_char
+  pref setd gdb/mem/bytes_per_row $bytes_per_row
+  pref setd gdb/mem/color $color
 
   build_win
   set dont_size 0
@@ -736,4 +769,3 @@ body MemWin::memMoveCell {w x y} {
   $w activate $r,$c
   $w see active
 }
-

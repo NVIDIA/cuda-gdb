@@ -1,3 +1,13 @@
+2001-03-15  Tom Tromey  <tromey@redhat.com>
+
+	* library/mempref.itb (MemPref::build_win): Correctly set initial
+	value of combobox.
+	* library/memwin.itb: Added copyright header.
+	(MemWin::constructor): Set defaults from preference database.
+	(MemWin::reconfig): Update preference database.
+	* library/prefs.tcl (pref_save): Save `mem' preferences.
+	(pref_set_defaults): Define default memory preferences.
+
 2001-03-08  Andrew Cagney  <ac131313@redhat.com>
 
 	* generic/gdbtk-cmds.c (map_arg_registers): Use REG_NUM instead of

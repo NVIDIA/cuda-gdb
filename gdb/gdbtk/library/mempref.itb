@@ -160,7 +160,7 @@ body MemPref::build_win {} {
   $fr.2.c list insert end 32
   $fr.2.c list insert end 64
   $fr.2.c list insert end 128
-  $fr.2.c configure -value 16
+  $fr.2.c configure -value $gbpr
 
   pack $fr.2.l -side left -anchor e
   pack $fr.2.c -side right

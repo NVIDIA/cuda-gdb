@@ -180,7 +180,7 @@ proc pref_save {{win {}}} {
     # FIXME: this is broken.  We should discover the list
     # dynamically.
     lappend secs load console src reg stack locals watch bp search \
-      process geometry help browser kod window session
+      process geometry help browser kod window session mem
 
     foreach section $secs {
       puts $fd "\[$section\]"
@@ -369,6 +369,15 @@ proc pref_set_defaults {} {
   # These are the classes of warning dialogs, and whether the user plans
   # to ignore them.
   pref define gdb/warnings/signal         0
+
+  # Memory window.
+  pref define gdb/mem/size 4
+  pref define gdb/mem/numbytes 0
+  pref define gdb/mem/format x
+  pref define gdb/mem/ascii 1
+  pref define gdb/mem/ascii_char .
+  pref define gdb/mem/bytes_per_row 16
+  pref define gdb/mem/color green
 }
 
 # This traces the global/fixed font and forces src-font to
