@@ -1,3 +1,27 @@
+2003-02-18  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-main.c (main): Change name of intepreter to "insight".
+	* generic/gdbtk.h: Add ifdef wrappers.
+	(gdbtk_init): Declare.
+	(gdbtk_source_start_file): Declare.
+	* generic/gdbtk.c (gdbtk_init): Export.
+	Reomve init_ui_hook stuff.
+	Do not add hooks here anymore (moved into interps).
+	Do not muck with gdbk_stdout et al (moved into interps).
+	(gdbtk_source_start_file): Code ripped out of gdbtk_init
+	which deals with sourcing the main startup file.
+	(gdbtk_init_1): Hack: New function.
+	(argv0): Hack: New static global.
+	(tk_init): Moved to gdbtk-interps.c.
+	(gdbtk_resume): Likewise.
+	(gdbtk_suspend): Likewise.
+	(gdbtk_prompt_p): Likewise.
+	(gdbtk_exec): Likewise.
+	(gdbtk_command_loop): Likewise.
+	(_initialize_gdbtk): Move interpreter stuff to gdbtk-interps.c.
+	Hack: Add new init_ui_hook.
+	* generic/gdbtk-interps.c: New file.
+
 2003-02-17  Christopher Faylor  <cgf@redhat.com>
 
 	Revert below change.

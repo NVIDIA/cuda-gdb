@@ -29,10 +29,8 @@
 #include "tracepoint.h"
 #include "demangle.h"
 #include "version.h"
-#include "cli-out.h"
 #include "top.h"
 #include "annotate.h"
-#include "interps.h"
 
 #if defined(_WIN32) || defined(__CYGWIN__)
 #define WIN32_LEAN_AND_MEAN
@@ -84,7 +82,9 @@ char *external_editor_command = NULL;
 
 extern int Tktable_Init (Tcl_Interp * interp);
 
-static void gdbtk_init (char *);
+void gdbtk_init (void);
+
+static void gdbtk_init_1 (char *argv0);
 
 void gdbtk_interactive (void);
 
@@ -119,6 +119,7 @@ static char *gdbtk_source_filename = NULL;
 
 int gdbtk_disable_fputs = 1;
 
+static const char *argv0; 
 
 #ifndef _WIN32
 
@@ -346,8 +347,8 @@ gdbtk_cleanup (PTR dummy)
  * the Tcl based library files.
  */
 
-static void
-gdbtk_init (char *argv0)
+void
+gdbtk_init (void)
 {
   struct cleanup *old_chain;
   char *s;
@@ -362,7 +363,6 @@ gdbtk_init (char *argv0)
 #ifndef _WIN32
   if (getenv ("DISPLAY") == NULL)
     {
-      init_ui_hook = NULL;
       return;
     }
 #endif
@@ -558,13 +558,6 @@ gdbtk_init (char *argv0)
 
   Tcl_StaticPackage (gdbtk_interp, "Insight", Gdbtk_Init, NULL);
 
-  /* This adds all the hooks that call up from the bowels of gdb
-   *  back into Tcl-land...
-   */
-
-  gdbtk_add_hooks ();
-
-
   /* Add a back door to Tk from the gdb console... */
 
   add_com ("tk", class_obscure, tk_command,
@@ -585,24 +578,19 @@ gdbtk_init (char *argv0)
       external_editor_command = NULL;
     }
 
-  /* close old output and send new to GDBTK */
-  ui_file_delete (gdb_stdout);
-  ui_file_delete (gdb_stderr);
-  gdb_stdout = gdbtk_fileopen ();
-  gdb_stderr = gdbtk_fileopen ();
-  gdb_stdlog = gdbtk_fileopen ();
-  gdb_stdtarg = gdbtk_fileopen ();
-  uiout = cli_out_new (gdb_stdout);
-
 #ifdef __CYGWIN32__
   (void) FreeConsole ();
 #endif
 
-  /* find the gdb tcl library and source main.tcl */
+  discard_cleanups (old_chain);
+}
 
-  {
+void
+gdbtk_source_start_file (void)
+{
+  /* find the gdb tcl library and source main.tcl */
 #ifdef NO_TCLPRO_DEBUGGER
-    static char script[] = "\
+  static char script[] = "\
 proc gdbtk_find_main {} {\n\
     global Paths GDBTK_LIBRARY\n\
     rename gdbtk_find_main {}\n\
@@ -628,31 +616,29 @@ proc gdbtk_find_main {} {\n\
 gdbtk_find_main";
 #endif /* NO_TCLPRO_DEBUGGER */
 
-    /* now enable gdbtk to parse the output from gdb */
-    gdbtk_disable_fputs = 0;
+  /* now enable gdbtk to parse the output from gdb */
+  gdbtk_disable_fputs = 0;
     
-    if (Tcl_GlobalEval (gdbtk_interp, (char *) script) != TCL_OK)
-      {
-	const char *msg;
+  if (Tcl_GlobalEval (gdbtk_interp, (char *) script) != TCL_OK)
+    {
+      const char *msg;
 
-	/* Force errorInfo to be set up propertly.  */
-	Tcl_AddErrorInfo (gdbtk_interp, "");
-	msg = Tcl_GetVar (gdbtk_interp, "errorInfo", TCL_GLOBAL_ONLY);
+      /* Force errorInfo to be set up propertly.  */
+      Tcl_AddErrorInfo (gdbtk_interp, "");
+      msg = Tcl_GetVar (gdbtk_interp, "errorInfo", TCL_GLOBAL_ONLY);
 
 #ifdef _WIN32
-	/* On windows, display the error using a pop-up message box.
-           If GDB wasn't started from the DOS prompt, the user won't
-           get to see the failure reason.  */
-	MessageBox (NULL, msg, NULL, MB_OK | MB_ICONERROR | MB_TASKMODAL);
-	throw_exception (RETURN_ERROR);
+      /* On windows, display the error using a pop-up message box.
+	 If GDB wasn't started from the DOS prompt, the user won't
+	 get to see the failure reason.  */
+      MessageBox (NULL, msg, NULL, MB_OK | MB_ICONERROR | MB_TASKMODAL);
+      throw_exception (RETURN_ERROR);
 #else
-	/* FIXME: cagney/2002-04-17: Wonder what the lifetime of
-           ``msg'' is - does it need a cleanup?  */
-	error (msg);
+      /* FIXME: cagney/2002-04-17: Wonder what the lifetime of
+	 ``msg'' is - does it need a cleanup?  */
+      error (msg);
 #endif
-      }
-  }
-
+    }
 
   /* Now source in the filename provided by the --tclcommand option.
      This is mostly used for the gdbtk testsuite... */
@@ -665,8 +651,13 @@ gdbtk_find_main";
       free (gdbtk_source_filename);
       free (script);
     }
+}
 
-  discard_cleanups (old_chain);
+static void
+gdbtk_init_1 (char *arg0)
+{
+  argv0 = arg0;
+  init_ui_hook = NULL;
 }
 
 /* gdbtk_test is used in main.c to validate the -tclcommand option to
@@ -683,96 +674,17 @@ gdbtk_test (char *filename)
   return 1;
 }
 
-void *
-tk_init (void)
-{
-  /* FIXME: Should return the interpreter's context.  */
-  return NULL;
-}
-
-int
-gdbtk_resume (void *data)
-{
-  return 1;
-}
-
-int
-gdbtk_suspend (void *data)
-{
-  return 1;
-}
-
-int
-gdbtk_prompt_p (void *data)
-{
-  return 0;
-}
-
-int
-gdbtk_exec (void *data, const char *command)
-{
-  internal_error (__FILE__, __LINE__, "tk_exec not implemented");
-}
-
-/* This function is called instead of gdb's internal command loop.  This is the
-   last chance to do anything before entering the main Tk event loop. 
-   At the end of the command, we enter the main loop. */
-
-static void
-gdbtk_command_loop (void *data)
-{
-  extern FILE *instream;
-
-  /* We no longer want to use stdin as the command input stream */
-  instream = NULL;
-
-  if (Tcl_Eval (gdbtk_interp, "gdbtk_tcl_preloop") != TCL_OK)
-    {
-      const char *msg;
-
-      /* Force errorInfo to be set up propertly.  */
-      Tcl_AddErrorInfo (gdbtk_interp, "");
-
-      msg = Tcl_GetVar (gdbtk_interp, "errorInfo", TCL_GLOBAL_ONLY);
-#ifdef _WIN32
-      MessageBox (NULL, msg, NULL, MB_OK | MB_ICONERROR | MB_TASKMODAL);
-#else
-      fputs_unfiltered (msg, gdb_stderr);
-#endif
-    }
-
-#ifdef _WIN32
-  close_bfds ();
-#endif
-
-  Tk_MainLoop ();
-}
-
 /* Come here during initialize_all_files () */
 
 void
 _initialize_gdbtk ()
 {
-  static const struct interp_procs tk_procs =
-  {
-    tk_init,
-    gdbtk_resume,
-    gdbtk_suspend,
-    gdbtk_exec,
-    gdbtk_prompt_p,
-    gdbtk_command_loop,
-  };
-
-  interp_add (interp_new ("gdbtk", NULL, NULL, &tk_procs));
-
-  /* FIXME: cagney/2003-02-12: This is wrong.  The initialization
-     should be done via the init function.  */
-  if (use_windows)
-    {
-      /* Tell the rest of the world that Gdbtk is now set up. */
-      init_ui_hook = gdbtk_init;
-    }
-#ifdef __CYGWIN32__
+  /* Current_interpreter not set yet, so we must check
+     if "interpreter_p" is set to "insight" to know if
+     insight is GOING to run. */
+  if (strcmp (interpreter_p, "insight") == 0)
+    init_ui_hook = gdbtk_init_1;
+#ifdef __CYGWIN__
   else
     {
       DWORD ft = GetFileType (GetStdHandle (STD_INPUT_HANDLE));
