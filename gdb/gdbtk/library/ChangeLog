@@ -1,5 +1,9 @@
 2000-08-10  Fernando Nasser  <fnasser@cygnus.com>
 
+	* targetselection.itb (change_baud): Don't set baud for ETX.
+
+2000-08-10  Fernando Nasser  <fnasser@cygnus.com>
+
 	* srctextwin.itb (jump_to_here): New method. Implements the
 	"Jump to Here" popup menu option.
 	(build_popups): Add the "Jump to Here" option to the popup menu.
