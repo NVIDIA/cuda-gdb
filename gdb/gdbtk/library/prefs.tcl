@@ -78,7 +78,8 @@ proc pref_read {} {
 	  {^[ \t\n]*#.*} {
 	    # Comment.  We recognize one magic comment that includes
 	    # the version number.
-	    if {[regexp -- "^GDBtkInitVersion: (\[0-9\]+)\$" $line v]} {
+	    if {[regexp -- "^# GDBtkInitVersion: (\[0-9\]+)\$" $line \
+		   dummy v]} {
 	      set version $v
 	    }
 	  }

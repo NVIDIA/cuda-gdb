@@ -1,3 +1,8 @@
+2001-08-22  Tom Tromey  <tromey@redhat.com>
+
+	* library/prefs.tcl (pref_read): Version number appears in
+	comment.
+
 2001-08-21  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk.c (gdbtk_init): Gdb just fixed this. No
