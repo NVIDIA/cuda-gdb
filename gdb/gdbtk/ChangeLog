@@ -1,5 +1,12 @@
 2002-11-11  Martin M. Hunt  <hunt@redhat.com>	
 
+	* library/srcbar.itcl (create_help_menu): For unix systems,
+	if compatibility is set to KDE or GNOME, put the help menu
+	in the right place. Otherwise put it on the far right, like
+	Motif does.
+
+2002-11-11  Martin M. Hunt  <hunt@redhat.com>	
+	
 	* library/helpviewer.tcl: New file. Finds
 	an appropriate help browser and displays the help files.
 
