@@ -1,3 +1,8 @@
+2003-02-20  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-cmds.c (gdb_search): Change SYMBOL_SOURCE_NAME
+	to SYMBOL_PRINT_NAME to track recent changes in gdb.
+
 2003-02-20  Pierre Muller  <muller@ics.u-strasbg.fr>
 
 	* generic/gdbtk-cmds.c: Add missing "block.h" include.

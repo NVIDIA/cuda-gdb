@@ -1373,10 +1373,10 @@ gdb_search (ClientData clientData, Tcl_Interp *interp,
 
 	  if (p->msymbol == NULL)
 	    Tcl_ListObjAppendElement (interp, elem,
-				      Tcl_NewStringObj (SYMBOL_SOURCE_NAME (p->symbol), -1));
+				      Tcl_NewStringObj (SYMBOL_PRINT_NAME (p->symbol), -1));
 	  else
 	    Tcl_ListObjAppendElement (interp, elem,
-				      Tcl_NewStringObj (SYMBOL_SOURCE_NAME (p->msymbol), -1));
+				      Tcl_NewStringObj (SYMBOL_PRINT_NAME (p->msymbol), -1));
 
 	  if (show_files)
 	    {
