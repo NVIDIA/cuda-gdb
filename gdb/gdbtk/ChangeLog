@@ -1,3 +1,7 @@
+2001-08-23  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/targetselection.itb: Added PMON and DDB targets.
+
 2001-08-22  Tom Tromey  <tromey@redhat.com>
 
 	* library/prefs.tcl (pref_read): Version number appears in

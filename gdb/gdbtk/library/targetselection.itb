@@ -198,6 +198,34 @@ body TargetSelection::init_target_db {} {
   set gdb_target(mipstcp,runlist) {1 1 0 1}
   set gdb_target(mipstcp,after_attaching) {}
 
+  # PMON
+  set gdb_target(pmon,pretty-name) "PMON/Serial"
+  set gdb_target(pmon,defbaud) "9600"
+  set gdb_target(pmon,baud-rates) {9600 19200 38400}
+  set gdb_target(pmon,cmd) "pmon com1"
+  set gdb_target(pmon,runlist) {1 1 0 1}
+  set gdb_target(pmon,after_attaching) {}
+  set gdb_target(pmontcp,pretty-name) "PMON/TCP"
+  set gdb_target(pmontcp,defbaud) "TCP"
+  set gdb_target(pmontcp,baud-rates) {}
+  set gdb_target(pmontcp,cmd) "pmon tcpX"
+  set gdb_target(pmontcp,runlist) {1 1 0 1}
+  set gdb_target(pmontcp,after_attaching) {}
+
+  # DDB
+  set gdb_target(ddb,pretty-name) "DDB/Serial"
+  set gdb_target(ddb,defbaud) "19200"
+  set gdb_target(ddb,baud-rates) {9600 19200 38400}
+  set gdb_target(ddb,cmd) "ddb com1"
+  set gdb_target(ddb,runlist) {1 1 0 1}
+  set gdb_target(ddb,after_attaching) {}
+  set gdb_target(ddbtcp,pretty-name) "DDB/TCP"
+  set gdb_target(ddbtcp,defbaud) "TCP"
+  set gdb_target(ddbtcp,baud-rates) {}
+  set gdb_target(ddbtcp,cmd) "ddb tcpX"
+  set gdb_target(ddbtcp,runlist) {1 1 0 1}
+  set gdb_target(ddbtcp,after_attaching) {}
+
   # Picobug
   set gdb_target(picobug,pretty-name) "Picobug/Serial"
   set gdb_target(picobug,defbaud) "19200"
