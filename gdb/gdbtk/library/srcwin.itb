@@ -386,7 +386,7 @@ body SrcWin::fillFuncCB {name} {
       _set_name ""
       return
     }
-    foreach f $listfuncs {
+    foreach f [lsort -increasing $listfuncs] {
       lassign $f func mang
       set _mangled_func($func) $mang
       $_statbar.func list insert end $func
