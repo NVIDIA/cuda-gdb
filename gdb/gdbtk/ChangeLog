@@ -1,3 +1,9 @@
+2004-06-24  Andrew Cagney  <cagney@gnu.org>
+
+	* generic/gdbtk-hooks.c (ui_loop_hook, pre_add_symbol_hook)
+	(post_add_symbol_hook, selected_frame_level_changed_hook): Delete
+	extern declarations.
+
 2004-06-15  Alan Modra  <amodra@bigpond.net.au>
 
 	* generic/gdbtk-cmds.c (gdb_load_info): Use bfd_get_section_size

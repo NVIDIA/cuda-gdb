@@ -73,11 +73,6 @@ extern void gdbtk_create_tracepoint (int);
 extern void gdbtk_delete_tracepoint (int);
 extern void gdbtk_modify_tracepoint (int);
 
-extern void (*pre_add_symbol_hook) (const char *);
-extern void (*post_add_symbol_hook) (void);
-extern void (*selected_frame_level_changed_hook) (int);
-extern int (*ui_loop_hook) (int);
-
 static void gdbtk_architecture_changed (void);
 static void gdbtk_trace_find (char *arg, int from_tty);
 static void gdbtk_trace_start_stop (int, int);
