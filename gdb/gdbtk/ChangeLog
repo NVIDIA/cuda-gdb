@@ -1,3 +1,8 @@
+2001-11-30  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/interface.tcl (gdbtk_eval): Remove
+	undocumented debug function.
+
 2001-11-21  Tom Tromey  <tromey@redhat.com>
 
 	* library/interface.tcl (gdbtk_tcl_preloop): Override session's
