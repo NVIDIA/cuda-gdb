@@ -2477,7 +2477,7 @@ hex2bin (const char *hex, char *bin, int count)
   int incr = 2;
 
 
-  if (TARGET_BYTE_ORDER == LITTLE_ENDIAN)
+  if (TARGET_BYTE_ORDER == BFD_ENDIAN_LITTLE)
     {
       /* need to read string in reverse */
       hex += count - 2;
