@@ -682,8 +682,14 @@ proc pref_set_option_db {makebg} {
 
   option add *highlightBackground $Colors(bg)
   option add *selectBackground $Colors(sbg)
-  option add *activeBackground $Colors(sbg)
+
+  if {$::tcl_platform(platform) == "unix"}  {
+    option add *activeBackground $Colors(sbg)
+  }
+
   option add *selectForeground $Colors(sfg)
+  option add *Menu*activeForeground $Colors(sfg)
+
   if {[info exists Colors(prelight)]} {
     option add *Button*activeBackground $Colors(prelight)
   }
