@@ -111,19 +111,8 @@ body SrcWin::_build_win {} {
   $_statbar.mode list insert end MIXED
   $_statbar.mode list insert end SRC+ASM
 
-  # Search
-  frame $_statbar.frame
-  entry $_statbar.frame.search -bd 3 -font src-font -width 10
-  bind_plain_key $_statbar.frame.search \
-    Return [code $this _search forwards]
-  bind_plain_key $_statbar.frame.search \
-    Shift-Return [code $this _search backwards]
-
-  pack $_statbar.frame -side right -pady 4 -padx 10 -fill y -expand 1 -anchor e
   pack $_statbar.mode -side right -padx 10 -pady 4
   pack $_statbar.name $_statbar.func -side left -pady 4 -padx 10
-
-  pack $_statbar.frame.search -fill x -expand yes  
 
   # if user likes control on top...
   if {[pref get gdb/src/top_control]} {
@@ -803,14 +792,12 @@ body SrcWin::reset {} {
 }
 
 # ------------------------------------------------------------------
-#  PRIVATE METHOD:  _search - search for text or jump to a specific line
+#  PUBLIC METHOD:  search - search for a STRING or jump to a specific line
 #           in source window, going in the specified DIRECTION.
 # ------------------------------------------------------------------
-body SrcWin::_search {direction} {
-  set exp [$_statbar.frame.search get]
-  #debug "searching $direction for \"$exp\""
+body SrcWin::search {direction string} {
   set_status
-  set_status [$twin search $exp $direction] 1
+  set_status [$twin search $string $direction] 1
 }
 
 # ------------------------------------------------------------------

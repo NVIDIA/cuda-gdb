@@ -51,6 +51,7 @@ class SrcWin {
     method clear_file {}
     method get_file {}
     method is_fixed {}
+    method search {direction string}
 
     proc choose_and_update {}
     proc choose_and_display {tag linespec}
@@ -68,7 +69,6 @@ class SrcWin {
     method _build_win {}
     method _exit {}
     method _name {w {val ""}}
-    method _search {direction}
     method _set_name { val {found 1} }
     method _set_state {varname}
     method _update_title {name}

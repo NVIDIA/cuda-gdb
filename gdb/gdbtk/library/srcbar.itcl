@@ -534,6 +534,19 @@ class SrcBar {
       $Tool add separator
     }
 
+    # Add find in file entry box.
+    $Tool add label findlabel "Find:" "" -anchor e -font src-font
+    $Tool add custom searchbox entry "Search in editor" \
+       -bd 3 -font src-font -width 10
+
+    set callback [code $source search]
+    $Tool itembind searchbox <Return> \
+	    "$callback forwards \[eval %W get\]"
+    $Tool itembind searchbox <Shift-Return> \
+            "$callback backwards \[eval %W get\]"
+
+    $Tool add separator
+
     $Tool toolbar_button_right_justify
 
     create_stack_buttons

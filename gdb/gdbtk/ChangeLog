@@ -1,3 +1,15 @@
+2002-02-25  Ian Roxborough  <irox@redhat.com>
+
+	* library/srcbar.itcl (SrcBar::create_buttons): Added
+	"Search in source file" entry box and label to the top
+	row toolbar.
+	* library/srcwin.itb (SrcWin::_build_win): Removed
+	"Search in source file" entry box.
+	(SrcWin::_search): Renamed to "search", add string
+	parameter and cleaned up.
+	* library/srcwin.ith (SrcWin): Removed private
+	method "_search" and added public method "search".
+
 2002-02-17  Tom Tromey  <tromey@redhat.com>
 
 	* library/tclIndex: Updated.
