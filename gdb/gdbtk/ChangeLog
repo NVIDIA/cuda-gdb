@@ -1,3 +1,8 @@
+2001-06-05  Martin Hunt  <hunt@redhat.com>
+
+	* library/globalpref.itb(build_win): Don't change directory
+	before building icon combobox.  Add debug lines.
+
 2001-06-04  Keith Seitz  <keiths@redhat.com>
 
 	* library/srcbar.itcl (constructor): Set the toolbar's initial

@@ -84,7 +84,6 @@ body GlobalPref::build_win {} {
       lappend icondirlist $foo
     }
   }
-  cd $curdir
 
   set width 14
   # load combobox
@@ -98,6 +97,7 @@ body GlobalPref::build_win {} {
     set foo [file join $dir "icons.txt"]
     if {[catch {::open $foo r} fid]} {
       # failed
+      dbug E "couldn't open $foo:$fid"
       if {$cdir} {$frame.icons.cb entryset "unknown icons"}
       $frame.icons.cb list insert end "unknown icons"
     } else {
@@ -113,7 +113,7 @@ body GlobalPref::build_win {} {
     }
   }
   $frame.icons.cb configure -width $width
-  
+  cd $curdir
 
   # searching for fixed font families take a long time
   # therefore, we cache the font names.  The font cache
