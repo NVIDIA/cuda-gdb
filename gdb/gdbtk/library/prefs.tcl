@@ -663,6 +663,11 @@ proc load_gnome_file {fd} {
 proc pref_set_option_db {makebg} {
   global Colors
 
+  # The color of text that indicates changed items
+  # We standardize on one color here so that changed
+  # items don't blend into any OS color scheme
+  set Colors(change) "green"
+
   option add *background $Colors(bg)
   option add *Text*background $Colors(textbg)
   option add *Entry*background $Colors(textbg)

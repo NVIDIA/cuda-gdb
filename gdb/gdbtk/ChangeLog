@@ -1,3 +1,17 @@
+2002-12-04  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/regwin.itb (update): Remove some old code
+	that marked registers as changed when the target started.
+	(_build_win): Make changed registers more visible by
+	changing their bg to Colors(change).
+
+	* library/prefs.tcl (pref_set_option_db): Create a new
+	Color(change) which is the color of text indicating a change.
+	Current default is green.
+
+	* library/vartree.itb (_init_data): Make changed values
+	Color(change). Can't change bg, so we change fill color.
+
 2002-12-04  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-hooks.c: Include tcl.h and tk.h to pull

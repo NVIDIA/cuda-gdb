@@ -396,7 +396,7 @@ itcl::body  VarTree::_init_data {} {
   set colors(type) "red"
   set colors(error) "red"
   set colors(value) "black"
-  set colors(change) "green"
+  set colors(change) $::Colors(change)
   set colors(disabled) "gray50"
   set colors(line) "gray50"
 

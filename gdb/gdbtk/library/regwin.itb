@@ -223,7 +223,7 @@ itcl::body RegWin::_build_win {} {
   $itk_component(table) tag configure normal  \
     -state disabled -bg $::Colors(textbg) -fg $::Colors(textfg)
   $itk_component(table) tag configure sel -bg $::Colors(sbg) -fg $::Colors(sfg)
-  $itk_component(table) tag configure highlight -bg $::Colors(bg)
+  $itk_component(table) tag configure highlight -bg $::Colors(change) -fg black
   $itk_component(table) tag raise highlight
   $itk_component(table) tag configure header \
     -anchor w -state disabled -relief raised
@@ -1107,8 +1107,7 @@ itcl::body RegWin::set_variable {event} {
 #  RETURNS:      Nothing
 # ------------------------------------------------------------------
 itcl::body RegWin::update {event} {
-
-  dbug I "START REGISTER UPDATE CALLBACK"
+  debug
 
   # Change anything on the old change list back to normal
   foreach r $_change_list {
@@ -1121,17 +1120,6 @@ itcl::body RegWin::update {event} {
   set _change_list {}
   if {![catch {gdb_reginfo changed $_reg_display_list} changed]} {
     set _change_list $changed
-  }
-
-  # Problem: if the register was invalid (i.e, we were not running),
-  # its old value will probably be "0x0". Now if we run and its real
-  # value is "0x0", then it will appear as a blank in the register
-  # window. Safegaurd against that here by adding any such register
-  # which is not already in the change list.
-  foreach r $_reg_display_list {
-    if {$_data($_cell($r)) == "" && [lsearch $_change_list $r] == -1} {
-      lappend _change_list $r
-    }
   }
 
   # Tag the changed cells and resize the columns
@@ -1150,6 +1138,5 @@ itcl::body RegWin::update {event} {
     _size_column $col 0
   }
 
-
-  dbug I "END REGISTER UPDATE CALLBACK" 
+  debug "END REGISTER UPDATE CALLBACK" 
 }
