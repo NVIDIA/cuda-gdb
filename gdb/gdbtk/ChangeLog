@@ -1,3 +1,14 @@
+2001-08-17  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-varobj.c (variable_obj_command): Pass pointer
+	to varobj* when calling variable_update (API changed).
+	(variable_create): Don't pass varobj* to install_variable. It's
+	not used.
+	(variable_children): Likewise.
+	(variable_update): Change parameters to accept pointer to
+	varobj*. Matches API change in varobj_update.
+	(install_variable): Remove unused "var" parameter.
+
 2001-08-16  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk.c (gdbtk_init): Revert change from earlier.

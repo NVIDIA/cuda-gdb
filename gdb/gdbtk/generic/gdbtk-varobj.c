@@ -61,11 +61,11 @@ static int variable_type (Tcl_Interp *, int, Tcl_Obj * CONST[],
 static int variable_value (Tcl_Interp *, int, Tcl_Obj * CONST[],
 			   struct varobj *);
 
-static Tcl_Obj *variable_update (Tcl_Interp * interp, struct varobj *var);
+static Tcl_Obj *variable_update (Tcl_Interp * interp, struct varobj **var);
 
 /* Helper functions for the above subcommands. */
 
-static void install_variable (Tcl_Interp *, char *, struct varobj *);
+static void install_variable (Tcl_Interp *, char *);
 
 static void uninstall_variable (Tcl_Interp *, char *);
 
@@ -278,7 +278,7 @@ variable_obj_command (clientData, interp, objc, objv)
     case VARIABLE_UPDATE:
       /* Only root variables can be updated */
       {
-	Tcl_Obj *obj = variable_update (interp, var);
+	Tcl_Obj *obj = variable_update (interp, &var);
 	Tcl_SetObjResult (interp, obj);
       }
       break;
@@ -386,7 +386,7 @@ variable_create (interp, objc, objv)
     {
       /* Install a command into the interpreter that represents this
          object */
-      install_variable (interp, obj_name, var);
+      install_variable (interp, obj_name);
       Tcl_SetObjResult (interp, Tcl_NewStringObj (obj_name, -1));
       result_ptr->flags |= GDBTK_IN_TCL_RESULT;
 
@@ -444,7 +444,7 @@ variable_children (interp, var)
       /* Add child to result list and install the Tcl command for it. */
       Tcl_ListObjAppendElement (NULL, list,
 				Tcl_NewStringObj (childname, -1));
-      install_variable (interp, childname, *vc);
+      install_variable (interp, childname);
       vc++;
     }
 
@@ -458,7 +458,7 @@ variable_children (interp, var)
 static Tcl_Obj *
 variable_update (interp, var)
      Tcl_Interp *interp;
-     struct varobj *var;
+     struct varobj **var;
 {
   Tcl_Obj *changed;
   struct varobj **changelist;
@@ -625,13 +625,12 @@ variable_value (interp, objc, objv, var)
 /* Install the given variable VAR into the tcl interpreter with
    the object name NAME. */
 static void
-install_variable (interp, name, var)
+install_variable (interp, name)
      Tcl_Interp *interp;
      char *name;
-     struct varobj *var;
 {
   Tcl_CreateObjCommand (interp, name, variable_obj_command,
-			(ClientData) var, NULL);
+			NULL, NULL);
 }
 
 /* Unistall the object VAR in the tcl interpreter. */
