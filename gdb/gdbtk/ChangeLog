@@ -1,3 +1,11 @@
+2001-09-28  Tom Tromey  <tromey@redhat.com>
+
+	* library/console.itb (Console::_operate_and_get_next): New method.
+	(Console::_setprompt): Insert next history element if requested.
+	(Console::_build_win): Bind C-o to _operate_and_get_next.
+	* library/console.ith (_operate_and_get_next): Declare.
+	(_pendingHistElement): New variable.
+
 2001-09-27  Elena Zannoni  <ezannoni@redhat.com>
 
 	* library/targetselection.itb (build_win, default_port): Handle

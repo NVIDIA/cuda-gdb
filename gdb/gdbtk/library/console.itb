@@ -65,9 +65,6 @@ body Console::_build_win {} {
   #
   bind $_twin <Return> "$this invoke; break"
 
-  # disable this
-  bind_plain_key $_twin Control-o "break"
-
   # History control.
   bind_plain_key $_twin Control-p "[code $this _previous]; break"
   bind $_twin <Up> "[code $this _previous]; break"
@@ -77,7 +74,8 @@ body Console::_build_win {} {
   bind $_twin <Home> "[code $this _first]; break"
   bind $_twin <Meta-greater> "[code $this _last]; break"
   bind $_twin <End> "[code $this _last]; break"
-  
+  bind_plain_key $_twin Control-o "[code $this _operate_and_get_next]; break"
+
   # Tab completion
   bind_plain_key $_twin KeyPress-Tab "[code $this _complete]; break"
   
@@ -243,6 +241,25 @@ body Console::einsert {line tag} {
   set _needNL 0
 }
 
+# ------------------------------------------------------------------
+#  NAME:         ConsoleWin::_operate_and_get_next
+#  DESCRIPTION:  Invokes the current command and, if this
+#                command came from the history, arrange for
+#                the next history command to be inserted once this
+#                command is finished.
+#
+#  ARGUMENTS:    None
+#  RETURNS:      Nothing
+# ------------------------------------------------------------------
+body Console::_operate_and_get_next {} {
+  if {$_histElement >= 0} {
+    # _pendingHistElement will be used after the new history element
+    # is pushed.  So we must increment it.
+    set _pendingHistElement [expr {$_histElement + 1}]
+  }
+  invoke
+}
+
 #-------------------------------------------------------------------
 #  METHOD:  _previous - recall the previous command
 # ------------------------------------------------------------------
@@ -368,6 +385,12 @@ body Console::_setprompt {{prompt {}}} {
   $_twin insert {insert linestart} $prompt prompt_tag
   $_twin mark set cmdmark "insert -1 char"
   $_twin see insert
+
+  if {$_pendingHistElement >= 0} {
+    set _histElement $_pendingHistElement
+    set _pendingHistElement -1
+    _next
+  }
 }
 
 #-------------------------------------------------------------------
