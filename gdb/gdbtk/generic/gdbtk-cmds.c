@@ -37,6 +37,7 @@
 #include "demangle.h"
 #include "frame.h"
 #include "regcache.h"
+#include "linespec.h"
 #include "tui/tui-file.h"
 
 #include <sys/stat.h>
