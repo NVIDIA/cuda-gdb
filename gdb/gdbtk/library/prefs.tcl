@@ -217,7 +217,12 @@ proc escape_value {val} {
   # We use a URL-style quoting.  We encode `=', `%', the `[]'
   # characters and newlines.  We use a cute trick here: we regsub in
   # command expressions which we then expand using subst.
-  regsub -all -- "(\[\]\[=%\n\])" $val \
+  if {[info tclversion] >= 8.1} {
+    set expr {([\[\]=%\n])}
+  } else {
+    set expr "(\[\]\[=%\n\])"
+  }
+  regsub -all -- $expr $val \
     {[format "%%%02x" [scan {\1} %c x; set x]]} newval
   return [subst -nobackslashes -novariables $newval]
 }

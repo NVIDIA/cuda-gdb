@@ -1,3 +1,16 @@
+2001-09-27  Keith Seitz  <keiths@redhat.com>
+
+        * library/prefs.tcl (escape_value): Update to work
+        with Tcl's new and old syntax.
+
+2001-09-19  Keith Seitz  <keiths@redhat.com>
+
+	* library/main.tcl: Append iwidgets library path, if needed.
+	* generic/gdbtk.c (gdbtk_init): Add TCLLIBPATH to iwidgets
+	package index.
+	Define IWIDGETS_LIBRARY in interpreter so that we can add
+	this path to the auto_path at the right time later.
+
 2001-09-10  Ian Roxborough <irox@redhat.com>
 
 	* generic/gdbtk.c (gdbtk_init): Set IWIDGETS_LIBRARY if
