@@ -1,7 +1,7 @@
 \input texinfo   @c -*- texinfo -*-
 @setfilename gdbint.info
 @include gdb-cfg.texi
-@dircategory Programming & development tools.
+@dircategory Software development
 @direntry
 * Gdb-Internals: (gdbint).	The GNU debugger's internals.
 @end direntry
@@ -38,7 +38,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.208 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.209 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
