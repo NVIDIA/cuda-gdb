@@ -803,7 +803,10 @@ class VariableWin {
 	return 0
     }
 
+    # ------------------------------------------------------------------
+    # METHOD:   update
     # OVERRIDE THIS METHOD and call it from there
+    # ------------------------------------------------------------------
     method update {} {
 	global Update
 	debug
@@ -821,8 +824,22 @@ class VariableWin {
 	set ChangeList {}
 	set variables [$Hlist info children {}]
 	foreach var $variables {
-	    #      debug "VARIABLE: $var ($Update($this,$var))"
-	    set ChangeList [concat $ChangeList [$var update]]
+	    # debug "VARIABLE: $var ($Update($this,$var))"
+	    set UpdatedList [$var update]
+            if {[lindex $UpdatedList 0] == $var} {
+              debug "Type changed."
+              # We must fix the tree entry to correspond to the new type
+              $Hlist delete offsprings $var
+              $Hlist entryconfigure $var -text [label $var]
+              if {[$var numChildren] > 0} {
+                $Tree setmode $var open
+              } else {
+                $Tree setmode $var none
+              }
+            } else {
+	      set ChangeList [concat $ChangeList $UpdatedList]
+	      # debug "ChangeList=$ChangeList"
+            }
 	}
 
 	foreach var $ChangeList {

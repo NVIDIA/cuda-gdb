@@ -1,5 +1,9 @@
 2001-03-29  Fernando Nasser  <fnasser@redhat.com>
 
+	* library/variable.tcl (update): Cope with varobj type changes.
+
+2001-03-29  Fernando Nasser  <fnasser@redhat.com>
+
 	* library/variable.tcl (destructor): Remove file_changed_hook hook.
 
 2001-03-29  Fernando Nasser  <fnasser@redhat.com>
