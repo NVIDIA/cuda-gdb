@@ -1,5 +1,8 @@
 2000-12-08  Tom Tromey  <tromey@redhat.com>
 
+	* managedwin.itb (ManagedWin::startup): Only open source window
+	if it doesn't already exist.
+
 	* toolbar.tcl (create_help_menu): Remove `Cygnus' item.
 
 	* console.itb (Console::invoke): Trim trailing newlines from

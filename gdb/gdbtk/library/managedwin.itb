@@ -88,7 +88,16 @@ body ManagedWin::startup {} {
   foreach cmd [pref get gdb/window/active] {
     eval $cmd
   }
-  ManagedWin::open SrcWin
+  # If we open the source window, and a source window already exists,
+  # then we end up raising it twice during startup.  This yields an
+  # annoying effect for the user: if the user tries the bury the
+  # source window during startup, it will raise itself again.  This
+  # explains why we first check to see if a source window exists
+  # before trying to create it -- raising the window is an inevitable
+  # side effect of the creation process.
+  if {[llength [find SrcWin]] == 0} {
+    ManagedWin::open SrcWin
+  }
 }
 
 body ManagedWin::open_dlg {class args} {
@@ -119,7 +128,7 @@ body ManagedWin::_open { class args } {
   debug "$class $args"
   
   parse_args force
-  
+
   if {!$force} {
     # check all windows for one of this type
     foreach obj $manage_active {
