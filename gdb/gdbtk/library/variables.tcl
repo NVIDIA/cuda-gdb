@@ -203,7 +203,7 @@ class VariableWin {
 		    %s editEntry [%s getSelection]
 		} $this $this]
 	}
-	[namespace tail $this].mmenu.var add cascade -label Format -underline 0 \
+	[namespace tail $this].mmenu.var add cascade -label Format -underline 0 -state disabled \
 	    -menu [namespace tail $this].mmenu.var.format
 
 	menu [namespace tail $this].mmenu.var.format

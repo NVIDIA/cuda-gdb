@@ -1,4 +1,13 @@
+2001-07-21  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/variables.tcl (build_menu_helper): Set
+	the Format menu option to "disabled" initially.
+
 2001-07-20  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/managedwin.itb: Revert to global to properly
+	initialize geometry with some window managers.
+	* library/managedwin.ith (shutdown): Remove _geometry.
 
 	* library/memwin.itb: Fix syntax to open a new window
 	using the "-force" flag.
