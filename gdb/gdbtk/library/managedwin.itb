@@ -255,7 +255,17 @@ body ManagedWin::_create { class args } {
 
   if {$transient} {
     wm resizable $top 0 0
-    wm transient $top [winfo toplevel [namespace tail [lindex [ManagedWin::find SrcWin] 0]]]
+
+    # If a SrcWin is around, use its toplevel as the master for
+    # the transient. Otherwise use ".". (The splash screen will
+    # need ".", for example.)
+    set srcs [ManagedWin::find SrcWin]
+    if {[llength $srcs] > 0} {
+      set w [winfo toplevel [namespace tail [lindex $srcs 0]]]
+    } else {
+      set w .
+    }
+    wm transient $top $w
   } elseif {$::tcl_platform(platform) == "unix"} {
     # Modal dialogs DONT get Icons...
     if {[pref get gdb/use_icons] && ![$newwin isa ModalDialog]} {

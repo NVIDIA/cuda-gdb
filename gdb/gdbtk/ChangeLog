@@ -1,3 +1,9 @@
+2002-02-13  Keith Seitz  <keiths@redhat.com>
+
+	* library/managedwin.itb (_create): If given a transient window,
+	make sure that the SrcWin that is to become its master exists;
+	otherwise, use ".".
+
 2002-02-12  Keith Seitz  <keiths@redhat.com>
 
 	From Don Bowman <don@sandvine.com>:
