@@ -1,0 +1,7 @@
+Sat Feb  5 00:14:30 2000  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* gdb.rc, gdbtool.ico, README.GDBTK: To here from top level GDB
+ 	directory.
+	* gdb/gdbtcl2: Directory moved to gdbtk/library.
+	* gdb/gdbtk/generic: New directory.
+	
