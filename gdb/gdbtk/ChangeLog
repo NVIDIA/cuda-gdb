@@ -1,3 +1,14 @@
+2005-01-17  Keith Seitz  <kseitz@sources.redhat.com>
+
+	* generic/gdbtk-varobj.c (variable_value): Remove all instances
+	of error_last_message. It's gone.
+
+	* generic/gdbtk-wrapper.c: Include exceptions.h
+	* generic/gdbtk-cmds.c: Likewise.
+	* generic/gdbtk-interp.c: Likewise.
+	(gdbtk_interpreter_exec): Change return type to struct
+	exception. Return exception_none.	
+
 2005-01-13  Keith Seitz  <keiths@redhat.com>
 
 	* configure.in: Rename to ...

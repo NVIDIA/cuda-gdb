@@ -21,6 +21,7 @@
 #include "frame.h"
 #include "value.h"
 #include "block.h"
+#include "exceptions.h"
 #include "gdbtk-wrapper.h"
 
 /*

@@ -28,6 +28,7 @@
 #include "gdb_string.h"
 #include "cli/cli-cmds.h"
 #include "cli/cli-decode.h"
+#include "exceptions.h"
 
 #include "tcl.h"
 #include "tk.h"
@@ -112,10 +113,10 @@ gdbtk_interpreter_display_prompt_p (void *data)
   return 1;
 }
 
-static int
+static struct exception
 gdbtk_interpreter_exec (void *data, const char *command_str)
 {
-  return 1;
+  return exception_none;
 }
 
 /* This function is called instead of gdb's internal command loop.  This is the

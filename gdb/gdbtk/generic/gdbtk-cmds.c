@@ -39,6 +39,7 @@
 #include "filenames.h"
 #include "disasm.h"
 #include "value.h"
+#include "exceptions.h"
 
 /* tcl header files includes varargs.h unless HAS_STDARG is defined,
    but gdb uses stdarg.h, so make sure HAS_STDARG is defined.  */
