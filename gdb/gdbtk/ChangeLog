@@ -1,3 +1,9 @@
+2003-07-02  Martin Hunt  <hunt@redhat.com>
+
+	* library/prefs.tcl (pref_set_option_db): Only
+	set checkbutton select color for Unix.  Fixes Windows
+	checkbutton problem.
+
 2003-06-26  Keith R Seitz  <keiths@redhat.com>
 
 	From Roland Schwingel <Roland.Schwingel@onevision.de>:

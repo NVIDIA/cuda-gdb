@@ -703,5 +703,7 @@ proc pref_set_option_db {makebg} {
 
   # Change the default select color for checkbuttons, etc to match 
   # selectBackground.
-  option add *selectColor $Colors(sbg)
+  if {$::tcl_platform(platform) == "unix"}  {
+    option add *selectColor $Colors(sbg)
+  }
 }
