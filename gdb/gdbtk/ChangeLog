@@ -1,11 +1,3 @@
-2000-07-02  Kevin Buettner  <kevinb@redhat.com>
-
-	* generic/gdbtk-cmds.c, generic/gdbtk-hooks.c,
-	generic/gdbtk-variable.c, generic/gdbtk-varobj.c,
-	generic/gdbtk-wrapper.c, generic/gdbtk-wrapper.h,
-	generic/gdbtk.c, generic/gdbtk.h: Eliminate use of PARAMS from
-	declarations in these files.
-
 2000-04-17  Jonathan Larmour  <jlarmour@redhat.co.uk>
 
 	* ChangeLog-gdbtk: Renamed to ChangeLog

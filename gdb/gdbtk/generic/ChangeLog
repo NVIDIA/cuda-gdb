@@ -1,3 +1,10 @@
+2000-07-02  Kevin Buettner  <kevinb@redhat.com>
+
+	* gdbtk-cmds.c, gdbtk-hooks.c, gdbtk-variable.c,
+	gdbtk-varobj.c, gdbtk-wrapper.c, gdbtk-wrapper.h, gdbtk.c,
+	gdbtk.h: Eliminate use of PARAMS from declarations in these
+	files.
+
 2000-06-08  Fernando Nasser  <fnasser@cygnus.com>
 
 	* gdbtk-cmds.c (get_register):  Allow editing of typed registers if
