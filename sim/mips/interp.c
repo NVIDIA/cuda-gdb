@@ -13,8 +13,8 @@
    THIS SOFTWARE INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
    MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
 
-   $Revision: 1.186 $
-   $Date: 1999/09/03 19:18:46 $             
+   $Revision: 1.187 $
+   $Date: 1999/11/11 18:13:32 $             
 
 NOTEs:
 
@@ -3124,9 +3124,14 @@ decode_coproc (SIM_DESC sd,
 	   CACHE   Cache operation                 (VR4100 = 101111bbbbbpppppiiiiiiiiiiiiiiii)
 	   ERET    Exception return                (VR4100 = 01000010000000000000000000011000)
 	   */
-        if (((code == 0x00) || (code == 0x04)) && tail == 0)
+        if (((code == 0x00) || (code == 0x04)      /* MFC0  /  MTC0  */        
+	     || (code == 0x01) || (code == 0x05))  /* DMFC0 / DMTC0  */        
+	    && tail == 0)
 	  {
-	    /* M[TF]C0 - 32 bit word */
+	    /* Clear double/single coprocessor move bit. */
+	    code &= ~1;
+
+	    /* M[TF]C0 (32 bits) | DM[TF]C0 (64 bits) */
 	    
 	    switch (rd)  /* NOTEs: Standard CP0 registers */
 	      {
