@@ -38,7 +38,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.188 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.189 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -6749,7 +6749,9 @@ is so old that it has never been converted to use BFD.  Now that's old!
 @end table
 
 @include observer.texi
+@raisesections
 @include fdl.texi
+@lowersections
 
 @node Index
 @unnumbered Index

@@ -35,7 +35,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.13 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.14 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Support\par
 \hfill \manvers\par
@@ -4026,7 +4026,9 @@ is no more work than having the linker relocate ELF symbols, and it
 solves the problem of having to associate the ELF and stab symbols.
 However, no one has yet designed or implemented such a scheme.
 
+@raisesections
 @include fdl.texi
+@lowersections
 
 @node Symbol Types Index
 @unnumbered Symbol Types Index
