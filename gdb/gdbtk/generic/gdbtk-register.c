@@ -62,10 +62,10 @@ Gdbtk_Register_Init (Tcl_Interp *interp)
   /* Register/initialize any architecture specific data */
   setup_architecture_data ();
 
-  register_gdbarch_swap (&old_regs, sizeof (old_regs), NULL);
-  register_gdbarch_swap (&regformat, sizeof (regformat), NULL);
-  register_gdbarch_swap (&regtype, sizeof (regtype), NULL);
-  register_gdbarch_swap (NULL, 0, setup_architecture_data);
+  deprecated_register_gdbarch_swap (&old_regs, sizeof (old_regs), NULL);
+  deprecated_register_gdbarch_swap (&regformat, sizeof (regformat), NULL);
+  deprecated_register_gdbarch_swap (&regtype, sizeof (regtype), NULL);
+  deprecated_register_gdbarch_swap (NULL, 0, setup_architecture_data);
 
   return TCL_OK;
 }

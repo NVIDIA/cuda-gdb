@@ -169,10 +169,6 @@ itcl::body SrcWin::_build_win {} {
     } else {
       _update $loc
     }
-  } else {
-    if {[set linespec [gdbtk_locate_main]] != ""} {
-      location BROWSE_TAG $linespec
-    }
   }
 }
 
