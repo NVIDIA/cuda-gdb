@@ -78,7 +78,7 @@ namespace import debug::*
 if {[info exists IWIDGETS_LIBRARY]} {
   lappend auto_path $IWIDGETS_LIBRARY
 }
-if {[catch {package require Iwidgets 3.0} msg]} {
+if {[catch {package require Iwidgets} msg]} {
   if {![info exists ::env(GDBTK_TEST_RUNNING)] || $::env(GDBTK_TEST_RUNNING) == 0} {
     if {$::tcl_platform(platform) != "windows"} {
       puts stderr "Error: $msg"

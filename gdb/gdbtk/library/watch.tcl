@@ -1,5 +1,5 @@
 # Watch window for Insight.
-# Copyright 2002 Red Hat
+# Copyright 2002, 2003 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -92,9 +92,9 @@ itcl::class WatchWin {
     grid columnconfigure $entryFrame 1
 
     if {$::tcl_platform(platform) == "windows"} {
-      grid columnconfigure $entryFrame 1 -pad 20
-      ide_sizebox [namespace tail $this].sizebox
-      place [namespace tail $this].sizebox -relx 1 -rely 1 -anchor se
+#      grid columnconfigure $entryFrame 1 -pad 20
+#      ide_sizebox [namespace tail $this].sizebox
+#      place [namespace tail $this].sizebox -relx 1 -rely 1 -anchor se
     }
 
     grid $treeFrame -row 0 -column 0 -sticky news

@@ -1,5 +1,5 @@
 # Stack window for Insight.
-# Copyright 1997, 1998, 1999, 2002 Red Hat
+# Copyright 1997, 1998, 1999, 2002, 2003 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -48,8 +48,8 @@ itcl::body StackWin::build_win {} {
 
   # Add sizebox for windows
   if {[string compare $tcl_platform(platform) "windows"] == 0} {
-    ide_sizebox $itk_interior.sbox
-    place $itk_interior.sbox -relx 1.0 -rely 1.0 -anchor se
+#    ide_sizebox $itk_interior.sbox
+#    place $itk_interior.sbox -relx 1.0 -rely 1.0 -anchor se
   }
 
   update dummy

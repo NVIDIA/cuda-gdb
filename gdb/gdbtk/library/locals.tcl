@@ -1,5 +1,5 @@
 # Local Variable Window for Insight.
-# Copyright 2002 Red Hat
+# Copyright 2002, 2003 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -83,8 +83,8 @@ itcl::class LocalsWin {
     pack $f.tree -expand yes -fill both
     pack $f -expand yes -fill both
     if {$::tcl_platform(platform) == "windows"} {
-      ide_sizebox [namespace tail $this].sizebox
-      place [namespace tail $this].sizebox -relx 1 -rely 1 -anchor se
+#      ide_sizebox [namespace tail $this].sizebox
+#      place [namespace tail $this].sizebox -relx 1 -rely 1 -anchor se
     }
     
     window_name "Local Variables"

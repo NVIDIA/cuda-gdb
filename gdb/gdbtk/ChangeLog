@@ -1,5 +1,18 @@
 2003-01-21  Martin M. Hunt  <hunt@redhat.com>
+	* library/main.tcl: Don't require iwidgets 3.0.
 
+	* library/console.itb (Console::_build_win): Rename
+	tkTextClosestGap to tk::TextClosestGap. Rename tkCancelRepeat
+	to tk::CancelRepeat. Rename tkPriv to tk::Priv. Needed for tk 8.4.1.
+
+	* library/bpwin.itb (BpWin::build_win): Don't
+	create sizebox.
+	* library/locals.tcl (build_win): Ditto.
+	* library/regwin.itb (RegWin::_build_win): Ditto.
+	* library/srcwin.itb (SrcWin::constructor): Ditto.
+	* library/stackwin.itb (StackWin::build_win): Ditto.
+	* library/watch.tcl (build_win): Ditto.
+	
 	* generic/gdbtk.c (gdbtk_init): Look for iwidgets in
 	"iwidgets" instead of "iwidgets3.0.0".
 	Don't call ide_create_sizebox_command.

@@ -1,5 +1,5 @@
 # Console window for Insight
-# Copyright 1998, 1999, 2000, 2001, 2002 Red Hat, Inc.
+# Copyright 1998, 1999, 2000, 2001, 2002, 2003 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -147,7 +147,7 @@ itcl::body Console::_build_win {} {
   # the saved insertion point.
   set pretag pre-$_twin
   bind $_twin <1> [format {
-    if {[%%W compare [tkTextClosestGap %%W %%x %%y] <= cmdmark]} {
+    if {[%%W compare [tk::TextClosestGap %%W %%x %%y] <= cmdmark]} {
       %s _insertion [%%W index insert]
     } else {
       %s _insertion {}
@@ -160,7 +160,7 @@ itcl::body Console::_build_win {} {
   } $this $this $this]
   # FIXME: has inside information.
   bind $_twin <ButtonRelease-1> [format {
-    tkCancelRepeat
+    tk::CancelRepeat
     if {[%s _insertion] != ""} {
       %%W mark set insert [%s _insertion]
     }
@@ -174,18 +174,18 @@ itcl::body Console::_build_win {} {
   # drags a little "fuzzy".
   bind $_twin <B2-Motion> {
     if {!$tk_strictMotif} {
-      if {($tkPriv(x) - 2 < %x < $tkPriv(x) + 2) \
-	    || ($tkPriv(y) - 2 < %y < $tkPriv(y) + 2)} {
-	set tkPriv(mouseMoved) 1
+      if {($tk::Priv(x) - 2 < %x < $tk::Priv(x) + 2) \
+	    || ($tk::Priv(y) - 2 < %y < $tk::Priv(y) + 2)} {
+	set tk::Priv(mouseMoved) 1
       }
-      if {$tkPriv(mouseMoved)} {
+      if {$tk::Priv(mouseMoved)} {
 	%W scan dragto %x %y
       }
     }
     break
   }
   bind $_twin <ButtonRelease-2> [format {
-    if {!$tkPriv(mouseMoved) || $tk_strictMotif} {
+    if {!$tk::Priv(mouseMoved) || $tk_strictMotif} {
       %s
       break
     }
