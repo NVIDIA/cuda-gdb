@@ -491,7 +491,7 @@ gdbtk_init (void)
   free(s);
    
   /* Note: Tcl_SetVar2() treats the value as read-only (making a
-     copy).  Unfortunatly it does not mark the parameter as
+     copy).  Unfortunately it does not mark the parameter as
      ``const''. */
   Tcl_SetVar2 (gdbtk_interp, "GDBStartup", "host_name", (char*) host_name, TCL_GLOBAL_ONLY);
   Tcl_SetVar2 (gdbtk_interp, "GDBStartup", "target_name", (char*) target_name, TCL_GLOBAL_ONLY);
