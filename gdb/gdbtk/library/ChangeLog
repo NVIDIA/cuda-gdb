@@ -16,6 +16,12 @@
 	(Console::_update_option): New method.
 	(Console::_build_win): Use _set_wrap.
 
+2000-12-01  Larry Smith <lsmith@redhat.com>
+
+        * console.itb (invoke): Added logic to allow user to build
+        up multiline "tk" commands based on results from checking
+        command with [info complete $cmd]s.
+
 2000-11-30  Tom Tromey  <tromey@cygnus.com>
 
 	* srctextwin.ith (enable_disable_at_line): Declare.

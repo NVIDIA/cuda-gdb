@@ -385,8 +385,18 @@ body Console::activate {{prompt {}}} {
 body Console::invoke {} {
   global gdbtk_state
 
+  set text [$_twin get {cmdmark + 1 char} end ]
+
+  if { "[string range $text 0 1]" == "tk" } {
+    if {! [info complete $text] } {
+      $_twin insert {insert lineend} " \\\n"
+      $_twin see insert
+      return
+    }
+  }
+
   incr _invoking
-  set text [$_twin get {cmdmark + 1 char} {cmdmark lineend}]
+
   if {$text == ""} {
     set text [lindex $_history 0]
     $_twin insert {insert lineend} $text
