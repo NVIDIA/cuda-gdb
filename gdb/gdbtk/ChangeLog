@@ -1,5 +1,25 @@
 2001-02-01  Fernando Nasser  <fnasser@redhat.com>
 
+	* library/gdbmenubar.itcl (constructor): Remove unused code.
+	(add): New method.  Emulate the style of the menubar iwidget commands.
+	(menubar_show): Old name.
+	(show): New name.
+	(menubar_menu_exists): Old name.
+	(exists): New name.
+	(menubar_clear_menu): Old name.
+	(clear): New name.
+	(menubar_delete_menu): Old name.
+        (delete): New name.
+	(menubar_new_menu): Make private.  Does not return anything.
+	(menubar_add_menu_command): Make private.
+	(menubar_add_menu_separator): Ditto.
+	(menubar_change_menu_state): Ditto.
+	* library/srcbar.itcl: Adjust to the above syntax.
+	* library/plugins/plugins.tcl: Ditto.
+	* library/plugins/rhabout/rhabout.itcl: Ditto.
+
+2001-02-01  Fernando Nasser  <fnasser@redhat.com>
+
 	* library/pluginwin.itcl (contrucdtor, destructor): Use "code" to
 	specify callbacks.
 	(running, stopped, no_inferior): Make it a protected method.

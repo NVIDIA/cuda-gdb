@@ -49,7 +49,7 @@ class SrcBar {
       destroy $this
     } else {
       # We do not pack the menu, but make it the menu of the toplevel window
-      $Menu menubar_show
+      $Menu show
     }
 
     # Create a toolbar widget for the Source Window
@@ -131,35 +131,35 @@ class SrcBar {
   private method create_file_menu {} {
     global enable_external_editor tcl_platform
 
-    $Menu menubar_new_menu file "File" 0
+    $Menu add menubutton file "File" 0
 
     if {[info exists enable_external_editor] && $enable_external_editor} {
-      $Menu menubar_add_menu_command None "Edit Source" \
+      $Menu add command None "Edit Source" \
 	[code $source edit]
     }
 
-    $Menu menubar_add_menu_command Other "Open..."  \
+    $Menu add command Other "Open..."  \
       "_open_file" -underline 0 -accelerator "Ctrl+O"
 
-    $Menu menubar_add_menu_command Other "Source..." \
+    $Menu add command Other "Source..." \
       "source_file" -underline 0
 
     set sessions [session_list]
     if {[llength $sessions]} {
-      $Menu menubar_add_menu_separator
+      $Menu add separator
       set i 1
       foreach item $sessions {
-	$Menu menubar_add_menu_command Other "$i $item" \
+	$Menu add command Other "$i $item" \
 	  [list session_load $item] \
 	  -underline 0
 	incr i
       }
     }
 
-    $Menu menubar_add_menu_separator
+    $Menu add separator
 
     if {$tcl_platform(platform) == "windows"} {
-      $Menu menubar_add_menu_command None "Page Setup..." \
+      $Menu add command None "Page Setup..." \
 	[format {
 	  set top %s
 	  ide_winprint page_setup -parent $top
@@ -167,18 +167,18 @@ class SrcBar {
 	-underline 8
     }
 
-    $Menu menubar_add_menu_command None "Print Source..." \
+    $Menu add command None "Print Source..." \
       [code $source print] \
       -underline 0 -accelerator "Ctrl+P"
 
-    $Menu menubar_add_menu_separator
+    $Menu add separator
 
-    $Menu menubar_add_menu_command Other "Target Settings..." \
+    $Menu add command Other "Target Settings..." \
       "set_target_name" -underline 0
 
-    $Menu menubar_add_menu_separator
+    $Menu add separator
 
-    $Menu menubar_add_menu_command None "Exit" gdbtk_quit -underline 1
+    $Menu add command None "Exit" gdbtk_quit -underline 1
   }
 
   # ------------------------------------------------------------------
@@ -188,10 +188,10 @@ class SrcBar {
   
   private method create_run_menu {} {
 
-    if {![$Menu menubar_menu_exists Run]} {
-      set run_menu [$Menu menubar_new_menu run "Run" 0]
+    if {![$Menu exists Run]} {
+      set run_menu [$Menu add menubutton run "Run" 0]
     } else {
-      set run_menu [$Menu menubar_clear_menu Run]
+      set run_menu [$Menu clear Run]
     }
     
     set is_native [TargetSelection::native_debugging]
@@ -202,49 +202,49 @@ class SrcBar {
 
     if {$is_native} {
       if {[string compare $::tcl_platform(platform) windows] != 0} {
-	$Menu menubar_add_menu_command Attach "Attach to process" \
+	$Menu add command Attach "Attach to process" \
 	  [code $this do_attach $run_menu] \
 	  -underline 0 -accelerator "Ctrl+A"
       }
     } else {
-      $Menu menubar_add_menu_command Other "Connect to target" \
+      $Menu add command Other "Connect to target" \
 	"$this do_connect $run_menu" -underline 0
     }
 
     if {[pref get gdb/control_target]} {
       if {!$is_native} {
-	$Menu menubar_add_menu_command Other "Download" Download::download_it \
+	$Menu add command Other "Download" Download::download_it \
 	  -underline 0 -accelerator "Ctrl+D"
       }
-      $Menu menubar_add_menu_command Other "Run" [code $source inferior run] \
+      $Menu add command Other "Run" [code $source inferior run] \
         -underline 0 -accelerator R
     }
 
     if {$is_native} {
       if {[string compare $::tcl_platform(platform) windows] != 0} {
-	$Menu menubar_add_menu_command Detach "Detach" \
+	$Menu add command Detach "Detach" \
           [code $this do_detach $run_menu] \
 	  -underline 0 -state disabled
       }
     } else {
-      $Menu menubar_add_menu_command Other "Disconnect"  \
+      $Menu add command Other "Disconnect"  \
 	[code $this do_disconnect $run_menu] -underline 0 -state disabled
     }
 
     if {$is_native} {
-      $Menu menubar_add_menu_separator
-      $Menu menubar_add_menu_command Control "Kill" \
+      $Menu add separator
+      $Menu add command Control "Kill" \
         [code $this do_kill $run_menu] \
 	-underline 0 -state disabled
     }
 
     if { [pref get gdb/mode] } {
-      $Menu menubar_add_menu_separator 
+      $Menu add separator 
 
-      $Menu menubar_add_menu_command Other "Start collection" "$this do_tstop" \
+      $Menu add command Other "Start collection" "$this do_tstop" \
 	-underline 0 -accelerator "Ctrl+B"
          
-      $Menu menubar_add_menu_command Other "Stop collection" "$this do_tstop" \
+      $Menu add command Other "Stop collection" "$this do_tstop" \
 	-underline 0  -accelerator "Ctrl+E" -state disabled
     }
   }
@@ -255,50 +255,50 @@ class SrcBar {
   
   private method create_view_menu {} {
 
-    $Menu menubar_new_menu view "View" 0
+    $Menu add menubutton view "View" 0
 
-    $Menu menubar_add_menu_command Other "Stack" {ManagedWin::open StackWin} \
+    $Menu add command Other "Stack" {ManagedWin::open StackWin} \
       -underline 0 -accelerator "Ctrl+S" 
       
-    $Menu menubar_add_menu_command Other "Registers" {ManagedWin::open RegWin} \
+    $Menu add command Other "Registers" {ManagedWin::open RegWin} \
       -underline 0 -accelerator "Ctrl+R" 
       
-    $Menu menubar_add_menu_command Other "Memory" {ManagedWin::open MemWin} \
+    $Menu add command Other "Memory" {ManagedWin::open MemWin} \
       -underline 0 -accelerator "Ctrl+M" 
       
-    $Menu menubar_add_menu_command Other "Watch Expressions" \
+    $Menu add command Other "Watch Expressions" \
       {ManagedWin::open WatchWin} \
       -underline 0 -accelerator "Ctrl+W" 
-    $Menu menubar_add_menu_command Other "Local Variables" \
+    $Menu add command Other "Local Variables" \
       {ManagedWin::open LocalsWin} \
       -underline 0 -accelerator "Ctrl+L" 
 
     if {[pref get gdb/control_target]} {
-      $Menu menubar_add_menu_command Other "Breakpoints" \
+      $Menu add command Other "Breakpoints" \
 	{ManagedWin::open BpWin -tracepoints 0} \
 	-underline 0 -accelerator "Ctrl+B" 
     }
 
     if {[pref get gdb/mode]} {
-      $Menu menubar_add_menu_command Other "Tracepoints" \
+      $Menu add command Other "Tracepoints" \
         {ManagedWin::open BpWin -tracepoints 1} \
 	-underline 0 -accelerator "Ctrl+T"
-      $Menu menubar_add_menu_command Other "Tdump" {ManagedWin::open TdumpWin} \
+      $Menu add command Other "Tdump" {ManagedWin::open TdumpWin} \
 	-underline 2 -accelerator "Ctrl+U"
     }
 
-    $Menu menubar_add_menu_command Other "Console" {ManagedWin::open Console} \
+    $Menu add command Other "Console" {ManagedWin::open Console} \
       -underline 2 -accelerator "Ctrl+N" 
       
-    $Menu menubar_add_menu_command Other "Function Browser" \
+    $Menu add command Other "Function Browser" \
       {ManagedWin::open BrowserWin} \
       -underline 1 -accelerator "Ctrl+F" 
-    $Menu menubar_add_menu_command Other "Thread List" \
+    $Menu add command Other "Thread List" \
       {ManagedWin::open ProcessWin} \
       -underline 0 -accelerator "Ctrl+H"
     if {[info exists ::env(GDBTK_DEBUG)] && $::env(GDBTK_DEBUG)} {
-      $Menu menubar_add_menu_separator
-      $Menu menubar_add_menu_command Other "Debug Window" \
+      $Menu add separator
+      $Menu add command Other "Debug Window" \
         {ManagedWin::open DebugWin} \
 	-underline 3 -accelerator "Ctrl+U"
     }
@@ -310,33 +310,33 @@ class SrcBar {
   
   private method create_control_menu {} {
 
-    $Menu menubar_new_menu cntrl "Control" 0
+    $Menu add menubutton cntrl "Control" 0
     
-    $Menu menubar_add_menu_command Control "Step" [code $source inferior step] \
+    $Menu add command Control "Step" [code $source inferior step] \
       -underline 0 -accelerator S
     
-    $Menu menubar_add_menu_command Control "Next" [code $source inferior next] \
+    $Menu add command Control "Next" [code $source inferior next] \
       -underline 0 -accelerator N
     
-    $Menu menubar_add_menu_command Control "Finish" \
+    $Menu add command Control "Finish" \
       [code $source inferior finish] \
       -underline 0 -accelerator F
     
-    $Menu menubar_add_menu_command Control "Continue" \
+    $Menu add command Control "Continue" \
       [code $source inferior continue] \
       -underline 0 -accelerator C
     
-    $Menu menubar_add_menu_separator
-    $Menu menubar_add_menu_command Control "Step Asm Inst" \
+    $Menu add separator
+    $Menu add command Control "Step Asm Inst" \
       [code $source inferior stepi] \
       -underline 1 -accelerator S
     
-    $Menu menubar_add_menu_command Control "Next Asm Inst" \
+    $Menu add command Control "Next Asm Inst" \
       [code $source inferior nexti] \
       -underline 1 -accelerator N
     
-    # $Menu menubar_add_menu_separator
-    # $Menu menubar_add_menu_command Other "Automatic Step" auto_step
+    # $Menu add separator
+    # $Menu add command Other "Automatic Step" auto_step
   }
 
   # ------------------------------------------------------------------
@@ -345,45 +345,45 @@ class SrcBar {
   
   private method create_trace_menu {} {
 
-    $Menu menubar_new_menu trace "Trace" 0
+    $Menu add menubutton trace "Trace" 0
     
-    $Menu menubar_add_menu_command Other "Save Trace Commands..." \
+    $Menu add command Other "Save Trace Commands..." \
       "save_trace_commands" \
       -underline 0
 
-    $Menu menubar_add_menu_separator
+    $Menu add separator
 
-    $Menu menubar_add_menu_command Trace "Next Hit" {tfind_cmd tfind} \
+    $Menu add command Trace "Next Hit" {tfind_cmd tfind} \
       -underline 0 -accelerator N
     
-    $Menu menubar_add_menu_command Trace "Previous Hit" {tfind_cmd "tfind -"} \
+    $Menu add command Trace "Previous Hit" {tfind_cmd "tfind -"} \
       -underline 0 -accelerator P
     
-    $Menu menubar_add_menu_command Trace "First Hit" {tfind_cmd "tfind start"} \
+    $Menu add command Trace "First Hit" {tfind_cmd "tfind start"} \
       -underline 0 -accelerator F
     
-    $Menu menubar_add_menu_command Trace "Next Line Hit" \
+    $Menu add command Trace "Next Line Hit" \
       {tfind_cmd "tfind line"} \
       -underline 5 -accelerator L
     
-    $Menu menubar_add_menu_command Trace "Next Hit Here" \
+    $Menu add command Trace "Next Hit Here" \
       {tfind_cmd "tfind tracepoint"} \
       -underline 9 -accelerator H
     
-    $Menu menubar_add_menu_separator
-    $Menu menubar_add_menu_command Trace "Tfind Line..." \
+    $Menu add separator
+    $Menu add command Trace "Tfind Line..." \
       "ManagedWin::open TfindArgs -Type LN" \
       -underline 9 -accelerator E
     
-    $Menu menubar_add_menu_command Trace "Tfind PC..." \
+    $Menu add command Trace "Tfind PC..." \
       "ManagedWin::open TfindArgs -Type PC" \
       -underline 7 -accelerator C
     
-    $Menu menubar_add_menu_command Trace "Tfind Tracepoint..." \
+    $Menu add command Trace "Tfind Tracepoint..." \
       "ManagedWin::open TfindArgs -Type TP" \
       -underline 6 -accelerator T
 
-    $Menu menubar_add_menu_command Trace "Tfind Frame..." \
+    $Menu add command Trace "Tfind Frame..." \
       "ManagedWin::open TfindArgs -Type FR" \
       -underline 6 -accelerator F
   }
@@ -395,14 +395,14 @@ class SrcBar {
     global gdb_plugins
 
     if {$gdb_plugins != ""} {
-      $Menu menubar_new_menu plugin "PlugIn" 4
+      $Menu add menubutton plugin "PlugIn" 4
       set plugins_available 0
       source [file join $gdb_plugins plugins.tcl]
       if {! $plugins_available} {
         # No plugins are available for this configuration,
         # so remove the menu
         debug "No plugins configured, go remove the PlugIn menu..."
-        $Menu menubar_delete_menu plugin
+        $Menu delete plugin
       }
     }
   }
@@ -412,12 +412,12 @@ class SrcBar {
   # ------------------------------------------------------------------  
   private method create_pref_menu {} {
 
-    $Menu menubar_new_menu pref "Preferences" 0
+    $Menu add menubutton pref "Preferences" 0
     
-    $Menu menubar_add_menu_command Other "Global..." \
+    $Menu add command Other "Global..." \
       "ManagedWin::open GlobalPref -transient" -underline 0
     
-    $Menu menubar_add_menu_command Other "Source..." \
+    $Menu add command Other "Source..." \
       "ManagedWin::open SrcPref -transient" -underline 0
   }
 
@@ -426,12 +426,12 @@ class SrcBar {
   # ------------------------------------------------------------------  
   private method create_help_menu {} {
 
-    $Menu menubar_new_menu help "Help" 0
-    $Menu menubar_add_menu_command Other "Help Topics" \
+    $Menu add menubutton help "Help" 0
+    $Menu add command Other "Help Topics" \
       {HtmlViewer::open_help index.html} \
       -underline 0
-    $Menu menubar_add_menu_separator
-    $Menu menubar_add_menu_command Other "About GDB..." \
+    $Menu add separator
+    $Menu add command Other "About GDB..." \
       {ManagedWin::open About -transient} \
       -underline 0
   }
@@ -836,7 +836,7 @@ class SrcBar {
       } else {
 	# Add KOD to View menu, but only if it isn't already there.
 	if {$index == "none"} {
-	  $Menu menubar_add_menu_command Other $title \
+	  $Menu add command Other $title \
             {ManagedWin::open KodWin} \
 	    -underline 0 -accelerator "Ctrl+K"
 	}

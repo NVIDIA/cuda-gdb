@@ -36,9 +36,6 @@ class GDBMenuBar {
   # ------------------------------------------------------------------
   constructor {args} {
 
-    set OtherMenus {}
-    set ControlMenus {}
-
     set Menu [menu $itk_interior.m -tearoff 0]
 
     eval itk_initialize $args
@@ -53,9 +50,9 @@ class GDBMenuBar {
   }
 
   # ------------------------------------------------------------------
-  #  METHOD:  menubar_show - attach menu to the toplevel window
+  #  METHOD:  show - attach menu to the toplevel window
   # ------------------------------------------------------------------
-  public method menubar_show {} {
+  public method show {} {
       [winfo toplevel $itk_interior] configure -menu $Menu
   }
 
@@ -100,7 +97,38 @@ class GDBMenuBar {
   ####################################################################
 
   # ------------------------------------------------------------------
-  #  METHOD:  menubar_new_menu - Add a new cascade menu to the main menu.
+  #  METHOD:  add - Add something.
+  #                 It can be a menubutton for the main menu,
+  #                 a separator or a command.
+  #
+  #  type - what we want to add
+  #  args - arguments appropriate to what is being added
+  #
+  #  RETURNS: the cascade menu widget path.
+  # ------------------------------------------------------------------
+  method add {type args} {
+
+    switch $type {
+      menubutton {
+        eval menubar_new_menu $args
+      }
+      command {
+        eval menubar_add_menu_command $args
+      }
+      separator {
+        menubar_add_menu_separator
+      }
+      default {
+        error "Invalid item type: $type"
+      }
+    }
+
+    return $current_menu
+  }
+
+  # ------------------------------------------------------------------
+  #  PRIVATE METHOD:  menubar_new_menu - Add a new cascade menu to the
+  #                      main menu.
   #                      Also target this menu for subsequent
   #                      menubar_add_menu_command calls.
   #
@@ -108,9 +136,8 @@ class GDBMenuBar {
   #  label - The label used for the label
   #  underline - the index of the underlined character for this menu item.
   #
-  #  RETURNS: the cascade menu widget path.
   # ------------------------------------------------------------------
-  method menubar_new_menu {name label underline} {
+  private method menubar_new_menu {name label underline} {
     set current_menu $Menu.$name
     set menu_list($name) [$Menu add cascade -menu  $current_menu \
 			     -label $label -underline $underline]
@@ -118,84 +145,18 @@ class GDBMenuBar {
     set menu_list($name,label) $label
 
     set item_number -1
-    return $current_menu
   }
 
   # ------------------------------------------------------------------
-  #  METHOD:  menubar_menu_exists - Report whether a menu keyed by
-  #           NAME exists.
-  # 
-  #  name - the token for the menu sought
-  #
-  #  RETURNS: 1 if the menu exists, 0 otherwise.
-  # ------------------------------------------------------------------
-  method menubar_menu_exists {name} {
-    return [info exists menu_list($name)]
-
-  }
-
-  # ------------------------------------------------------------------
-  #  METHOD:  menubar_clear_menu - Deletes the items from one of the
-  #                   main menu cascade menus. Also makes this menu
-  #                   the target menu.
-  # 
-  #  name - the token for the new menu
-  #
-  #  RETURNS: then item number of the menu, or "" if the menu is not found.
-  #
-  #  FIXME: Does not remove the deleted menus from their class lists.
-  # ------------------------------------------------------------------
-  method menubar_clear_menu {name} {
-    if {[info exists menu_list($name)]} {
-      set current_menu [$Menu entrycget $menu_list($name) -menu]
-      $current_menu delete 0 end
-      set item_number -1
-      return $current_menu
-    } else {
-      return ""
-    }
-  }
-
-  # ------------------------------------------------------------------
-  #  METHOD:  menubar_delete_menu - Deletes one of the main menu
-  #                   cascade menus. Also makes the previous menu the
-  #                   target menu.
-  # 
-  #  name - the token for the new menu
-  #
-  #  RETURNS: then item number of the menu, or "" if the menu is not found.
-  #
-  #  FIXME: Does not remove the deleted menus from their class lists.
-  # ------------------------------------------------------------------
-  method menubar_delete_menu {name} {
-    if {[info exists menu_list($name)]} {
-      $Menu delete $menu_list($name,label)
-      set current_menu {}
-      unset menu_list($name,label)
-      unset menu_list($name)
-    }
-  }
-
-  # ------------------------------------------------------------------
-  #  METHOD:  menubar_add_menu_separator - Adds a menu separator to
-  #                   the currently targeted submenu of the main menu.
-  # 
-  # ------------------------------------------------------------------
-  method menubar_add_menu_separator {} {
-    incr item_number
-    $current_menu add separator
-  }
-
-  # ------------------------------------------------------------------
-  #  METHOD:  menubar_add_menu_command - Adds a menu command item to
-  #                   the currently targeted submenu of the main menu.
+  #  PRIVATE METHOD:  menubar_add_menu_command - Adds a menu command item
+  #                   to the currently targeted submenu of the main menu.
   #
   #  class - The class of the command, used for disabling entries.
   #  label - The text for the command.
   #  command - The command for the menu entry
   #  args  - Passed to the menu entry creation command (eval'ed) 
   # ------------------------------------------------------------------
-  method menubar_add_menu_command {class label command args} {
+  private method menubar_add_menu_command {class label command args} {
 
     eval $current_menu add command -label \$label -command \$command \
 	  $args
@@ -213,12 +174,76 @@ class GDBMenuBar {
   }
 
   # ------------------------------------------------------------------
-  # METHOD:  menubar_change_menu_state - Does the actual job of
+  #  PRIVATE METHOD:  menubar_add_menu_separator - Adds a menu separator
+  #                   to the currently targeted submenu of the main menu.
+  # 
+  # ------------------------------------------------------------------
+  private method menubar_add_menu_separator {} {
+    incr item_number
+    $current_menu add separator
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  exists - Report whether a menu keyed by NAME exists.
+  # 
+  #  name - the token for the menu sought
+  #
+  #  RETURNS: 1 if the menu exists, 0 otherwise.
+  # ------------------------------------------------------------------
+  method exists {name} {
+    return [info exists menu_list($name)]
+
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  clear - Deletes the items from one of the
+  #                   main menu cascade menus. Also makes this menu
+  #                   the target menu.
+  # 
+  #  name - the token for the new menu
+  #
+  #  RETURNS: then item number of the menu, or "" if the menu is not found.
+  #
+  #  FIXME: Does not remove the deleted menus from their class lists.
+  # ------------------------------------------------------------------
+  method clear {name} {
+    if {[info exists menu_list($name)]} {
+      set current_menu [$Menu entrycget $menu_list($name) -menu]
+      $current_menu delete 0 end
+      set item_number -1
+      return $current_menu
+    } else {
+      return ""
+    }
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  delete - Deletes one of the main menu
+  #                    cascade menus. Also makes the previous menu the
+  #                    target menu.
+  # 
+  #  name - the token for the new menu
+  #
+  #  RETURNS: then item number of the menu, or "" if the menu is not found.
+  #
+  #  FIXME: Does not remove the deleted menus from their class lists.
+  # ------------------------------------------------------------------
+  method delete {name} {
+    if {[info exists menu_list($name)]} {
+      $Menu delete $menu_list($name,label)
+      set current_menu {}
+      unset menu_list($name,label)
+      unset menu_list($name)
+    }
+  }
+
+  # ------------------------------------------------------------------
+  # PRIVATE METHOD:  menubar_change_menu_state - Does the actual job of
   #                  enabling menus...
   #
   # INPUT:  Pass normal or disabled for the state.
   # ------------------------------------------------------------------
-  method menubar_change_menu_state {menu state} {
+  private method menubar_change_menu_state {menu state} {
 
     [lindex $menu 0] entryconfigure [lindex $menu 1] -state $state
   }

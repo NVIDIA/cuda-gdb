@@ -4,21 +4,21 @@ class RHAbout {
     global gdb_ImageDir
 
     # What about a menu?
-    $menubar menubar_new_menu file "File" 0
-    $menubar menubar_add_menu_command None "Close" \
+    $menubar add menubutton file "File" 0
+    $menubar add command None "Close" \
       [code $this destroy_toplevel] \
       -underline 1
-    $menubar menubar_new_menu help "Help" 0
-    $menubar menubar_add_menu_command Other "Help Topics" \
+    $menubar add menubutton help "Help" 0
+    $menubar add command Other "Help Topics" \
       {HtmlViewer::open_help index.html} \
       -underline 0
-    $menubar menubar_add_menu_separator
-    $menubar menubar_add_menu_command Other "About GDB..." \
+    $menubar add separator
+    $menubar add command Other "About GDB..." \
       {ManagedWin::open About -transient} \
       -underline 0
 
     # The menu only shows up if you do this:
-    $menubar menubar_show
+    $menubar show
 
     # Do you want a toolbar?
     $toolbar toolbar_add_button con Other {ManagedWin::open Console} \
@@ -56,13 +56,6 @@ class RHAbout {
 
     # Give our sample window a name
     window_name "About Red Hat Insight Plug-In"
-  }
-
-  # Don't quit if this is the last window.  The only way that this can
-  # happen is if we are the splash screen. 
-
-  method quit_if_last {} { 
-    return 0
   }
 
   # You can overload the base class running method, but make sure
