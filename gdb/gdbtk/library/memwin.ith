@@ -74,5 +74,6 @@ class MemWin {
     method do_popup {x y}
     method goto {addr}
     method memMoveCell {w x y}
+    method error_dialog {msg {modality task} {type ok}}
   }
 }

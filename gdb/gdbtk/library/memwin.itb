@@ -289,7 +289,14 @@ body MemWin::edit { cell } {
     foreach c [split $val ""] {
       if {$c != $ascii_char} {
 	if {$c == "'"} {set c "\\'"}
-	catch {gdb_cmd "set *(char *)($addr) = '$c'"}
+	set err [catch {gdb_cmd "set *(char *)($addr) = '$c'"} res]
+	if {$err} {
+	  error_dialog [winfo toplevel $itk_interior] $res
+
+	  # reset value
+	  set ${this}_memval($row,$col) $saved_value
+	  return
+	}
       }
       incr addr
     }
@@ -315,7 +322,15 @@ body MemWin::edit { cell } {
   set addr [expr {$current_addr + $bytes_per_row * $row + $size * $col}]
   #debug "  edit $row,$col         [format "%x" $addr] = $val"
   #set memory
-  catch {gdb_cmd "set *($type($size) *)($addr) = $val"} res
+  set err [catch {gdb_cmd "set *($type($size) *)($addr) = $val"} res]
+  if {$err} {
+    error_dialog [winfo toplevel $itk_interior] $res
+
+    # reset value
+    set ${this}_memval($row,$col) $saved_value
+    return
+  }
+
   # read it back
   # FIXME - HACK ALERT - This call causes trouble with remotes on Windows. 
   # This routine is in fact called from within an idle handler triggered by
@@ -768,4 +783,18 @@ body MemWin::memMoveCell {w x y} {
   if { $r < 0 } { set r 0 }
   $w activate $r,$c
   $w see active
+}
+
+# ------------------------------------------------------------
+#  PUBLIC METHOD:  error_dialog - Open and error dialog.
+#    Arguments:
+#        msg      - The message to display in the dialog
+#        modality - The dialog modailty. Default: task
+#        type     - The dialog type (tk_messageBox).
+#                    Default: ok
+# ------------------------------------------------------------
+body MemWin::error_dialog {msg {modality task} {type ok}} {
+  set parent [winfo toplevel [namespace tail $this]]
+  tk_messageBox -icon error -title Error -type $type \
+    -modal $modality -message $msg -parent $parent
 }

@@ -1,5 +1,12 @@
 2001-05-22  Keith Seitz  <keiths@cygnus.com>
 
+	* memwin.ith (error_dialog): Declare public method.
+	* memwin.itb (error_dialog): Define.
+	(edit): When attempting to set memory, post an error dialog
+	if gdb told us an error occurred while writing the memory.
+
+2001-05-22  Keith Seitz  <keiths@cygnus.com>
+
 	* library/interface.tcl (gdbtk_tcl_file_changed): Handle
 	the case of empty-string files, sent by gdb when the
 	user requests to reset the file.
