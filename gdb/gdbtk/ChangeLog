@@ -1,5 +1,13 @@
 2001-08-16  Keith Seitz  <keiths@redhat.com>
 
+	* generic/gdbtk.c (gdbtk_init): Revert change from earlier.
+	It is insufficient. We must get the absolute pathname
+	from autoconf.
+	Don't bother setting TCL_LIBRARY: it must be set already
+	in order for us to execute a script.
+
+2001-08-16  Keith Seitz  <keiths@redhat.com>
+
 	* library/globalpref.ith (_change_font, _change_size): New
 	private methods.
 	(_size): New private variable.
