@@ -71,7 +71,12 @@ itcl::body  VarTree::buildlayer {tlist in} {
     set x [expr [lindex [$c bbox $j1] 2] + 5]
     set j2 [$c create text $x $y -text "([$var type])" -fill $colors(type) -anchor w -font global/fixed]
     set x [expr [lindex [$c bbox $j2] 2] + 5]
-    set j3 [$c create text $x $y -text "[$var value]" -fill $colors(value) -anchor w -font global/fixed]
+    if {[catch {$var value} val]} {
+      # error accessing memory, etc.
+      set j3 [$c create text $x $y -text $val -fill $colors(error) -anchor w -font global/fixed]      
+    } else {
+      set j3 [$c create text $x $y -text $val -fill $colors(value) -anchor w -font global/fixed]
+    }
 
     set var_to_items($var) [list $j1 $j2 $j3]
     set item_to_var($j1) $var
@@ -126,11 +131,15 @@ itcl::body  VarTree::update_var {var enabled check} {
   if {$enabled} {
     $c itemconfigure $nam -fill $colors(name)
     $c itemconfigure $typ -fill $colors(type)
-    if {[$c itemcget $val -text] != [$var value]} {
-      $c itemconfigure $val -text [$var value] -fill $colors(change)
+
+    if {[catch {$var value} value]} {
+      set color $colors(error)      
+    } elseif {[$c itemcget $val -text] != $value} {
+      set color $colors(change)
     } else {
-      $c itemconfigure $val -text [$var value] -fill $colors(value)
+      set color $colors(value)
     }
+    $c itemconfigure $val -text $value -fill $color
   } else {
     $c itemconfigure $nam -fill $colors(disabled)
     $c itemconfigure $typ -fill $colors(disabled)
@@ -381,6 +390,7 @@ itcl::body  VarTree::_compare {a b} {
 itcl::body  VarTree::_init_data {} {
   set colors(name) "\#0000C0"
   set colors(type) "red"
+  set colors(error) "red"
   set colors(value) "black"
   set colors(change) "green"
   set colors(disabled) "gray50"

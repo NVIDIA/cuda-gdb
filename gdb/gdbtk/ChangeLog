@@ -1,5 +1,9 @@
 2002-12-03  Martin M. Hunt  <hunt@redhat.com>
 
+	* library/vartree.itb (buildlayer): Check for error when updating
+	a variable's value.
+	(update_var): Ditto.
+	
 	* library/srcpref.itb: Latest tk doesn't support
 	"-col" as a grid option.  Use "-column".
 
