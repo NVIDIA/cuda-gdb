@@ -38,7 +38,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.213 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.214 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3546,10 +3546,6 @@ the address.
 and guess the starting and ending addresses of the compilation unit from
 them.
 @end itemize
-
-@item PCC_SOL_BROKEN
-@findex PCC_SOL_BROKEN
-(Used only in the Convex target.)
 
 @item PC_LOAD_SEGMENT
 @findex PC_LOAD_SEGMENT
