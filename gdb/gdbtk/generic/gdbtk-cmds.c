@@ -3774,7 +3774,7 @@ gdb_set_bp (clientData, interp, objc, objv)
   /* FIXME: this won't work for duplicate basenames! */
   xasprintf (&buf, "%s:%d", basename (Tcl_GetStringFromObj (objv[1], NULL)),
 	   line);
-  b->addr_string = strsave (buf);
+  b->addr_string = xstrdup (buf);
   free(buf);
 
   /* now send notification command back to GUI */
@@ -3880,7 +3880,7 @@ gdb_set_bp_addr (clientData, interp, objc, objv)
   b->thread = thread;
 
   xasprintf (&buf, "*(0x%lx)", addr);
-  b->addr_string = strsave (buf);
+  b->addr_string = xstrdup (buf);
 
   /* now send notification command back to GUI */
 
