@@ -38,7 +38,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.198 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.199 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3702,8 +3702,7 @@ reserved for that breakpoint, and @var{real_pc} set to @var{funaddr}.
 
 This method replaces @code{DEPRECATED_CALL_DUMMY_WORDS},
 @code{DEPRECATED_SIZEOF_CALL_DUMMY_WORDS}, @code{CALL_DUMMY},
-@code{CALL_DUMMY_LOCATION}, @code{DEPRECATED_REGISTER_SIZE},
-@code{DEPRECATED_CALL_DUMMY_BREAKPOINT_OFFSET}, and
+@code{CALL_DUMMY_LOCATION}, @code{DEPRECATED_REGISTER_SIZE}, and
 @code{DEPRECATED_FIX_CALL_DUMMY}.
 
 @item DEPRECATED_PUSH_DUMMY_FRAME
