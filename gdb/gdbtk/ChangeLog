@@ -1,3 +1,16 @@
+2001-07-12  Keith Seitz  <keiths@redhat.com>
+
+	* library/srcbar.itcl (create_trace_buttons): Fix
+	syntax errors.
+
+	* library/tracedlg.tcl: Update to work with Itcl3.0
+	and ManagedWin.
+
+	* library/actiondlg.tcl: Update to work with Itcl3.0
+	and ManagedWin.
+	(build_win): Use iwidgets scrolled listbox instead
+	of the tix one.
+
 2001-07-05  Keith Seitz  <keiths@redhat.com>
 
 	* library/managedwin.itb (_create): Don't pass "-over"

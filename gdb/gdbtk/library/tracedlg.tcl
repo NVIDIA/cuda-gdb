@@ -1,5 +1,5 @@
-# Trace configuration dialog for GDBtk.
-# Copyright 1997, 1998, 1999 Cygnus Solutions
+# Trace configuration dialog for Insight
+# Copyright 1997, 1998, 1999, 2001 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -26,28 +26,17 @@
 # either one if a tracepoint was set/edited successfully or zero if 
 # the user bails out (cancel or destroy buttons).
 
-itcl_class TraceDlg {
+class TraceDlg {
+  inherit ManagedWin
+
   # ------------------------------------------------------------------
   # CONSTRUCTOR: create new trace dialog
   # ------------------------------------------------------------------
-  constructor {config} {
-    #
-    #  Create a window with the same name as this object
-    #
-    set class [$this info class]
-    set hull [namespace tail $this]
-    set old_name $this
-    ::rename $this $this-tmp-
-    ::frame $hull -class $class 
-    ::rename $hull $old_name-win-
-    ::rename $this $old_name
-    
-    set top [winfo toplevel [namespace tail $this]]
-    wm withdraw $top
-    build_win $this
-    after idle [list wm deiconify $top]
-    after idle [list $this title]
-#    after idle grab $this
+  constructor {args} {
+
+    eval itk_initialize $args
+    build_win
+    title
   }
 
   # ------------------------------------------------------------------
@@ -56,21 +45,17 @@ itcl_class TraceDlg {
   destructor {
 
     # Remove this window and all hooks
-#    grab release $this
     if {$ActionsDlg != ""} {
-      catch {manage delete $ActionsDlg}
+      catch {delete object $ActionsDlg}
     }
-    set top [winfo toplevel [namespace tail $this]]
-    destroy $top
-    destroy $this
   }
 
   # ------------------------------------------------------------------
   # METHOD: build_win - build the Trace dialog box (cache this?)
   # ------------------------------------------------------------------
-  method build_win {f} {
-    global _TPassCount
+  method build_win {} {
 
+    set f $itk_interior
 
     # Need to set the title to either "Add Tracepoint" or "Edit Tracepoint",
     # depending on the location of the given tracepoint.
@@ -265,7 +250,7 @@ itcl_class TraceDlg {
       # Do not allow this until we clean up the action dialog...
       tk_messageBox -type ok -icon error \
 	-message "Cannot set tracepoint ranges across functions!"
-      after idle manage delete $this
+      after idle [code delete object $this]
     }
     #set functions [join $functions ,]
     label $exp.funlbl -text {Function:}
@@ -378,15 +363,15 @@ itcl_class TraceDlg {
 
     #debug "ADDING ACTION FOR $File:[lindex $Lines 0]"
     if {$Lines != {}} {
-      set ActionsDlg [eval manage create actiondlg -File $File \
+      set ActionsDlg [eval ManagedWin::open ActionDlg -File $File \
 			-Line [lindex $Lines 0] \
 			-WhileStepping $whilestepping -Number [lindex $Number 0]\
-			-Callback \"$this done\" $step_args]
+			-Callback "\\\{$this done\\\}" $step_args]
     } else {
-      set ActionsDlg [eval manage create actiondlg -File $File \
+      set ActionsDlg [eval ManagedWin::open ActionDlg -File $File \
 			-Address [lindex $Addresses 0] \
 			-WhileStepping $whilestepping -Number [lindex $Number 0]\
-			-Callback \"$this done\" $step_args]
+			-Callback "\\\{$this done\\\}" $step_args]
     }
   }
 
@@ -461,7 +446,7 @@ itcl_class TraceDlg {
   # METHOD: cancel - cancel the dialog and do not set the trace
   # ------------------------------------------------------------------
   method cancel {} {
-    manage delete $this
+    ::delete object $this
   }
 
   # ------------------------------------------------------------------
@@ -499,7 +484,7 @@ itcl_class TraceDlg {
           set tpnum [gdb_tracepoint_exists "$File:$line"]
           if {$tpnum == -1} {
              tk_messageBox -type ok -icon error -message "Tracepoint was deleted"
-             manage delete $this
+             ::delete object $this
              return
            }
         }
@@ -534,14 +519,15 @@ itcl_class TraceDlg {
 	      continue
 	    }
 	  }
-        if {$New == 0 && $Exists == 1} {
-          set num [gdb_tracepoint_exists "$File:$Line"]
-          if {$num == -1} {
-             tk_messageBox -type ok -icon error -message "Tracepoint was deleted"
-             manage delete $this
-             return
-          }
-       }
+	  if {$New == 0 && $Exists == 1} {
+	    set num [gdb_tracepoint_exists "$File:$Line"]
+	    if {$num == -1} {
+	      tk_messageBox -type ok -icon error -message "Tracepoint was deleted"
+	      ::delete object $this
+	      return
+	    }
+	  }
+
 	  #debug "Editing tracepoint \#$Number: $_TPassCount $actions"
 	  set err [catch {gdb_edit_tracepoint $number $_TPassCount $actions} errTxt]
 	}
@@ -557,7 +543,7 @@ itcl_class TraceDlg {
       }
     }
     
-    manage delete $this
+    ::delete object $this
   }
 
   method cmd {line} {
@@ -568,7 +554,7 @@ itcl_class TraceDlg {
     debug "deleting tracepoint $Number"
     set err [catch {gdb_cmd "delete tracepoints $Number"} errTxt]
     debug "done deleting tracepoint $Number"
-    manage delete $this
+    ::delete object $this
   }
 
   method get_data {action} {
@@ -670,11 +656,11 @@ itcl_class TraceDlg {
     
     # !! lindex $Lines 0 -- better way?
     if {$Lines != {}} {
-      manage create actiondlg -File $File -Line [lindex $Lines 0] \
+      ManagedWin::open ActionDlg -File $File -Line [lindex $Lines 0] \
 	-WhileStepping $whilestepping -Number [lindex $Number 0] \
 	-Callback "$this done" -Data $real_data -Steps $steps
     } else {
-      manage create actiondlg -File $File -Address [lindex $Addresses 0] \
+      ManagedWin::open ActionDlg -File $File -Address [lindex $Addresses 0] \
 	-WhileStepping $whilestepping -Number [lindex $Number 0] \
 	-Callback "$this done" -Data $real_data -Steps $steps
     }
@@ -704,23 +690,23 @@ itcl_class TraceDlg {
   }
 
   # PUBLIC DATA
-  public File {}
-  public Lines {}
-  public Addresses {}
-  public Number {}
+  public variable File {}
+  public variable Lines {}
+  public variable Addresses {}
+  public variable Number {}
 
   # PROTECTED DATA
-  protected Delete
-  protected _TPassCount
-  protected ActionType {}
-  protected ActionLB
-  protected Actions
-  protected WhileStepping 0
-  protected Selection {}
-  protected New 0;			# set whenever there is a new tp to add
-  protected Exists 0;			# set whenever a tracepoint in the range exists
-  protected Dismissed 0;		# has this dialog been dismissed already?
-  protected ActionsDlg {}
+  protected variable Delete
+  protected variable _TPassCount
+  protected variable ActionType {}
+  protected variable ActionLB
+  protected variable Actions
+  protected variable WhileStepping 0
+  protected variable Selection {}
+  protected variable New 0;		# set whenever there is a new tp to add
+  protected variable Exists 0;		# set whenever a tracepoint in the range exists
+  protected variable Dismissed 0;	# has this dialog been dismissed already?
+  protected variable ActionsDlg {}
 }
 
 proc gdb_add_tracepoint {where passes actions {addr {}}} {

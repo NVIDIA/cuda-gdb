@@ -559,23 +559,23 @@ class SrcBar {
   private method create_trace_buttons {{show 0}} {
 
     if {$show} {
-      set command $Tool add button
+      set command "add button"
     } else {
-      set command $Tool create
+      set command "create"
     }
 
-    $command tfindstart Trace {tfind_cmd "tfind start"} "First Hit <F>" \
+    $Tool $command tfindstart Trace {tfind_cmd "tfind start"} "First Hit <F>" \
       -image rewind_img
     
-    $command tfind Trace {tfind_cmd tfind} "Next Hit <N>" -image next_hit_img
+    $Tool $command tfind Trace {tfind_cmd tfind} "Next Hit <N>" -image next_hit_img
     
-    $command tfindprev Trace {tfind_cmd "tfind -"} "Previous Hit <P>" \
+    $Tool $command tfindprev Trace {tfind_cmd "tfind -"} "Previous Hit <P>" \
       -image prev_hit_img
     
-    $command tfindline Trace {tfind_cmd "tfind line"} "Next Line Hit <L>" \
+    $Tool $command tfindline Trace {tfind_cmd "tfind line"} "Next Line Hit <L>" \
       -image next_line_img
     
-    $command tfindtp Trace { tfind_cmd "tfind tracepoint"} \
+    $Tool $command tfindtp Trace { tfind_cmd "tfind tracepoint"} \
       "Next Hit Here <H>" -image next_check_img
 
     set Trace_control_buttons {tfindstart tfind tfindprev tfindline tfindtp}
