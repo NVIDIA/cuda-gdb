@@ -46,7 +46,7 @@ regarded as a program in the language TeX).
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.1.1.6 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.1.1.7 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -1397,6 +1397,15 @@ If defined, these are the names of the symbols that GDB will look for to
 detect that GCC compiled the file.  The default symbols are
 @code{gcc_compiled.} and @code{gcc2_compiled.}, respectively. (Currently
 only defined for the Delta 68.)
+
+@item GDB_MULTI_ARCH
+If defined and non-zero, enables suport for multiple architectures
+within GDB.
+
+The support can be enabled at two levels.  At level one, only
+definitions for previously undefined macros are provided; at level two,
+a multi-arch definition of all architecture dependant macros will be
+defined.
 
 @item GDB_TARGET_IS_HPPA
 This determines whether horrible kludge code in dbxread.c and
