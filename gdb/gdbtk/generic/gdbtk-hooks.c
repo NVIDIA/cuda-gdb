@@ -677,8 +677,6 @@ static void
 gdbtk_print_frame_info (struct symtab *s, int line,
 			int stopline, int noerror)
 {
-  current_source_symtab = s;
-  current_source_line = line;
 }
 
 /*
