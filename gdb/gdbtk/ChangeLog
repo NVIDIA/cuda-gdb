@@ -1,3 +1,21 @@
+2001-10-18  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/srcpref.itb (SrcPref::contructor): Move array
+	initialization to _init_var.
+	(SrcPref::_init_var): New method to initialize _saved and 
+	_new arrays.
+	(SrcPref::buildwin): Rename to _buildwin. Have widgets use 
+	_new instead of [pref varname ...].  Set initial value of
+	tab size spinint.
+	(SrcPref::_apply): Set prefs with values from the _new array.
+	(SrcPref::_cancel): Reset disassembly flavor and don't call 
+	_save because nothing is saved unless OK is selected.
+	(SrcPref::set_flavor): Rename to _set_flavor.
+	(SrcPref::_pick): Just set _new, not prefs.
+	
+	* library/srcpref.ith: Add private variable _new and
+	private method cancel. Rename others with leading underscore.
+
 2001-10-16  Andrew Cagney  <ac131313@redhat.com>
 
 	From 2001-08-29 John Moore <jmoore@redhat.com>:
