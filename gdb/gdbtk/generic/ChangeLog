@@ -1,6 +1,6 @@
 2000-10-23  Fernando Nasser  <fnasser@totem.to.cygnus.com>
 
-	* gdbtk-hooks.c (x_events): Only process events if the target is
+	* gdbtk-hooks.c (x_event): Only process events if the target is
 	running.
 
 2000-10-23  Fernando Nasser  <fnasser@totem.to.cygnus.com>
