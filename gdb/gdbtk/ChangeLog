@@ -1,3 +1,9 @@
+2001-01-15  Fernando Nasser  <fnasser@redhat.com>
+
+	* srcwin.itb (clear_file): Pass the appropriate value to the GO 
+	argument of mode() so it does not try to read a source file when
+	no executable is loaded.
+
 2001-01-09  Fernando Nasser  <fnasser@redhat.com>
 
 	* library/srcmenubar.itcl (create_file_menu): Add missing incr for

@@ -888,7 +888,7 @@ body SrcWin::clear_file {} {
 
   # Reset to Source mode
   if {[$twin mode_get] != "SOURCE"} {
-    mode {} SOURCE
+    mode {} SOURCE 0
   }
 
   no_inferior
