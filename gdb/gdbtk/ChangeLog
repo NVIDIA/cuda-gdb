@@ -1,3 +1,20 @@
+2001-05-01  Keith Seitz  <keiths@cygnus.com>
+
+        * gdbtk.c (gdbtk_init): Include the command "warp_pointer"
+        for all platforms. Used for testing ONLY.
+
+        * util.tcl (gdbtk_read_defs): If there is an error reading
+        the testsuite definition file, print the error message to
+        stderr, not stdout. This will allow tcl to know that an error
+        has occurred.
+        (find_iwidgets_library): Make it work for running testsuites
+        from installed directory.
+
+        * main.tcl: If we failed to find iwidgets, check if the
+        testsuite is running. If it is running, do not pop up
+        a dialog box: just print out the error and exit.
+        Initialize _test(verbose) for the testsuite.
+
 2001-04-23  Keith Seitz  <keiths@cygnus.com>
 
 	* generic/gdbtk-cmds.c (gdb_get_breakpoint_info): If unable

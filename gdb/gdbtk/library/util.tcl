@@ -154,7 +154,7 @@ proc gdbtk_read_defs {} {
       tk_messageBox -icon error -message "Cannot load defs file:\n$errTxt" -type ok
       return 0
     } else {
-      puts stdout "cannot load defs files: $errTxt\ntry setting DEFS"
+      puts stderr "cannot load defs files: $errTxt\ntry setting DEFS"
       exit 1
     }
   }
@@ -259,11 +259,20 @@ proc find_iwidgets_library {} {
     set iwidgetsBuildDir [glob -nocomplain [file join \
 					      [file dirname $exec_name] \
 					      itcl iwidgets*]]
-    
+    set initFile [file join [lindex $iwidgetsBuildDir 0] \
+		    unix iwidgets.tcl]
+
+    if {[llength $iwidgetsBuildDir] == 0} {
+      # We could be runnning on an installed toolchain.
+      # Check in "normal" installed place: "../../share/iwidgets*"
+      set iwidgetsBuildDir [glob -nocomplain [file join \
+						[file dirname [file dirname $exec_name]] \
+						share iwidgets*]]
+      set initFile [file join [lindex $iwidgetsBuildDir 0] iwidgets.tcl]
+    }
+
     if {[llength $iwidgetsSrcDir] == 1 && [llength $iwidgetsBuildDir] == 1} {
       # The lindex is necessary because the path may have spaces in it...
-      set initFile [file join [lindex $iwidgetsBuildDir 0] \
-		      $::tcl_platform(platform) iwidgets.tcl]
       set libDir [file join [lindex $iwidgetsSrcDir 0] generic]
       if {[file exists $initFile] && [file isdirectory $libDir]} {
 	if {![catch {source $initFile} err]} {

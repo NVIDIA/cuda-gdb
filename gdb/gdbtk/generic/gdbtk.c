@@ -462,11 +462,12 @@ gdbtk_init (argv0)
     error ("cygwin path command initialization failed");
   if (ide_create_shell_execute_command (gdbtk_interp) != TCL_OK)
     error ("cygwin shell execute command initialization failed");
-#else
-  /* for now, this testing function is Unix only */
+#endif
+
+  /* Only for testing -- and only when it can't be done any
+     other way. */
   if (cyg_create_warp_pointer_command (gdbtk_interp) != TCL_OK)
     error ("warp_pointer command initialization failed");
-#endif
 
   /*
    * This adds all the Gdbtk commands.

@@ -59,10 +59,13 @@ namespace import itcl::*
 namespace import debug::*
 
 if {![find_iwidgets_library]} {
-  tk_messageBox -title Error -message "Could not find the Iwidgets libraries.
-Got nameofexec: [info nameofexecutable]
-Error(s) were: \n$errMsg" \
-      -icon error -type ok
+  set msg "Could not find the Iwidgets libraries.\n\nGot nameofexec: [info nameofexecutable]\nError(s) were: \n$errMsg"
+
+  if {![info exists ::env(GDBTK_TEST_RUNNING)] || $::env(GDBTK_TEST_RUNNING) == 0} {
+    puts stderr $msg
+  } else {
+    tk_messageBox -title Error -message $msg -icon error -type ok
+  }
   exit
 }
 
@@ -102,6 +105,9 @@ if {$tcl_platform(platform) == "unix"} {
 #  tk_setPalette tan
   tix resetoptions TixGray [tix cget -fontset]
 }
+
+# For testing
+set _test(interactive) 0
 
 # initialize state variables
 initialize_gdbtk
