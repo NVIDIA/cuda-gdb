@@ -1,5 +1,11 @@
 2002-01-03  Martin M. Hunt  <hunt@redhat.com>
 
+	* library/session.tcl (SESSION_serialize_bps): Ignore
+	breakpoints set on internal_error and info_command because
+	these are set by .gdbinit and will be recreated by it.
+	This is a bit of a hack and should be fixed properly
+	someday.
+	
 	* library/debugwin.itb: Fix incorrect button names
 	so they will be enabled/disabled properly.
 

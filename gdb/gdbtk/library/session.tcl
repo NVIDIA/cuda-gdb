@@ -1,5 +1,5 @@
 # Local preferences functions for GDBtk.
-# Copyright 2000 Red Hat, Inc.
+# Copyright 2000, 2001, 2002 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -33,11 +33,37 @@ proc SESSION_exe_name {path} {
 proc SESSION_serialize_bps {} {
   set result {}
 
+  # HACK.  When debugging gdb with itself in the build
+  # directory, there is a ".gdbinit" file that will set
+  # breakpoints on internal_error() and info_command().
+  # If we then save and set them, they will accumulate.
+  # Possible fixes are to modify GDB so we can tell which 
+  # breakpoints were set from .gdbinit, or modify 
+  # SESSION_recreate_bps to record which breakpoints were
+  # set before it was called.  For now, we simply detect the
+  # most common case and fix it.
+  set basename [string tolower [file tail $::gdb_exe_name]]
+  if {[string match "gdb*" $basename] 
+      || [string match "insight*" $basename]} {
+    set debugging_gdb 1
+  } else {
+    set debugging_gdb 0
+  }
+  
   foreach bp_num [gdb_get_breakpoint_list] {
     lassign [gdb_get_breakpoint_info $bp_num] file function line_number \
       address type enabled disposition ignore_count command_list \
       condition thread hit_count user_specification
 
+    # These breakpoints are set when debugging GDB with itself.
+    # Ignore them so they don't accumulate. They get set again
+    # by .gdbinit anyway. 
+    if {$debugging_gdb} {
+      if {$function == "internal_error" || $function == "info_command"} {
+	continue
+      }
+    }
+    
     switch -glob -- $type {
       "breakpoint" -
       "hw breakpoint" {
@@ -82,13 +108,13 @@ proc SESSION_serialize_bps {} {
 
     lappend result [list $cmd $enabled $condition $command_list]
   }
-
+  
   return $result
 }
 
 # An internal function used when loading sessions.  It takes a
 # breakpoint string and recreates all the breakpoints.
-proc SESSION_recreate_bps {specs} {
+proc SESSION_recreate_bps {specs} {  
   foreach spec $specs {
     lassign $spec create enabled condition commands
 
