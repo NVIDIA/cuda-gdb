@@ -116,6 +116,8 @@ static int gdb_trace_status (ClientData, Tcl_Interp *, int,
 			     Tcl_Obj * CONST[]);
 static int gdb_tracepoint_exists_command (ClientData, Tcl_Interp *,
 					  int, Tcl_Obj * CONST objv[]);
+static Tcl_Obj *get_breakpoint_commands (struct command_line *cmd);
+
 static int tracepoint_exists (char *args);
 
 /* Breakpoint/tracepoint events and related functions */
@@ -349,11 +351,8 @@ gdb_get_breakpoint_info (ClientData clientData, Tcl_Interp *interp, int objc,
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
 			    Tcl_NewIntObj (b->ignore_count));
 
-  new_obj = Tcl_NewObj ();
-  for (cmd = b->commands; cmd; cmd = cmd->next)
-    Tcl_ListObjAppendElement (NULL, new_obj,
-			      Tcl_NewStringObj (cmd->line, -1));
-  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, new_obj);
+  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
+			    get_breakpoint_commands (b->commands));
 
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
 			    Tcl_NewStringObj (b->cond_string, -1));
@@ -371,6 +370,75 @@ gdb_get_breakpoint_info (ClientData clientData, Tcl_Interp *interp, int objc,
   return TCL_OK;
 }
 
+/* Helper function for gdb_get_breakpoint_info, this function is
+   responsible for figuring out what to type at the "commands" command
+   in gdb's cli in order to get at the same command list passed here.
+
+   NOTE: cannot use sprintf_append_element_to_obj with anything from
+   gdb, since those things could contain unescaped sequences. */
+static Tcl_Obj *
+get_breakpoint_commands (struct command_line *cmd)
+{
+  Tcl_Obj *obj, *tmp;
+
+  obj = Tcl_NewObj ();
+  while (cmd != NULL)
+    {
+      switch (cmd->control_type)
+	{
+	case simple_control:
+	  /* A simple command. Just append it. */
+	  Tcl_ListObjAppendElement (NULL, obj,
+				    Tcl_NewStringObj (cmd->line, -1));
+	  break;
+
+	case break_control:
+	  /* A loop_break */
+	  sprintf_append_element_to_obj (obj, "loop_break");
+	  break;
+
+	case continue_control:
+	  /* A loop_continue */
+	  sprintf_append_element_to_obj (obj, "loop_continue");
+	  break;
+
+	case while_control:
+	  /* A while loop. Must append "end" to the end of it. */
+	  tmp = Tcl_NewStringObj ("while ", -1);
+	  Tcl_AppendToObj (tmp, cmd->line, -1);
+	  Tcl_ListObjAppendElement (NULL, obj, tmp);
+	  Tcl_ListObjAppendList (NULL, obj,
+				    get_breakpoint_commands (*cmd->body_list));
+	  sprintf_append_element_to_obj (obj, "end");
+	  break;
+
+	case if_control:
+	  /* An if statement. cmd->body_list[0] is the true part,
+	     cmd->body_list[1] contains the "else" (false) part. */
+	  tmp = Tcl_NewStringObj ("if ", -1);
+	  Tcl_AppendToObj (tmp, cmd->line, -1);
+	  Tcl_ListObjAppendElement (NULL, obj, tmp);
+	  Tcl_ListObjAppendList (NULL, obj,
+				 get_breakpoint_commands (cmd->body_list[0]));
+	  if (cmd->body_count == 2)
+	    {
+	      sprintf_append_element_to_obj (obj, "else");
+	      Tcl_ListObjAppendList (NULL, obj,
+					get_breakpoint_commands(cmd->body_list[1]));
+	    }
+	  sprintf_append_element_to_obj (obj, "end");
+	  break;
+
+	case invalid_control:
+	  /* Something invalid. Just skip it. */
+	  break;
+	}
+
+      cmd = cmd->next;
+    }
+
+  return obj;
+}
 
 /* This implements the tcl command gdb_get_breakpoint_list
  * It builds up a list of the current breakpoints.

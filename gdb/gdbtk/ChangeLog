@@ -1,3 +1,9 @@
+2001-10-05  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-bp.c (get_breakpoint_commands): New function.
+	(gdb_get_breakpoint_info): Use gdb_breakpoint_commands to
+	assemble breakpoint commands information.
+
 2001-10-02  Tom Tromey  <tromey@redhat.com>
 
 	* library/tclIndex: Updated.
