@@ -1,3 +1,8 @@
+2001-09-27  Elena Zannoni  <ezannoni@redhat.com>
+
+	* library/targetselection.itb (build_win, default_port): Handle
+        hpux 11.00.
+
 2001-09-27  Keith Seitz  <keiths@redhat.com>
 
         * library/prefs.tcl (escape_value): Update to work

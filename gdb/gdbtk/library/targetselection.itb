@@ -270,7 +270,8 @@ body TargetSelection::default_port {} {
       # Special case...
       switch -regexp $tcl_platform(osVersion) {
 	A.09 { set port /dev/tty00 }
-	B.10 { set port /dev/tty0p0 }
+	B.10 -
+	B.11 { set port /dev/tty0p0 }
       }
     }
     default { set port /dev/ttya }
@@ -436,7 +437,8 @@ body TargetSelection::build_win {} {
 	# Special case...
 	switch -regexp $tcl_platform(osVersion) {
 	  A.09 { set ports [list /dev/tty00 /dev/tty01] }
-	  B.10 { set ports [list /dev/tty0p0 /dev/tty1p0] }
+	  B.10 -
+	  B.11 { set ports [list /dev/tty0p0 /dev/tty1p0] }
 	}
       }
       default { set ports [list UNKNOWN UNKNOWN] }
