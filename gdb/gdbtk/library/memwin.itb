@@ -288,10 +288,9 @@ body MemWin::edit { cell } {
     # now process each char, one at a time
     foreach c [split $val ""] {
       if {$c != $ascii_char} {
-	if {$c == "'"} {set c "\\'"}
-	set err [catch {gdb_cmd "set *(char *)($addr) = '$c'"} res]
-	if {$err} {
-	  error_dialog [winfo toplevel $itk_interior] $res
+	scan $c %c char
+	if {[catch {gdb_set_mem $addr [format %02x $char] 1} res]} {
+	  error_dialog $res
 
 	  # reset value
 	  set ${this}_memval($row,$col) $saved_value
@@ -321,10 +320,14 @@ body MemWin::edit { cell } {
   # calculate address based on row and column
   set addr [expr {$current_addr + $bytes_per_row * $row + $size * $col}]
   #debug "  edit $row,$col         [format "%x" $addr] = $val"
-  #set memory
-  set err [catch {gdb_cmd "set *($type($size) *)($addr) = $val"} res]
-  if {$err} {
-    error_dialog [winfo toplevel $itk_interior] $res
+
+  # Pad the value with zeros, if necessary
+  set s [expr {$size * 2}]
+  set val [format "0x%0${s}x" $val]
+
+  # set memory
+  if {[catch {gdb_set_mem $addr $val $size} res]} {
+    error_dialog $res
 
     # reset value
     set ${this}_memval($row,$col) $saved_value

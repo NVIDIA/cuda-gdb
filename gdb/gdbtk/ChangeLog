@@ -1,3 +1,14 @@
+2001-05-25  Keith Seitz  <keiths@cygnus.com>
+
+	* generic/gdbtk-cmds.c (bin2hex): New function.
+	(fromhex): New function.
+	(gdb_set_mem): New function.
+	(Gdbtk_Init): Add new command, "gdb_set_mem".
+	* library/memwin.itb (edit): Use "gdb_set_mem" to set
+	memory, not some gdb_cmd contrivance.
+	When sending data to gdb_set_mem, make sure that it
+	is properly zero-padded.
+
 2001-05-22  Keith Seitz  <keiths@cygnus.com>
 
 	* memwin.ith (error_dialog): Declare public method.

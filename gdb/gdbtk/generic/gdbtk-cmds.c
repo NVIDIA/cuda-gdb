@@ -144,6 +144,7 @@ static int gdb_get_function_command (ClientData, Tcl_Interp *, int,
 static int gdb_get_line_command (ClientData, Tcl_Interp *, int,
 				 Tcl_Obj * CONST objv[]);
 static int gdb_get_mem (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+static int gdb_set_mem (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_immediate_command (ClientData, Tcl_Interp *, int,
 				  Tcl_Obj * CONST[]);
 static int gdb_listfiles (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
@@ -197,6 +198,8 @@ static int gdb_disassemble_driver (CORE_ADDR low, CORE_ADDR high,
 char *get_prompt (void);
 static int perror_with_name_wrapper (PTR args);
 static int wrapped_call (PTR opaque_args);
+static int hex2bin (const char *hex, char *bin, int count);
+static int fromhex (int a);
 
 
 /* Gdbtk_Init
@@ -226,6 +229,8 @@ Gdbtk_Init (interp)
   Tcl_CreateObjCommand (interp, "gdb_entry_point", gdbtk_call_wrapper,
 			gdb_entry_point, NULL);
   Tcl_CreateObjCommand (interp, "gdb_get_mem", gdbtk_call_wrapper, gdb_get_mem,
+			NULL);
+  Tcl_CreateObjCommand (interp, "gdb_set_mem", gdbtk_call_wrapper, gdb_set_mem,
 			NULL);
   Tcl_CreateObjCommand (interp, "gdb_stop", gdbtk_call_wrapper, gdb_stop, NULL);
   Tcl_CreateObjCommand (interp, "gdb_restore_fputs", gdbtk_call_wrapper, gdb_restore_fputs,
@@ -2443,6 +2448,105 @@ gdb_entry_point (clientData, interp, objc, objv)
   else
     Tcl_SetStringObj (result_ptr->obj_ptr, "", -1);
 
+  return TCL_OK;
+}
+
+/* Covert hex to binary. Stolen from remote.c,
+   but added error handling */
+static int
+fromhex (int a)
+{
+  if (a >= '0' && a <= '9')
+    return a - '0';
+  else if (a >= 'a' && a <= 'f')
+    return a - 'a' + 10;
+  else if (a >= 'A' && a <= 'F')
+    return a - 'A' + 10;
+
+  return -1;
+}
+
+static int
+hex2bin (const char *hex, char *bin, int count)
+{
+  int i;
+  int m, n;
+
+  for (i = 0; i < count; i++)
+    {
+      if (hex[0] == 0 || hex[1] == 0)
+	{
+	  /* Hex string is short, or of uneven length.
+	     Return the count that has been converted so far. */
+	  return i;
+	}
+      m = fromhex (hex[0]);
+      n = fromhex (hex[1]);
+      if (m == -1 || n == -1)
+	return -1;
+      *bin++ = m * 16 + n;
+      hex += 2;
+    }
+
+  return i;
+}
+
+/* This implements the Tcl command 'gdb_set_mem', which
+ * sets some chunk of memory.
+ *
+ * Arguments:
+ *   gdb_set_mem addr hexstr len
+ *
+ *   addr:   address of data to set
+ *   hexstr: ascii string of data to set
+ *   len:    number of bytes of data to set
+ */
+static int
+gdb_set_mem (clientData, interp, objc, objv)
+     ClientData clientData;
+     Tcl_Interp *interp;
+     int objc;
+     Tcl_Obj *CONST objv[];
+{
+  CORE_ADDR addr;
+  char buf[128];
+  char *hexstr;
+  int len, size;
+
+  if (objc != 4)
+    {
+      Tcl_WrongNumArgs (interp, 1, objv, "addr hex_data len");
+      return TCL_ERROR;
+    }
+
+  /* Address to write */
+  addr = parse_and_eval_address (Tcl_GetStringFromObj (objv[1], NULL));
+
+  /* String value to write: it's in hex */
+  hexstr = Tcl_GetStringFromObj (objv[2], NULL);
+  if (hexstr == NULL)
+    return TCL_ERROR;
+
+  /* Length of buf */
+  if (Tcl_GetIntFromObj (interp, objv[3], &len) != TCL_OK)
+    return TCL_ERROR;
+
+  /* Convert hexstr to binary and write */
+  if (hexstr[0] == '0' && hexstr[1] == 'x')
+    hexstr += 2;
+  size = hex2bin (hexstr, buf, strlen (hexstr));
+  if (size < 0)
+    {
+      /* Error in input */
+      char *res;
+
+      xasprintf (&res, "Invalid hexadecimal input: \"0x%s\"", hexstr);
+      Tcl_SetObjResult (interp, Tcl_NewStringObj (res, -1));
+      free (res);
+      return TCL_ERROR;
+    }
+
+  target_write_memory (addr, buf, len);
   return TCL_OK;
 }
 
