@@ -1,3 +1,12 @@
+2001-10-25  Keith Seitz  <keiths@redhat.com>
+
+	* defs (_report_error): Fix typo.
+	(show_warning): Redefine the standard warning handler
+	so that we don't end up stalling tests with a warning dialog.
+
+	* windows.exp: New file.
+	* windows.test: New file.
+
 2001-10-08  Keith Seitz  <keiths@redhat.com>
 
 	* c_variable.test (check_update): Forget about returning

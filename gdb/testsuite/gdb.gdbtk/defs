@@ -122,7 +122,7 @@ proc gdbtk_test_run {{prog_args {}}} {
 proc _report_error {msg} {
   global _test
 
-  if {[info exists _tesst(interactive)] && $_test(interactive)} {
+  if {[info exists _test(interactive)] && $_test(interactive)} {
     # Dialog
     tk_messageBox -message $msg -icon error -type ok
   } else {
@@ -291,4 +291,16 @@ proc gdbtk_test_error {desc} {
   set desc [join [split $desc \n] |]
   puts "ERROR \{$desc\} \{\} \{\}"
   gdbtk_test_done
+}
+
+# Override the warning dialog. We don't want to see them.
+rename show_warning real_show_warning
+proc show_warning {msg} {
+  global _test
+
+  set str "INSIGHT TESTSUITE WARNING: $msg"
+  puts stdout $str
+  if {$_test(logfile) != ""} {
+    puts $_test(logfile) $str
+  }
 }
