@@ -144,7 +144,7 @@ gdbtk_add_hooks (void)
   pre_add_symbol_hook = gdbtk_pre_add_symbol;
   post_add_symbol_hook = gdbtk_post_add_symbol;
   file_changed_hook = gdbtk_file_changed;
-  exec_file_display_hook = gdbtk_exec_file_display;
+  specify_exec_file_hook (gdbtk_exec_file_display);
 
   create_tracepoint_hook = gdbtk_create_tracepoint;
   delete_tracepoint_hook = gdbtk_delete_tracepoint;

@@ -1,3 +1,19 @@
+2000-02-23  Keith R Seitz  <kseitz@nwlink.com>
+
+	* gdbtk-wrapper.h: Add declarations for GDB_get_prev_frame, GDB_get_next_frame,
+	GDB_find_relative_frame, GDB_get_current_frame.
+	* gdbtk-wrapper.c (GDB_get_prev_frame, wrap_get_prev_frame): New functions.
+	(GDB_get_next_frame, wrap_get_next_frame): New functions.
+	(GDB_find_relative_frame, wrap_find_relative_frame): New functions.
+	(GDB_get_current_frame, wrap_get_current_frame): New functions.
+
+	* gdbtk-hooks.c (gdbtk_add_hooks): Use "specify_exec_file_hook" so
+	that our hook is added to the list of hooks run instead of overwriting
+	all other hooks.
+
+	* gdbtk-cmds.c (gdb_stack): Wrap all calls to internal functions and
+	deal with errors more gracefully.
+
 Wed Feb 23 13:01:36 2000  Andrew Cagney  <cagney@b1.cygnus.com>
 
 	* gdbtk-cmds.c (gdbtk_dis_asm_read_memory): Change LEN to unsigned

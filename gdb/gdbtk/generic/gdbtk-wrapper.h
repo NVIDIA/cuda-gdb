@@ -39,12 +39,12 @@ typedef enum gdb_wrapper_status { GDB_OK, GDB_ERROR } gdb_result;
    function. */
 extern gdb_result GDB_evaluate_expression PARAMS ((struct expression *expr, value_ptr *val));
 extern gdb_result GDB_select_frame PARAMS ((struct frame_info *fi, int level));
-extern gdb_result GDB_type_print (value_ptr val, char *varstring,
-				  struct ui_file *stream, int show);
-extern gdb_result GDB_val_print (struct type *type, char *valaddr,
-				 CORE_ADDR address, struct ui_file *stream,
-				 int format, int deref_ref, int recurse,
-				 enum val_prettyprint pretty);
+extern gdb_result GDB_type_print PARAMS ((value_ptr val, char *varstring,
+					  struct ui_file *stream, int show));
+extern gdb_result GDB_val_print PARAMS ((struct type *type, char *valaddr,
+                                  CORE_ADDR address, struct ui_file *stream,
+                                  int format, int deref_ref, int recurse,
+                                  enum val_prettyprint pretty));
 extern gdb_result GDB_value_fetch_lazy PARAMS ((value_ptr value));
 extern gdb_result GDB_value_equal PARAMS ((value_ptr val1, value_ptr val2, int *result));
 extern gdb_result GDB_parse_exp_1 PARAMS ((char **stringptr, struct block *block, int comma,
@@ -66,6 +66,14 @@ extern gdb_result GDB_value_struct_elt PARAMS ((value_ptr *argp, value_ptr *args
 extern gdb_result GDB_value_cast PARAMS ((struct type *type, value_ptr val,
 					  value_ptr *rval));
 gdb_result GDB_get_frame_block PARAMS ((struct frame_info *fi, struct block **rval));
+extern gdb_result GDB_get_prev_frame PARAMS ((struct frame_info *fi,
+					      struct frame_info **result));
+extern gdb_result GDB_get_next_frame PARAMS ((struct frame_info *fi,
+					      struct frame_info **result));
+extern gdb_result GDB_find_relative_frame PARAMS ((struct frame_info *fi,
+						   int *start,
+						   struct frame_info **result));
+extern gdb_result GDB_get_current_frame PARAMS ((struct frame_info **result));
 #endif /* GDBTK_WRAPPER_H */
 
 /* Local variables: */

@@ -46,6 +46,7 @@
 #include <tix.h>
 #include "guitcl.h"
 #include "gdbtk.h"
+#include "gdbtk-wrapper.h"
 
 #include <signal.h>
 #include <fcntl.h>
@@ -4090,37 +4091,47 @@ gdb_stack (clientData, interp, objc, objv)
       return TCL_ERROR;
     }
 
-  Tcl_SetListObj (result_ptr->obj_ptr, 0, NULL);
-
   if (target_has_stack)
     {
+      gdb_result r;
       struct frame_info *top;
       struct frame_info *fi;
 
       /* Find the outermost frame */
-      fi = get_current_frame ();
+      r  = GDB_get_current_frame (&fi);
+      if (r != GDB_OK)
+	return TCL_OK;
+
       while (fi != NULL)
-	{
-	  top = fi;
-	  fi = get_prev_frame (fi);
-	}
+        {
+          top = fi;
+	  r = GDB_get_prev_frame (fi, &fi);
+	  if (r != GDB_OK)
+	    fi = NULL;
+        }
 
       /* top now points to the top (outermost frame) of the
          stack, so point it to the requested start */
       start = -start;
-      top = find_relative_frame (top, &start);
+      r = GDB_find_relative_frame (top, &start, &top);
+      
+      result_ptr->obj_ptr = Tcl_NewListObj (0, NULL);
+      if (r != GDB_OK)
+	return TCL_OK;
 
       /* If start != 0, then we have asked to start outputting
          frames beyond the innermost stack frame */
       if (start == 0)
-	{
-	  fi = top;
-	  while (fi && count--)
-	    {
-	      get_frame_name (interp, result_ptr->obj_ptr, fi);
-	      fi = get_next_frame (fi);
-	    }
-	}
+        {
+          fi = top; 
+          while (fi && count--)
+            {
+              get_frame_name (interp, result_ptr->obj_ptr, fi);
+              r = GDB_get_next_frame (fi, &fi);
+	      if (r != GDB_OK)
+		break;
+            }
+        }
     }
 
   return TCL_OK;

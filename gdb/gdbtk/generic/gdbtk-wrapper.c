@@ -30,12 +30,12 @@ gdb_result GDB_value_fetch_lazy PARAMS ((value_ptr));
 
 gdb_result GDB_evaluate_expression PARAMS ((struct expression *, value_ptr *));
 
-gdb_result GDB_type_print (value_ptr, char *, struct ui_file *, int);
+gdb_result GDB_type_print PARAMS ((value_ptr, char *, struct ui_file *, int));
 
-gdb_result GDB_val_print (struct type * type, char *valaddr,
-			  CORE_ADDR address, struct ui_file *stream,
-			  int format, int deref_ref, int recurse,
-			  enum val_prettyprint pretty);
+gdb_result GDB_val_print PARAMS ((struct type * type, char *valaddr,
+				  CORE_ADDR address, struct ui_file * stream,
+				  int format, int deref_ref, int recurse,
+				  enum val_prettyprint pretty));
 
 gdb_result GDB_select_frame PARAMS ((struct frame_info *, int));
 
@@ -70,6 +70,18 @@ gdb_result GDB_value_struct_elt PARAMS ((value_ptr * argp, value_ptr * args,
 gdb_result GDB_value_cast PARAMS ((struct type * type, value_ptr val, value_ptr * rval));
 
 gdb_result GDB_get_frame_block PARAMS ((struct frame_info * fi, struct block ** rval));
+
+gdb_result GDB_get_prev_frame PARAMS ((struct frame_info *fi,
+				       struct frame_info **result));
+
+gdb_result GDB_get_next_frame PARAMS ((struct frame_info *fi,
+				       struct frame_info **result));
+
+gdb_result GDB_find_relative_frame PARAMS ((struct frame_info *fi,
+					    int *start,
+					    struct frame_info **result));
+
+gdb_result GDB_get_current_frame PARAMS ((struct frame_info **result));
 
 /*
  * Private functions for this file
@@ -113,6 +125,14 @@ static int wrap_value_cast PARAMS ((char *opaque_arg));
 
 static int wrap_get_frame_block PARAMS ((char *opaque_arg));
 
+static int wrap_get_prev_frame PARAMS ((char *opaque_arg));
+
+static int wrap_get_next_frame PARAMS ((char *opaque_arg));
+
+static int wrap_find_relative_frame PARAMS ((char *opaque_arg));
+
+static int wrap_get_current_frame PARAMS ((char *opaque_arg));
+
 static gdb_result
 call_wrapped_function (fn, arg)
      catch_errors_ftype *fn;
@@ -702,6 +722,110 @@ wrap_get_frame_block (opaque_arg)
   fi = (struct frame_info *) (*args)->args[0];
   (*args)->result = (char *) get_frame_block (fi);
 
+  return 1;
+}
+
+gdb_result
+GDB_get_prev_frame (struct frame_info *fi, struct frame_info **result)
+{
+  struct gdb_wrapper_arguments args;
+  gdb_result r;
+
+  args.args[0] = (char *) fi;
+  r = call_wrapped_function ((catch_errors_ftype *) wrap_get_prev_frame, &args);
+  if (r != GDB_OK)
+    return r;
+
+  *result = (struct frame_info *) args.result;
+  return GDB_OK;
+}
+
+static int
+wrap_get_prev_frame (char *opaque_arg)
+{
+  struct gdb_wrapper_arguments **args = (struct gdb_wrapper_arguments **) opaque_arg;
+  struct frame_info *fi = (struct frame_info *) (*args)->args[0];
+
+  (*args)->result = (char *) get_prev_frame (fi);
+  return 1;
+}
+
+gdb_result
+GDB_get_next_frame (struct frame_info *fi, struct frame_info **result)
+{
+  struct gdb_wrapper_arguments args;
+  gdb_result r;
+
+  args.args[0] = (char *) fi;
+  r = call_wrapped_function ((catch_errors_ftype *) wrap_get_next_frame, &args);
+  if (r != GDB_OK)
+    return r;
+
+  *result = (struct frame_info *) args.result;
+  return GDB_OK;
+}
+
+static int
+wrap_get_next_frame (char *opaque_arg)
+{
+  struct gdb_wrapper_arguments **args = (struct gdb_wrapper_arguments **) opaque_arg;
+  struct frame_info *fi = (struct frame_info *) (*args)->args[0];
+
+  (*args)->result = (char *) get_next_frame (fi);
+  return 1;
+}
+
+gdb_result
+GDB_find_relative_frame (struct frame_info *fi, int *start,
+			 struct frame_info **result)
+{
+  struct gdb_wrapper_arguments args;
+  gdb_result r;
+
+  args.args[0] = (char *) fi;
+  args.args[1] = (char *) start;
+
+  r = call_wrapped_function ((catch_errors_ftype *) wrap_find_relative_frame, 
+			     &args);
+  if (r != GDB_OK)
+    return r;
+
+  *result = (struct frame_info *) args.result;
+  return GDB_OK;
+}
+
+static int
+wrap_find_relative_frame (char *opaque_arg)
+{
+  struct gdb_wrapper_arguments **args = (struct gdb_wrapper_arguments **) opaque_arg;
+  struct frame_info *fi = (struct frame_info *) (*args)->args[0];
+  int *start = (int *) (*args)->args[1];
+
+  (*args)->result = (char *) find_relative_frame (fi, start);
+  return 1;
+}
+
+gdb_result
+GDB_get_current_frame (struct frame_info **result)
+{
+  struct gdb_wrapper_arguments args;
+  gdb_result r;
+
+  r = call_wrapped_function ((catch_errors_ftype *) wrap_get_current_frame, 
+			     &args);
+  if (r != GDB_OK)
+    return r;
+
+  *result = (struct frame_info *) args.result;
+  return GDB_OK;
+}
+
+static int
+wrap_get_current_frame (char *opaque_arg)
+{
+  struct gdb_wrapper_arguments **args = (struct gdb_wrapper_arguments **) opaque_arg;
+
+  (*args)->result = (char *) get_current_frame ();
   return 1;
 }
 
