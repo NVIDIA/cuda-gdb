@@ -2159,7 +2159,7 @@ itcl::body SrcTextWin::addToWatch {var} {
 itcl::body SrcTextWin::do_key {key} {    
   if {!$Running} {
     switch $key {
-      print        { print }
+      print        { print $top }
       download     { Download::download_it }
       run          { $parent inferior run }
       stack        { ManagedWin::open StackWin }
