@@ -50,7 +50,7 @@ regarded as a program in the language TeX).
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.20 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.21 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -2151,7 +2151,7 @@ languages, these predicates will always see a pointer type, never an
 array type.  All the references above to arrays being returned by value
 apply only to other languages.
 
-@item SOFTWARE_SINGLE_STEP_P
+@item SOFTWARE_SINGLE_STEP_P()
 @findex SOFTWARE_SINGLE_STEP_P
 Define this as 1 if the target does not have a hardware single-step
 mechanism.  The macro @code{SOFTWARE_SINGLE_STEP} must also be defined.
