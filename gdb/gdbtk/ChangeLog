@@ -1,3 +1,8 @@
+2003-02-11  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/help/images/browser1.png: New file.
+	* library/help/images/browser2.png: New file.	
+
 2003-02-11  Keith R Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-register.c (register_changed_p): If the selected
