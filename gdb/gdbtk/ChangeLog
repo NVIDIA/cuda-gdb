@@ -1,3 +1,8 @@
+2003-06-11  David Carlton  <carlton@bactrian.org>
+
+	* generic/gdbtk-register.c (get_register): REGISTER_CONVERTIBLE
+	and REGISTER_CONVERT_TO_VIRTUAL are deprecated.
+
 2003-05-12  Elena Zannoni  <ezannoni@redhat.com>
 
         * generic/gdbtk-cmds.c (gdb_search): Replace namespace_enum

@@ -301,9 +301,9 @@ get_register (int regnum, void *arg)
     }
 
   /* Convert raw data to virtual format if necessary.  */
-  if (REGISTER_CONVERTIBLE (regnum))
+  if (DEPRECATED_REGISTER_CONVERTIBLE (regnum))
     {
-      REGISTER_CONVERT_TO_VIRTUAL (regnum, reg_vtype,
+      DEPRECATED_REGISTER_CONVERT_TO_VIRTUAL (regnum, reg_vtype,
       				   raw_buffer, virtual_buffer);
     }
   else
