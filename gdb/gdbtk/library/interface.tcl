@@ -1492,15 +1492,16 @@ proc gdbtk_detached {} {
 # the debugger must be able to keep gui alive while target_wait is
 # blocking (so that the user can interrupt or detach from it).
 # 
-# The best solution for this is to capture gdb deep down where it
-# can block. For _any_ target board, this will be in either
-# serial or socket code. These places call ui_loop_hook to 
-# keep us alive. For native unix, we use an interval timer.
-# Simulators either call ui_loop_hook directly (older sims, at least)
-# or they call gdb's os_poll_quit callback, where we insert a call
-# to ui_loop_hook. Some targets (like v850ice and windows native)
-# require a call to ui_loop_hook directly in target_wait. See comments
-# before gdb_stop and x_event to find out more about how this is accomplished.
+# The best solution for this is to capture gdb deep down where it can
+# block. For _any_ target board, this will be in either serial or
+# socket code. These places call deprecated_ui_loop_hook to keep us
+# alive. For native unix, we use an interval timer.  Simulators either
+# call deprecated_ui_loop_hook directly (older sims, at least) or they
+# call gdb's os_poll_quit callback, where we insert a call to
+# deprecated_ui_loop_hook. Some targets (like v850ice and windows
+# native) require a call to deprecated_ui_loop_hook directly in
+# target_wait. See comments before gdb_stop and x_event to find out
+# more about how this is accomplished.
 #
 # The stop button's behavior:
 # Pressing the stop button should attempt to stop the target. If, after

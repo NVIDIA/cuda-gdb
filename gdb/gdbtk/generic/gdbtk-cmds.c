@@ -517,9 +517,9 @@ gdb_force_quit (ClientData clientData, Tcl_Interp *interp,
  * stop the target. If, after some short time, this fails, a dialog
  * should appear allowing the user to detach.
  *
- * The global GDBTK_FORCE_DETACH is set when we wish to detach
- * from a target. This value is returned by ui_loop_hook (x_event),
- * indicating to callers that they should detach.
+ * The global GDBTK_FORCE_DETACH is set when we wish to detach from a
+ * target. This value is returned by deprecated_ui_loop_hook
+ * (x_event), indicating to callers that they should detach.
  *
  * Read the comments before x_event to find out how we (try) to keep
  * gdbtk alive while some other event loop has stolen control from us.

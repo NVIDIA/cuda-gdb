@@ -139,8 +139,9 @@ extern void gdbtk_restore_result_ptr (void *);
 /* GDB context identifier */
 extern int gdb_context;
 
-/* Internal flag used to tell callers of ui_loop_hook whether they should
-   detach from the target. See explanations before x_event and gdb_stop. */
+/* Internal flag used to tell callers of deprecated_ui_loop_hook
+   whether they should detach from the target. See explanations before
+   x_event and gdb_stop. */
 extern int gdbtk_force_detach;
 
 /*

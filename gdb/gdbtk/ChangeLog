@@ -1,3 +1,9 @@
+2004-06-25  Andrew Cagney  <cagney@gnu.org>
+
+	* generic/gdbtk.h: "ui_loop_hook" was deprecated, update.
+	* generic/gdbtk-hooks.c (gdbtk_add_hooks, x_event): Ditto.
+	* generic/gdbtk-cmds.c: Ditto.
+
 2004-06-24  Andrew Cagney  <cagney@gnu.org>
 
 	* generic/gdbtk-hooks.c (gdbtk_add_hooks): Update references to

@@ -143,7 +143,7 @@ gdbtk_add_hooks (void)
   deprecated_target_wait_hook = gdbtk_wait;
   deprecated_ui_load_progress_hook = gdbtk_load_hash;
 
-  ui_loop_hook = x_event;
+  deprecated_ui_loop_hook = x_event;
   deprecated_pre_add_symbol_hook = gdbtk_pre_add_symbol;
   deprecated_post_add_symbol_hook = gdbtk_post_add_symbol;
   deprecated_file_changed_hook = gdbtk_file_changed;
@@ -354,9 +354,9 @@ gdbtk_memory_changed (CORE_ADDR addr, int len)
 }
 
 
-/* This hook is installed as the ui_loop_hook, which is used in several
- * places to keep the gui alive (x_event runs gdbtk's event loop). Users
- * include:
+/* This hook is installed as the deprecated_ui_loop_hook, which is
+ * used in several places to keep the gui alive (x_event runs gdbtk's
+ * event loop). Users include:
  * - ser-tcp.c in socket reading code
  * - ser-unix.c in serial port reading code
  * - built-in simulators while executing
@@ -366,11 +366,11 @@ gdbtk_memory_changed (CORE_ADDR addr, int len)
  * to an elaborate scheme to keep the gui alive.
  *
  * For simulators and socket or serial connections on all hosts, we
- * rely on ui_loop_hook (x_event) to keep us going. If the user
- * requests a detach (as a result of pressing the stop button -- see
- * comments before gdb_stop in gdbtk-cmds.c), it sets the global
- * GDBTK_FORCE_DETACH, which is the value that x_event returns to
- * it's caller. It is up to the caller of x_event to act on this
+ * rely on deprecated_ui_loop_hook (x_event) to keep us going. If the
+ * user requests a detach (as a result of pressing the stop button --
+ * see comments before gdb_stop in gdbtk-cmds.c), it sets the global
+ * GDBTK_FORCE_DETACH, which is the value that x_event returns to it's
+ * caller. It is up to the caller of x_event to act on this
  * information.
  *
  * For native unix, we simply set an interval timer which calls
@@ -378,8 +378,9 @@ gdbtk_memory_changed (CORE_ADDR addr, int len)
  * loop. See comments before gdbtk_start_timer and gdb_stop_timer
  * in gdbtk.c.
  *
- * For native windows (and a few other targets, like the v850 ICE),
- * we rely on the target_wait loops to call ui_loop_hook to keep us alive. */
+ * For native windows (and a few other targets, like the v850 ICE), we
+ * rely on the target_wait loops to call deprecated_ui_loop_hook to
+ * keep us alive.  */
 int
 x_event (int signo)
 {
