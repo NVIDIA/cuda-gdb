@@ -6,6 +6,8 @@
 	* library/srcmenubar.itcl: Remove obsolete file.
 	* library/srctoolbar.itcl: Remove obsolete file.
 	* library/srcbar.tcl: Remove obsolete file.
+	* library/gdbmenubar.itcl (menubar_show): New method. Associate the
+	menu with the toplevel window.
         * library/srcwin.itb (_build_win): Use SrcBar.
 	* library/tclIndex: Regenerate.
 

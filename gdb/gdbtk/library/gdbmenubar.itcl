@@ -53,6 +53,13 @@ class GDBMenuBar {
   }
 
   # ------------------------------------------------------------------
+  #  METHOD:  menubar_show - attach menu to the toplevel window
+  # ------------------------------------------------------------------
+  public method menubar_show {} {
+      [winfo toplevel $itk_interior] configure -menu $Menu
+  }
+
+  # ------------------------------------------------------------------
   #  METHOD:  set_class_state - standard method to control state by class
   # ------------------------------------------------------------------
   public method set_class_state {enable_list} {
