@@ -61,6 +61,7 @@ class SrcTextWin {
     method jump_to_here {{win {}} {y -1} {threads -1}}
     method set_bp_at_line {{type N} {win {}} {y -1} {threads "-1"}}
     method remove_bp_at_line {{win {}} {y -1}}
+    method enable_disable_at_line {action}
     method set_tp_at_line {{win {}} {y -1}}
     method next_hit_at_line {{win {}} {y -1}}
     method remove_tp_at_line {{win {}} {y -1}}

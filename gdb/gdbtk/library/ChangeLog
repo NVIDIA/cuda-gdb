@@ -1,5 +1,14 @@
 2000-11-30  Tom Tromey  <tromey@cygnus.com>
 
+	* srctextwin.ith (enable_disable_at_line): Declare.
+	* srctextwin.itb (SrcTextWin::build_popups): Create popup for
+	disabled breakpoint.  Add "disable" to breakpoint menu.
+	(enable_disable_at_line): New method.
+	(SrcTextWin::do_bp): Don't remove the tag we are adding -- remove
+	the "opposite" tag.
+
+2000-11-30  Tom Tromey  <tromey@cygnus.com>
+
 	* prefs.tcl (pref_save): Put version number into file.  Added
 	`session' to list of top-level keys.  Allow keys with many `/'s.
 	(pref_read): Recognize version number.

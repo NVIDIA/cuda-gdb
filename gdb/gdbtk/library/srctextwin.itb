@@ -171,7 +171,8 @@ body SrcTextWin::build_popups {} {
   set popups(tp_browse) $itk_interior.tp_browse_menu
   set popups(break_rgn) $itk_interior.break_menu
   set popups(source) $itk_interior.src_menu
-  
+  set popups(disabled_bp) $itk_interior.disabled_bp_menu
+
   # This is a scratch popup menu we use when we are not over a bp...
   if {![winfo exists $popups(source)]} {
     menu $popups(source) -tearoff 0
@@ -220,6 +221,10 @@ body SrcTextWin::build_popups {} {
       addPopup bp "Continue to Here" "$this continue_to_here" {} 0 0
       addPopup bp "Jump to Here" "$this jump_to_here" {} 0 0
       $popups(bp) add separator    
+
+      addPopup bp "Disable Breakpoint" "$this enable_disable_at_line disable" \
+	$bp_fg
+      $popups(bp) add separator
     }
     
     addPopup bp "Delete Breakpoint" "$this remove_bp_at_line"
@@ -276,7 +281,7 @@ body SrcTextWin::build_popups {} {
 	green 0 0
       $popups(bp_and_tp) add separator    
     }
-    
+
     addPopup bp_and_tp "Delete Breakpoint" "$this remove_bp_at_line" $bp_fg
     if {$Tracing} {
       addPopup bp_and_tp "Modify Tracepoint" "$this set_tp_at_line" $tp_fg
@@ -284,7 +289,17 @@ body SrcTextWin::build_popups {} {
 	"$this remove_tp_at_line" $tp_fg
     }
   }
-  
+
+  if {![winfo exists $popups(disabled_bp)]} {
+    menu $popups(disabled_bp) -tearoff 0
+
+    addPopup disabled_bp "Enable Breakpoint" \
+      "$this enable_disable_at_line enable" $bp_fg
+    
+    $popups(disabled_bp) add separator
+    addPopup disabled_bp "Delete Breakpoint" "$this remove_bp_at_line"
+  }
+
   if {![winfo exists $popups(tp_browse)]} {
     
     # this popup is on a tracepoint when browsing.
@@ -293,7 +308,6 @@ body SrcTextWin::build_popups {} {
     addPopup tp_browse "Next hit Here" "$this next_hit_at_line" \
       green
   }
-  
 }
 
 # ------------------------------------------------------------------
@@ -527,7 +541,13 @@ body SrcTextWin::config_win {win {asm S}} {
     $win tag bind break_rgn_tag <Button-3> \
       "$this do_tag_popup break_rgn %X %Y %y; break"
     foreach type $bp_types {
-      $win tag bind ${type}_tag <Button-3> "$this do_tag_popup bp %X %Y %y; break"
+      if {$type == "disabled_bp"} then {
+	set tag disabled_bp
+      } else {
+	set tag bp
+      }
+      $win tag bind ${type}_tag <Button-3> \
+	"$this do_tag_popup $tag %X %Y %y; break"
     }
     $win tag bind tp_tag <Button-3> "$this do_tag_popup tp %X %Y %y; break"
     $win tag bind bp_and_tp_tag <Button-3> "$this do_tag_popup bp_and_tp %X %Y %y; break"
@@ -692,6 +712,7 @@ body SrcTextWin::addPopup {menu label command {abg {}} {browse 1} {run 1}} {
   }
   
 }
+
 # ------------------------------------------------------------------
 #  METHOD:  handle_set_hook - Handle changes in the gdb variables
 #           changed through the "set" gdb command.
@@ -1323,12 +1344,11 @@ body SrcTextWin::insertBreakTag {win linenum tag} {
 			$linenum.0 "$linenum.0 lineend"] 1]
     $win tag remove break_rgn_tag $linenum.0 "$linenum.0 lineend"
     $win delete $linenum.0
-    
+
     # Strip the "_tag" off the end of the tag to get the image name.
     $win image create $linenum.0 -image $break_images($img_name)
     $win tag add $tag $linenum.0 $stop
   } else {
-    
     set other_tag [lindex $tag_list \
 		     [lsearch -glob $tag_list {*[bt]p_tag}]]
     if {$other_tag == ""} {
@@ -1488,22 +1508,26 @@ body SrcTextWin::do_bp { win action linenum type bpnum enabled thread asm} {
       set type thread
     }
   }
-  
+
   switch $type {
     donttouch {
       set tag_type bp_tag
+      set remove_type disabled_bp_tag
     }
     delete {
       set tag_type temp_bp_tag
     }
     disabled_bp {
       set tag_type disabled_bp_tag
+      set remove_type bp_tag
     }
     tracepoint {
       set tag_type tp_tag
+      set remove_type disabled_tp_tag
     }
     disabled_tracepoint {
       set tag_type disabled_tp_tag
+      set remove_type tp_tag
     }
     thread {
       set tag_type thread_bp_tag
@@ -1514,12 +1538,12 @@ body SrcTextWin::do_bp { win action linenum type bpnum enabled thread asm} {
       set tag_type bp_tag
     }
   }
-  
+
   if {[string compare $action "delete"] == 0} {
     removeBreakTag $win $linenum $tag_type
   } else {
-    if {[string compare $action "modify"] == 0} {
-      removeBreakTag $win $linenum $tag_type
+    if {[string compare $action "modify"] == 0 && $remove_type != ""} {
+      removeBreakTag $win $linenum $remove_type
     }
     insertBreakTag $win $linenum $tag_type
   }
@@ -1786,6 +1810,52 @@ body SrcTextWin::set_bp_at_line {{type N} {win {}} {y -1} {threads "-1"}} {
       }
     }    
   }
+}
+
+# ------------------------------------------------------------------
+#  METHOD:  enable_disable_at_line - Enable or disable breakpoint
+# ------------------------------------------------------------------
+body SrcTextWin::enable_disable_at_line {action} {
+  if {$Running} {
+    return
+  }
+
+  # FIXME: should this work on $bwin as well?  In that case we'd need
+  # a `win' argument...
+
+  set y $popups(saved_y)
+
+  $twin tag remove _show_variable 1.0 end 
+  set line [lindex [split [$twin index @0,$y] .] 0]
+  set bps ""
+
+  switch $current(mode) {
+    SRC+ASM {
+    }
+    ASSEMBLY {
+      if {[info exists _map($Cname,line=$line)]} {
+	set addr $_map($Cname,line=$line)
+	set bps [gdb_find_bp_at_addr $addr]
+      } else {
+	return
+      }
+    }
+    MIXED {
+      if {[info exists _map($Cname,line=$line)]} {
+	set addr $_map($Cname,line=$line)
+	set bps [gdb_find_bp_at_addr $addr]
+      } else {
+	return
+      }
+    }
+  }
+
+  if {$bps == ""} {
+    set bps [gdb_find_bp_at_line $current(filename) $line]
+  }
+
+  # ACTION is `enable' or `disable'
+  gdb_cmd "$action $bps"
 }
 
 # ------------------------------------------------------------------
