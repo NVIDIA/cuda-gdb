@@ -769,10 +769,9 @@ proc gdbtk_tcl_exec_file_display {filename} {
   # quotes, so we need to strip them here.
   # We need to make sure that we turn filename into
   # an absolute path or sessions won't work.
-  set filename [string trim $filename \']
-  if {[string index $filename 0] != "/"} {
-    set pwd [pwd]
-    set filename "$pwd/$filename"
+  if {[file tail $filename] == $filename} {
+    # want full pathname
+    set filename [file join $::gdb_current_directory $filename]
   }
   set_exe_name $filename
   set gdb_exe_changed 0
