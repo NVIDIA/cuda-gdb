@@ -1,5 +1,22 @@
 2001-08-28  Keith Seitz  <keiths@redhat.com>
 
+	* library/process.ith (top): Remove unused protected variable.
+	Use GDBWin::_top instead.
+	(lb): Remove unused variable.
+	(change_context): Remove parameter. It's not needed.
+	* library/process.itb (constructor): Don't set the variable
+	"top". It isn't needed. GDBWin has this information.
+	(buildwin): Get rid of tixScrolledListbox. Use
+	iwidgets::scrolledlistbox instead.
+	Loose the balloon help. It annoys more than helps.
+	(update): Use new scrolledlistbox component.
+	Split the list of threads BEFORE doing llength. Someone
+	shoot me if this has to be fixed one more time...
+	(change_context): Update definition and usage.
+	(cursor): Use GDBWin::_top instead of our own private copy.
+
+2001-08-28  Keith Seitz  <keiths@redhat.com>
+
 	* generic/gdbtk-cmds.c (gdb_disassemble_driver): We should be
 	looking for "thread", not "threads" to determine if we have
 	a multi-threaded child process.
