@@ -774,24 +774,33 @@ proc gdbtk_tcl_exec_file_display {filename} {
 #  3: source line number
 #  4: address
 #  5: current PC - which will often be the same as address, but not when
-#  6: shared library name if the pc is in a shared lib
 #  we are browsing, or walking the stack.
+#  6: shared library name if the pc is in a shared lib
 #
 # ------------------------------------------------------------------
 proc gdbtk_locate_main {} {
+  set result {}
   set main_names [pref get gdb/main_names]
   debug "Searching $main_names"
+
   foreach main $main_names {
     if {![catch {gdb_search functions $main -static 1}] \
         && ![catch {gdb_loc $main} linespec]} {
-      return $linespec
+      set result $linespec
+      break
     }
   }
-  if {![catch gdb_entry_point entry_point]
+  if {$result == {} 
+      && ![catch gdb_entry_point entry_point]
       && ![catch {gdb_loc "*$entry_point"} linespec]} {
-    return $linespec
+    set result $linespec
   }
-  return {}
+  
+  # need to see if result is valid
+  lassign $result file func ffile line addr rest
+  if {$addr == 0x0 && $func == {}} { set result {} }
+
+  return $result
 }
 
 ##############################################

@@ -1,5 +1,9 @@
 2001-07-21  Martin M. Hunt  <hunt@redhat.com>
 
+	* library/interface.tcl (gdbtk_locate_main): Fix function 
+	so that it returns either a null string or a valid location,
+	as documented.
+
 	* library/variables.tcl (build_menu_helper): Set
 	the Format menu option to "disabled" initially.
 
