@@ -1,5 +1,14 @@
 2002-11-11  Martin M. Hunt  <hunt@redhat.com>	
 
+	* library/data.ith: Deleted.
+	* library/data.itb: Deleted.
+	
+2002-11-11  Martin M. Hunt  <hunt@redhat.com>		
+
+	* library/memwin.itb: Supply arg to _update_address.
+
+2002-11-11  Martin M. Hunt  <hunt@redhat.com>	
+	
 	* library/toolbar.tcl: Deleted this obsolete file.
 	* library/tclIndex: Rebuilt.
 
