@@ -79,7 +79,7 @@ proc session_load {name} {
   }
 
   if {[info exists values(args)]} {
-    gdb_cmd "set args $values(args)"
+    gdb_set_inferior_args $values(args)
   }
 
   if {[info exists values(executable)]} {

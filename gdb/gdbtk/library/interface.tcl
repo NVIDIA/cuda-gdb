@@ -1114,7 +1114,7 @@ proc run_executable { {auto_start 1} } {
       set gdb_args [pref getd gdb/load/$gdb_target_name-opts]
       if { $gdb_args != ""} {
 	debug "set args $gdb_args"
-	catch {gdb_cmd "set args $gdb_args"}
+	gdb_set_inferior_args $gdb_args
       }
     }
 

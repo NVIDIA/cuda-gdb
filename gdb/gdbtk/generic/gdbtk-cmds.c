@@ -236,6 +236,9 @@ static int gdb_load_disassembly (ClientData clientData, Tcl_Interp
 static int gdb_get_inferior_args (ClientData clientData,
 				  Tcl_Interp *interp,
 				  int objc, Tcl_Obj * CONST objv[]);
+static int gdb_set_inferior_args (ClientData clientData,
+				  Tcl_Interp *interp,
+				  int objc, Tcl_Obj * CONST objv[]);
 static int gdb_load_info (ClientData, Tcl_Interp *, int,
 			  Tcl_Obj * CONST objv[]);
 static int gdb_loc (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
@@ -421,6 +424,8 @@ Gdbtk_Init (interp)
 			gdb_block_vars, NULL);
   Tcl_CreateObjCommand (interp, "gdb_get_inferior_args", call_wrapper,
 			gdb_get_inferior_args, NULL);
+  Tcl_CreateObjCommand (interp, "gdb_set_inferior_args", call_wrapper,
+			gdb_set_inferior_args, NULL);
 
   Tcl_LinkVar (interp, "gdb_selected_frame_level",
 	       (char *) &selected_frame_level,
@@ -1006,6 +1011,43 @@ gdb_get_inferior_args (clientData, interp, objc, objv)
     }
 
   Tcl_SetStringObj (result_ptr->obj_ptr, get_inferior_args (), -1);
+  return TCL_OK;
+}
+
+/* This implements the tcl command "gdb_set_inferior_args"
+
+ * Sets inferior command line arguments
+ *
+ * Tcl Arguments:
+ *    A string containing the inferior command line arguments
+ * Tcl Result:
+ *    None
+ */
+
+static int
+gdb_set_inferior_args (clientData, interp, objc, objv)
+     ClientData clientData;
+     Tcl_Interp *interp;
+     int objc;
+     Tcl_Obj *CONST objv[];
+{
+  char *args;
+
+  if (objc != 2)
+    {
+      Tcl_WrongNumArgs (interp, 1, objv, "argument");
+      return TCL_ERROR;
+    }
+
+  args = Tcl_GetStringFromObj (objv[1], NULL);
+
+  /* The xstrdup/xfree stuff is so that we maintain a coherent picture
+     for gdb.  I would expect the accessors to do this, but they
+     don't.  */
+  args = xstrdup (args);
+  args = set_inferior_args (args);
+  xfree (args);
+
   return TCL_OK;
 }
 

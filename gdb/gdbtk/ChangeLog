@@ -1,3 +1,12 @@
+2001-04-18  Tom Tromey  <tromey@redhat.com>
+
+	* library/interface.tcl (run_executable): Use
+	gdb_set_inferior_args.
+	* library/session.tcl (session_load): Use gdb_set_inferior_args.
+	* generic/gdbtk-cmds.c (Gdbtk_Init): Register
+	gdb_set_inferior_args.
+	(gdb_get_inferior_args): New function.
+
 2001-04-17  Tom Tromey  <tromey@redhat.com>
 
 	* library/session.tcl (session_save): Use gdb_get_inferior_args.
