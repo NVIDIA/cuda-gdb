@@ -66,13 +66,13 @@ class GDBMenuBar {
     debug "Enable list is: $enable_list"
 
     foreach {type state} $enable_list {
-      dbug W $type
+      # debug $type
       if {[info exists menu_classes($type)]} {
         set class_list $menu_classes($type)
         if {[llength $class_list]} {
-          dbug W "$type $state \{$class_list\}"
+          # debug "$type $state \{$class_list\}"
           foreach menu $class_list {
-            dbug W "$type $menu $state"
+            # debug "$type $menu $state"
             menubar_change_menu_state $menu $state
           }
         }

@@ -1,3 +1,9 @@
+2001-01-28  Fernando Nasser  <fnasser@redhat.com>
+
+	* library/gdbmenubar.itcl (set_class_state): Turn off verbose debug
+	messages.
+	* library/gdbtoolbar.itcl (set_class_state): Ditto.
+
 2001-01-26  Fernando Nasser  <fnasser@redhat.com>
 
 	* generic/gdbtk-cmds.c (gdb_clear_file): Call exec_file_clear() and
