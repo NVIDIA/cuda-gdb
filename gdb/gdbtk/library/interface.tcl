@@ -212,9 +212,6 @@ proc gdbtk_idle {} {
 
 define_hook download_progress_hook
 
-# Random hook of procs to call just before exiting.
-define_hook gdb_quit_hook
-
 # ------------------------------------------------------------------
 #  PROCEDURE:  gdbtk_quit_check - Ask if the user really wants to quit.
 # ------------------------------------------------------------------
@@ -247,13 +244,11 @@ proc gdbtk_quit_check {} {
 # ------------------------------------------------------------------
 #  PROCEDURE:  gdbtk_quit - Quit the debugger
 #         Call this procedure anywhere the user can request to quit.
-#         This procedure will ask all the right questions and run
-#         all the gdb_quit_hooks before exiting. 
+#         This procedure will ask all the right questions before
+#         exiting.
 # ------------------------------------------------------------------
 proc gdbtk_quit {} {
   if {[gdbtk_quit_check]} {
-    ManagedWin::shutdown
-    pref_save
     gdb_force_quit
   }
 }
@@ -263,8 +258,14 @@ proc gdbtk_quit {} {
 #         before exiting.  Last chance to cleanup!
 # ------------------------------------------------------------------
 proc gdbtk_cleanup {} {
-   # This is a sign that it is too late to be doing updates, etc...
-   set ::gdb_shutting_down 1
+  # This is a sign that it is too late to be doing updates, etc...
+  set ::gdb_shutting_down 1
+
+  # Shutdown the window manager and save all preferences
+  # This way a "quit" in the console window will cause
+  # preferences to be saved.
+  ManagedWin::shutdown
+  pref_save
 }
 
 # ------------------------------------------------------------------

@@ -1,3 +1,11 @@
+2001-05-09  Keith Seitz  <keiths@cygnus.com>
+
+	* library/interface.tcl (gdb_quit_hook): Remove. It's unused.
+	(gdbtk_quit): Do no shutdown window manager and save
+	preferences here.
+	(gdbtk_cleanup): This is the proper place to do those
+	things.
+
 2001-05-07  Keith Seitz  <keiths@cygnus.com>
 
 	* library/globalpref.itb (build_win): Preserve the
