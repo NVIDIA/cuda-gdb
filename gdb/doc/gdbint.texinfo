@@ -42,7 +42,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.44 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.45 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -445,15 +445,6 @@ Enables watchpoints in the process identified by @var{pid}.  This is
 used, e.g., on HP-UX which provides operations to disable and enable
 the page-level memory protection that implements hardware watchpoints
 on that platform.
-
-@findex TARGET_RANGE_PROFITABLE_FOR_HW_WATCHPOINT
-@item TARGET_RANGE_PROFITABLE_FOR_HW_WATCHPOINT (@var{pid},@var{start},@var{len})
-Some addresses may not be profitable to use hardware to watch, or may
-be difficult to understand when the addressed object is out of scope,
-and hence should not be watched with hardware watchpoints.  On some
-targets, this may have severe performance penalties, such that we
-might as well use regular watchpoints, and save (possibly precious)
-hardware watchpoints for other locations.
 
 @findex target_insert_watchpoint
 @findex target_remove_watchpoint
