@@ -21,7 +21,6 @@
         (open): Make sure to abort any ongoing edit.  This was causing problems
 	when someone tried to expand an structure while editing its pointer.
 
->>>>>>> 1.12
 2000-03-28  James Ingham  <jingham@leda.cygnus.com>
 
 	* managedwin.itb (ManagedWin::startup): Open the SrcWin, this does 
