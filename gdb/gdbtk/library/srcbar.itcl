@@ -168,13 +168,13 @@ class SrcBar {
     $Menu add command Other "Source..." \
       "source_file" -underline 0
 
-    set sessions [session_list]
+    set sessions [Session::list_names]
     if {[llength $sessions]} {
       $Menu add separator
       set i 1
       foreach item $sessions {
 	$Menu add command Other "$i $item" \
-	  [list session_load $item] \
+	  [list Session::load $item] \
 	  -underline 0
 	incr i
       }

@@ -1,3 +1,14 @@
+2002-02-17  Tom Tromey  <tromey@redhat.com>
+
+	* library/tclIndex: Updated.
+	* library/srcbar.itcl (SrcBar): Use new Session namespace.
+	* library/main.tcl: Use new Session namespace.
+	* library/interface.tcl (gdbtk_tcl_preloop): Use new Session
+	namespace.
+	(gdbtk_cleanup): Likewise.
+	(_close_file): Likewise.
+	* library/session.tcl: Use a namespace.  Renamed all functions.
+
 2002-02-13  Martin M. Hunt  <hunt@redhat.com>
 
 	* generic/gdbtk-hooks.c (gdbtk_print_frame_info): Don't 

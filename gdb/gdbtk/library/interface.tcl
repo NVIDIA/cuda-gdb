@@ -118,7 +118,7 @@ proc gdbtk_tcl_preloop { } {
     # arguments and pwd to override what is set in the session.
     set current_args [gdb_get_inferior_args]
     set current_dir $gdb_current_directory
-    session_notice_file_change
+    Session::notice_file_change
     if {[string length $current_args] > 0} {
       gdb_set_inferior_args $current_args
       gdb_cmd "cd $current_dir"
@@ -268,7 +268,7 @@ proc gdbtk_cleanup {} {
 
   # Save the session
   if {$gdb_exe_name != ""} {
-    session_save
+    Session::save
   }
 
   # This is a sign that it is too late to be doing updates, etc...
@@ -970,7 +970,7 @@ proc _close_file {} {
   }
 
   if {$okay} {
-    session_save
+    Session::save
     gdb_clear_file
     gdbtk_tcl_file_changed ""
 

@@ -142,7 +142,7 @@ pref_read
 init_disassembly_flavor
 
 # Arrange for session code to notice when file changes.
-add_hook file_changed_hook session_notice_file_change
+add_hook file_changed_hook Session::notice_file_change
 
 ManagedWin::init
 
