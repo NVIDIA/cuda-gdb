@@ -1,3 +1,10 @@
+2004-08-09  Ben Elliston  <bje@au.ibm.com>
+
+	* generic/gdbtk-register.c (get_register_size): Use
+	register_size() instead of DEPRECATED_REGISTER_RAW_SIZE.
+	(get_register): Likewise.
+	(register_changed_p): Likewise.
+
 2004-07-02  Martin Hunt  <hunt@redhat.com>
 
 	* library/targetselection.itb: Use /dev/comX for
