@@ -1,3 +1,8 @@
+2002-02-06  Keith Seitz  <keiths@redhat.com>
+
+	* library/images/cygnus.gif: Remove.
+	* library/images2/cygnus.gif: Remove.
+
 2002-02-05  Elena Zannoni  <ezannoni@redhat.com>
 
         * generic/gdbtk-cmds.c (gdbtk_load_asm, gdbtk_print_asm): Use
