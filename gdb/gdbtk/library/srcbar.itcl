@@ -534,7 +534,7 @@ class SrcBar {
       $Tool add separator
     }
 
-    $Tool add label addr $address "Address" -width 10 -relief sunken \
+    $Tool add label addr $address "Address" -relief sunken \
                            -bd 1 -anchor e -font  src-font
 
     $Tool add label line $line "Line Number" -width 6 -relief sunken \
@@ -1169,7 +1169,14 @@ Do you want to continue?" \
 
   # This holds the text that is shown in the address label.
   public variable address {} {
-    $Tool itemconfigure addr -text $address -font src-font
+    if {[string length $address] > 10} {
+      # 64-bit address plus "0x"
+      set width 18
+    } else {
+      # 32-bit address plus "0x"
+      set width 10
+    }
+    $Tool itemconfigure addr -text $address -font src-font -width $width
   }
 
   # This holds the text that is shown in the line label.

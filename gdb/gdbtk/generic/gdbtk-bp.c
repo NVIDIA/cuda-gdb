@@ -200,8 +200,8 @@ Gdbtk_Breakpoint_Init (Tcl_Interp *interp)
  *    It returns a list of breakpoint numbers
  */
 static int
-gdb_find_bp_at_addr ( ClientData clientData, Tcl_Interp *interp,
-		      int objc, Tcl_Obj *CONST objv[])
+gdb_find_bp_at_addr (ClientData clientData, Tcl_Interp *interp,
+		     int objc, Tcl_Obj *CONST objv[])
 {
   int i;
   CORE_ADDR addr;
@@ -568,7 +568,7 @@ gdb_set_bp_addr (ClientData clientData, Tcl_Interp *interp, int objc,
   int thread = -1;
   CORE_ADDR addr;
   struct breakpoint *b;
-  char *typestr, *buf;
+  char *saddr, *typestr, *buf;
   enum bpdisp disp;
 
   if (objc != 3 && objc != 4)
@@ -577,8 +577,9 @@ gdb_set_bp_addr (ClientData clientData, Tcl_Interp *interp, int objc,
       return TCL_ERROR;
     }
 
-  addr = string_to_core_addr (Tcl_GetStringFromObj (objv[1], NULL));
-
+  saddr = Tcl_GetStringFromObj (objv[1], NULL);
+  addr = string_to_core_addr (saddr);
+  
   typestr = Tcl_GetStringFromObj (objv[2], NULL);
   if (strncmp (typestr, "temp", 4) == 0)
     disp = disp_del;
@@ -607,9 +608,7 @@ gdb_set_bp_addr (ClientData clientData, Tcl_Interp *interp, int objc,
   b->number = breakpoint_count;
   b->disposition = disp;
   b->thread = thread;
-
-  xasprintf (&buf, "*(0x%lx)", addr);
-  b->addr_string = xstrdup (buf);
+  b->addr_string = xstrdup (saddr);
 
   /* now send notification command back to GUI */
   breakpoint_create_event (b->number);
