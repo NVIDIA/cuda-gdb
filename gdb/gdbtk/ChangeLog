@@ -1,3 +1,14 @@
+2001-07-13  Keith Seitz  <keiths@redhat.com>
+
+	* library/download.itb (constructor): Use the iwidgets
+	feedback widget instead of tixMeter.
+	Pack all the topmost widgets together -- don't use grid.
+	(update_download): Support the feedback widget.
+	(done): Ditto.
+
+	* library/download.ith (steps): New private variable.
+	(num_steps): New common.
+
 2001-07-12  Keith Seitz  <keiths@redhat.com>
 
 	* library/srcbar.itcl (create_trace_buttons): Fix
