@@ -215,7 +215,8 @@ get_register_types (int regnum, void *arg)
   struct type *reg_vtype;
   int i,n;
 
-  reg_vtype = REGISTER_VIRTUAL_TYPE (regnum);
+  reg_vtype = register_type (current_gdbarch, regnum);
+  
   if (TYPE_CODE (reg_vtype) == TYPE_CODE_UNION)
     {
       n = TYPE_NFIELDS (reg_vtype);
@@ -278,8 +279,7 @@ get_register (int regnum, void *arg)
   
   reg_vtype = regtype[regnum];
   if (reg_vtype == NULL)
-    reg_vtype = REGISTER_VIRTUAL_TYPE (regnum);
-
+    reg_vtype = register_type (current_gdbarch, regnum);
 
   if (!target_has_registers)
     {

@@ -1,3 +1,9 @@
+2003-03-24  Martin M. Hunt  <hunt@redhat.com>
+
+	* generic/gdbtk-register.c (get_register_types): Use 
+	register_type instead of REGISTER_VIRTUAL_TYPE.
+	(get_register): Ditto.
+
 2003-03-17  Keith R Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-register.c (get_register): Use frame_register
