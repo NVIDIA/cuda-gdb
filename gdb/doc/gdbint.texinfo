@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.118 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.119 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3651,11 +3651,6 @@ The number of the ``next program counter'' register, if defined.
 @findex PARM_BOUNDARY
 If non-zero, round arguments to a boundary of this many bits before
 pushing them on the stack.
-
-@item PRINT_REGISTER_HOOK (@var{regno})
-@findex PRINT_REGISTER_HOOK
-If defined, this must be a function that prints the contents of the
-given register to standard output.
 
 @item PRINT_TYPELESS_INTEGER
 @findex PRINT_TYPELESS_INTEGER
