@@ -1944,6 +1944,7 @@ get_register (regnum, fp)
      int regnum;
      void *fp;
 {
+  struct type *reg_vtype;
   char raw_buffer[MAX_REGISTER_RAW_SIZE];
   char virtual_buffer[MAX_REGISTER_VIRTUAL_SIZE];
   int format = (int) fp;
@@ -1967,10 +1968,11 @@ get_register (regnum, fp)
 
   /* Convert raw data to virtual format if necessary.  */
 
+  reg_vtype = REGISTER_VIRTUAL_TYPE (regnum);
   if (REGISTER_CONVERTIBLE (regnum))
     {
-      REGISTER_CONVERT_TO_VIRTUAL (regnum, REGISTER_VIRTUAL_TYPE (regnum),
-				   raw_buffer, virtual_buffer);
+      REGISTER_CONVERT_TO_VIRTUAL (regnum, reg_vtype,
+      				   raw_buffer, virtual_buffer);
     }
   else
     memcpy (virtual_buffer, raw_buffer, REGISTER_VIRTUAL_SIZE (regnum));
@@ -1992,8 +1994,15 @@ get_register (regnum, fp)
       fputs_filtered (buf, gdb_stdout);
     }
   else
-    val_print (REGISTER_VIRTUAL_TYPE (regnum), virtual_buffer, 0, 0,
-	       gdb_stdout, format, 1, 0, Val_pretty_default);
+    if ((TYPE_CODE (reg_vtype) == TYPE_CODE_UNION)
+        && (strcmp (FIELD_NAME (TYPE_FIELD (reg_vtype, 0)), REGISTER_NAME (regnum)) == 0))
+      {
+        val_print (FIELD_TYPE (TYPE_FIELD (reg_vtype, 0)), virtual_buffer, 0, 0,
+	           gdb_stdout, format, 1, 0, Val_pretty_default);
+      }
+    else
+      val_print (REGISTER_VIRTUAL_TYPE (regnum), virtual_buffer, 0, 0,
+	         gdb_stdout, format, 1, 0, Val_pretty_default);
 
 }
 
