@@ -222,8 +222,6 @@ proc gdbtk_quit_check {} {
     if {![gdbtk_tcl_query $msg no]} {
       return 0
     }
-  } elseif {$gdb_exe_name != ""} {
-    session_save
   }
   return 1
 }
@@ -738,10 +736,6 @@ proc gdbtk_locate_main {} {
 proc set_exe_name {exe} {
   global gdb_exe_name gdb_exe_changed
   #debug "set_exe_name: exe=$exe  gdb_exe_name=$gdb_exe_name"
-
-  if {$gdb_exe_name != ""} then {
-    session_save
-  }
 
   set gdb_exe_name $exe
   set gdb_exe_changed 1    
