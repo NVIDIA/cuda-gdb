@@ -1,3 +1,10 @@
+2001-10-08  Keith Seitz  <keiths@redhat.com>
+
+	* c_variable.test (check_update): Forget about returning
+	the "unchanged" list. It unneccessarily complicates things.
+	Update all callers.
+	* cpp_variable.test: Likewise.
+
 2001-08-30  Keith Seitz  <keiths@redhat.com>
 
 	* README: Update documentation to reflect recent changes.
