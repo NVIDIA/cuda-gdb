@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.89 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.90 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -2385,6 +2385,14 @@ NetBSD using the ELF executable format
 @findex GDB_OSABI_WINCE
 @item GDB_OSABI_WINCE
 Windows CE
+
+@findex GDB_OSABI_GO32
+@item GDB_OSABI_GO32
+DJGPP
+
+@findex GDB_OSABI_NETWARE
+@item GDB_OSABI_NETWARE
+Novell NetWare
 
 @findex GDB_OSABI_ARM_EABI_V1
 @item GDB_OSABI_ARM_EABI_V1
