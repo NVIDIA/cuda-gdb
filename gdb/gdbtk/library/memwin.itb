@@ -675,7 +675,7 @@ itcl::body MemWin::goto { addr } {
   set current_addr $addr
   $itk_interior.f.cntl delete 0 end
   $itk_interior.f.cntl insert end $addr
-  _update_address
+  _update_address 1
 }
 
 # ------------------------------------------------------------------
