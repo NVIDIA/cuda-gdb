@@ -237,7 +237,7 @@ proc find_iwidgets_library {} {
 
     set iwidgetsSrcDir [glob -nocomplain [file join \
 					    [file dirname [file dirname $::tcl_library]] \
-					    itcl iwidgets*]]
+					    itcl iwidgets3*]]
     
     # Canonicalize the executable's directory name.  It turns out that on Solaris, 
     # info nameofexecutable returns /foo/bar/real_dir/./gdb when gdb is launched from
@@ -258,7 +258,7 @@ proc find_iwidgets_library {} {
 
     set iwidgetsBuildDir [glob -nocomplain [file join \
 					      [file dirname $exec_name] \
-					      itcl iwidgets*]]
+					      itcl iwidgets3*]]
     set initFile [file join [lindex $iwidgetsBuildDir 0] \
 		    unix iwidgets.tcl]
 
@@ -267,7 +267,7 @@ proc find_iwidgets_library {} {
       # Check in "normal" installed place: "../../share/iwidgets*"
       set iwidgetsBuildDir [glob -nocomplain [file join \
 						[file dirname [file dirname $exec_name]] \
-						share iwidgets*]]
+						share iwidgets3*]]
       set initFile [file join [lindex $iwidgetsBuildDir 0] iwidgets.tcl]
     }
 

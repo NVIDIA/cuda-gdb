@@ -1,3 +1,8 @@
+2001-07-18  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/util.tcl (find_iwidgets_library): Look
+	for iwidgets3* so we don't accidently find iwidgets2.x.
+
 2001-07-16  Nick Duffek  <nsd@redhat.com>
 
 	* library/regwin.itb (RegWin::build_win): Add radio button
