@@ -1,3 +1,15 @@
+2004-12-08  Keith Seitz  <kseitz@sources.redhat.com>
+
+	* library/download.ith (completed_steps): New variable.
+	* library/download.itb (Download::constructor): Remove
+	"-fraction" option from iwidgets feedback widget. It's not a valid
+	option!
+	(update_download): Compute the step number and use that to
+	update the feedback widget.
+	(done): Use completed_steps to figure out how many steps
+	the dumb feedback meter needs to show full.
+	(download_it): Initialize completed_steps.
+	
 2004-11-18  Keith Seitz  <kseitz@sources.redhat.com>
 
 	* generic/gdbtk-wrapper.c (wrap_type_print): Use value_type instead
