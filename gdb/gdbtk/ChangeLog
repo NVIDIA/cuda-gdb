@@ -1,3 +1,8 @@
+2001-05-07  Keith Seitz  <keiths@cygnus.com>
+
+	* library/globalpref.itb (build_win): Preserve the
+	current working directory.
+
 2001-05-06  Kevin Buettner  <kevinb@redhat.com>
 
 	* generic/gdbtk-cmds.c (gdb_target_has_execution_command)

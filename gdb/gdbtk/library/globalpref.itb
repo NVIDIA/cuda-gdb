@@ -76,6 +76,7 @@ body GlobalPref::build_win {} {
     -command [code $this change_icons]
   
   # get list of icon directories
+  set curdir [pwd]
   set icondirlist ""
   cd $GDBTK_LIBRARY
   foreach foo [glob -- *] {
@@ -83,7 +84,8 @@ body GlobalPref::build_win {} {
       lappend icondirlist $foo
     }
   }
-  
+  cd $curdir
+
   set width 14
   # load combobox
   set imagedir [pref get gdb/ImageDir]
