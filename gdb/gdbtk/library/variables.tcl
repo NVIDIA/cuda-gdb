@@ -39,6 +39,10 @@ class VariableWin {
 	add_hook gdb_no_inferior_hook "$this no_inferior"
 	add_hook gdb_idle_hook [list $this idle]
 	add_hook gdb_clear_file_hook [code $this clear_file]
+        # FIXME: This is too harsh.  We must add to varobj a method
+        # to re-parse the expressions and compute new types so we can
+	# keep the contents of the window whenever possible.
+	add_hook file_changed_hook [code $this clear_file]
     }
 
     # ------------------------------------------------------------------

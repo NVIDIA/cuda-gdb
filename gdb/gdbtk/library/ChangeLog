@@ -1,5 +1,11 @@
 2000-12-13  Fernando Nasser  <fnasser@redhat.com>
 
+	* variables.tcl (constructor): Use the  file_changed_hook to remove
+	all variables if the exec file changes.  This prevents the Watch
+	Window to dump core because the "types" are not valid anymore.
+
+2000-12-13  Fernando Nasser  <fnasser@redhat.com>
+
 	* session.tcl (session_save): Save target name.
 	(session_load): Restore target name.
 
