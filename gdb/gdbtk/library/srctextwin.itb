@@ -1034,7 +1034,7 @@ body SrcTextWin::FillAssembly {w tagname filename funcname line addr pc_addr lib
 	set pane $Stwc(gdbtk_scratch_widget:pane)
 	set win [[$itk_interior.p childsite $pane].st component text]
 	$win delete 0.0 end
-	$win insert 0.0 "Unable to Read Instructions at $addr"
+	$win insert 0.0 "$mess"
 	if {$oldpane != "" && $oldpane != $pane} {
 	  $itk_interior.p replace $oldpane $pane
 	} else {
@@ -2773,9 +2773,11 @@ body SrcTextWin::UnLoadFromCache {w oldpane name asm lib} {
     unset Stwc($elem)
   }
 
-  $itk_interior.p show $oldpane
-  set pane $oldpane
-  set win [[$itk_interior.p childsite $pane].st component text]
+  if {$oldpane != ""} {
+    $itk_interior.p show $oldpane
+    set pane $oldpane
+    set win [[$itk_interior.p childsite $pane].st component text]
+  }
 }
 
 # ------------------------------------------------------------------

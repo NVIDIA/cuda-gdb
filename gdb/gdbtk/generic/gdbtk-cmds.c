@@ -1636,7 +1636,7 @@ static int
 gdb_load_disassembly (ClientData clientData, Tcl_Interp *interp,
 		      int objc, Tcl_Obj *CONST objv[])
 {
-  CORE_ADDR low, high;
+  CORE_ADDR low, high, orig;
   struct disassembly_client_data client_data;
   int mixed_source_and_assembly, ret_val, i;
   char *arg_ptr;
@@ -1729,11 +1729,13 @@ gdb_load_disassembly (ClientData clientData, Tcl_Interp *interp,
   /* Now parse the addresses */
   
   low = parse_and_eval_address (Tcl_GetStringFromObj (objv[5], NULL));
+  orig = low;
 
   if (objc == 6)
     {
       if (find_pc_partial_function (low, NULL, &low, &high) == 0)
-        error ("No function contains specified address");
+	error ("No function contains address 0x%s (%s)",
+	       paddr_nz (orig), Tcl_GetStringFromObj (objv[5], NULL));
     }
   else
     high = parse_and_eval_address (Tcl_GetStringFromObj (objv[6], NULL));
