@@ -1,3 +1,9 @@
+2003-09-30  David Carlton  <carlton@kealia.com>
+
+	* generic/gdbtk-register.c (get_register): Replace
+	REGISTER_VIRTUAL_SIZE by
+	DEPRECATED_REGISTER_VIRTUAL_SIZE.
+
 2003-09-08  Andrew Cagney  <cagney@redhat.com>
 
 	* generic/gdbtk-cmds.c: Include "disasm.h".

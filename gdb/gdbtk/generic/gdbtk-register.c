@@ -307,7 +307,8 @@ get_register (int regnum, void *arg)
       				   raw_buffer, virtual_buffer);
     }
   else
-    memcpy (virtual_buffer, raw_buffer, REGISTER_VIRTUAL_SIZE (regnum));
+    memcpy (virtual_buffer, raw_buffer,
+	    DEPRECATED_REGISTER_VIRTUAL_SIZE (regnum));
 
   stb = mem_fileopen ();
   old_chain = make_cleanup_ui_file_delete (stb);
