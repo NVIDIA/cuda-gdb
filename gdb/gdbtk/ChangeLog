@@ -1,3 +1,10 @@
+2001-05-11  Keith Seitz  <keiths@cygnus.com>
+
+	* generic/gdbtk-bp.c (gdbtk_create_breakpoint): Safe guard
+	against "invalid" (internal) breakpoint numbers.
+	(gdbtk_modify_breakpoint): Ditto.
+	(gdbtk_delete_breakpoint): Ditto.
+
 2001-05-10  Keith Seitz  <keiths@cygnus.com>
 
 	* generic/gdbtk-bp.c (gdb_set_bp): Generate a breakpoint event

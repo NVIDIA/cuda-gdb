@@ -52,6 +52,15 @@ char *bptypes[] =
 char *bpdisp[] =
 {"delete", "delstop", "disable", "donttouch"};
 
+/* Is this breakpoint interesting to a user interface? */
+#define BREAKPOINT_IS_INTERESTING(bp) \
+((bp)->type == bp_breakpoint             \
+ || (bp)->type == bp_hardware_breakpoint \
+ || (bp)->type == bp_watchpoint          \
+ || (bp)->type == bp_hardware_watchpoint \
+ || (bp)->type == bp_read_watchpoint     \
+ || (bp)->type == bp_access_watchpoint)
+
 /*
  * These are routines we need from breakpoint.c.
  * at some point make these static in breakpoint.c and move GUI code there
@@ -575,7 +584,7 @@ gdbtk_create_breakpoint (int num)
 	break;
     }
 
-  if (b == NULL)
+  if (b == NULL || !BREAKPOINT_IS_INTERESTING (b))
     return;
 
   /* Check if there is room to store it */
@@ -595,7 +604,9 @@ gdbtk_create_breakpoint (int num)
 void
 gdbtk_delete_breakpoint (int num)
 {
-  if (breakpoint_list[num] != NULL)
+  if (num >= 0
+      && num <= breakpoint_list_size
+      && breakpoint_list[num] != NULL)
     {
       breakpoint_notify (num, "delete");
       breakpoint_list[num] = NULL;
@@ -605,7 +616,8 @@ gdbtk_delete_breakpoint (int num)
 void
 gdbtk_modify_breakpoint (int num)
 {
-  breakpoint_notify (num, "modify");
+  if (num >= 0)
+    breakpoint_notify (num, "modify");
 }
 
 /* This is the generic function for handling changes in
@@ -622,7 +634,9 @@ breakpoint_notify (num, action)
   char *buf;
 
   if (num > breakpoint_list_size
+      || num < 0
       || breakpoint_list[num] == NULL
+      /* FIXME: should not be so restrictive... */
       || breakpoint_list[num]->type != bp_breakpoint)
     return;
 
