@@ -12,7 +12,8 @@ END-INFO-DIR-ENTRY
 @ifinfo
 This file documents the internals of the GNU debugger @value{GDBN}.
 
-Copyright 1990-1999 Free Software Foundation, Inc.
+Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
+2001 Free Software Foundation, Inc.
 Contributed by Cygnus Solutions.  Written by John Gilmore.
 Second Edition by Stan Shebs.
 
@@ -49,7 +50,7 @@ regarded as a program in the language TeX).
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.19 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.20 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
