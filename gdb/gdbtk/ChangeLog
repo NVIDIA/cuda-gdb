@@ -1,5 +1,11 @@
 2002-01-08  Keith Seitz  <keiths@redhat.com>
 
+	* generic/gdbtk-cmds.c (gdb_find_file_command): If the symtab
+	doesn't have the filename's fullname, look it up with
+	symtab_to_filename.
+
+2002-01-08  Keith Seitz  <keiths@redhat.com>
+
 	* library/srcwin.itb (location): Fix typo. It's "addr" not
 	"address".
 

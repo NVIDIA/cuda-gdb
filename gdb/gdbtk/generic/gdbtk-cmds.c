@@ -1102,7 +1102,7 @@ gdb_find_file_command (clientData, interp, objc, objv)
      Tcl_Obj *CONST objv[];
 {
   struct symtab *st;
-  char *filename;
+  char *filename, *fullname;
 
   if (objc != 2)
     {
@@ -1120,14 +1120,19 @@ gdb_find_file_command (clientData, interp, objc, objv)
       return TCL_ERROR;
     }
 
+  if (st->fullname == NULL)
+    fullname = symtab_to_filename (st);
+  else
+    fullname = st->fullname;
+
   /* We may not be able to open the file (not available). */
-  if (!st->fullname)
+  if (fullname == NULL)
     {
       Tcl_SetStringObj (result_ptr->obj_ptr, "", -1);
       return TCL_OK;
     }
 
-  Tcl_SetStringObj (result_ptr->obj_ptr, st->fullname, -1);
+  Tcl_SetStringObj (result_ptr->obj_ptr, fullname, -1);
 
   return TCL_OK;
 }
