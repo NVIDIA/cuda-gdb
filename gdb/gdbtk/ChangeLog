@@ -1,3 +1,9 @@
+2001-11-01  Keith Seitz  <keiths@redhat.com>
+
+	* library/memwin.itb (update_addr): Evaluate the address
+	to be sent to gdb_get_mem to prevent passing error strings
+	to string_to_coreaddr in gdb_get_mem.
+
 2001-10-29  Martin M. Hunt  <hunt@redhat.com>	
 
 	* library/debugwin.itb: Don't increment number of

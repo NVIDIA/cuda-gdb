@@ -480,7 +480,7 @@ body MemWin::update_address { {ae ""} } {
 	return
       }
     }
-  } elseif {[string match {\$*} $addr_exp]} {
+  } elseif {[regexp {\$[a-zA-Z_]} $addr_exp]} {
     # Looks like a local variable
     catch {gdb_eval "$addr_exp"} current_addr
     if {$current_addr == "No registers.\n"} { 
@@ -493,7 +493,7 @@ body MemWin::update_address { {ae ""} } {
     }
   } else {
     # something really strange, like "0.1" or ""
-    BadExpr "Can't Evaluate \"$addr_expr\""
+    BadExpr "Can't Evaluate \"$addr_exp\""
     return
   }
 
@@ -581,46 +581,49 @@ body MemWin::update_addr {} {
     set asc ""
   }
 
-  set retVal [catch {gdb_get_mem $addr $format \
-		       $size $nb $bytes_per_row $asc} vals]
+  # Last chance to verify addr
+  if {![catch {gdb_eval $addr}]} {
+    set retVal [catch {gdb_get_mem $addr $format \
+			 $size $nb $bytes_per_row $asc} vals]
  
-  if {$retVal || [llength $vals] == 0}  {
-    # FIXME gdb_get_mem does not always return an error when addr is invalid.
-    BadExpr "Couldn't get memory at address: \"$addr\""
-    gdbtk_idle 
-    debug "gdb_get_mem returned return code: $retVal and value: \"$vals\""
-    return    
-  }
+    if {$retVal || [llength $vals] == 0}  {
+      # FIXME gdb_get_mem does not always return an error when addr is invalid.
+      BadExpr "Couldn't get memory at address: \"$addr\""
+      gdbtk_idle 
+      debug "gdb_get_mem returned return code: $retVal and value: \"$vals\""
+      return
+    }
 
-  set mlen 0
-  for {set n 0} {$n < $nb} {incr n $bytes_per_row} {
-    set x [format "0x%x" $addr]
-    if {[string length $x] > $mlen} {
-      set mlen [string length $x]
+    set mlen 0
+    for {set n 0} {$n < $nb} {incr n $bytes_per_row} {
+      set x [format "0x%x" $addr]
+      if {[string length $x] > $mlen} {
+	set mlen [string length $x]
+      }
+      set ${this}_memval($row,-1) $x
+      for { set col 0 } { $col < $num } { incr col } {
+	set x [lindex $vals $nextval]
+	if {[string length $x] > $maxlen} {set maxlen [string length $x]}
+	set ${this}_memval($row,$col) $x
+	incr nextval
+      }
+      if {$ascii} {
+	set x [lindex $vals $nextval]
+	if {[string length $x] > $maxalen} {set maxalen [string length $x]}
+	set ${this}_memval($row,$col) $x
+	incr nextval
+      }
+      incr addr $bytes_per_row
+      incr row
     }
-    set ${this}_memval($row,-1) $x
-    for { set col 0 } { $col < $num } { incr col } {
-      set x [lindex $vals $nextval]
-      if {[string length $x] > $maxlen} {set maxlen [string length $x]}
-      set ${this}_memval($row,$col) $x
-      incr nextval
-    }
+    # set default column width to the max in the data columns
+    $itk_interior.t configure -colwidth [expr {$maxlen + 1}]
+    # set border column width
+    $itk_interior.t width -1 [expr {$mlen + 1}]
     if {$ascii} {
-      set x [lindex $vals $nextval]
-      if {[string length $x] > $maxalen} {set maxalen [string length $x]}
-      set ${this}_memval($row,$col) $x
-      incr nextval
+      # set ascii column width
+      $itk_interior.t width $Numcols [expr {$maxalen + 1}]
     }
-    incr addr $bytes_per_row
-    incr row
-  }
-  # set default column width to the max in the data columns
-  $itk_interior.t configure -colwidth [expr {$maxlen + 1}]
-  # set border column width
-  $itk_interior.t width -1 [expr {$mlen + 1}]
-  if {$ascii} {
-    # set ascii column width
-    $itk_interior.t width $Numcols [expr {$maxalen + 1}]
   }
 
   gdbtk_idle
