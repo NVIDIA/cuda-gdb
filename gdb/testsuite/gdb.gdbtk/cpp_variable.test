@@ -25,18 +25,11 @@ if {![gdbtk_read_defs]} {
 }
 
 global objdir test_ran
-global tcl_platform 
 
 # Load in a file
-if {$tcl_platform(platform) == "windows"} {
-  set program [file join $objdir cpp_variable.exe]
-} else {
-  set program [file join $objdir cpp_variable]
-}
-
-# This isn't a test case, since if this fails, we're hosed.
-if {[catch {gdb_cmd "file $program"} t]} {
-  # an error occured loading the file
+set program [file join $objdir cpp_variable]
+if {[catch {gdbtk_test_file $program} t]} {
+  # This isn't a test case, since if this fails, we're hosed.
   gdbtk_test_error "loading \"$program\": $t"
 }
 

@@ -71,16 +71,10 @@ proc click {win bbox event} {
 #####                 #####
 
 # Load the test executable
-if {$tcl_platform(platform) == "windows"} {
-  set file [file join $objdir list.exe]
-} else {
-  set file [file join $objdir list]
-}
-
-# This isn't a test case, since if this fails, we're hosed.
-if {[catch {gdb_cmd "file $file" 1} t]} {
-  # an error occured loading the file
-  gdbtk_test_error "loading \"$file\": $t"
+set program [file join $objdir list]
+if {[catch {gdbtk_test_file $program} t]} {
+  # This isn't a test case, since if this fails, we're hosed.
+  gdbtk_test_error "loading \"$program\": $t"
 }
 
 set srcwin [ManagedWin::open SrcWin]
@@ -89,7 +83,7 @@ set twin [$stw test_get twin]
 
 # get things started
 gdb_cmd "break main"
-run_executable
+gdbtk_test_run
 
 # Test: srcwin-1.1
 # Desc: Check for something in source window
@@ -1112,60 +1106,31 @@ gdbtk_test srcwin-4.4 "Click on line to set BP" {
 # Test: srcwin-4.5
 # Desc: Continue till here popup
 gdbtk_test srcwin-4.5 "Continue till here popup" {
-  set r 
   set twin [$stw test_get twin]
 
-  # click mouse button 1 at index 12.1
+  # Get coordinates of line 12
   set b [$twin bbox 12.1]
-  if {![click $twin $b <ButtonPress-3>]} {
-    set r "Click failed on $b"
-  } else {
-  
-    # Hack. Just release the botton 10 pixels to the right and below
-    # where the press was.  This should select the first entry in the
-    # popup menu, "Continue to Here". This should be made more robust.
-    if {[llength $b] == 4} {
-      set x [expr [lindex $b 0] + [lindex $b 2] / 2 + 10]
-      set y [expr [lindex $b 1] + [lindex $b 3] / 2 + 10]
-      if {![click $twin [list $x $y 0 0] <ButtonRelease-3>]} {
-	set r "Click failed at $x $y"
-      } else {
+  set y [expr {[lindex $b 1] + ([lindex $b 3] / 2)}]
 
-	# check for PC_TAG on the correct line
-	if {$r == 0} {
-	  if {![catch {set z [$twin dump 1.0 end]}]} {
-	    foreach {k v i} $z {
-	      if {$k == "tagon"} {
-		if {$v == "PC_TAG"} {
-		  if {$i == "12.2"} {
-		    incr r
-		  } else {
-		    incr r 5
-		  }
-		}
-		if {$v == "STACK_TAG"} {incr r 10}
-		if {$v == "BROWSE_TAG"} {incr r 100}
-	      } elseif {$k == "image"} {
-		switch $i {
-		  10.0 {incr r}
-		  12.0 {incr r}
-		  14.0 {incr r}
-		  default {incr r 1000}
-		}
-	      }
-	    }
-	  } else {
-	    set r -4
-	  }
-	}
-      }
-    } else {
-      set r "Line 12.1 was not visible..."
-    }
-    # should have seen on PC_TAG at line 12, plus BP images at 10.0, 12.0 and 14.0
+  # Continue to here
+  $stw continue_to_here $twin $y
+
+  # Where is the PC_TAG?
+  set pcs {}
+  set tags [$twin tag ranges PC_TAG]
+  foreach {start end} $tags {
+    lappend pcs [expr {int($start)}]
   }
-  set r
-} {4}
+
+  # Where are breakpoints?
+  set bps {}
+  set imgs [$twin dump -image 1.0 end]
+  foreach {foo bar line} $imgs {
+    lappend bps $line
+  }
+
+  list $pcs $bps
+} {12 {10.0 14.0}}
 
 # 5.1 balloon variables
 # Test: srcwin-5.1
@@ -1220,8 +1185,3 @@ gdbtk_test srcwin-6.1 "mixed mode disassembly of include file" {
 } {1}
 
 gdbtk_test_done
-
-# Local variables:
-# mode: tcl
-# change-log-default-name: "ChangeLog-gdbtk"
-# End:

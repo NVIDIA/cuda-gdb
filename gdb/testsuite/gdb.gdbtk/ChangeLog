@@ -1,3 +1,51 @@
+2001-05-07  Keith Seitz  <keiths@cygnus.com>
+
+	* README: New file.
+
+        * configure.in: Check for executable filename extension.
+	* Makefile.in: Add filename extensions.
+        * configure: Regenerated.
+
+        * defs: Fix typo setting _test(verbose).
+        (gdbtk_test_file): New proc to load executables into gdbtk.
+        (gdbtk_test_run): New proc to run executables on gdbtk.
+        * browser.exp: Don't check if DISPLAY is set: let
+        gdbtk_initialize_display do it all for us.
+        Call gdbtk_done when finished with tests.
+        * c_variable.exp: Ditto.
+        * console.exp: Ditto.
+        * cpp_variable.exp: Ditto.
+        Only run tests if c++ is supported in the configuration.
+        * srcwin.exp: Ditto the DISPLAY stuff.
+        Accumulate all test results for the end and report them then.
+
+        * browser.test: Use gdbtk_test_file and gdbtk_test_run
+        to load and run an executable.
+        * c_variable.test: Use gdbtk_test_file and gdbtk_test_run
+        to load and run an executable.
+        * srcwin.test: Ditto.
+        * srcwin1.test: Ditto.
+        * srcwin2.test: Ditto.
+
+        * browser.test: (set_search_mode): Use "configure
+        -value" not "entryset" to set the combobox's value. We need
+        to have the command fired.
+        (browser-3.5): Remove trailing whitespace which causes test to
+        fail.
+        (browser-4.4): Expect something rational. Regexp "\_1$" cannot
+        match "func_10"!
+        (browser-4.5): Ditto.
+        (browser-5.12): Select all files for search to make test
+        match description.
+        (browser-6.2): Renamed from another test also calledd 6.1.
+        (browser-7.1): Delete all breakpoints at once without from_tty.
+        Select all entries in the comobox before invoking BP set/delete
+        button.
+        (browser-7.2): Ditto.
+
+        * list0.c, list1.c, list0.h: New files. Grabbed from gdb.base.
+        * srcwin.exp: Use these local files instead of those in gdb.base.
+
 1999-09-17  Fernando Nasser  <fnasser@totem.to.cygnus.com>
 
 	* cpp_variable.test: Add test (2.75) to verify

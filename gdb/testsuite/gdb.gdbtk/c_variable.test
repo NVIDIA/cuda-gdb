@@ -1,4 +1,5 @@
-#   Copyright (C) 1998 Cygnus Solutions
+# Varobj Tests (C language)
+# Copyright 1998, 2001 Red Hat, Inc.
 #
 # This Program Is Free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -25,18 +26,11 @@ if {![gdbtk_read_defs]} {
 }
 
 global objdir test_ran
-global tcl_platform 
 
 # Load in a file
-if {$tcl_platform(platform) == "windows"} {
-  set program [file join $objdir c_variable.exe]
-} else {
-  set program [file join $objdir c_variable]
-}
-
-# This isn't a test case, since if this fails, we're hosed.
-if {[catch {gdb_cmd "file $program"} t]} {
-  # an error occured loading the file
+set program [file join $objdir c_variable]
+if {[catch {gdbtk_test_file $program} t]} {
+  # This isn't a test case, since if this fails, we're hosed.
   gdbtk_test_error "loading \"$program\": $t"
 }
 
@@ -179,10 +173,9 @@ gdbtk_test c_variable-1.3 {create out of scope variable} {
   create_variable argc
 } {1}
 
-## FIXME: natives only
 # Break in main and run
 gdb_cmd "break do_locals_tests"
-gdb_cmd "run"
+gdbtk_test_run
 
 # Test: c_variable-1.4
 # Desc: create local variables
@@ -354,6 +347,8 @@ gdbtk_test c_variable-2.11 {create do_locals_tests local in subroutine1} {
   create_variable linteger
 } {1}
 
+# Step over
+#  global_simple.integer = i + 3;
 gdb_cmd "step"
 
 # Test: c_variable-2.12
@@ -365,6 +360,8 @@ gdbtk_test c_variable-2.12 {change global_simple.integer} {
   check_update
 } {{} {lsimple.character lsimple.integer lpsimple lsimple i lcharacter lpcharacter global_simple linteger lpinteger lfloat lpfloat l func llong lplong lpsimple->integer ldouble lpdouble} {}}
 
+# Step over
+#  i = 212;
 gdb_cmd "step"
 
 # Test: c_variable-2.13
@@ -373,6 +370,8 @@ gdbtk_test c_variable-2.13 {change subroutine1 local i} {
   check_update
 } {i {lsimple.character lsimple.integer lpsimple lsimple lcharacter lpcharacter global_simple linteger lpinteger lfloat lpfloat l func llong lplong lpsimple->integer ldouble lpdouble} {}}
 
+# Step over
+#  *l = 12
 gdb_cmd "step"
 
 # Test: c_variable-2.14
@@ -381,6 +380,7 @@ gdbtk_test c_variable-2.14 {change do_locals_tests local llong} {
   check_update
 } {llong {lsimple.character lsimple.integer lpsimple lsimple i lcharacter lpcharacter global_simple linteger lpinteger lfloat lpfloat l func lplong lpsimple->integer ldouble lpdouble} {}}
 
+# Leave subroutine1
 gdb_cmd "next"
 
 # Test: c_variable-2.15

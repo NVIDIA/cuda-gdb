@@ -39,16 +39,10 @@ global objdir srcdir
 #####                 #####
 
 # Load the test executable
-if {$tcl_platform(platform) == "windows"} {
-  set file [file join $objdir list.exe]
-} else {
-  set file [file join $objdir list]
-}
-
-# This isn't a test case, since if this fails, we're hosed.
-if {[catch {gdb_cmd "file $file" 1} t]} {
-  # an error occured loading the file
-  gdbtk_test_error "loading \"$file\": $t"
+set program [file join $objdir list]
+if {[catch {gdbtk_test_file $program} t]} {
+  # This isn't a test case, since if this fails, we're hosed.
+  gdbtk_test_error "loading \"$program\": $t"
 }
 
 set srcwin [ManagedWin::open SrcWin]
@@ -58,7 +52,7 @@ set statbar [$srcwin test_get _statbar]
 
 # get things started
 gdb_cmd "break main"
-run_executable
+gdbtk_test_run
 
 # Test: srcwin3-1.1
 # Desc: Check for something in source window
@@ -793,8 +787,3 @@ gdbtk_test srcwin3-4.2 "temporary BP" {
 } {3}
 
 gdbtk_test_done
-
-# Local variables:
-# mode: tcl
-# change-log-default-name: "ChangeLog-gdbtk"
-# End:

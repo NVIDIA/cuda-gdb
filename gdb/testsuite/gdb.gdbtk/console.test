@@ -108,7 +108,7 @@ gdbtk_test console-paste-1 {paste X text} {
   text .test_text
   .test_text insert end "this is some pasted text"
   .test_text tag add sel 1.0 {1.0 lineend}
-
+  event generate .test_text <<Copy>>
   event generate $text <<Paste>>
   get_cmd_line
 } {(gdb) this is some pasted text}
@@ -467,8 +467,3 @@ if {$test_ran} {
 #  Exit
 #
 gdbtk_test_done
-
-# Local variables:
-# mode: tcl
-# change-log-default-name: "ChangeLog-gdbtk"
-# End:
