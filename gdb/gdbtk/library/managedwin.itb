@@ -115,7 +115,8 @@ body ManagedWin::open {class args} {
   set newwin [eval _open $class $args]
   if {$newwin != ""} {
     if {[$newwin isa ModalDialog]} {
-      after idle "$newwin reveal; $newwin post"
+      parse_args [list {expire 0}]
+      after idle "$newwin reveal; $newwin post 0 $expire"
     } else {
       after idle "$newwin reveal"
     }

@@ -1,4 +1,13 @@
-2001-01-04  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
+2001-01-04  Fernando Nasser  <fnasser@redhat.com>
+
+	The following changes fix the problem of having to click on a splash
+	window to make it disapear.
+	* modal.tcl (post): Take as an argument "expire", the time a modal
+	window is displayed.
+	* managedwin.itb (open): Check for an "expire" argument and pass the
+	value down to modal post method.
+
+2001-01-04  Fernando Nasser  <fnasser@redhat.com>
 
 	* library/gdbmenubar.itcl (set_class_state): New public method.
 	Standard method to control state by class.
@@ -13,7 +22,7 @@
 	* library/srctoolbar.itcl (enable_ui): Use set_class_state instead
 	of prying into base class internal data.
 
-2001-01-04  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
+2001-01-04  Fernando Nasser  <fnasser@redhat.com>
 
 	* library/interface.tcl (gdbtk_connect): New proc. Connects to ai
 	 remote target (code previously at library/gdbmenubar.itcl).
@@ -26,14 +35,14 @@
 	(do_detach): Call gdbtk_disconnect, not ::disconnect (old name).
 	(do_disconnect): Call gdbtk_disconnect, not disconnect (old name).
 
-2001-01-03  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
+2001-01-03  Fernando Nasser  <fnasser@redhat.com>
 
 	* library/prefs.tcl (pref_set_defaults): Define gdb/src/top_control
 	to allow the source window controls to be placed at the top.
 	* library/srcwin.itb (_build_win): Test for gdb/src/top_control
 	and place the controls accordingly.
 
-2001-01-02  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
+2001-01-02  Fernando Nasser  <fnasser@redhat.com>
 
 	* library/gdbmenubar.itcl: New file. Define the GDBMenuBar class,
 	a generic menubar building facility for Insight windows (WIP).
@@ -51,19 +60,19 @@
 	* library/Makefile (TCL): Include .itcl files.
 	* library/tclIndex: Regenerate.
 
-2001-01-02  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
+2001-01-02  Fernando Nasser  <fnasser@redhat.com>
 
 	* library/srcwin.itb (_build_win): If gdb is running a program, load
 	the window with source for that location (if available).
 	(download_progress): Calls to "update" must refer to the global
 	namespace.
 
-2001-01-02  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
+2001-01-02  Fernando Nasser  <fnasser@redhat.com>
 
 	* library/interface.tcl (gdbtk_quit_check): Save session whenever
 	possible.
 
-2001-01-01  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
+2001-01-01  Fernando Nasser  <fnasser@redhat.com>
 
 	* library/ChangeLog-2000: New file. Entries dated 2000 moved here
         from library/ChangeLog.
@@ -72,7 +81,7 @@
         from library/ChangeLog.
         * generic/ChangeLog: Removed.
 
-2000-12-14  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
+2000-12-14  Fernando Nasser  <fnasser@redhat.com>
 
 	* library/ChangeLog-1999: New file. Entries dated 1999 moved here
 	from library/ChangeLog.
