@@ -1,3 +1,11 @@
+2001-05-14  Keith Seitz  <keiths@cygnus.com>
+
+	* library/interface.tcl (gdbtk_quit_check): Don't save sessions
+	here. It doesn't work for the Console Window.
+	(gdbtk_cleanup): Save session information here.
+	(gdbtk_tcl_exec_file_display): When files are loaded,
+	get the full pathname to the exe.
+
 2001-05-11  Tom Tromey  <tromey@redhat.com>
 
 	* library/prefs.tcl (pref_save): Fix bug when key in gdb space has

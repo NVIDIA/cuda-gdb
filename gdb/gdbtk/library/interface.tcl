@@ -234,10 +234,6 @@ proc gdbtk_quit_check {} {
     }
   }
   
-  # If we have an executable file loaded, save a session associated to it
-  if {$gdb_exe_name != ""} {
-    session_save
-  }
   return 1
 }
 
@@ -258,6 +254,13 @@ proc gdbtk_quit {} {
 #         before exiting.  Last chance to cleanup!
 # ------------------------------------------------------------------
 proc gdbtk_cleanup {} {
+  global gdb_exe_name
+
+  # Save the session
+  if {$gdb_exe_name != ""} {
+    session_save
+  }
+
   # This is a sign that it is too late to be doing updates, etc...
   set ::gdb_shutting_down 1
 
@@ -717,7 +720,7 @@ proc gdbtk_tcl_file_changed {filename} {
 #         commands, then we cannot look for main.
 # ------------------------------------------------------------------
 proc gdbtk_tcl_exec_file_display {filename} {
-  global gdb_loaded gdb_running gdb_exe_name gdb_target_changed
+  global gdb_exe_changed
 
   # DO NOT CALL set_exe here! 
 
@@ -730,7 +733,15 @@ proc gdbtk_tcl_exec_file_display {filename} {
 
   # set_exe calls file command with the filename in
   # quotes, so we need to strip them here.
-  set gdb_exe_name [string trim $filename \']
+  # We need to make sure that we turn filename into
+  # an absolute path or sessions won't work.
+  set filename [string trim $filename \']
+  if {[string index $filename 0] != "/"} {
+    set pwd [pwd]
+    set filename "$pwd/$filename"
+  }
+  set_exe_name $filename
+  set gdb_exe_changed 0
 
   SrcWin::point_to_main
 }
