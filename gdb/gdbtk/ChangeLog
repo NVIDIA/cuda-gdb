@@ -1,3 +1,10 @@
+2003-04-30  Andrew Cagney  <cagney@redhat.com>
+
+	* generic/gdbtk-cmds.c (gdb_disassemble_driver): Instead of
+	TARGET_PRINT_INSN_INFO, "dis_asm_memory_error",
+	"dis_asm_read_memory", and "dis_asm_print_address", use
+	"deprecated_tm_print_insn_info"
+
 2003-04-11  Andrew Cagney  <cagney@redhat.com>
 
 	* generic/gdbtk-stack.c (get_frame_name): Use get_frame_pc and

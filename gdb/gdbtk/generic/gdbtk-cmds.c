@@ -1928,12 +1928,15 @@ gdb_disassemble_driver (CORE_ADDR low, CORE_ADDR high,
       INIT_DISASSEMBLE_INFO_NO_ARCH (di, gdb_stdout,
                                      (fprintf_ftype) fprintf_unfiltered);
       di.flavour = bfd_target_unknown_flavour;
-      di.memory_error_func = dis_asm_memory_error;
-      di.print_address_func = dis_asm_print_address;
+      /* NOTE: cagney/2003-04: This all goes away, along with this
+         function, when insight starts using the "disasm.h"
+         disassembler.  */
+      di.memory_error_func = deprecated_tm_print_insn_info.memory_error_func;
+      di.print_address_func = deprecated_tm_print_insn_info.print_address_func;
       di_initialized = 1;
     }
 
-  di.mach = TARGET_PRINT_INSN_INFO->mach;
+  di.mach = deprecated_tm_print_insn_info.mach;
   if (TARGET_BYTE_ORDER == BFD_ENDIAN_BIG)
     di.endian = BFD_ENDIAN_BIG;
   else
@@ -1977,7 +1980,7 @@ gdb_disassemble_driver (CORE_ADDR low, CORE_ADDR high,
   if (disassemble_from_exec)
     di.read_memory_func = gdbtk_dis_asm_read_memory;
   else
-    di.read_memory_func = dis_asm_read_memory;
+    di.read_memory_func = deprecated_tm_print_insn_info.read_memory_func;
 
   /* If just doing straight assembly, all we need to do is disassemble
      everything between low and high.  If doing mixed source/assembly, we've
