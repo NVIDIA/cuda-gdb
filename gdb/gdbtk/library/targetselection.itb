@@ -261,6 +261,21 @@ body TargetSelection::init_target_db {} {
   set gdb_target(vxworks,cmd) "vxworks ethX"
   set gdb_target(vxworks,runlist) { 1 0 1 1}
   set gdb_target(vxworks,after_attaching) { sym vxWorks.st }
+
+  # GDBServer, libremote, rda, etc
+  set gdb_target(gdbserver,pretty-name) "GDBserver"
+  set gdb_target(gdbserver,pretty-name) "GDBserver/Serial"
+  set gdb_target(gdbserver,defbaud) "9600"
+  set gdb_target(gdbserver,baud-rates) {9600 19200 38400 57600 115200}
+  set gdb_target(gdbserver,cmd) "remote com1"
+  set gdb_target(gdbserver,runlist) {1 0 0 1}
+  set gdb_target(gdbserver,after_attaching) {}
+  set gdb_target(gdbservertcp,pretty-name) "GDBserver/TCP"
+  set gdb_target(gdbservertcp,defbaud) "TCP"
+  set gdb_target(gdbservertcp,baud-rates) {}
+  set gdb_target(gdbservertcp,cmd) "remote tcpX"
+  set gdb_target(gdbservertcp,runlist) {1 0 0 1}
+  set gdb_target(gdbservertcp,after_attaching) {}
 }
 
 body TargetSelection::default_port {} {
@@ -897,6 +912,7 @@ body TargetSelection::get_target_list {} {
       lappend names $name
     }
   }
+  lappend names gdbserver
   return $names
 }
 
@@ -1036,6 +1052,10 @@ body TargetSelection::target_trace {variable index op} {
 
 # Returns 1 if TARGET is a _runnable_ target for this gdb.
 body TargetSelection::valid_target {target} {
+
+  # always allow gdbserver
+  if {$target == "gdbserver"} {return 1}
+
   set err [catch {gdb_cmd "help target $target"}]
   if {$target == "exec" && ![native_debugging]} {
     set err 1

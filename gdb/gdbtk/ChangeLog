@@ -1,3 +1,11 @@
+2002-10-09  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/targetselection.itb (init_target_db): Add gdbserver
+	target.
+	(get_target_list): Always add "gdbserver" to list of valid 
+	targets.
+	(valid_target): Always allow "gdbserver".
+
 2002-09-27  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-hooks.c (gdbtk_add_hooks): Add gdbtk_annotate_signal
