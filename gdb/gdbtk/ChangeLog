@@ -1,5 +1,19 @@
-2002-10-09  Martin M. Hunt  <hunt@redhat.com>
+2002-10-10  Martin M. Hunt  <hunt@redhat.com>
 
+	* library/session.tcl (save): Save target_cmd,
+	attach, load, run, and cont as session prefs.
+	(notice_file_change): Load in above session
+	prefs.
+	
+	* library/interface.tcl (set_target): Set icons busy
+	before attempting target command and set back to idle after.
+	(run_executable): Return on ATTACH_ERROR.
+	(gdbtk_run): If run button is hit when a program
+	is currently being debugged, put up a dialog allowing
+	user to continue or cancel.
+
+2002-10-09  Martin M. Hunt  <hunt@redhat.com>
+	
 	* library/targetselection.itb (init_target_db): Add gdbserver
 	target.
 	(get_target_list): Always add "gdbserver" to list of valid 

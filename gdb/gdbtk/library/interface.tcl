@@ -1075,8 +1075,8 @@ proc set_target_name {{prompt 1}} {
 # ------------------------------------------------------------------
 proc set_target {} {
   global gdb_target_cmd gdb_target_changed gdb_pretty_name gdb_target_name
-#  debug "gdb_target_changed=$gdb_target_changed gdb_target_cmd=\"$gdb_target_cmd\""
-#  debug "gdb_target_name=$gdb_target_name"
+  #debug "gdb_target_changed=$gdb_target_changed gdb_target_cmd=\"$gdb_target_cmd\""
+  #debug "gdb_target_name=$gdb_target_name"
   if {$gdb_target_cmd == "" && ![TargetSelection::native_debugging]} {
     if {$gdb_target_name == ""} {
       set prompt 1
@@ -1099,8 +1099,10 @@ proc set_target {} {
     update
     catch {gdb_cmd "detach"}
     debug "CONNECTING TO TARGET: $gdb_target_cmd"
+    gdbtk_busy
     set err [catch {gdb_immediate "target $gdb_target_cmd"} msg ]
     $srcWin set_status
+    gdbtk_idle
 
     if {$err} {
       if {[string first "Program not killed" $msg] != -1} {
@@ -1161,7 +1163,8 @@ proc run_executable { {auto_start 1} } {
 
     # Attach
     if {$gdb_target_name == "" || [pref get gdb/src/run_attach]} {
-      if {[gdbtk_attach_remote] == "ATTACH_CANCELED"} {
+      set r [gdbtk_attach_remote]
+      if {$r == "ATTACH_CANCELED" || $r == "ATTACH_ERROR"} {
 	return
       }
     }
@@ -1548,6 +1551,14 @@ proc gdbtk_detach {} {
 #  PROC: gdbtk_run
 # ------------------------------------------------------------------
 proc gdbtk_run {} {
+  if {$::gdb_running == 1} {
+    set msg "A program is currently being debugged.\n"
+    append msg "Do you want to restart?"
+    if {![gdbtk_tcl_query $msg no]} {
+      # NO
+      return
+    }
+  }
   run_executable
 }
 
