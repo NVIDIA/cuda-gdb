@@ -8,13 +8,14 @@
 
 /* -*-C-*-
  *
- * $Revision: 1.7 $
- *     $Date: 2000/01/04 14:56:32 $
+ * $Revision: 1.8 $
+ *     $Date: 2000/01/20 16:08:00 $
  *
  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
 
 #include "adp.h"
 #include "sys.h"
@@ -48,9 +49,14 @@ static void openLogFile ()
       perror ("fopen");
     }
   else
-    /* The following line is equivalent to: */
-    /* setlinebuf (angelDebugLogFile); */
-    setvbuf(angelDebugLogFile, (char *)NULL, _IOLBF, 0);
+    {
+      /* The following line is equivalent to: */
+      /* setlinebuf (angelDebugLogFile); */
+      setvbuf(angelDebugLogFile, (char *)NULL, _IOLBF, 0);
+#if defined(__CYGWIN32__) || defined(__CYGWIN__)
+      setmode(fileno(angelDebugLogFile), O_TEXT);
+#endif
+    }
   
   time (&t);
   fprintf (angelDebugLogFile,"ADP log file opened at %s\n",asctime(localtime(&t)));
