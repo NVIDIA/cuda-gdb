@@ -1,3 +1,24 @@
+2001-06-11  Tom Tromey  <tromey@redhat.com>
+
+	* library/session.tcl (session_save): Save breakpoints.
+	(SESSION_serialize_bps): New proc.
+	(SESSION_recreate_bps): New proc.
+	(session_load): Recreate breakpoints.
+	* library/util.tcl (bp_exists): Expect user specification in
+	breakpoint info.
+	* library/srctextwin.itb (SrcTextWin::showBPBalloon): Expect user
+	specification in breakpoint info.
+	* library/gdbevent.itb (BreakpointEvent::_init): Initialize
+	_user_specification.
+	(BreakpointEvent::get): Handle user_specification.
+	* library/gdbevent.ith (BreakpointEvent): Added
+	_user_specification field.
+	* library/bpwin.itb (BpWin::bp_store): Expect user specification
+	and use it when saving.
+	(BpWin::bp_type): Expect user specification.
+	* generic/gdbtk-bp.c (BREAKPOINT_IS_WATCHPOINT): New macro.
+	(gdb_get_breakpoint_info): Added `user specification' to result.
+
 2001-06-11  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-stack.c (gdb_stack): Return TCL_ERROR if

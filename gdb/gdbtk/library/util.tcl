@@ -175,7 +175,7 @@ proc bp_exists {linespec} {
   foreach bpnum $bps {
     set bpinfo [gdb_get_breakpoint_info $bpnum]
     lassign $bpinfo file func line pc type enabled disposition \
-      ignore_count commands cond thread hit_count
+      ignore_count commands cond thread hit_count user_specification
     if {$filename == $file && $function == $func && $addr == $pc} {
       return $bpnum
     }

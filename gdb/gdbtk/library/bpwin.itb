@@ -298,18 +298,21 @@ body BpWin::bp_store {} {
   foreach breakpoint [gdb_get_breakpoint_list] {
     # This is an lassign
     foreach {file function line_no address type \
-	       enable_p disp ignore cmds thread hit_count} \
+	       enable_p disp ignore cmds thread hit_count user_spec} \
       [gdb_get_breakpoint_info $breakpoint] {
 	break
       }
 
-    if {$file != ""} {
+    if {$user_spec != ""} {
+      set bp_specifier $user_spec
+    } elseif {$file != ""} {
       set filename [file tail $file]
       set bp_specifier $filename:$line_no
     } else {
       set bp_specifier *$address
     }
 
+    # FIXME: doesn't handle watchpoints.
     if {[string compare $disp "delete"] == 0} {
       puts $outH "tbreak $bp_specifier"
     } else {
@@ -542,7 +545,7 @@ body BpWin::bp_type { i } {
   #debug "bp_type $i $bpnum"
   set bpinfo [gdb_get_breakpoint_info $bpnum]
   lassign $bpinfo file func line pc type enabled disposition \
-    ignore_count commands cond thread hit_count
+    ignore_count commands cond thread hit_count user_spec
   bp_select $i
   switch $disposition {
     delete {  

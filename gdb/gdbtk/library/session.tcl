@@ -11,6 +11,91 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
+# An internal function used when saving sessions.  Returns a string
+# that can be used to recreate all pertinent breakpoint state.
+proc SESSION_serialize_bps {} {
+  set result {}
+
+  foreach bp_num [gdb_get_breakpoint_list] {
+    lassign [gdb_get_breakpoint_info $bp_num] file function line_number \
+      address type enabled disposition ignore_count command_list \
+      condition thread hit_count user_specification
+
+    switch -glob -- $type {
+      "breakpoint" -
+      "hw breakpoint" {
+	if {$disposition == "delete"} {
+	  set cmd tbreak
+	} else {
+	  set cmd break
+	}
+
+	append cmd " "
+	if {$user_specification != ""} {
+	  append cmd "$user_specification"
+	} elseif {$file != ""} {
+	  # BpWin::bp_store uses file tail here, but I think that is
+	  # wrong.
+	  append cmd "$file:$line_number"
+	} else {
+	  append cmd "*$address"
+	}
+      }
+      "watchpoint" -
+      "hw watchpoint" {
+	set cmd watch
+	if {$user_specification != ""} {
+	  append cmd " $user_specification"
+	} else {
+	  # There's nothing sensible to do.
+	  continue
+	}
+      }
+
+      "catch*" {
+	# FIXME: Don't know what to do.
+	continue
+      }
+
+      default {
+	# Can't serialize anything other than those listed above.
+	continue
+      }
+    }
+
+    lappend result [list $cmd $enabled $condition $command_list]
+  }
+
+  return $result
+}
+
+# An internal function used when loading sessions.  It takes a
+# breakpoint string and recreates all the breakpoints.
+proc SESSION_recreate_bps {specs} {
+  foreach spec $specs {
+    lassign $spec create enabled condition commands
+
+    # Create the breakpoint
+    gdb_cmd $create
+
+    # Below we use `\$bpnum'.  This means we don't have to figure out
+    # the number of the breakpoint when doing further manipulations.
+
+    if {! $enabled} {
+      gdb_cmd "disable \$bpnum"
+    }
+
+    if {$condition != ""} {
+      gdb_cmd "cond \$bpnum $condition"
+    }
+
+    if {[llength $commands]} {
+      lappend commands end
+      gdb_cmd "commands \$bpnum\n[join $commands \n]"
+    }
+  }
+}
+
 #
 # This procedure decides what makes up a gdb `session'.  Roughly a
 # session is whatever the user found useful when debugging a certain
@@ -38,6 +123,9 @@ proc session_save {} {
   set values(dirs) $gdb_source_path
   set values(pwd) $gdb_current_directory
   set values(target) $gdb_target_name
+
+  # Breakpoints.
+  set values(breakpoints) [SESSION_serialize_bps]
 
   # Recompute list of recent sessions.  Trim to no more than 5 sessions.
   set recent [concat [list $name] \
@@ -86,6 +174,10 @@ proc session_load {name} {
     gdb_clear_file
     set_exe_name $values(executable)
     set_exe
+  }
+
+  if {[info exists values(breakpoints)]} {
+    SESSION_recreate_bps $values(breakpoints)
   }
 
   if {[info exists values(target)]} {

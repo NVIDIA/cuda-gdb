@@ -31,8 +31,9 @@ body BreakpointEvent::get {what} {
     condition    { return $_condition }
     thread       { return $_thread }
     hit_count    { return $_hit_count }
+    user_specification { return $_user_specification }
 
-    default { error "unknown event data \"$what\": should be: action|number|file|function|line|address|type|enabled|disposition|ignore_count|commands|condition|thread|hit_count" }
+    default { error "unknown event data \"$what\": should be: action|number|file|function|line|address|type|enabled|disposition|ignore_count|commands|condition|thread|hit_count|user_specification" }
   }
 }
 
@@ -53,6 +54,7 @@ body BreakpointEvent::_init {} {
     set _condition    {}
     set _thread       {}
     set _hit_count    {}
+    set _user_specification {}
   } else {
     lassign $bpinfo \
       _file         \
@@ -66,7 +68,8 @@ body BreakpointEvent::_init {} {
       _commands     \
       _condition    \
       _thread       \
-      _hit_count
+      _hit_count    \
+      _user_specification
   }
 }
 

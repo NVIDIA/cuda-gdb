@@ -62,6 +62,13 @@ char *bpdisp[] =
  || (bp)->type == bp_read_watchpoint     \
  || (bp)->type == bp_access_watchpoint)
 
+/* Is this breakpoint a watchpoint?  */
+#define BREAKPOINT_IS_WATCHPOINT(bp)					      \
+((bp)->type == bp_watchpoint						      \
+ || (bp)->type == bp_hardware_watchpoint				      \
+ || (bp)->type == bp_read_watchpoint					      \
+ || (bp)->type == bp_access_watchpoint)
+
 /*
  * These are routines we need from breakpoint.c.
  * at some point make these static in breakpoint.c and move GUI code there
@@ -279,7 +286,7 @@ gdb_find_bp_at_line (clientData, interp, objc, objv)
  * Tcl Result:
  *   A list with {file, function, line_number, address, type, enabled?,
  *                disposition, ignore_count, {list_of_commands},
- *                condition, thread, hit_count}
+ *                condition, thread, hit_count user_specification}
  */
 static int
 gdb_get_breakpoint_info (ClientData clientData, Tcl_Interp *interp, int objc,
@@ -355,6 +362,11 @@ gdb_get_breakpoint_info (ClientData clientData, Tcl_Interp *interp, int objc,
 			    Tcl_NewIntObj (b->thread));
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
 			    Tcl_NewIntObj (b->hit_count));
+
+  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
+			    Tcl_NewStringObj (BREAKPOINT_IS_WATCHPOINT (b)
+					      ? b->exp_string
+					      : b->addr_string, -1));
 
   return TCL_OK;
 }

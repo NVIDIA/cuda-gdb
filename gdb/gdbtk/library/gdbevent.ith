@@ -40,6 +40,8 @@ class GDBEvent {
 # condition .... BP condition
 # thread ....... thread in which BP is set (or -1 for all threads) 
 # hit_count .... number of times BP has been hit
+# user_specification
+#             .. text the user initially used to set this breakpoint
 class BreakpointEvent {
   inherit GDBEvent
 
@@ -71,6 +73,7 @@ class BreakpointEvent {
   private variable _condition    {}
   private variable _thread       {}
   private variable _hit_count    {}
+  private variable _user_specification {}
 
   private method _init {}
 }

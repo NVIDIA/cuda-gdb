@@ -2314,7 +2314,7 @@ body SrcTextWin::showBPBalloon {win x y} {
   foreach b $bps {
     set bpinfo [gdb_get_breakpoint_info $b]
     lassign $bpinfo file func linenum addr type enabled disposition \
-      ignore_count commands cond thread hit_count
+      ignore_count commands cond thread hit_count user_specification
     if {$thread == "-1"} {set thread "all"}
     set file [lindex [file split $file] end]
     if {$enabled} {
