@@ -202,7 +202,8 @@ static void
 get_register_size (int regnum, void *arg)
 {
   Tcl_ListObjAppendElement (gdbtk_interp, result_ptr->obj_ptr,
-			    Tcl_NewIntObj (REGISTER_RAW_SIZE (regnum)));
+			    Tcl_NewIntObj (DEPRECATED_REGISTER_RAW_SIZE
+					   (regnum)));
 }
 
 /* returns a list of valid types for a register */
@@ -321,10 +322,10 @@ get_register (int regnum, void *arg)
 
       strcpy (buf, "0x");
       ptr = buf + 2;
-      for (j = 0; j < REGISTER_RAW_SIZE (regnum); j++)
+      for (j = 0; j < DEPRECATED_REGISTER_RAW_SIZE (regnum); j++)
 	{
 	  int idx = TARGET_BYTE_ORDER == BFD_ENDIAN_BIG ? j
-	    : REGISTER_RAW_SIZE (regnum) - 1 - j;
+	    : DEPRECATED_REGISTER_RAW_SIZE (regnum) - 1 - j;
 	  sprintf (ptr, "%02x", (unsigned char) raw_buffer[idx]);
 	  ptr += 2;
 	}
@@ -447,13 +448,13 @@ register_changed_p (int regnum, void *argp)
     return;
 
   if (memcmp (&old_regs[regnum * MAX_REGISTER_SIZE], raw_buffer,
-	      REGISTER_RAW_SIZE (regnum)) == 0)
+	      DEPRECATED_REGISTER_RAW_SIZE (regnum)) == 0)
     return;
 
   /* Found a changed register.  Save new value and return its number. */
 
   memcpy (&old_regs[regnum * MAX_REGISTER_SIZE], raw_buffer,
-	  REGISTER_RAW_SIZE (regnum));
+	  DEPRECATED_REGISTER_RAW_SIZE (regnum));
 
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, Tcl_NewIntObj (regnum));
 }

@@ -1,3 +1,9 @@
+2003-10-06  David Carlton  <carlton@kealia.com>
+
+	* generic/gdbtk-register.c (get_register_size): Replace
+	REGISTER_RAW_SIZE by DEPRECATED_REGISTER_RAW_SIZE.
+	(get_register, register_changed_p): Ditto.
+
 2003-09-30  David Carlton  <carlton@kealia.com>
 
 	* generic/gdbtk-register.c (get_register): Replace
