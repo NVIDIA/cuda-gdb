@@ -246,7 +246,7 @@ body ManagedWin::_create { class args } {
 
   if {$over != "" || $center} {
     # center new window
-    center_window $top -over $over
+    center_window $top -over [winfo toplevel [namespace tail $over]]
   }
   
   if {$transient} {

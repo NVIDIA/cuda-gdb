@@ -1,3 +1,9 @@
+2001-06-18  Keith Seitz  <keiths@redhat.com>
+
+	* library/managedwin.itb (_create): When creating a
+	window over another, be sure to center on the window,
+	not the object.
+
 2001-06-13  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-bp.c (gdbtk_tracepoint_create): Change
