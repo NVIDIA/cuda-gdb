@@ -32,6 +32,7 @@
 #include "cli-out.h"
 #include "top.h"
 #include "annotate.h"
+#include "interps.h"
 
 #if defined(_WIN32) || defined(__CYGWIN__)
 #define WIN32_LEAN_AND_MEAN
@@ -682,11 +683,90 @@ gdbtk_test (char *filename)
   return 1;
 }
 
+void *
+tk_init (void)
+{
+  /* FIXME: Should return the interpreter's context.  */
+  return NULL;
+}
+
+int
+gdbtk_resume (void *data)
+{
+  return 1;
+}
+
+int
+gdbtk_suspend (void *data)
+{
+  return 1;
+}
+
+int
+gdbtk_prompt_p (void *data)
+{
+  return 0;
+}
+
+int
+gdbtk_exec (void *data, const char *command)
+{
+  internal_error (__FILE__, __LINE__, "tk_exec not implemented");
+}
+
+/* This function is called instead of gdb's internal command loop.  This is the
+   last chance to do anything before entering the main Tk event loop. 
+   At the end of the command, we enter the main loop. */
+
+static void
+gdbtk_command_loop (void *data)
+{
+  extern FILE *instream;
+
+  /* We no longer want to use stdin as the command input stream */
+  instream = NULL;
+
+  if (Tcl_Eval (gdbtk_interp, "gdbtk_tcl_preloop") != TCL_OK)
+    {
+      const char *msg;
+
+      /* Force errorInfo to be set up propertly.  */
+      Tcl_AddErrorInfo (gdbtk_interp, "");
+
+      msg = Tcl_GetVar (gdbtk_interp, "errorInfo", TCL_GLOBAL_ONLY);
+#ifdef _WIN32
+      MessageBox (NULL, msg, NULL, MB_OK | MB_ICONERROR | MB_TASKMODAL);
+#else
+      fputs_unfiltered (msg, gdb_stderr);
+#endif
+    }
+
+#ifdef _WIN32
+  close_bfds ();
+#endif
+
+  Tk_MainLoop ();
+}
+
 /* Come here during initialize_all_files () */
 
 void
 _initialize_gdbtk ()
 {
+  static const struct interp_procs tk_procs =
+  {
+    tk_init,
+    gdbtk_resume,
+    gdbtk_suspend,
+    gdbtk_exec,
+    gdbtk_prompt_p,
+    gdbtk_command_loop,
+  };
+
+  interp_add (interp_new ("gdbtk", NULL, NULL, &tk_procs));
+
+  /* FIXME: cagney/2003-02-12: This is wrong.  The initialization
+     should be done via the init function.  */
   if (use_windows)
     {
       /* Tell the rest of the world that Gdbtk is now set up. */

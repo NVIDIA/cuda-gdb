@@ -1,3 +1,19 @@
+2003-02-12  Andrew Cagney  <ac131313@redhat.com>
+
+	* generic/gdbtk-hooks.c (tk_command_loop): Move function ...
+	* generic/gdbtk.c (gdbtk_command_loop): ... to here.  Add data
+	parameter.
+
+	* generic/gdbtk.c: Include "interps.h".
+	(_initialize_gdbtk): Register the "gdbtk" interpreter.  Don't set
+	init_ui_hook.
+	(gdbtk_init): Change parameter to a void data pointer.
+	(tk_init, gdbtk_resume, gdbtk_suspend): New functions.
+	(gdbtk_prompt_p, gdbtk_exec): New functions.
+
+	* generic/gdbtk-hooks.c (gdbtk_add_hooks): Don't set
+	command_loop_hook.  Update copyright.
+	
 2003-02-11  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/help/images/browser1.png: New file.
