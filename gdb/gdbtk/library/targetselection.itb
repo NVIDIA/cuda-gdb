@@ -770,7 +770,7 @@ body TargetSelection::change_target {w {name ""}} {
 body TargetSelection::change_baud {w {baud ""}} {
   if {$baud != ""} {
     if {([string compare $baud "TCP"] != 0)
-        && ([string compare $baud "ETX"] != 0)} {
+        && ([string compare $baud "ETH"] != 0)} {
       gdb_cmd "set remotebaud $baud"
       if {[catch {gdb_cmd "show remotebaud"} res]} {
 	set newbaud 0
