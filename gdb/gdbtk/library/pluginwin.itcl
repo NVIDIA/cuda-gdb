@@ -71,6 +71,9 @@ class PluginWindow {
     return $child
   }
 
+  # Don't automatically reload plugins.
+  protected method _ignore_on_save {} { return 1 }
+
   ####################################################################
   #
   # State control methods used by both the menu and the toolbar

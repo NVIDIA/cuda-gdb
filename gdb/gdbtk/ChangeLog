@@ -1,3 +1,15 @@
+2002-04-24  Keith Seitz  <keiths@redhat.com>
+
+	* library/managedwin.ith (_ignore_on_save): New protected method.
+	* library/managedwin.itb (shutdown): If _ignore_on_save, don't
+	save this window to the active window list in the preferences
+	file.
+	* library/debugwin.ith (DebugWin::_ignore_on_save): Don't save
+	this window to preferences active list.
+	(DebugWinDOpts::_ignore_on_save): Likewise.
+	* library/pluginwin.itcl (_ignore_on_save): Likewise.
+	* library/download.ith (_ignore_on_save): Likewise.
+
 2002-04-22  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-stack.c (Gdbtk_Stack_Init): Don't link

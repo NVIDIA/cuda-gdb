@@ -44,6 +44,10 @@ class DebugWin {
     method _save_contents {}
   }
 
+  protected {
+    method _ignore_on_save {} { return 1 }
+  }
+
   public {
     method constructor {args}
     method destructor {}
@@ -73,6 +77,10 @@ class DebugWinDOpts {
   public {
     method constructor {args} {}
     method destructor {}
+  }
+
+  protected {
+    method _ignore_on_save { return 1 }
   }
 
   private {
