@@ -1,3 +1,30 @@
+2003-03-05  Martin M. Hunt  <hunt@redhat.com>
+
+	* generic/gdbtk-cmds.c (Gdbtk_Init): Create gdb_CA_to_TAS.
+	(gdb_load_disassembly): Now takes CORE_ADDRs. Returns CORE_ADDRs
+	for low and high.
+	(gdbtk_load_asm): Use CORE_ADDRs.
+	(gdb_loc): Return CORE_ADDRs.
+	(gdb_entry_point): Return CORE_ADDR.
+	(gdb_incr_addr): Update description.
+	(gdb_CA_to_TAS): New function. Takes a CORE_ADDR and returns 
+	a target sddress string.
+
+	* generic/gdbtk-bp.c (gdb_find_bp_at_addr): Change to
+	take a CORE_ADDR.
+	(gdb_get_breakpoint_info): Returns a CORE_ADDR.
+	(gdb_set_bp_addr): Takes a CORE_ADDR.
+	
+	* library/bpwin.itb (bp_add): Call gdb_CA_to_TAS before 
+	displaying address.
+	(bp_modify): Ditto.
+
+	* library/srcwin.itb (location): Call gdb_CA_to_TAS before 
+	displaying address. Don't add "0x" in front of address.
+	(set_execution_status): Call gdb_CA_to_TAS before 
+	displaying address. Don't call [gdb_cmd printf] to format
+	output. Weird.
+
 2003-02-25  David Carlton  <carlton@math.stanford.edu>
 
 	* generic/gdbtk.h: Replace all instances of SYMBOL_NAME by

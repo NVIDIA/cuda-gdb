@@ -416,8 +416,8 @@ itcl::body SrcWin::fillFuncCB {name} {
 #  3: source line number
 #  4: address
 #  5: current PC - which will often be the same as address, but not when
+#     we are browsing, or walking the stack.
 #  6: shared library name if the pc is in a shared lib
-#  we are browsing, or walking the stack.
 #
 # linespec will be "{} {} {} 0 0x0 0x0" when GDB has not started debugging.
 # ------------------------------------------------------------------
@@ -465,15 +465,18 @@ itcl::body SrcWin::location {tag linespec} {
     fillFuncCB $name
   }
 
+  # get a proper address string to display
+  set textaddr [gdb_CA_to_TAS $addr]
+
   # set address and line widgets
-  if {[string length $addr] > 10} {
-    # 64-bit address plus "0x"
-    set width 18
+  if {[string length $textaddr] > 8} {
+    # 64-bit address
+    set width 16
   } else {
-    # 32-bit address plus "0x"
-    set width 10
+    # 32-bit address
+    set width 8
   }
-  $_statusframe.addr configure -text $addr -font global/fixed -width $width
+  $_statusframe.addr configure -text $textaddr -font global/fixed -width $width
   $_statusframe.line configure -text $line
 
   # set function combobox
@@ -669,6 +672,8 @@ itcl::body SrcWin::set_execution_status { {line ""} {pc ""}} {
       }
     }
 
+    set pc [gdb_CA_to_TAS $pc]
+
     if {$line == "" || $line == 0} {
       if {$pc == "" || $pc == 0} {
 	if {$Tracing} {
@@ -677,7 +682,7 @@ itcl::body SrcWin::set_execution_status { {line ""} {pc ""}} {
 	  set message "Program stopped."
 	}
       } else {
-	set message [gdb_cmd "printf \"Program stopped at %lx\",$pc"]
+	set message "Program stopped at 0x$pc"
       }
     } else {
       if {$Tracing} {
@@ -686,9 +691,9 @@ itcl::body SrcWin::set_execution_status { {line ""} {pc ""}} {
 	set msg "Program stopped"
       }
       switch [$twin mode_get] {
-	ASSEMBLY {set message [gdb_cmd "printf \"$msg at 0x%lx\",$pc"] }
-	MIXED {set message [gdb_cmd "printf \"$msg at line $line, 0x%lx\",$pc"] }
-	SRC+ASM {set message [gdb_cmd "printf \"$msg at line $line, 0x%lx\",$pc"] }
+	ASSEMBLY {set message "$msg at 0x$pc" }
+	MIXED {set message "$msg at line $line, 0x$pc" }
+	SRC+ASM {set message "$msg at line $line, 0x$pc" }
 	default {set message "$msg at line $line" }
       }
     }

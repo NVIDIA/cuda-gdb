@@ -194,7 +194,7 @@ Gdbtk_Breakpoint_Init (Tcl_Interp *interp)
 /* This implements the tcl command "gdb_find_bp_at_addr"
 
 * Tcl Arguments:
-*    addr:     address
+*    addr:     CORE_ADDR
 * Tcl Result:
 *    It returns a list of breakpoint numbers
 */
@@ -204,14 +204,17 @@ gdb_find_bp_at_addr (ClientData clientData, Tcl_Interp *interp,
 {
   int i;
   CORE_ADDR addr;
+  Tcl_WideInt waddr;
 
   if (objc != 2)
     {
       Tcl_WrongNumArgs (interp, 1, objv, "address");
       return TCL_ERROR;
     }
-
-  addr = string_to_core_addr (Tcl_GetStringFromObj (objv[1], NULL));
+  
+  if (Tcl_GetWideIntFromObj (interp, objv[1], &waddr) != TCL_OK)
+    return TCL_ERROR;
+  addr = waddr;
 
   Tcl_SetListObj (result_ptr->obj_ptr, 0, NULL);
   for (i = 0; i < breakpoint_list_size; i++)
@@ -323,8 +326,8 @@ gdb_get_breakpoint_info (ClientData clientData, Tcl_Interp *interp, int objc,
 
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
 			    Tcl_NewIntObj (b->line_number));
-  sprintf_append_element_to_obj (result_ptr->obj_ptr, "0x%s",
-				 paddr_nz (b->address));
+  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
+			    Tcl_NewStringObj (core_addr_to_string (b->address), -1));
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
 			    Tcl_NewStringObj (bptypes[b->type], -1));
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
@@ -540,7 +543,7 @@ gdb_set_bp (ClientData clientData, Tcl_Interp *interp,
  * It sets breakpoints, and notifies the GUI.
  *
  * Tcl Arguments:
- *    addr: the address at which to set the breakpoint
+ *    addr:     the CORE_ADDR at which to set the breakpoint
  *    type:     the type of the breakpoint
  *    thread:   optional thread number
  * Tcl Result:
@@ -554,6 +557,7 @@ gdb_set_bp_addr (ClientData clientData, Tcl_Interp *interp, int objc,
   struct symtab_and_line sal;
   int thread = -1;
   CORE_ADDR addr;
+  Tcl_WideInt waddr;
   struct breakpoint *b;
   char *saddr, *typestr;
   enum bpdisp disp;
@@ -564,9 +568,11 @@ gdb_set_bp_addr (ClientData clientData, Tcl_Interp *interp, int objc,
       return TCL_ERROR;
     }
 
+  if (Tcl_GetWideIntFromObj (interp, objv[1], &waddr) != TCL_OK)
+    return TCL_ERROR;
+  addr = waddr;
   saddr = Tcl_GetStringFromObj (objv[1], NULL);
-  addr = string_to_core_addr (saddr);
-  
+
   typestr = Tcl_GetStringFromObj (objv[2], NULL);
   if (strncmp (typestr, "temp", 4) == 0)
     disp = disp_del;

@@ -151,6 +151,7 @@ static int gdb_set_mem (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_immediate_command (ClientData, Tcl_Interp *, int,
 				  Tcl_Obj * CONST[]);
 static int gdb_incr_addr (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
+static int gdb_CA_to_TAS (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_listfiles (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_listfuncs (ClientData, Tcl_Interp *, int, Tcl_Obj * CONST[]);
 static int gdb_loadfile (ClientData, Tcl_Interp *, int,
@@ -242,6 +243,7 @@ Gdbtk_Init (Tcl_Interp *interp)
 			gdb_disassemble, NULL);
   Tcl_CreateObjCommand (interp, "gdb_eval", gdbtk_call_wrapper, gdb_eval, NULL);
   Tcl_CreateObjCommand (interp, "gdb_incr_addr", gdbtk_call_wrapper, gdb_incr_addr, NULL);
+  Tcl_CreateObjCommand (interp, "gdb_CA_to_TAS", gdbtk_call_wrapper, gdb_CA_to_TAS, NULL);
   Tcl_CreateObjCommand (interp, "gdb_clear_file", gdbtk_call_wrapper,
 			gdb_clear_file, NULL);
   Tcl_CreateObjCommand (interp, "gdb_confirm_quit", gdbtk_call_wrapper,
@@ -1571,8 +1573,8 @@ gdb_disassemble (ClientData clientData, Tcl_Interp *interp,
  * Arguments:
  *    widget - the name of a text widget into which to load the data
  *    source_with_assm - must be "source" or "nosource"
- *    low_address - the address from which to start disassembly
- *    ?hi_address? - the address to which to disassemble, defaults
+ *    low_address - the CORE_ADDR from which to start disassembly
+ *    ?hi_address? - the CORE_ADDR to which to disassemble, defaults
  *                   to the end of the function containing low_address.
  * Tcl Result:
  *    The text widget is loaded with the data, and a list is returned.
@@ -1592,6 +1594,7 @@ gdb_load_disassembly (ClientData clientData, Tcl_Interp *interp,
   int mixed_source_and_assembly, ret_val, i;
   char *arg_ptr;
   char *map_name;
+  Tcl_WideInt waddr;
 
   if (objc != 6 && objc != 7)
     {
@@ -1677,20 +1680,24 @@ gdb_load_disassembly (ClientData clientData, Tcl_Interp *interp,
     }
 
   /* Now parse the addresses */
-  
-  low = string_to_core_addr (Tcl_GetStringFromObj (objv[5], NULL));
+  if (Tcl_GetWideIntFromObj (interp, objv[5], &waddr) != TCL_OK)
+    return TCL_ERROR;
+  low = waddr;
+
   orig = low;
 
   if (objc == 6)
     {
       if (find_pc_partial_function (low, NULL, &low, &high) == 0)
-	error ("No function contains address 0x%s (%s)",
-	       paddr_nz (orig), Tcl_GetStringFromObj (objv[5], NULL));
+	error ("No function contains address 0x%s", core_addr_to_string (orig));
     }
   else
-    high = string_to_core_addr (Tcl_GetStringFromObj (objv[6], NULL));
-
-
+    {
+      if (Tcl_GetWideIntFromObj (interp, objv[6], &waddr) != TCL_OK)
+	return TCL_ERROR;
+      high = waddr;
+    }
+  
   /* Setup the client_data structure, and call the driver function. */
   
   client_data.file_opened_p = 0;
@@ -1755,19 +1762,10 @@ gdb_load_disassembly (ClientData clientData, Tcl_Interp *interp,
 
   if (ret_val == TCL_OK) 
     {
-      char *buffer;
-      Tcl_Obj *limits_obj[2];
-      
-      xasprintf (&buffer, "0x%s", paddr_nz (low));
-      limits_obj[0] = Tcl_NewStringObj (buffer, -1);
-      free(buffer);
-      
-      xasprintf (&buffer, "0x%s", paddr_nz (high));
-      limits_obj[1] = Tcl_NewStringObj (buffer, -1);
-      free(buffer);
-      
-      Tcl_DecrRefCount (result_ptr->obj_ptr);
-      result_ptr->obj_ptr = Tcl_NewListObj (2, limits_obj);
+      Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
+				Tcl_NewStringObj (core_addr_to_string (low), -1));
+      Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
+				Tcl_NewStringObj (core_addr_to_string (high), -1));
     }
   return ret_val;
 }
@@ -1914,6 +1912,7 @@ gdbtk_load_asm (ClientData clientData, CORE_ADDR pc,
   const char **text_argv;
   int i, pc_to_line_len, line_to_pc_len;
   gdbtk_result new_result;
+  int insn;
   struct cleanup *old_chain = NULL;
 
   pc_to_line_len = Tcl_DStringLength (&client_data->pc_to_line_prefix);
@@ -1933,17 +1932,16 @@ gdbtk_load_asm (ClientData clientData, CORE_ADDR pc,
 
   for (i = 0; i < 3; i++)
     Tcl_SetObjLength (client_data->result_obj[i], 0);
-  
+
   print_address_numeric (pc, 1, gdb_stdout);
   gdb_flush (gdb_stdout);
 
   result_ptr->obj_ptr = client_data->result_obj[1];
-  
   print_address_symbolic (pc, gdb_stdout, 1, "\t");
   gdb_flush (gdb_stdout);
 
   result_ptr->obj_ptr = client_data->result_obj[2];
-  pc += TARGET_PRINT_INSN (pc, di);
+  insn = TARGET_PRINT_INSN (pc, di);
   gdb_flush (gdb_stdout);
 
   client_data->widget_line_no++;
@@ -1962,7 +1960,7 @@ gdbtk_load_asm (ClientData clientData, CORE_ADDR pc,
       /* Run the command, then add an entry to the map array in
 	 the caller's scope. */
       
-      Tcl_DStringAppend (&client_data->pc_to_line_prefix, text_argv[5], -1);
+      Tcl_DStringAppend (&client_data->pc_to_line_prefix, core_addr_to_string (pc), -1);
       
       /* FIXME: Convert to Tcl_SetVar2Ex when we move to 8.2.  This
 	 will allow us avoid converting widget_line_no into a string. */
@@ -1975,10 +1973,11 @@ gdbtk_load_asm (ClientData clientData, CORE_ADDR pc,
 
       Tcl_DStringAppend (&client_data->line_to_pc_prefix, buffer, -1);
       
+
       Tcl_SetVar2 (client_data->interp, client_data->map_arr,
 		   Tcl_DStringValue (&client_data->line_to_pc_prefix),
-		   text_argv[5], 0);
-
+		   core_addr_to_string (pc), 0);
+      
       /* Restore the prefixes to their initial state. */
       
       Tcl_DStringSetLength (&client_data->pc_to_line_prefix, pc_to_line_len);      
@@ -1988,8 +1987,8 @@ gdbtk_load_asm (ClientData clientData, CORE_ADDR pc,
     }
   
   do_cleanups (old_chain);
-    
-  return pc;
+
+  return pc + insn;
 }
 
 static void
@@ -2322,17 +2321,15 @@ gdb_loc (ClientData clientData, Tcl_Interp *interp, int objc, Tcl_Obj *CONST obj
     filename = "";
 
   /* file name */
-  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-			    Tcl_NewStringObj (filename, -1));
+  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, Tcl_NewStringObj (filename, -1));
   /* line number */
-  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
-			    Tcl_NewIntObj (sal.line));
+  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, Tcl_NewIntObj (sal.line));
   /* PC in current frame */
-  sprintf_append_element_to_obj (result_ptr->obj_ptr, "0x%s", paddr_nz (pc));
+  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, 
+			    Tcl_NewStringObj (core_addr_to_string (pc), -1));
   /* Real PC */
-  sprintf_append_element_to_obj (result_ptr->obj_ptr, "0x%s",
-				 paddr_nz (stop_pc));
-
+  Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, 
+			    Tcl_NewStringObj (core_addr_to_string (stop_pc), -1));
   /* shared library */
 #ifdef PC_SOLIB
   Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr,
@@ -2357,7 +2354,7 @@ gdb_entry_point (ClientData clientData, Tcl_Interp *interp,
      entry point, so return an empty string.*/
   if ((int) current_target.to_stratum > (int) dummy_stratum)
     {
-      addrstr = paddr_nz (entry_point_address ());
+      addrstr = (char *)core_addr_to_string (entry_point_address ());
       Tcl_SetStringObj (result_ptr->obj_ptr, addrstr, -1);
     }
   else
@@ -3040,16 +3037,22 @@ gdbtk_set_result (Tcl_Interp *interp, const char *fmt,...)
 
 
 /* This implements the tcl command 'gdb_incr_addr'.
- * It increments addresses, which must be implemented
- * this way because tcl cannot handle 64-bit values.
+ * It does address arithmetic and outputs a proper
+ * hex string.  This was originally implemented
+ * when tcl did not support 64-bit values, but we keep
+ * it because it saves us from having to call incr 
+ * followed by format to get the result in hex.
+ * Also, it may be true in the future that CORE_ADDRs
+ * will have their own ALU to deal properly with
+ * architecture-specific address arithmetic.
  *
  * Tcl Arguments:
- *     addr   - 32 or 64-bit address
+ *     addr   - CORE_ADDR
  *     number - optional number to add to the address
  *	default is 1.
  *
  * Tcl Result:
- *     addr + number
+ *     hex string containing the result of addr + number
  */
 
 static int
@@ -3061,7 +3064,7 @@ gdb_incr_addr (ClientData clientData, Tcl_Interp *interp,
 
   if (objc != 2 && objc != 3)
     {
-      Tcl_WrongNumArgs (interp, 1, objv, "address [number]");
+      Tcl_WrongNumArgs (interp, 1, objv, "CORE_ADDR [number]");
       return TCL_ERROR;
     }
 
@@ -3077,5 +3080,50 @@ gdb_incr_addr (ClientData clientData, Tcl_Interp *interp,
 
   Tcl_SetStringObj (result_ptr->obj_ptr, (char *)core_addr_to_string (address), -1);
   
+  return TCL_OK;
+}
+
+/* This implements the tcl command 'gdb_CAS_to_TAS'.
+ * It takes a CORE_ADDR and outputs a string suitable
+ * for displaying as the target address.
+ *
+ * Note that CORE_ADDRs are internal addresses which map
+ * to target addresses in different ways depending on the 
+ * architecture. The target address string is a user-readable
+ * string may be quite different than the CORE_ADDR. For example,
+ * a CORE_ADDR of 0x02001234 might indicate a data address of
+ * 0x1234 which this function might someday output as something
+ * like "D:1234".
+ *
+ * Tcl Arguments:
+ *     address   - CORE_ADDR
+ *
+ * Tcl Result:
+ *     string
+ */
+
+static int
+gdb_CA_to_TAS (ClientData clientData, Tcl_Interp *interp,
+	       int objc, Tcl_Obj *CONST objv[])
+{
+  CORE_ADDR address;
+  Tcl_WideInt wide_addr;
+
+  if (objc != 2)
+    {
+      Tcl_WrongNumArgs (interp, 1, objv, "CORE_ADDR");
+      return TCL_ERROR;
+    }
+
+  /* Read address into a wideint, which is the largest tcl supports
+     then convert to a CORE_ADDR */
+  if (Tcl_GetWideIntFromObj (interp, objv[1], &wide_addr) != TCL_OK)
+    return TCL_ERROR;
+  address = wide_addr;
+
+  /* This is not really correct.  Using paddr_nz() will convert to hex and truncate 
+     to 32-bits when required but will otherwise not do what we really want. */
+  Tcl_SetStringObj (result_ptr->obj_ptr, paddr_nz (address), -1);
+
   return TCL_OK;
 }
