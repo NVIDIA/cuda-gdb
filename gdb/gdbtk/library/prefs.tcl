@@ -138,6 +138,9 @@ proc pref_read {} {
   
     # now set global options
     set gdb_ImageDir [file join $GDBTK_LIBRARY [pref get gdb/ImageDir]]
+
+    # finally set colors, from system if possible
+    pref_set_colors
   }
 }
 
@@ -282,28 +285,7 @@ proc pref_set_defaults {} {
   pref define gdb/B1_behavior             1;     # 0 means set/clear breakpoints,
                                                  # 1 means set/clear tracepoints.
   pref define gdb/use_icons		  1;	 # For Unix, use gdbtk_icon.gif as an icon
-						 # some window managers can't deal with it.
-
-  #
-  # Font attributes
-  #
-
-  # "Normal" font attributes
-  pref define gdb/font/normal_fg    black
-  pref define gdb/font/normal_bg    gray92
-
-  # Selection foreground/background
-  pref define gdb/font/select_fg    black
-  pref define gdb/font/select_bg    lightgray
-
-  # Highlight used when something changes (variable value changes, etc)
-  pref define gdb/font/highlight_fg blue
-  pref define gdb/font/highlight_bg gray92
-
-  # "Header" foreground and background. Used by table headers and such.
-  pref define gdb/font/header_fg    gray92
-  pref define gdb/font/header_bg    darkgray
-
+						 # some window managers can't deal with it.    
   # set download and execution options
   pref define gdb/load/verbose 0
   pref define gdb/load/main 1
@@ -416,3 +398,111 @@ proc pref_set_defaults {} {
   pref define gdb/editor ""
 }
 
+proc pref_set_colors {} {
+  # set color palette
+  
+  # In a normal tk app, most of this is not necessary.  Unfortunately
+  # Insight is a mixture of widgets from all over and was coded first
+  # in tcl and later in itcl.  So lots of color inheritance is broken or wrong.
+  # To enable us to fix that without hardcoding colors, we create a color
+  # array here and use it as needed to force widgets to the correct colors.
+  
+  global Colors tcl_platform
+  
+  debug
+
+  if {$tcl_platform(platform) == "windows"} {
+    option add *foreground SystemButtonText
+    set Colors(fg) SystemButtonText
+    
+    option add *background SystemButtonFace
+    set Colors(bg) SystemButtonFace
+    
+    option add *Entry*foreground SystemWindowText
+    option add *Text*foreground SystemWindowText
+    set Colors(textfg) SystemWindowText
+    
+    option add *Entry*background SystemWindow
+    option add *Text*background SystemWindow
+    set Colors(textbg) SystemWindow
+    
+    option add *selectForeground SystemHighlightText
+    set Colors(sfg) SystemHighlightText
+    
+    option add *selectBackground SystemHighlight
+    set Colors(sbg) SystemHighlight
+    
+    option add *highlightBackground SystemButtonFace
+    set Colors(hbg) SystemButtonFace
+    return
+  }
+
+  # UNIX colors
+  
+  # For KDE3 (and probably earlier versions) when the user sets
+  # a color scheme from the KDE control center, the appropriate color 
+  # information is set in the X resource database.  Well, most of it 
+  # is there but it is missing some settings, so we will carefully 
+  # adjust things.
+  #
+  # For GNOME, you can use a program called grdb update the X resource database
+  # with your current color scheme.
+  #
+  # If there is no information in the X rdb, we provide reasonable defaults.
+  
+  # create an empty entry widget so we can query its colors
+  entry .e
+  
+  # text background
+  set Colors(textbg) [option get .e background {}]
+  if {$Colors(textbg) == ""} {set Colors(textbg) white}
+  
+  # text foreground
+  set Colors(textfg) [option get .e foreground {}]
+  if {$Colors(textfg) == ""} {set Colors(textfg) black}
+  
+  # background
+  set Colors(bg) [option get . background {}]
+  if {$Colors(bg) == ""} {set Colors(bg) lightgray}
+  
+  # foreground
+  set Colors(fg) [option get . foreground {}]
+  if {$Colors(fg) == ""} {set Colors(fg) black}
+  
+  # now reset resource database so all widgets are consistent
+  option add *background $Colors(bg)
+  option add *Text*background $Colors(textbg)
+  option add *Entry*background $Colors(textbg)
+  option add *foreground $Colors(fg)
+  option add *Text*foreground $Colors(textfg)
+  option add *Entry*foreground $Colors(textfg)
+  
+  
+  # highlightBackground.  Set to background for now.
+  set Colors(hbg) $Colors(bg)
+  option add *highlightBackground $Colors(hbg)
+  
+  # selectBackground
+  set Colors(sbg) [option get .e selectBackground {}]
+  if {$Colors(sbg) == ""} {set Colors(sbg) blue}
+  option add *selectBackground $Colors(sbg)
+  
+  # selectForeground
+  set Colors(sfg) [option get .e selectForeground {}]
+  if {$Colors(sfg) == ""} {set Colors(sfg) white}
+  option add *selectForeground $Colors(sfg)
+  
+  # compute a slightly darker background color
+  # and use for activeBackground and troughColor
+  set bg2 [winfo rgb . $Colors(bg)]
+  set dbg [format #%02x%02x%02x [expr {(9*[lindex $bg2 0])/2560}] \
+	   [expr {(9*[lindex $bg2 1])/2560}] [expr {(9*[lindex $bg2 2])/2560}]]
+  option add *activeBackground $dbg
+  option add *troughColor $dbg
+  
+  # Change the default select color for checkbuttons, etc to match 
+  # selectBackground.
+  option add *selectColor $Colors(sbg)
+  
+  destroy .e
+}

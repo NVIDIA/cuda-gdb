@@ -284,7 +284,8 @@ body GlobalPref::_make_font_item {f name label font_list} {
     iwidgets::spinint $f.${name}s -labeltext "Size:" -range {6 18} -step 1 \
       -fixed 2 -width 2 -textvariable [scope _size($name)] -wrap 0 \
       -increment [code $this _change_size up $name] \
-      -decrement [code $this _change_size down $name]
+      -decrement [code $this _change_size down $name] \
+      -textbackground $::Colors(textbg)
   } {}
   label $f.${name}l -text ABCDEFabcdef0123456789 -font test-$name-font
   set _size($name) $_original($name,size)

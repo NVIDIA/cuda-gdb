@@ -113,11 +113,9 @@ body BrowserWin::_build_win {} {
 
   itk_component add filt_entry {
     entry [$itk_component(filter) childsite].ent -font global/fixed \
-      -textvariable [pref varname gdb/search/last_symbol] -background white
-  } {
-    usual Entry
-    rename -background -textbackground textBackground Background
-  }
+      -textvariable [pref varname gdb/search/last_symbol] 
+  } {}
+
 
   # Watch keystrokes into the entry box and filter on them...
 
@@ -134,9 +132,9 @@ body BrowserWin::_build_win {} {
     iwidgets::scrolledlistbox $itk_component(browser).files \
       -selectmode extended -exportselection false \
       -labeltext "Files" -labelpos nw -labelrelief groove \
-      -labelborderwidth 2 -ipadx 8 -ipady 6 \
-      -childsitepos s -hscrollmode none -textbackground white
-  }
+      -labelborderwidth 2 -ipadx 8 -ipady 6 -foreground $::Colors(textfg) \
+      -childsitepos s -hscrollmode none -textbackground $::Colors(textbg)
+  } {}
 
   append labelUpdateCode [$itk_component(file_box) clientHandlesConfigure 1] \
     "\n"
@@ -181,9 +179,9 @@ body BrowserWin::_build_win {} {
       -selectmode extended \
       -exportselection false \
       -labeltext "Functions" -labelpos nw -labelrelief groove \
-      -labelborderwidth 2 -ipadx 8 -ipady 6 \
-      -childsitepos s -hscrollmode none -textbackground white
-  }
+      -labelborderwidth 2 -ipadx 8 -ipady 6 -foreground $::Colors(textfg) \
+      -childsitepos s -hscrollmode none -textbackground $::Colors(textbg)
+  } {}
 	    
   append labelUpdateCode [$itk_component(func_box) clientHandlesConfigure 1] \
     "\n"
@@ -301,10 +299,8 @@ body BrowserWin::_build_win {} {
 
   itk_component add view_search {
     entry $itk_component(view_bottom).search -borderwidth 2 \
-      -font global/fixed -width 10 -background white
-  } {
-    rename -background -textbackground textBackground Background
-  }
+      -font global/fixed -width 10 -background $::Colors(textbg)
+  } {}
 
   # Pack all the components of view_hidden into the frame:
 

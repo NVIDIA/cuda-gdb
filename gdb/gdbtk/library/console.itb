@@ -54,8 +54,9 @@ body Console::_build_win {} {
   $_twin tag configure err_tag -foreground [pref get gdb/console/error_fg]
   $_twin tag configure log_tag -foreground [pref get gdb/console/log_fg]
   $_twin tag configure target_tag -foreground [pref get gdb/console/target_fg]
-  $_twin configure -font [pref get gdb/console/font]
-
+  $_twin configure -font [pref get gdb/console/font] \
+    -bg $::Colors(textbg) -fg $::Colors(textfg)
+  
   #
   # bind editing keys for console window
   #

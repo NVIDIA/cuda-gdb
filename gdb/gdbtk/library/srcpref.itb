@@ -137,7 +137,7 @@ body SrcPref::_build_win {} {
   itk_component add size {
     iwidgets::spinint $f.x.size -labeltext "Tab Size" -range {1 16} \
       -step 1 -fixed 2 -width 2 -textvariable [scope _new(gdb/src/tab_size)] \
-      -wrap 0
+      -wrap 0 -textbackground $::Colors(textbg)
   }
   $f.x.size delete 0 end
   $f.x.size insert end $_saved(gdb/src/tab_size)

@@ -160,21 +160,25 @@ body RegWin::_build_win {} {
   # Create scrollbars and table
   itk_component add vscroll {
     scrollbar $itk_interior.vs -orient vertical
-  } {}
+  }
   itk_component add hscroll {
     scrollbar $itk_interior.hs -orient horizontal
-  } {}
+  }
 
   itk_component add table {
     ::table $itk_interior.tbl -variable [scope _data] \
-      -bg [pref get gdb/font/normal_bg] -fg [pref get gdb/font/normal_fg] \
       -browsecmd [code $this _select_cell %S] -font global/fixed \
       -colstretch unset -rowstretch unset -selectmode single \
       -resizeborders none -multiline false -colwidth 18 \
-      -autoclear 0 -bg [pref get gdb/font/normal_bg] \
+      -autoclear 0 -bg $::Colors(bg) \
       -padx 5 -xscrollcommand [code $itk_component(hscroll) set] \
       -yscrollcommand [code $itk_component(vscroll) set]
-  } {}
+  } {
+    keep -foreground
+    keep -insertbackground
+    keep -highlightcolor
+    keep -highlightbackground
+  }
   bind $itk_component(table) <Up>       \
     [format "%s; break" [code $this _move up]]
   bind $itk_component(table) <Down>     \
@@ -217,33 +221,26 @@ body RegWin::_build_win {} {
   # header    - used on the register name cells and empty cells
   # edit      - used on a cell being edited
   $itk_component(table) tag configure normal  \
-    -foreground [pref get gdb/font/normal_fg] \
-    -background [pref get gdb/font/normal_bg] \
-    -state disabled
-  $itk_component(table) tag configure highlight  \
-    -foreground [pref get gdb/font/highlight_fg] \
-    -background [pref get gdb/font/highlight_bg]
+    -state disabled -bg $::Colors(textbg) -fg $::Colors(textfg)
+  $itk_component(table) tag configure sel -bg $::Colors(sbg) -fg $::Colors(sfg)
+  $itk_component(table) tag configure highlight -bg $::Colors(hbg)
   $itk_component(table) tag raise highlight
-  $itk_component(table) tag configure sel     \
-    -foreground [pref get gdb/font/select_fg]
-  $itk_component(table) tag configure header  \
-    -foreground [pref get gdb/font/header_fg] \
-    -background [pref get gdb/font/header_bg] \
+  $itk_component(table) tag configure header \
     -anchor w -state disabled -relief raised
   $itk_component(table) tag configure disabled \
     -state disabled
   $itk_component(table) tag raise active
   $itk_component(table) tag configure edit \
-    -state normal
+    -state normal 
   $itk_component(table) tag raise edit
   $itk_component(table) tag raise sel
 
   # Register to receive notifications on preference changes
   # (Note that these are not supported by the preference dialogs, but...)
-  foreach opt [list highlight select header] {
-    pref add_hook gdb/font/${opt}_fg [code $this _prefs_changed]
-    pref add_hook gdb/font/${opt}_bg [code $this _prefs_changed]
-  }
+  #foreach opt [list highlight select header] {
+  #  pref add_hook gdb/font/${opt}_fg [code $this _prefs_changed]
+  #  pref add_hook gdb/font/${opt}_bg [code $this _prefs_changed]
+  #}
 
   # Create toplevel menubar
   itk_component add menubar {
@@ -485,32 +482,9 @@ body RegWin::_size_column {col down} {
 #  NOTES:        Callback from pref system
 # ------------------------------------------------------------------
 body RegWin::_prefs_changed {pref value} {
-
-  switch $pref {
-    gdb/font/highlight_fg {
-      $itk_component(table) tag configure highlight -fg $value
-    }
-
-    gdb/font/highlight_bg {
-      $itk_component(table) tag configure highlight -bg $value
-    }
-
-    gdb/font/select_fg {
-      $itk_component(table) tag configure sel -bg $value
-    }
-
-    gdb/font/select_bg {
-      $itk_component(table) tag configure sel -bg $value
-    }
-
-    gdb/font/header_fg {
-      $itk_component(table) tag configure header -bg $value
-    }
-
-    gdb/font/header_bg {
-      $itk_component(table) tag configure header -bg $value
-    }
-  }
+  debug "$pref $value"
+  # do nothing for now.  With proper iwidgets this would not
+  # be required anyway.
 }
 
 

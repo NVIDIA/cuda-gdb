@@ -39,13 +39,12 @@ body StackWin::build_win {} {
   itk_component add slb {
     iwidgets::scrolledlistbox $itk_interior.s \
       -vscrollmode dynamic -hscrollmode dynamic \
-      -selectmode single -selectforeground black \
-      -selectbackground [pref get gdb/src/STACK_TAG] -exportselection false \
-      -textbackground [pref get gdb/font/normal_bg] \
-      -foreground [pref get gdb/font/normal_fg] \
-      -visibleitems 30x15 \
+      -selectmode single -exportselection false -visibleitems 30x15 \
       -textfont global/fixed -selectioncommand [code $this change_frame]
-  } {}
+  }
+
+  [$itk_component(slb) component listbox] configure \
+    -bg $::Colors(textbg) -fg $::Colors(textfg)
 
   # Add sizebox for windows
   if {[string compare $tcl_platform(platform) "windows"] == 0} {

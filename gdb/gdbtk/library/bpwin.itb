@@ -45,7 +45,7 @@ body BpWin::destructor {} {}
 # ------------------------------------------------------------------
 body BpWin::build_win {} {
   global _bp_en _bp_disp tcl_platform
-  set bg1 [pref get gdb/font/normal_bg]
+  set bg1 $::Colors(bg)
 
   if {$tcl_platform(platform) == "windows"} {
     # Add a sizebox and set scroll modes to static
@@ -61,9 +61,9 @@ body BpWin::build_win {} {
   # FIXME: The iwidgets scrolled frame is pretty useless.
   # When we get BLT, use its hiertable to do this.
   itk_component add sframe {
-    iwidgets::scrolledframe $itk_interior.sf -background $bg1 \
+    iwidgets::scrolledframe $itk_interior.sf \
       -hscrollmode $hsmode -vscrollmode $vsmode
-  } {}
+  }
 
   set twin [$itk_component(sframe) childsite]
 
@@ -236,15 +236,16 @@ body BpWin::bp_add {bp_event {tracepoint 0}} {
   if {$thread != "-1"} {set color [pref get gdb/src/thread_fg]}
 
   if {$tcl_platform(platform) == "windows"} {
-    checkbutton $twin.en$i -relief flat -variable _bp_en($i) -bg $bg1 \
+    checkbutton $twin.en$i -relief flat -variable _bp_en($i) \
       -activebackground $bg1 -command "$this bp_able $i" -fg $color 
   } else {
-    checkbutton $twin.en$i -relief flat -variable _bp_en($i) -selectcolor $color \
-      -command "$this bp_able $i" -bg $bg1 -activebackground $bg1
+    checkbutton $twin.en$i -relief flat -variable _bp_en($i) \
+      -command "$this bp_able $i" -activebackground $bg1 \
+      -selectcolor $color -highlightbackground $bg1
   }
 
   if {$tracepoints} {
-    label $twin.num$i -text "$number " -relief flat -anchor w -font global/fixed -bg $bg1
+    label $twin.num$i -text "$number " -relief flat -anchor w -font global/fixed
   }
   label $twin.addr$i -text "[$bp_event get address] " -relief flat -anchor w -font global/fixed -bg $bg1
   if {[info exists _files(short,$file)]} {
@@ -255,13 +256,13 @@ body BpWin::bp_add {bp_event {tracepoint 0}} {
   }
   if {$show_threads} {
     if {$thread == "-1"} {set thread "ALL"}
-    label $twin.thread$i -text "$thread " -relief flat -anchor w -font global/fixed -bg $bg1
+    label $twin.thread$i -text "$thread " -relief flat -anchor w -font global/fixed
   }
-  label $twin.file$i -text "$file " -relief flat -anchor w -font global/fixed -bg $bg1 
-  label $twin.line$i -text "[$bp_event get line] " -relief flat -anchor w -font global/fixed -bg $bg1
-  label $twin.func$i -text "[$bp_event get function] " -relief flat -anchor w -font global/fixed -bg $bg1 
+  label $twin.file$i -text "$file " -relief flat -anchor w -font global/fixed 
+  label $twin.line$i -text "[$bp_event get line] " -relief flat -anchor w -font global/fixed
+  label $twin.func$i -text "[$bp_event get function] " -relief flat -anchor w -font global/fixed 
   if {$tracepoints} {
-    label $twin.pass$i -text "[$bp_event get pass_count] " -relief flat -anchor w -font global/fixed -bg $bg1
+    label $twin.pass$i -text "[$bp_event get pass_count] " -relief flat -anchor w -font global/fixed
   }
 
   if {$mbar} {
@@ -374,7 +375,7 @@ body BpWin::bp_select { r } {
     set i $selected
     
     foreach thing $zz {
-      $twin.${thing}${i}  configure -fg [pref get gdb/font/select_fg] -bg $bg1
+      $twin.${thing}${i}  configure -fg $::Colors(fg) -bg $bg1
     }
   }
 
@@ -396,8 +397,7 @@ body BpWin::bp_select { r } {
   }
 
   foreach thing $zz {
-    $twin.${thing}${r} configure -fg [pref get gdb/font/select_fg] \
-      -bg [pref get gdb/font/select_bg]
+    $twin.${thing}${r} configure -fg $::Colors(sfg) -bg $::Colors(sbg)
   }
   
   if {$tracepoints == 0} {

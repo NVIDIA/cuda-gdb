@@ -48,15 +48,14 @@ body ProcessWin::build_win {} {
 
   itk_component add slbox {
     iwidgets::scrolledlistbox $itk_interior.slbox \
-      -background [pref get gdb/font/normal_bg] \
-      -selectbackground green \
-      -selectforeground black \
+      -background $::Colors(bg) \
+      -selectbackground $::Colors(sbg) -selectforeground $::Colors(sfg) \
       -textfont global/fixed \
       -exportselection false \
       -selectioncommand [code $this change_context]
   } {}
   [$itk_component(slbox) component listbox] configure \
-    -bg [pref get gdb/font/normal_bg]
+    -bg $::Colors(textbg) -fg $::Colors(textfg)
   update dummy
 
   pack $itk_component(slbox) -side left -expand yes -fill both

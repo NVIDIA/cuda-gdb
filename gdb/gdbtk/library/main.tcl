@@ -1,5 +1,5 @@
 # GDBtk (Insight) entry point
-# Copyright 1997, 1998, 1999 Cygnus Solutions
+# Copyright 1997, 1998, 1999, 2002 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -107,12 +107,6 @@ if {[info exists env(GDBTK_DEBUG)] && $env(GDBTK_DEBUG) != 0} {
   } else {
     ::debug::logfile "insight.log"
   }
-}
-
-if {$tcl_platform(platform) == "unix"} {
-#  tix resetoptions TK TK
-#  tk_setPalette tan
-  tix resetoptions TixGray [tix cget -fontset]
 }
 
 # For testing

@@ -304,7 +304,7 @@ body SrcTextWin::build_popups {} {
 #  METHOD:  build_win - build the main source paned window
 # ------------------------------------------------------------------
 body SrcTextWin::build_win {} {
-  cyg::panedwindow $itk_interior.p -background white
+  cyg::panedwindow $itk_interior.p
 
   set _tpane pane$filenum
   incr filenum
@@ -314,7 +314,7 @@ body SrcTextWin::build_win {} {
   set Stwc(gdbtk_scratch_widget:pane) $_tpane
   set Stwc(gdbtk_scratch_widget:dirty) 0
 
-  set twinp [iwidgets::scrolledtext $pane1.st -textbackground white \
+  set twinp [iwidgets::scrolledtext $pane1.st \
 	       -hscrollmode dynamic -vscrollmode dynamic]
   set twin [$twinp component text]
   pack $twinp -fill both -expand yes
@@ -493,22 +493,22 @@ body SrcTextWin::enable_disable_src_tags {win how} {
 body SrcTextWin::config_win {win {asm S}} {
 #  debug "$win $asm Tracing=$Tracing Browsing=$Browsing"
   
-  $win config -borderwidth 2 -insertwidth 0 -wrap none -bg white
+  $win config -borderwidth 2 -insertwidth 0 -wrap none
   
   # font
   set font [pref get gdb/src/font]
-  $win configure -font $font
+  $win configure -font $font -bg $::Colors(textbg) -fg $::Colors(textfg)
   
   setTabs $win $asm
 
   # set up some tags.  should probably be done differently
   # !! change bg?
   
-  $win tag configure break_rgn_tag -foreground [pref get gdb/src/break_fg]
+  $win tag configure break_rgn_tag
   foreach type $bp_types {
-    $win tag configure ${type}_tag -foreground [pref get gdb/src/break_fg]
+    $win tag configure ${type}_tag 
   }
-  $win tag configure tp_tag -foreground [pref get gdb/src/break_fg]
+  $win tag configure tp_tag 
   $win tag configure source_tag2 -foreground [pref get gdb/src/source2_fg]
   $win tag configure PC_TAG -background [pref get gdb/src/PC_TAG]
   $win tag configure STACK_TAG -background [pref get gdb/src/STACK_TAG]
