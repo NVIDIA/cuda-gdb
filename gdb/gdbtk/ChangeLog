@@ -1,3 +1,13 @@
+2002-12-20  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/srcbar.itcl (SrcBar): Don't load vmake icon.
+
+	* library/images: Removed back.gif, build.gif, file.gif, fore.gif,
+	gdbtk.gif, opt.gif, tools.gif, tools2_3d.gif, and vmake.gif.
+
+	* library/images2: Removed back.gif, build.gif, file.gif, fore.gif,
+	gdbtk.gif, load.gif, opt.gif, tools.gif, tools2_3d.gif, and vmake.gif.
+	
 2002-12-18  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/main.tcl: Don't try to print errors to stderr on Windows.

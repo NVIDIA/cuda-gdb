@@ -705,7 +705,7 @@ itcl::class SrcBar {
     }
     set _loaded_images 1
 
-    lappend imgs console reg stack vmake vars watch memory bp
+    lappend imgs console reg stack vars watch memory bp
     foreach name $imgs {
       image create photo ${name}_img -file [file join $gdb_ImageDir ${name}.gif]
     }
