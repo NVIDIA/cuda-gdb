@@ -1,3 +1,7 @@
+2003-02-28  Martin M. Hunt  <hunt@redhat.com>
+
+	* c_variable.test: Fix result for 6.22.
+
 2003-02-27  Martin M. Hunt  <hunt@redhat.com>
 
 	* cpp_variable.test: Major changes required because varobj_update

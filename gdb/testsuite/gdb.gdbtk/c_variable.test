@@ -1686,7 +1686,7 @@ gdbtk_test c_variable-6.22 {type of weird and children} {
   }
 
   set types
-} {{struct _struct_decl *} {char *} char {void (*)(void)} {struct _struct_decl *(*)(int, char *, long int)} {struct _struct_decl (*)(int, char *, long int)} {int **} int {long int [10]} {long int} struct union}
+} {{weird_struct *} {char *} char {void (*)(void)} {struct _struct_decl *(*)(int, char *, long int)} {struct _struct_decl (*)(int, char *, long int)} {int **} int {long int [10]} {long int} struct union}
 
 # Test: c_variable-6.23
 # Desc: change format of weird.func_ptr and weird.func_ptr_ptr
