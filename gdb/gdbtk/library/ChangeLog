@@ -1,3 +1,8 @@
+2000-04-08  Tom Tromey  <tromey@cygnus.com>
+
+	* console.itb (Console::_build_win): Make Control-a, Control-u,
+	and Control-w bindings show the insertion point.
+
 2000-04-05  James Ingham  <jingham@leda.cygnus.com>
 
 	* regwin.itb (RegWin::build_win): Enable the "Display all

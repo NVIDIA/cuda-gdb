@@ -88,18 +88,21 @@ body Console::_build_win {} {
   # Control-a moves to start of line.
   bind_plain_key $_twin Control-a {
     %W mark set insert {cmdmark + 1 char}
+    %W see {insert linestart}
     break
   }
 
   # Control-u deletes to start of line.
   bind_plain_key $_twin Control-u {
     %W delete {cmdmark + 1 char} insert
+    %W see {insert linestart}
   }
   
   # Control-w deletes previous word.
   bind_plain_key $_twin Control-w {
     if {[%W compare {insert -1c wordstart} > cmdmark]} {
       %W delete {insert -1c wordstart} insert
+      %W see insert
     }
   }
 
