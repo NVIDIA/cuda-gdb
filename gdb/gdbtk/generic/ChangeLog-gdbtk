@@ -1,3 +1,8 @@
+2000-04-14  Jonathan Larmour  <jlarmour@redhat.co.uk>
+
+	* gdbtk.c (gdbtk_init): For now, reset gdb_stdtarg to gdb_stdout
+	when using gdbtk.
+
 2000-04-01  Jim Blandy  <jimb@redhat.com>
 
 	* gdbtk-hooks.c (gdbtk_restore_result_ptr): New function.

@@ -530,6 +530,10 @@ gdbtk_find_main";
 
     fputs_unfiltered_hook = gdbtk_fputs;
 
+    /* set gdb_stdtarg for now until gdbtk is changed to use struct ui_out. */
+
+    gdb_stdtarg = gdb_stdout;
+
     if (Tcl_GlobalEval (gdbtk_interp, (char *) script) != TCL_OK)
       {
 	char *msg;
