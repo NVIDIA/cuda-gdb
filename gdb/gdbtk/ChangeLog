@@ -11,6 +11,10 @@
 	the event notification.
 	(gdbtk_delete_tracepoints): Ditto for tracepoints.
 
+	* generic/gdbtk-cmds.c (gdb_entry_point): Return an empty
+	string when there is no active target (i.e., there is no
+	entry point to return yet).
+
 2001-04-20  Keith Seitz  <keiths@cygnus.com>
 
 	* library/srctextwin.ith (handle_set_hook): Rename to set_variable.

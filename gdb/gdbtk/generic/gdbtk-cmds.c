@@ -3335,8 +3335,16 @@ gdb_entry_point (clientData, interp, objc, objv)
 {
   char *addrstr;
 
-  addrstr = paddr_nz (entry_point_address ());
-  Tcl_SetStringObj (result_ptr->obj_ptr, addrstr, -1);
+  /* If we have not yet loaded an exec file, then we have no
+     entry point, so return an empty string.*/
+  if ((int) current_target.to_stratum > (int) dummy_stratum)
+    {
+      addrstr = paddr_nz (entry_point_address ());
+      Tcl_SetStringObj (result_ptr->obj_ptr, addrstr, -1);
+    }
+  else
+    Tcl_SetStringObj (result_ptr->obj_ptr, "", -1);
+
   return TCL_OK;
 }
 
