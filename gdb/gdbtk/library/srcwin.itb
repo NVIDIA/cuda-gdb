@@ -87,15 +87,19 @@ body SrcWin::_build_win {} {
     -updatecommand [list $this toggle_updates] \
     -updatevalue $do_updates
 
-  # add a SrcTextWin container
-  set srcwin [conAdd src]
-  set twin [SrcTextWin $srcwin -Tracing $Tracing -parent $this]
-  pack $srcwin -expand 1 -fill both
+  # if user likes control on bottom...
+  if {! [pref get gdb/src/top_control]} {
 
-  # add status line
-  set _status [conAdd status -resizable 0]
-  label $_status -relief sunken -bd 3 -font global/status -height 1
-  pack $_status -expand 1 -fill both
+    # add a SrcTextWin container
+    set srcwin [conAdd src]
+    set twin [SrcTextWin $srcwin -Tracing $Tracing -parent $this]
+    pack $srcwin -expand 1 -fill both
+
+    # add status line
+    set _status [conAdd status -resizable 0]
+    label $_status -relief sunken -bd 3 -font global/status -height 1
+    pack $_status -expand 1 -fill both
+  }
   
   # add a status bar container
   set _statbar [conAdd stat -resizable 0]
@@ -135,6 +139,20 @@ body SrcWin::_build_win {} {
   pack $_statbar.name $_statbar.func -side left -pady 4 -padx 10
 
   pack $_statbar.frame.search -fill x -expand yes  
+
+  # if user likes control on top...
+  if {[pref get gdb/src/top_control]} {
+  
+    # add a SrcTextWin container
+    set srcwin [conAdd src]
+    set twin [SrcTextWin $srcwin -Tracing $Tracing -parent $this]
+    pack $srcwin -expand 1 -fill both
+
+    # add status line
+    set _status [conAdd status -resizable 0]
+    label $_status -relief sunken -bd 3 -font global/status -height 1
+    pack $_status -expand 1 -fill both
+  }
 
   set_execution_status
 

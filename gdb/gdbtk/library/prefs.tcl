@@ -305,6 +305,7 @@ proc pref_set_defaults {} {
   pref define gdb/src/tab_size            8
   pref define gdb/src/linenums		  1
   pref define gdb/src/thread_fg           pink
+  pref define gdb/src/top_control	  0;	# 1 srctextwin controls on top, 0 bottom
 
   # Define the run button's functions. These are defined here in case
   # we do a "run" with an exec target (which never causes target.tcl to 

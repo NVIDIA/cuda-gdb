@@ -1,3 +1,10 @@
+2001-01-03  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
+
+	* library/prefs.tcl (pref_set_defaults): Define gdb/src/top_control
+	to allow the source window controls to be placed at the top.
+	* library/srcwin.itb (_build_win): Test for gdb/src/top_control
+	and place the controls accordingly.
+
 2001-01-02  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
 
 	* library/gdbmenubar.itcl: New file. Define the GDBMenuBar class,
