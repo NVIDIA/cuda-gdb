@@ -60,7 +60,6 @@ gdbtk_interpreter_init (void)
   struct cmd_list_element *cmd = NULL;
   struct cmd_list_element *alias = NULL;
   struct cmd_list_element *prefix = NULL;
-  struct cmd_list_element *c;
 
   gdbtk_init ();
 

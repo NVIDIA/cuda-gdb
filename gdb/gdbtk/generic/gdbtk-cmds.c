@@ -183,11 +183,6 @@ static void gdbtk_load_source (ClientData clientData,
 			       int start_line, int end_line);
 static CORE_ADDR gdbtk_load_asm (ClientData clientData, CORE_ADDR pc,
 				 struct disassemble_info *di);
-static void gdbtk_print_source (ClientData clientData,
-				struct symtab *symtab,
-				int start_line, int end_line);
-static CORE_ADDR gdbtk_print_asm (ClientData clientData, CORE_ADDR pc,
-				  struct disassemble_info *di);
 static int gdb_disassemble_driver (CORE_ADDR low, CORE_ADDR high,
 				   int mixed_source_and_assembly,
 				   ClientData clientData,
@@ -1917,27 +1912,6 @@ gdbtk_load_asm (ClientData clientData, CORE_ADDR pc,
   return pc + insn;
 }
 
-static void
-gdbtk_print_source (ClientData clientData, struct symtab *symtab,
-		    int start_line, int end_line)
-{
-  print_source_lines (symtab, start_line, end_line, 0);
-  gdb_flush (gdb_stdout);
-}
-
-static CORE_ADDR
-gdbtk_print_asm (ClientData clientData, CORE_ADDR pc,
-		 struct disassemble_info *di)
-{
-  fputs_unfiltered ("    ", gdb_stdout);
-  print_address (pc, gdb_stdout);
-  fputs_unfiltered (":\t    ", gdb_stdout);
-  pc += TARGET_PRINT_INSN (pc, di);
-  fputs_unfiltered ("\n", gdb_stdout);
-  gdb_flush (gdb_stdout);
-  return pc;
-}
-
 static int
 gdb_disassemble_driver (CORE_ADDR low, CORE_ADDR high, 
 			int mixed_source_and_assembly,
@@ -2424,7 +2398,6 @@ gdb_update_mem (ClientData clientData, Tcl_Interp *interp,
   struct ui_file *stb;
   struct type *val_type;
   struct cleanup *old_chain;
-  Tcl_Obj *result;
 
   if (objc < 7 || objc > 8)
     {
