@@ -24,7 +24,6 @@ body ManagedWin::constructor {args} {
 #  PUBLIC METHOD: destructor
 # ------------------------------------------------------------
 body ManagedWin::destructor {} {
-
   # If no toplevels remain, quit.  However, check the quit_if_last
   # flag since we might be doing something like displaying a 
   # splash screen at startup...
@@ -116,7 +115,7 @@ body ManagedWin::restart {} {
 body ManagedWin::shutdown {} {
   set activeWins {}
   foreach win [itcl_info objects -isa ManagedWin] {
-    if {![$win isa ModalDialog]} {
+    if {![$win isa ModalDialog] && ![$win isa DebugWin]} {
       set g [wm geometry [winfo toplevel [namespace tail $win]]]
       pref setd gdb/geometry/[namespace tail $win] $g
       lappend activeWins [$win pickle]

@@ -22,11 +22,10 @@
 # ARGS:		None are used yet.
 # -----------------------------------------------------------------------------
 body DebugWin::constructor {args} {
-  debug ""
+  debug $args
   window_name "Insight Debug" "Debug"
 
   build_win
-  incr numTopWins
 }
 
 # -----------------------------------------------------------------------------
@@ -129,7 +128,6 @@ body DebugWin::build_win {} {
   # override the window delete procedure so the messages are
   # turned off first.
   wm protocol $top WM_DELETE_WINDOW "::debug::debugwin {};destroy $top"
-
 }
 
 # -----------------------------------------------------------------------------
