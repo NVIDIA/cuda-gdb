@@ -380,15 +380,6 @@ gdbtk_init (argv0)
 
   old_chain = make_cleanup (cleanup_init, 0);
 
-  /* close old output and send new to GDBTK */
-  ui_file_delete (gdb_stdout);
-  ui_file_delete (gdb_stderr);
-  gdb_stdout = gdbtk_fileopen ();
-  gdb_stderr = gdbtk_fileopen ();
-  gdb_stdlog = gdbtk_fileopen ();
-  gdb_stdtarg = gdbtk_fileopen ();
-  uiout = cli_out_new (gdb_stdout);
-
   /* First init tcl and tk. */
   Tcl_FindExecutable (argv0);
   gdbtk_interp = Tcl_CreateInterp ();
@@ -502,6 +493,18 @@ gdbtk_init (argv0)
   Tcl_SetVar (gdbtk_interp, "external_editor_command",
 	      external_editor_command, 0);
 
+  /* close old output and send new to GDBTK */
+  ui_file_delete (gdb_stdout);
+  ui_file_delete (gdb_stderr);
+  gdb_stdout = gdbtk_fileopen ();
+  gdb_stderr = gdbtk_fileopen ();
+  gdb_stdlog = gdbtk_fileopen ();
+  gdb_stdtarg = gdbtk_fileopen ();
+  uiout = cli_out_new (gdb_stdout);
+
+#ifdef __CYGWIN32__
+      (void) FreeConsole ();
+#endif
 
   /* find the gdb tcl library and source main.tcl */
 
@@ -593,11 +596,7 @@ _initialize_gdbtk ()
   if (use_windows)
     {
       /* Tell the rest of the world that Gdbtk is now set up. */
-
       init_ui_hook = gdbtk_init;
-#ifdef __CYGWIN32__
-      (void) FreeConsole ();
-#endif
     }
 #ifdef __CYGWIN32__
   else
