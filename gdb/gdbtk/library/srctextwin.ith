@@ -36,9 +36,9 @@ class SrcTextWin {
     method build_win {}
     method SetRunningState {state}
     method enable {on}
-    method setTabs {win {asm ""}}
+    method setTabs {win {asm S}}
     method enable_disable_src_tags {win how}
-    method config_win {win {asm ""}}
+    method config_win {win {asm S}}
     method addPopup {menu label command {abg {}} {browse 1} {run 1}}
     method updateBalloon {}
     method ClearTags {}

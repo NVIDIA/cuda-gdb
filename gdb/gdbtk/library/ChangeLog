@@ -1,3 +1,22 @@
+2000-04-27  James Ingham  <jingham@leda.cygnus.com>
+
+	These changes allow Insight to handle the case where there are
+	symbols for the source files, but the source files are not in the
+	location pointed to by the symbol.
+	
+	* srctextwin.itb (SrcTextWin::setTabs): Make the "asm" type for
+	the source display "S" not "", which is not very clear.
+        (SrcTextWin::configWin): ditto.
+	(SrcTextWin::FillAssembly): Handle all return values from
+	LoadFromCache.
+	* (SrcTextWin::LoadFile): Handle "couldn't find file" return from
+	LoadFromCache.
+	* (SrcTextWin::LoadFromCache): If the source file could not be
+	found, return -1 rather than choking.
+	Also change "asm" type for source from "" to "S".
+	* srctextwin.ith: Change the defaults for the "asm" type from ""
+	to "S" for Source display.  This is just cosmetic, but clearer.
+	
 2000-04-13  Tom Tromey  <tromey@cygnus.com>
 
 	* console.itb (Console::_complete): Dequoted first argument to

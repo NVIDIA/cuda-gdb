@@ -395,12 +395,12 @@ body SrcTextWin::makeBreakDot {size colorList {image {}}} {
 # ------------------------------------------------------------------
 # METHOD: setTabs - set the tabs for the assembly/src windows
 # ------------------------------------------------------------------
-body SrcTextWin::setTabs {win {asm ""}} {
+body SrcTextWin::setTabs {win {asm S}} {
   set fsize [font measure src-font "W"]
   set tsize [pref get gdb/src/tab_size]
   set rest ""
   
-  if {$asm != ""} {
+  if {[string compare $asm "S"] != 0} {
     set first  [expr {$fsize * 12}]
     set second [expr {$fsize * 13}]
     set third  [expr {$fsize * 34}]
@@ -480,7 +480,7 @@ body SrcTextWin::enable_disable_src_tags {win how} {
 # ------------------------------------------------------------------
 #  METHOD:  config_win - configure the source or assembly text window
 # ------------------------------------------------------------------
-body SrcTextWin::config_win {win {asm ""}} {
+body SrcTextWin::config_win {win {asm S}} {
 #  debug "$win $asm Tracing=$Tracing Browsing=$Browsing"
   
   $win config -borderwidth 2 -insertwidth 0 -wrap none -bg white
@@ -563,7 +563,7 @@ body SrcTextWin::config_win {win {asm ""}} {
   bind_plain_key $win x "$this do_key quit; break"
   
   if {!$Browsing && [pref get gdb/control_target]} {
-    if {$asm != ""} {
+    if {[string compare $asm "S"] != 0} {
       bind_plain_key $win s "$this do_key stepi; break"
       bind_plain_key $win n "$this do_key nexti; break"
     } else {
@@ -980,7 +980,8 @@ body SrcTextWin::FillAssembly {w tagname filename funcname line addr pc_addr lib
 	    || ([info exists Stwc($addr:dirty)] && $Stwc($addr:dirty))} {
     set mode_changed 0
     set oldpane $pane
-    if {[LoadFromCache $w $addr A $lib]} {
+    set result [LoadFromCache $w $addr A $lib]
+    if {$result == 1} {
       #debug [format "Disassembling at %x" $addr]
       #debug "cf=$current(filename) name=$filename"
       if {[catch {gdb_load_disassembly $win nosource \
@@ -1001,6 +1002,12 @@ body SrcTextWin::FillAssembly {w tagname filename funcname line addr pc_addr lib
 	foreach {asm_lo_addr asm_hi_addr} $mess {break}
         debug "Got low address: $asm_lo_addr and high: $asm_hi_addr"
       }
+    } elseif {$result == 0} {
+      debug "LoadFromCache returned 0"
+    } else {
+      # This branch should not ever happen.  In assembly mode, there
+      # are no checks in LoadFromCache that can fail.
+      debug "LoadFromCache returned -1"
     }
     set current(filename) $filename
     set do_display_breaks 1
@@ -1172,12 +1179,16 @@ body SrcTextWin::location {tagname filename funcname line addr pc_addr lib} {
 #  METHOD:  LoadFile - loads in a new source file
 # ------------------------------------------------------------------
 body SrcTextWin::LoadFile {w name lib mtime_changed} {
-#  debug "$name $current(filename) $current(mode)"
+  debug "$name $current(filename) $current(mode)"
   upvar ${w}win win
   upvar _${w}pane pane
 
   set oldpane $pane
-  if {[LoadFromCache $w $name "" $lib] || $mtime_changed} {
+  set result [LoadFromCache $w $name "S" $lib]
+  if {$result == -1} {
+    # This is a source file we could not find the source for...
+    return 0
+  } elseif {$result == 1 || $mtime_changed} {
     $win delete 0.0 end
 #    debug "READING $name"
     if {[catch {gdb_loadfile $win $name $Linenums} msg]} {
@@ -2424,11 +2435,15 @@ body SrcTextWin::search {exp direction} {
 #		name	name to look for in cache. This will be a filename if
 #			we are filling in a source window, or an address 
 #			otherwise.
-#		asm	'A' for assembly mode, 'M' for mixed mode.
+#		asm	'S' for source, 
+#                       'A' for assembly mode 
+#                       'M' for mixed mode.
 #		lib	library name
 #
 # RETURNS:	0 - read from cache
 #		1 - created new (blank) widget
+#              -1 - could not find the contents you are trying to load,
+#                   so far this only happens for "Source" files.
 #
 # NOTES:	If you call this and a new widget is created which cannot be
 #		filled in later due to errors, call UnLoadFromCache.
@@ -2444,6 +2459,8 @@ body SrcTextWin::LoadFromCache {w name asm lib} {
     set full_name $name
   }
 
+  set loadingSource [expr ![string compare $asm "S"]]
+
   set oldpane $pane
   if {[info exists Stwc($full_name:pane)]} {
     #debug "READING CACHE $full_name->$Stwc($full_name:pane)"
@@ -2454,7 +2471,7 @@ body SrcTextWin::LoadFromCache {w name asm lib} {
       $itk_interior.p show $pane
     }
     set win [[$itk_interior.p childsite $pane].st component text]
-    if {$asm != ""} {
+    if {!$loadingSource} {
       set Cname $full_name
     }
 
@@ -2471,16 +2488,30 @@ body SrcTextWin::LoadFromCache {w name asm lib} {
     }
 
   } else {
-    #debug "name=$name"
+    debug "name=$name"
     set Stwc($full_name:pane) pane$filenum
-    # Sometimes we get in here with no source file, in which case
-    # name is a hex address.  Catch the error from this.
-    if {[catch {file mtime $name} file_time]} {
-      debug "Could not stat file: $name in LoadFromCache: $file_time"
-      set Stwc($name:mtime) 0
+    # If we are trying to load a source file, check the time
+    # to see if we need to update it.  If we can't stat the
+    # file then we probably can't open it either, so error 
+    # out.
+
+    if {$loadingSource} {
+      if {[catch {file mtime $name} file_time]} {
+	debug "Could not stat file \"$name\" - \"$file_time\""
+	return -1
+      } else {
+	set Stwc($name:mtime) $file_time
+      }    
     } else {
-      set Stwc($name:mtime) $file_time
+      # FIXME: This is wrong.  For Assembly files we need to
+      # check whether the executable is newer than the cached
+      # disassembly.  For mixed files, we need to check BOTH
+      # the source file mtime, and the executable time.
+
+      set Stwc($name:mtime) 0
     }
+
+    set Stwc($full_name:pane) pane$filenum
 
     set Stwc($name:dirty) 0
     incr filenum
@@ -2494,7 +2525,7 @@ body SrcTextWin::LoadFromCache {w name asm lib} {
 	      -hscrollmode dynamic -vscrollmode dynamic]
     set win [$st component text]
 
-    if {$asm != ""} {
+    if {!$loadingSource} {
       set Cname $full_name
     }
     pack $st -expand yes -fill both
@@ -2518,11 +2549,16 @@ body SrcTextWin::UnLoadFromCache {w oldpane name asm lib} {
   upvar _${w}pane pane
 #  debug "pane=$pane win=$win"
 
-  append name "," $asm "," $lib
+
+  set full_name ${name},${asm},${lib}
   $itk_interior.p delete $pane
-  unset Stwc($name:pane)
-  unset Stwc($name:dirty)
-  unset Stwc($name:mtime)
+  foreach elem [array names Stwc $full_name:*] {
+    unset Stwc($elem)
+  }
+  foreach elem [array names Stwc $name:*] {
+    unset Stwc($elem)
+  }
+
   $itk_interior.p show $oldpane
   set pane $oldpane
   set win [[$itk_interior.p childsite $pane].st component text]
