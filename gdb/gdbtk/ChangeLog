@@ -1,5 +1,10 @@
 2002-11-19  Andrew Cagney  <ac131313@redhat.com>
 
+	* generic/gdbtk-stack.c (gdb_selected_frame): Use get_frame_base
+	instead of FRAME_FP.  Mention that get_frame_id() should be used.
+	
+2002-11-19  Andrew Cagney  <ac131313@redhat.com>
+
 	* generic/gdbtk-cmds.c (gdb_loc): Use get_frame_type instead of
 	->signal_handler_caller.
 	* generic/gdbtk-stack.c (get_frame_name): Ditto.

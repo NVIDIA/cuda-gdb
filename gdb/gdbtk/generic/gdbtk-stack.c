@@ -420,7 +420,9 @@ gdb_selected_frame (ClientData clientData, Tcl_Interp *interp,
   if (selected_frame == NULL)
     xasprintf (&frame, "%s","");
   else
-    xasprintf (&frame, "0x%s", paddr_nz (FRAME_FP (selected_frame)));
+    /* FIXME: cagney/2002-11-19: This should be using get_frame_id()
+       to identify the frame and *NOT* get_frame_base().  */
+    xasprintf (&frame, "0x%s", paddr_nz (get_frame_base (selected_frame)));
 
   Tcl_SetStringObj (result_ptr->obj_ptr, frame, -1);
 
