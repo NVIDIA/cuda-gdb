@@ -365,6 +365,9 @@ gdbtk_init (argv0)
 {
   struct cleanup *old_chain;
   char *s;
+  int element_count;
+  char **exec_path;
+  CONST char *internal_exec_name;
 
   /* If there is no DISPLAY environment variable, Tk_Init below will fail,
      causing gdb to abort.  If instead we simply return here, gdb will
@@ -387,6 +390,94 @@ gdbtk_init (argv0)
 
   if (!gdbtk_interp)
     error ("Tcl_CreateInterp failed");
+
+  /* We need to check if we are being run from
+     a bin directory, if not then we may have to
+     set some environment variables. */
+
+  internal_exec_name = Tcl_GetNameOfExecutable ();
+
+  Tcl_SplitPath ((char *) internal_exec_name, &element_count, &exec_path);
+
+  if (strcmp (exec_path[element_count - 2], "bin") != 0)
+    {
+      /* We check to see if TCL_LIBRARY, TK_LIBRARY,
+	 ITCL_LIBRARY, ITK_LIBRARY, TIX_LIBRARY and maybe
+	 a couple other environment variables have been
+	 set (we don't want to override the User's settings).
+	 If the *_LIBRARY variable is not set, point it at
+	 the source directory. */
+
+      static char set_libs_path_script[] = "\
+	  set srcDir [file dirname [file dirname $env(TCL_LIBRARY)]];\n\
+\
+	  if {![info exists env(TCL_LIBRARY)]} {\n\
+	      set env(TCL_LIBRARY) [file join $srcDir tcl library]\n\
+	  }\n\
+\
+	  if {![info exists env(TK_LIBRARY)]} {\n\
+	      set env(TK_LIBRARY) [file join $srcDir tk library]\n\
+	  }\n\
+\
+	  if {![info exists env(ITCL_LIBRARY)]} {\n\
+	      set env(ITCL_LIBRARY) [file join $srcDir itcl itcl library]\n\
+	  }\n\
+\
+	  if {![info exists env(ITK_LIBRARY)]} {\n\
+	      set env(ITK_LIBRARY) [file join $srcDir itcl itk library]\n\
+	  }\n\
+\
+	  if {![info exists env(TIX_LIBRARY)]} {\n\
+	      set env(TIX_LIBRARY) [file join $srcDir tix library]\n\
+	  }\n\
+\
+	  if {![info exists env(GDBTK_LIBRARY)]} {\n\
+	      set env(GDBTK_LIBRARY) [file join $srcDir gdb gdbtk library]\n\
+	  }\n";
+
+      Tcl_Obj *commandObj;
+
+      /* Before we can run our script we must set TCL_LIBRARY. */
+      if (Tcl_GetVar2 (gdbtk_interp, "env", "TCL_LIBRARY", TCL_GLOBAL_ONLY) == NULL)
+	{
+	  int i, count;
+	  char *src_dir = SRC_DIR;
+	  char **src_path;
+	  char **lib_path;
+	  Tcl_DString lib_dstring;
+
+	  Tcl_DStringInit (&lib_dstring);
+
+#ifdef __CYGWIN__
+	  /* SRC_DIR from configure is a posix path. Tcl really needs a
+	     windows path. */
+	  src_dir = (char *) alloca (cygwin_posix_to_win32_path_list_buf_size (SRC_DIR));
+	  cygwin_posix_to_win32_path_list (SRC_DIR, src_dir);
+#endif
+	  Tcl_SplitPath (src_dir, &count, &src_path);
+
+	  /* Append tcl/library to src_dir (src_dir=/foo/bar/gdb) */
+	  lib_path = (char **) alloca ((count + 2) * sizeof (char *));
+	  for (i = 0; i < count - 1; i++)
+	    lib_path[i] = src_path[i];
+	  lib_path[i++] = "tcl";
+	  lib_path[i++] = "library";
+	  Tcl_JoinPath (i, lib_path, &lib_dstring);
+
+	  /* Set TCL_LIBRARY */
+	  Tcl_SetVar2 (gdbtk_interp, "env", "TCL_LIBRARY",
+		       Tcl_DStringValue (&lib_dstring) , TCL_GLOBAL_ONLY);
+	  Tcl_DStringFree (&lib_dstring);
+	  Tcl_Free ((char *) src_path);
+	}
+
+      commandObj = Tcl_NewStringObj (set_libs_path_script, -1);
+      Tcl_IncrRefCount (commandObj);
+      Tcl_EvalObj (gdbtk_interp, commandObj);
+      Tcl_DecrRefCount (commandObj);
+    }
+
+  Tcl_Free ((char *) exec_path);
 
   if (Tcl_Init (gdbtk_interp) != TCL_OK)
     error ("Tcl_Init failed: %s", gdbtk_interp->result);
@@ -467,7 +558,7 @@ gdbtk_init (argv0)
       error ("Gdbtk_Init failed: %s", gdbtk_interp->result);
     }
 
-  Tcl_StaticPackage (gdbtk_interp, "Gdbtk", Gdbtk_Init, NULL);
+  Tcl_StaticPackage (gdbtk_interp, "Insight", Gdbtk_Init, NULL);
 
   /* This adds all the hooks that call up from the bowels of gdb
    *  back into Tcl-land...
@@ -511,7 +602,7 @@ gdbtk_init (argv0)
 proc gdbtk_find_main {} {\n\
     global Paths GDBTK_LIBRARY\n\
     rename gdbtk_find_main {}\n\
-    tcl_findLibrary gdb 1.0 {} main.tcl GDBTK_LIBRARY GDBTK_LIBRARY gdbtk/library gdbtcl {}\n\
+    tcl_findLibrary insight 1.0 {} main.tcl GDBTK_LIBRARY GDBTKLIBRARY\n\
     set Paths(appdir) $GDBTK_LIBRARY\n\
 }\n\
 gdbtk_find_main";
@@ -527,7 +618,7 @@ proc gdbtk_find_main {} {\n\
     } else {\n\
         set debug_startup 0\n\
     }\n\
-    tcl_findLibrary gdb 1.0 {} main.tcl GDBTK_LIBRARY GDBTK_LIBRARY gdbtk/library gdbtcl {} $debug_startup\n\
+    tcl_findLibrary insight 1.0 {} main.tcl GDBTK_LIBRARY GDBTK_LIBRARY\n\
     set Paths(appdir) $GDBTK_LIBRARY\n\
 }\n\
 gdbtk_find_main";

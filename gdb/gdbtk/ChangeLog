@@ -1,3 +1,19 @@
+2001-08-15  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk.c (gdbtk_init): Don't assume a particular
+	layout for the source directory, let the Makefile tell us
+	where the real source directory is.
+	When compiling under Cygwin, convert the (posix) path to a
+	win32 path, which is what tcl really wants.
+
+2001-08-15  Ian Roxborough  <irox@redhat.com>
+
+        * generic/gdbtk.c (gdbtk_init): If Insight isn't
+        executed from inside a directory called "bin",
+        assume that we are being running from the build
+        directory and set the *_LIBRARY variables to point
+        to (hopefully) the correct source directory.
+
 2001-08-13  Keith Seitz  <keiths@redhat.com>
 
 	* library/regwin.ith: Rewrite.
