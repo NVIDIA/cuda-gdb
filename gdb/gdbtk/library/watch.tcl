@@ -1,5 +1,5 @@
-# Watch window for GDBtk.
-# Copyright 1997, 1998, 1999 Cygnus Solutions
+# Watch window for Insight.
+# Copyright 1997, 1998, 1999, 2001 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -39,7 +39,7 @@ class WatchWin {
   # ------------------------------------------------------------------
   method build_win {f} {
     global tcl_platform
-    #debug "WatchWin::build_win $f"
+    #debug "$f"
 
     set Menu [build_menu_helper Watch]
     $Menu add command -label Remove -underline 0 \
@@ -125,7 +125,7 @@ class WatchWin {
   }
 
   method postMenu {X Y} {
-#    debug "WatchWin::postMenu $x $y"
+#    debug "$x $y"
 
     set entry [getEntry $X $Y]
     
@@ -178,7 +178,7 @@ class WatchWin {
   # (or use deleteTree)
   # ------------------------------------------------------------------
   method getVariablesBlankPath {} {
-#    debug "WatchWin::getVariablesBlankPath"
+#    debug
     set list {}
 
     set variables [displayedVariables {}]

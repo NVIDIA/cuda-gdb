@@ -120,7 +120,7 @@ proc gdbtk_busy {} {
 
   set err [catch {run_hooks gdb_busy_hook} txt]
   if {$err} { 
-    debug "gdbtk_busy ERROR: $txt" 
+    dbug E "$txt" 
   }
 
   # Force the screen to update
@@ -137,7 +137,7 @@ proc gdbtk_busy {} {
 proc gdbtk_update {} {
   set err [catch {run_hooks gdb_update_hook} txt]
   if {$err} { 
-    debug "gdbtk_update ERROR: $txt" 
+    dbug E "$txt" 
   }
   
   # Force the screen to update
@@ -184,13 +184,13 @@ proc gdbtk_idle {} {
   gdb_restore_fputs
   set err [catch {run_hooks gdb_idle_hook} txt]
   if {$err} { 
-    debug "gdbtk_idle 1 ERROR: $txt" 
+    dbug E "idle_hook error: $txt" 
   }
   
   if {!$gdb_running} {
     set err [catch {run_hooks gdb_no_inferior_hook} txt]
     if {$err} { 
-      debug "gdbtk_idle 2 ERROR: $txt" 
+      dbug E "no_inferior_hook error: $txt" 
     }
   }    
   # Force the screen to update
@@ -444,7 +444,7 @@ proc gdbtk_tcl_tracepoint {action tpnum addr line file pass_count} {
 # PROC: gdbtk_tcl_trace_find_hook -
 # ------------------------------------------------------------------
 proc gdbtk_tcl_trace_find_hook {arg from_tty} {
-#  debug "Running trace find hook with $arg $from_tty"
+#  debug "$arg $from_tty"
   run_hooks gdb_trace_find_hook $arg $from_tty
 }
 
@@ -463,7 +463,7 @@ proc gdbtk_tcl_trace_find_hook {arg from_tty} {
 # ------------------------------------------------------------------
 proc gdb_run_readline_command {command args} {
   global gdbtk_state
-#  debug "run readline_command $command $args"
+#  debug "$command $args"
   set gdbtk_state(readlineArgs) $args
   gdb_cmd $command
 }
@@ -485,7 +485,7 @@ proc gdbtk_tcl_readline_begin {message} {
 # ------------------------------------------------------------------
 proc gdbtk_tcl_readline {prompt} {
   global gdbtk_state
-#  debug "gdbtk_tcl_readline $prompt"
+#  debug "$prompt"
   if {[info exists gdbtk_state(readlineArgs)]} {
     # Not interactive, so pop the list, and print element.
     set cmd [lvarpop gdbtk_state(readlineArgs)]
@@ -719,7 +719,7 @@ proc gdbtk_tcl_exec_file_display {filename} {
 # ------------------------------------------------------------------
 proc gdbtk_locate_main {} {
   set main_names [pref get gdb/main_names]
-  debug "gdbtk_locate_main: Searching $main_names"
+  debug "Searching $main_names"
   foreach main $main_names {
     if {![catch {gdb_search functions $main -static 1}] \
         && ![catch {gdb_loc $main} linespec]} {
@@ -740,7 +740,7 @@ proc gdbtk_locate_main {} {
 # ------------------------------------------------------------------
 proc set_exe_name {exe} {
   global gdb_exe_name gdb_exe_changed
-  #debug "set_exe_name: exe=$exe  gdb_exe_name=$gdb_exe_name"
+  #debug "exe=$exe  gdb_exe_name=$gdb_exe_name"
 
   if {$gdb_exe_name != ""} then {
     session_save
@@ -762,7 +762,7 @@ proc set_exe {} {
     if {$gdb_exe_name == ""} { return }
     set err [catch {gdb_cmd "file '$gdb_exe_name'" 1} msg]
     if {$err} {
-      debug "set_exe ERROR: $msg"
+      dbug E "$msg"
       set l [split $msg :]
       set errtxt [join [lrange $l 1 end] :]
       set msg "Error loading \"$gdb_exe_name\":\n"
@@ -1563,7 +1563,7 @@ define_hook gdb_clear_file_hook
 proc gdbtk_clear_file {} {
   global gdb_target_name
 
-  dbug W "GDBTK_CLEAR_FILE"
+  debug
   # Give widgets a chance to clean up
   run_hooks gdb_clear_file_hook
 

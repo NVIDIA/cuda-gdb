@@ -1,5 +1,5 @@
-# Variable display window for GDBtk.
-# Copyright 1997, 1998, 1999 Cygnus Solutions
+# Variable display window for Insight.
+# Copyright 1997, 1998, 1999, 2001 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -50,7 +50,7 @@ class VariableWin {
     # ------------------------------------------------------------------
     method build_win {f} {
 	global tixOption tcl_platform Display
-	#    debug "VariableWin::build_win"
+	#    debug
 	set width [font measure src-font "W"]
 	# Choose the default width to be...
 	set width [expr {40 * $width}]
@@ -155,7 +155,7 @@ class VariableWin {
     #  DESTRUCTOR - destroy window containing widget
     # ------------------------------------------------------------------
     destructor {
-	#    debug "VariableWin::destructor"
+	#    debug
 	# Make sure to clean up the frame
 	catch {destroy $_frame}
 	
@@ -184,7 +184,7 @@ class VariableWin {
     #  METHOD:  reconfig - used when preferences change
     # ------------------------------------------------------------------
     method reconfig {} {
-	#    debug "VariableWin::reconfig"
+	#    debug
 	foreach win [winfo children $itk_interior] { 
 	    destroy $win
 	}
@@ -304,7 +304,7 @@ class VariableWin {
     }
 
     method updateNow {variable} {
-	# debug "VariableWin::updateNow $variable"
+	# debug "$variable"
 
 	if {!$Running} {
 	    set text [label $variable]
@@ -329,7 +329,7 @@ class VariableWin {
 
     method postMenu {X Y} {
 	global Update Display
-	#    debug "VariableWin::postMenu"
+	#    debug
 
 	# Quicky for menu posting problems.. How to unpost and post??
 
@@ -649,7 +649,7 @@ class VariableWin {
     method open {path} {
 	global Update
 	# We must lookup all the variables for this struct
-	#    debug "VariableWin::open $path"
+	#    debug "$path"
 
 	# Cancel any edits
 	if {[info exists EditEntry]} {
@@ -673,7 +673,7 @@ class VariableWin {
     # ------------------------------------------------------------------
     method close {path} {
 	global Update
-	debug "VariableWin::close $path"
+	debug "$path"
 	# Close the path and destroy all the entry widgets
 
 	# Cancel any edits
@@ -706,7 +706,7 @@ class VariableWin {
 
     # OVERRIDE THIS METHOD
     method getVariablesBlankPath {} {
-	debug "You forgot to override getVariablesBlankPath!!"
+	dbug -W "You forgot to override getVariablesBlankPath!!"
 	return {}
     }
 
@@ -719,7 +719,7 @@ class VariableWin {
     # ------------------------------------------------------------------
     method populate {parent} {
 	global Update
-	debug "VariableWin::populate \"$parent\""
+	debug "$parent"
 
 	if {[string length $parent] == 0} {
 	    set variables [getVariablesBlankPath]
@@ -805,7 +805,7 @@ class VariableWin {
     # OVERRIDE THIS METHOD and call it from there
     method update {} {
 	global Update
-	debug "VariableWin::update"
+	debug
 
 	# First, reset color on label to black
 	foreach w $ChangeList {
@@ -838,7 +838,7 @@ class VariableWin {
 
     # RECURSION!!
     method displayedVariables {top} {
-	#    debug "VariableWin::displayedVariables"
+	#    debug
 	set variableList {}
 	set variables [$Hlist info children $top]
 	foreach var $variables {
@@ -855,8 +855,7 @@ class VariableWin {
 
     method deleteTree {} {
 	global Update
-	debug "deleteTree"
-	#    debug "VariableWin::deleteTree"
+	debug
 #	set variables [displayedVariables {}]
 
 	# Delete all HList entries

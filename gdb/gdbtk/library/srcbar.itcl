@@ -689,7 +689,7 @@ class SrcBar {
   #  normal      - Run button appears, allowing user to run/re-run exe
   # ------------------------------------------------------------------
   public method _set_runstop {} {
-    dbug W $runstop
+    dbug I $runstop
 
     switch $runstop {
       busy {
@@ -1136,7 +1136,7 @@ Do you want to continue?" \
   # This indicates what is the inferior state.
   # Possible values are: {busy running downloading normal}
   public variable runstop normal {
-    dbug W "configuring runstop $runstop"
+    dbug I "configuring runstop $runstop"
 
     # Set the Run/Stop button accordingly
     _set_runstop
