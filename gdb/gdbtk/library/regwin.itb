@@ -185,22 +185,22 @@ body RegWin::build_win {} {
 body RegWin::init_reg_display_vars {args} {
   global reg_display max_regs
   set reg_display_list {}
-  set regnames [gdb_regnames]
+  set regnames [gdb_regnames -numbers]
   set i 1
-  set rn 0
   foreach r $regnames {
-    set reg_display($rn,name) $r
-    set format [pref getd gdb/reg/$r-format]
+    set name [lindex $r 0]
+    set rn   [lindex $r 1]
+    set reg_display($rn,name) $name
+    set format [pref getd gdb/reg/$name-format]
     if {$format == ""} { set format x }
     set reg_display($rn,format) $format
-    if {$args != "" && [pref getd gdb/reg/$r] == "no"} {
+    if {$args != "" && [pref getd gdb/reg/$name] == "no"} {
       set reg_display($rn,line) 0
     } else {
       set reg_display($rn,line) $i
       lappend reg_display_list $rn
       incr i
     }
-    incr rn
   }
   set num_regs [expr {$i - 1}]
   set max_regs $rn
