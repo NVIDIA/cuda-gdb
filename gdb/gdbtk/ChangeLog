@@ -1,3 +1,8 @@
+2003-04-11  Andrew Cagney  <cagney@redhat.com>
+
+	* generic/gdbtk-stack.c (get_frame_name): Use get_frame_pc and
+	get_next_frame.
+
 2003-03-18  Keith Seitz  <keiths@redhat.com>
 
 	From Nick Kelsey <nickk@ubicom.com>:

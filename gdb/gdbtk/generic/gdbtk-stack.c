@@ -544,15 +544,15 @@ get_frame_name (Tcl_Interp *interp, Tcl_Obj *list, struct frame_info *fi)
     }
 
   sal =
-    find_pc_line (fi->pc,
-		  fi->next != NULL
+    find_pc_line (get_frame_pc (fi),
+		  get_next_frame (fi) != NULL
 		  && !(get_frame_type (fi) == SIGTRAMP_FRAME)
 		  && !(get_frame_type (fi) == DUMMY_FRAME));
 
-  func = find_pc_function (fi->pc);
+  func = find_pc_function (get_frame_pc (fi));
   if (func)
     {
-      struct minimal_symbol *msymbol = lookup_minimal_symbol_by_pc (fi->pc);
+      struct minimal_symbol *msymbol = lookup_minimal_symbol_by_pc (get_frame_pc (fi));
       if (msymbol != NULL
 	  && (SYMBOL_VALUE_ADDRESS (msymbol)
 	      > BLOCK_START (SYMBOL_BLOCK_VALUE (func))))
@@ -569,7 +569,7 @@ get_frame_name (Tcl_Interp *interp, Tcl_Obj *list, struct frame_info *fi)
     }
   else
     {
-      struct minimal_symbol *msymbol = lookup_minimal_symbol_by_pc (fi->pc);
+      struct minimal_symbol *msymbol = lookup_minimal_symbol_by_pc (get_frame_pc (fi));
       if (msymbol != NULL)
 	{
 	  funname = GDBTK_SYMBOL_SOURCE_NAME (msymbol);
@@ -608,7 +608,7 @@ get_frame_name (Tcl_Interp *interp, Tcl_Obj *list, struct frame_info *fi)
 #ifdef PC_SOLIB
       if (!funname)
 	{
-	  char *lib = PC_SOLIB (fi->pc);
+	  char *lib = PC_SOLIB (get_frame_pc (fi));
 	  if (lib)
 	    {
 	      Tcl_AppendStringsToObj (objv[0], " from ", lib, (char *) NULL);
