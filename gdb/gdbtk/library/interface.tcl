@@ -145,6 +145,27 @@ proc gdbtk_update {} {
 }
 
 # ------------------------------------------------------------------
+#   PROCEDURE:  gdbtk_update_safe - run all update hooks in a safe way
+#
+#          Use this procedure to force all widgets to update
+#          themselves. This hook is usually run after command
+#          that could change target state.
+#          Like gdbtk_update but safe to be used in "after idle"
+#          which is used in update hooks.
+# ------------------------------------------------------------------
+proc gdbtk_update_safe {} {
+  global gdb_running
+
+  # Fencepost: Do not update if we are running the target
+  # We get here because script commands may have changed memory or
+  # registers and "after idle" events registered as a consequence
+  # If we try to update while the target is running we are doomed.
+  if {!$gdb_running} {
+    gdbtk_update
+  }
+}
+
+# ------------------------------------------------------------------
 #   PROCEDURE: gdbtk_idle - run all idle hooks
 #
 #          Use this procedure to run all the gdb_idle_hook's,
@@ -548,7 +569,7 @@ proc gdbtk_tcl_display {action number {value {}}} {
 #         the user has changed the contents of a register.
 # ------------------------------------------------------------------
 proc gdbtk_register_changed {} {
-  after idle gdbtk_update
+  after idle gdbtk_update_safe
 }
 
 # ------------------------------------------------------------------
@@ -558,7 +579,7 @@ proc gdbtk_register_changed {} {
 #         the program's variables).
 # ------------------------------------------------------------------
 proc gdbtk_memory_changed {} {
-  after idle gdbtk_update
+  after idle gdbtk_update_safe
 }
 
 ####################################################################

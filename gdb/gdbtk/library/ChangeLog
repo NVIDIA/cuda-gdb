@@ -1,3 +1,15 @@
+2000-10-13  Fernando Nasser  <fnasser@cygnus.com>
+
+	With Steven Johnson <sbjohnson@ozemail.com.au>
+	This change fixes part of the possible scenarios where a race condition
+	would cause core dumps if there were commands changing registers or
+	other target resources in a startup script.
+	The remaining scenarios are fixed by a patch to generic.gdbtk.c
+	* interface.tcl (gdbtk_update_safe): New function. Like gdbtk_update
+	but does nothing if target is running.
+	(gdbtk_register_changed): Call the above safe version.
+	(gdbtk_memory_changed): Likewise.
+
 2000-10-11  Fernando Nasser  <fnasser@cygnus.com>
 
 	* srctextwin.itb (build_popups): Fix typos that caused duplicate
