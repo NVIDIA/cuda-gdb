@@ -208,3 +208,13 @@ class UpdateEvent {
   private variable _pc               {}
   private variable _shlib            {}
 }
+
+# ARCHITECTURE CHANGED EVENT
+#
+# This event is posted whenever the target architecture changes
+
+class ArchChangedEvent {
+  inherit GDBEvent
+
+  public method handler {} { return "arch_changed" }
+}

@@ -80,6 +80,7 @@ extern void (*post_add_symbol_hook) (void);
 extern void (*selected_frame_level_changed_hook) (int);
 extern int (*ui_loop_hook) (int);
 
+static void gdbtk_architecture_changed (void);
 static void gdbtk_trace_find (char *arg, int from_tty);
 static void gdbtk_trace_start_stop (int, int);
 static void gdbtk_attach (void);
@@ -132,6 +133,7 @@ gdbtk_add_hooks (void)
   handlers.tracepoint_create = gdbtk_create_tracepoint;
   handlers.tracepoint_modify = gdbtk_modify_tracepoint;
   handlers.tracepoint_delete = gdbtk_delete_tracepoint;
+  handlers.architecture_changed = gdbtk_architecture_changed;
   set_gdb_event_hooks (&handlers);
 
   /* Hooks */
@@ -840,3 +842,9 @@ gdbtk_detach ()
     }
 }
 
+/* Called from gdbarch_update_p whenever the architecture changes. */
+static void
+gdbtk_architecture_changed (void)
+{
+  Tcl_Eval (gdbtk_interp, "gdbtk_tcl_architecture_changed");
+}

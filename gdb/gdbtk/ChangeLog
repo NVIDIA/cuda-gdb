@@ -1,3 +1,14 @@
+2001-08-13  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-hooks.c (gdbtk_add_hooks): Register
+	architecture_changed event handler.
+	(gdbtk_architecture_changed): New function.
+	* library/gdbevent.ith (class ArchChangdEvent): New event.
+	* library/ehandler.ith (arch_changed): New method. Handler
+	for ArchChangedEvents.
+	* library/interface.tcl (gdbtk_tcl_architecture_changed): New
+	proc to handle architecture change events.
+
 2001-08-09  Keith Seitz  <keiths@redhat.com>
 
 	* library/prefs.tcl (pref_set_defaults): Add new font

@@ -41,5 +41,8 @@ class GDBEventHandler {
 
     # Update event
     method update {event} {}
+
+    # Architecture changed event
+    method arch_changed {event} {}
   }
 }
