@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.102 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.103 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -1008,6 +1008,13 @@ use one of the specialized versions (see below).
 @deftypefun void ui_out_field_int (struct ui_out *@var{uiout}, const char *@var{fldname}, int @var{value})
 This function outputs a value of an @code{int} variable.  It uses the
 @code{"%d"} output conversion specification.  @var{fldname} specifies
+the name of the field.
+@end deftypefun
+
+@deftypefun void ui_out_field_fmt_int (struct ui_out *@var{uiout}, int @var{width}, enum ui_align @var{alignment}, const char *@var{fldname}, int @var{value})
+This function outputs a value of an @code{int} variable.  It differs from
+@code{ui_out_field_int} in that the caller specifies the desired @var{width} and @var{alignment} of the output.
+@var{fldname} specifies
 the name of the field.
 @end deftypefun
 
