@@ -30,8 +30,8 @@
 # A helper procedure to keep a window on top.
 proc keep_raised {top} {
   if {[winfo exists $top]} {
-    wm deiconify $top
     raise $top
+    wm deiconify $top
     after 1000 [info level 0]
   }
 }

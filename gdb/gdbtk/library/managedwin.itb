@@ -31,13 +31,13 @@ body ManagedWin::reveal {} {
   update idletasks
   
   set top [winfo toplevel [namespace tail $this]]
+  raise $top
   wm deiconify $top
   
   # I don't understand this next line and no one commented it, so it's gone.
   #focus -force [focus -lastfor $top]
   
   focus $top
-  raise $top
 }
 
 body ManagedWin::restart {} {

@@ -1,3 +1,10 @@
+2000-03-10  James Ingham  <jingham@leda.cygnus.com>
+
+	* util.tcl (keep_raised): For some reason raising a window, then
+	deiconifying it is MUCH faster on "e" & WindowMaker under XFree.  
+	Go figure.  Other WM's don't seem to care, so do it this way...
+	* managedwin.itb (ManagedWin::reveal): Ditto...
+
 2000-03-10  Elena Zannoni  <ezannoni@kwikemart.cygnus.com>
 
 	* srcbar.tcl (do_attach): Just call gdbtk_attach_native.
