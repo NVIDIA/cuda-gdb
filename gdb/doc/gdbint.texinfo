@@ -41,7 +41,7 @@ Software Foundation raise funds for GNU development.''
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.73 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.74 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -5727,9 +5727,6 @@ and deleted from all of @value{GDBN}'s config files.
 
 Any @file{@var{foo}-xdep.c} file that references STACK_END_ADDR
 is so old that it has never been converted to use BFD.  Now that's old!
-
-@item REG_STACK_SEGMENT
-exec.c
 
 @end table
 
