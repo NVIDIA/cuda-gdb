@@ -111,18 +111,13 @@ body SrcWin::_build_win {} {
   $_statbar.mode list insert end MIXED
   $_statbar.mode list insert end SRC+ASM
 
-
-  # Search/download progress frame
+  # Search
   frame $_statbar.frame
   entry $_statbar.frame.search -bd 3 -font src-font -width 10
   bind_plain_key $_statbar.frame.search \
     Return [code $this _search forwards]
   bind_plain_key $_statbar.frame.search \
     Shift-Return [code $this _search backwards]
-  canvas $_statbar.frame.progress -relief sunken -borderwidth 2 \
-    -highlightthickness 0 -takefocus 0 -width 100 -height 0 -confine 1
-  $_statbar.frame.progress create rectangle 0 0 0 \
-    [winfo height $_statbar.frame.progress] -outline blue -fill blue -tags rect
 
   pack $_statbar.frame -side right -pady 4 -padx 10 -fill y -expand 1 -anchor e
   pack $_statbar.mode -side right -padx 10 -pady 4
@@ -140,8 +135,32 @@ body SrcWin::_build_win {} {
 
     # add status line
     set _status [conAdd status -resizable 0]
+    set _statusframe [frame $_status]
+    set _status $_statusframe.con
     label $_status -relief sunken -bd 3 -font global/status -height 1
-    pack $_status -expand 1 -fill both
+
+    # add download progress meter
+    canvas $_statusframe.progress -relief sunken -borderwidth 2 \
+      -highlightthickness 0 -takefocus 0 -width 100 -height 0 -confine 1
+    $_statusframe.progress create rectangle 0 0 0 \
+      [winfo height $_statusframe.progress] -outline blue -fill blue -tags rect
+
+    # add address and line number indicators
+    label $_statusframe.addr -text "" -width 10 -relief sunken \
+      -bd 1 -anchor e -font src-font
+    label $_statusframe.line -text "" -width 6 -relief sunken \
+      -bd 1 -anchor e -font src-font
+
+    balloon register $_statusframe.addr "Address"
+    balloon register $_statusframe.line "Line number"
+
+    pack $_statusframe -expand 1 -fill both
+    grid $_status -row 0 -column 1 -sticky news -pady 2 -padx 2
+    grid $_statusframe.addr -row 0 -column 3 -sticky nes -pady 4
+    grid $_statusframe.line -row 0 -column 4 -sticky nws -pady 4
+    grid columnconfigure $_statusframe 1 -weight 10
+    grid columnconfigure $_statusframe 2 -minsize 5
+    grid columnconfigure $_statusframe 5 -minsize 5
   }
 
   set_execution_status
@@ -206,8 +225,8 @@ body SrcWin::download_progress { section num tot {msg ""} } {
 
   #debug "$section $num $tot $msg"
   if {$last_section_start == 0} {
-    pack forget $_statbar.frame.search
-    pack $_statbar.frame.progress -fill both -expand yes
+    grid forget $_statusframe.addr $_statusframe.line
+    grid $_statusframe.progress -row 0 -column 4 -padx 4 -sticky news
     ::update idletasks
   }
 
@@ -232,7 +251,7 @@ body SrcWin::download_progress { section num tot {msg ""} } {
     set_status "Downloading section $section - $num bytes"
   }
 
-  set canvas $_statbar.frame.progress
+  set canvas $_statusframe.progress
   set height [winfo height $canvas]
   if {$last_done} {
     set width [winfo width $canvas]
@@ -259,8 +278,9 @@ body SrcWin::download_progress { section num tot {msg ""} } {
     set last_done 0
     set last_section_start 0
 
-    pack forget $_statbar.frame.progress
-    pack $_statbar.frame.search -fill x -expand yes
+    grid forget $_statusframe.progress
+    grid $_statusframe.addr -row 0 -column 3 -sticky new -pady 4
+    grid $_statusframe.line -row 0 -column 4 -sticky nws -pady 4
     ::update idletasks
   }
 }
@@ -457,7 +477,15 @@ body SrcWin::location {tag linespec} {
   }
 
   # set address and line widgets
-  $_toolbar configure -address $addr -line $line
+  if {[string length $address] > 10} {
+    # 64-bit address plus "0x"
+    set width 18
+  } else {
+    # 32-bit address plus "0x"
+    set width 10
+  }
+  $_statusframe.addr configure -text $addr -font src-font -width $width
+  $_statusframe.line configure -text $line
 
   # set function combobox
   $_statbar.func entryset $funcname

@@ -534,12 +534,6 @@ class SrcBar {
       $Tool add separator
     }
 
-    $Tool add label addr $address "Address" -relief sunken \
-                           -bd 1 -anchor e -font  src-font
-
-    $Tool add label line $line "Line Number" -width 6 -relief sunken \
-                           -bd 1 -anchor e -font  src-font
-
     $Tool toolbar_button_right_justify
 
     create_stack_buttons
@@ -1165,23 +1159,6 @@ Do you want to continue?" \
   public variable updatevalue 0 {
     global GDBSrcBar_state
     ::set GDBSrcBar_state($this) $updatevalue
-  }
-
-  # This holds the text that is shown in the address label.
-  public variable address {} {
-    if {[string length $address] > 10} {
-      # 64-bit address plus "0x"
-      set width 18
-    } else {
-      # 32-bit address plus "0x"
-      set width 10
-    }
-    $Tool itemconfigure addr -text $address -font src-font -width $width
-  }
-
-  # This holds the text that is shown in the line label.
-  public variable line {} {
-    $Tool itemconfigure line -text $line
   }
 
   # This holds the source window's display mode.  Valid values are

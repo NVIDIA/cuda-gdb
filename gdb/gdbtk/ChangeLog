@@ -1,3 +1,16 @@
+2002-01-07  Ian Roxborough  <irox@redhat.com>
+
+	* library/srcbar.itcl (SrcBar::create_buttons): Line number
+	and address fields have been removed and added to the
+	status bar.
+	* library/srcwin.itb (SrcWin::_build_win): Add address and
+	line number fields to status bar.  Moved download progress
+	bar to status bar.
+	(SrcWin::download_progress):  Use canvas on status bar.
+	Remember to adjust width of 64-bit address.
+	(SrcWin::location): Set line number and address on status bar.
+	* library/srcwin.ith (SrcWin): Added new private variable.
+
 2002-01-04  Andrew Cagney  <ac131313@redhat.com>
 
 	* generic/gdbtk-cmds.c (gdb_disassemble_driver): Replace

@@ -79,6 +79,7 @@ class SrcWin {
     variable _statbar
     variable _status
     variable _toolbar
+    variable _statusframe
     variable top
     variable twin
     variable current
