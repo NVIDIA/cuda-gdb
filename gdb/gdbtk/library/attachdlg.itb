@@ -37,6 +37,8 @@ body AttachDlg::build_win {} {
       -command [code $this filter_pid_selection]
   }
 
+  $itk_component(pid_filter) insert 0 *
+
   itk_component add pid_sep {
     frame [$itk_component(choose_pid) childsite].sep \
       -height 2 -borderwidth 1 -relief sunken
@@ -153,8 +155,18 @@ body AttachDlg::choose_symbol_file {} {
 #           point we should steal some C code to do it by hand.
 # ------------------------------------------------------------------
 
-body AttachDlg::list_pids {{expr {}}} {
-  if {[catch {::open "|ps w" r} psH]} {
+body AttachDlg::list_pids {{pattern *}} {
+  global tcl_platform
+
+  switch $tcl_platform(os) {
+    Linux {
+      set ps_cmd "ps axw"
+    }
+    default {
+      set ps_cmd "ps w"
+    }
+  }
+  if {[catch {::open "|$ps_cmd" r} psH]} {
     set errTxt "Could not exec ps: $psH
 You will have to enter the PID by hand."
     ManagedWin::open WarningDlg -message [list $errTxt]
@@ -163,7 +175,7 @@ You will have to enter the PID by hand."
   gets $psH header
 
   set nfields [llength $header]
-  set nfields_m_1 [expr $nfields - 1]
+  set nfields_m_1 [expr {$nfields - 1}]
   set regexp {^ *([^ ]*) +}
   for {set i 1} {$i < $nfields_m_1} {incr i} {
     append regexp {[^ ]* +}
@@ -175,7 +187,7 @@ You will have to enter the PID by hand."
 
   while {[gets $psH line] >= 0} {
     regexp $regexp $line dummy PID COMMAND
-    if {$expr == "" || [regexp $expr $COMMAND dummy]} {
+    if {[string match $pattern $COMMAND]} {
       lappend pid_list [list $PID $COMMAND]
       $itk_component(choose_pid) insert end $COMMAND
     }

@@ -21,7 +21,7 @@ class AttachDlg {
     method cancel {}
     method choose_symbol_file {}
     method doit {}
-    method list_pids {{expr {}}}
+    method list_pids {{pattern *}}
     method select_pid {}
     method clear_pid_selection {}
     method filter_pid_selection {}
