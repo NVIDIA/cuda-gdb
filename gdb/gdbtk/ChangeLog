@@ -1,5 +1,22 @@
 2001-01-28  Fernando Nasser  <fnasser@redhat.com>
 
+	* library/plugins: New directory.  Sample plug-in directory to help
+	developers of Insight plug-ins.  See README file in that directory.
+	* library/plugins/plugins.tcl: New file. Sample version of a code
+	fragment file which adds entries to the PlugIn menu of the Source
+	Window to activate custom plug-in windows.
+	* library/plugins/pkgIndex.tcl: New file.  Sample version of a file
+	with package information for the installed plug-ins.
+	* library/plugins/rhabout.tcl: New file. Sample file providing a
+	plug-in package.
+	* library/plugins/rhabout: New directory.  Sample plug-in.
+	* library/plugins/rhabout/rhabout.itcl: New file.  Sample class
+	implementing a plug-in window.
+	* library/plugins/rhabout/tclIndex: New file.  Tcl index for the sample
+	plug-in implementation.
+
+2001-01-28  Fernando Nasser  <fnasser@redhat.com>
+
 	* library/main.tcl: Add plugin subdirectory, if existent, to auto_path.
 	* library/srcbar.itcl (create_plugin_menu): New method.  Create a pull
 	down menu for plugins if there are any for this target configuration.
