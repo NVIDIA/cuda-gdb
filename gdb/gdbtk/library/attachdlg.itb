@@ -9,6 +9,7 @@
 
 body AttachDlg::constructor {args} {
 
+  window_name "Attach To Process"
   build_win
   eval itk_initialize $args
 

@@ -1,3 +1,7 @@
+2000-03-02  Elena Zannoni  <ezannoni@kwikemart.cygnus.com>
+
+        * attachdlg.itb: Give a name to the window.
+
 2000-03-01  James Ingham  <jingham@leda.cygnus.com>
 
 	* interface.tcl (_open_file): The window which had the focus could 
