@@ -269,7 +269,7 @@ body MemWin::edit { cell } {
 
   if {$col == $Numcols} { 
     # editing the ASCII field
-    set addr [gdb_incr_addr $current_addr + [expr {$bytes_per_row * $row}]]
+    set addr [gdb_incr_addr $current_addr [expr {$bytes_per_row * $row}]]
     set start_addr $addr
 
     # calculate number of rows to modify
@@ -543,7 +543,7 @@ body MemWin::incr_addr {num} {
     return
   }
   set old_addr $current_addr
-  set current_addr [gdb_incr_addr $current_addr + [expr {$bytes_per_row * $num}]]
+  set current_addr [gdb_incr_addr $current_addr [expr {$bytes_per_row * $num}]]
 
   # A memory address less than zero is probably not a good thing...
   #

@@ -1,3 +1,7 @@
+2001-12-18  Keith Seitz  <keiths@redhat.com>
+
+	* library/memwin.itb (incr_addr): Fix typo.
+
 2001-12-16  Andrew Cagney  <ac131313@redhat.com>
 
 	* generic/gdbtk-cmds.c (hex2bin): Replace LITTLE_ENDIAN with
