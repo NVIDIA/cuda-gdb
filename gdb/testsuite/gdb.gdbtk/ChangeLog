@@ -1,5 +1,7 @@
 2003-02-27  Martin M. Hunt  <hunt@redhat.com>
 
+	* windows.test: Remove HtmlViewer from list of windows.
+
 	* srcwin.test: Use "list get" instead of "listget" to
 	get contents of comboboxes. 
 	(2.1): Be less sensitive. 
