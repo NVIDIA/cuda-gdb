@@ -595,7 +595,8 @@ body SrcTextWin::config_win {win {asm S}} {
   bind_plain_key $win Control-u "$this do_key debug; break"
   bind_plain_key $win Control-o [list $this do_key open]
   bind_plain_key $win Control-a [list $this do_key attach]
-  
+  bind_plain_key $win Control-w [code $this do_key close]
+
   if {!$Browsing && [pref get gdb/control_target]} {
     # Ctrl+F5 is another accelerator for Run
     bind_plain_key $win Control-F5 "$this do_key run"
@@ -654,7 +655,7 @@ body SrcTextWin::config_win {win {asm S}} {
   bind_plain_key $win Control-s "$this do_key stack"
   bind_plain_key $win Control-r "$this do_key registers"
   bind_plain_key $win Control-m "$this do_key memory"
-  bind_plain_key $win Control-w "$this do_key watch"
+  bind_plain_key $win Control-t "$this do_key watch"
   bind_plain_key $win Control-l "$this do_key locals"
   bind_plain_key $win Control-k "$this do_key kod"
   if { !$Tracing } {
@@ -2185,6 +2186,7 @@ body SrcTextWin::do_key {key} {
       tfind_line   { catch {gdb_immediate "tfind line"} }
       tfind_tp     { catch {gdb_immediate "tfind tracepoint"} }
       open         { catch {_open_file} }
+      close        { catch {_close_file} }
       browser      { catch {ManagedWin::open BrowserWin} }
       thread_list  { catch {ManagedWin::open ProcessWin} }
       debug	     { catch {ManagedWin::open DebugWin} }
@@ -2921,9 +2923,6 @@ body SrcTextWin::_initialize_srctextwin {} {
 #  METHOD:  _clear_cache - Clear the cache
 # ------------------------------------------------------------------
 body SrcTextWin::_clear_cache {} {
-  # This doesn't work, and it's so darn entangled that it's nearly
-  # impossible.
-  return
 
   # display empty scratch frame
   set pane $Stwc(gdbtk_scratch_widget:pane)
@@ -2935,9 +2934,19 @@ body SrcTextWin::_clear_cache {} {
   foreach p [array names Stwc *:pane] {
     set p [lindex [split $p :] 0]
     if {$p != "gdbtk_scratch_widget"} {
-      catch {$itk_interior.p delete $Stwc($p:pane)}
-      unset Stwc($p:pane)
-      unset Stwc($p:mtime)
+      catch {
+	#debug "clearing cache: \"$p\""
+	$itk_interior.p delete $Stwc($p:pane)
+	unset Stwc($p:pane)
+	unset Stwc($p:mtime)
+      }
     }
   }
+
+  _initialize_srctextwin
+  set filenum 0
+  set Cname ""
+  set _tpane pane$filenum
+  incr filenum
+  set _bpane ""
 }

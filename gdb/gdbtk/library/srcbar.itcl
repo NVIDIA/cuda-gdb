@@ -139,6 +139,9 @@ class SrcBar {
     $Menu add command Other "Open..."  \
       "_open_file" -underline 0 -accelerator "Ctrl+O"
 
+    $Menu add command Other "Close" \
+      "_close_file" -underline 0 -accelerator "Ctrl+W"
+
     $Menu add command Other "Source..." \
       "source_file" -underline 0
 
@@ -266,7 +269,7 @@ class SrcBar {
       
     $Menu add command Other "Watch Expressions" \
       {ManagedWin::open WatchWin} \
-      -underline 0 -accelerator "Ctrl+W" 
+      -underline 0 -accelerator "Ctrl+T" 
     $Menu add command Other "Local Variables" \
       {ManagedWin::open LocalsWin} \
       -underline 0 -accelerator "Ctrl+L" 

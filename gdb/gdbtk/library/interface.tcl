@@ -705,8 +705,17 @@ proc gdbtk_tcl_post_add_symbol {} {
 # ------------------------------------------------------------------
 proc gdbtk_tcl_file_changed {filename} {
 
-  SrcWin::point_to_main
-  run_hooks file_changed_hook
+  if {$filename == ""} {
+    gdb_clear_file
+    run_hooks gdb_clear_file_hook
+    set ::gdb_exe_name ""
+    set ::gdb_loaded 0
+    set ::gdb_running 0
+    gdbtk_update
+  } else {
+    SrcWin::point_to_main
+    run_hooks file_changed_hook
+  }
 }
 
 # ------------------------------------------------------------------
@@ -913,6 +922,36 @@ proc _open_file {{file ""}} {
   }
   
   return 1
+}
+
+# ------------------------------------------------------------------
+#  _close_file - close the current executable and prepare for
+#    another executable.
+# ------------------------------------------------------------------
+proc _close_file {} {
+
+  # If there is already an inferior, ask him if he wants to close
+  # the file. If there is already an exec file loaded (and not run)
+  # also ask, but don't ask twice.
+  set okay 1
+  if {[gdb_target_has_execution]} {
+    set okay [gdbtk_tcl_query "Program is already running.\nClose file anyway?"]
+  } elseif {$::gdb_exe_name != ""} {
+    set okay [gdbtk_tcl_query "Program already loaded.\nClose file anyway?"]
+  } else {
+    # No exec file yet
+    return
+  }
+
+  if {$okay} {
+    gdb_clear_file
+    gdbtk_tcl_file_changed ""
+
+    # Print out a little message to all console windows
+    foreach cw [ManagedWin::find Console] {
+      $cw insert "No executable file now.\n"
+    }
+  }
 }
 
 # ------------------------------------------------------------------

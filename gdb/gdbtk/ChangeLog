@@ -1,5 +1,21 @@
 2001-05-22  Keith Seitz  <keiths@cygnus.com>
 
+	* library/interface.tcl (gdbtk_tcl_file_changed): Handle
+	the case of empty-string files, sent by gdb when the
+	user requests to reset the file.
+	(_close_file): New proc to deal with closing an exe.
+	* library/srcbar.itcl (create_file_menu): Add "Close" menu
+	option.
+	(create_view_menu): Change key binding for Watch Window to
+	Ctrl+T to accomodate "Close" going to Ctrl+W.
+	* library/srctextwin.itb (config_win): Update key binding
+	for Watch Window.
+	Add key binding for Close.
+	(do_key): Add "close".
+	(_clear_cache): Finally implement. I think this works now.
+
+2001-05-22  Keith Seitz  <keiths@cygnus.com>
+
 	* library/variables.tcl (postMenu): Add mysterious workaround
 	for popup menu bug in Tk for windows.
 	Highlight the selection, too.
