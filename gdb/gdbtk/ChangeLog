@@ -1,3 +1,9 @@
+2001-04-10  Keith Seitz  <keiths@cygnus.com>
+
+	From Tom Tromey (tromey@redhat.com):
+	* library/managedwin.itb (reveal): We actually do want to force
+	the focus for Windows.
+
 2001-04-09  Martin M. Hunt  <hunt@redhat.com>
 
 	* library/managedwin.itb (ManagedWin::reveal): After

@@ -85,6 +85,13 @@ body ManagedWin::reveal {} {
   # `focus $top'.  However, this has no useful effect -- it just
   # resets the subwindow of $top which has the `potential' focus.
   # This can actually be confusing to the user.
+
+  # NOT for Windows, though. Without the focus, we get, eg. a
+  # register window on top of the source window, but the source window
+  # will have the focus. This is not the proper model for Windows.
+  if {$::tcl_platform(platform) == "windows"} {
+    focus -force [focus -lastfor $top]
+  }
 }
 
 # ------------------------------------------------------------
