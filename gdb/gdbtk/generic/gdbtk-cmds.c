@@ -1442,9 +1442,6 @@ gdb_listfuncs (clientData, interp, objc, objv)
   for (i = GLOBAL_BLOCK; i <= STATIC_BLOCK; i++)
     {
       b = BLOCKVECTOR_BLOCK (bv, i);
-      /* Skip the sort if this block is always sorted.  */
-      if (!BLOCK_SHOULD_SORT (b))
-	sort_block_syms (b);
       ALL_BLOCK_SYMBOLS (b, j, sym)
 	{
 	  if (SYMBOL_CLASS (sym) == LOC_BLOCK)

@@ -1,3 +1,10 @@
+2002-02-10  Daniel Jacobowitz  <drow@mvista.com>
+
+	* generic/gdbtk-cmds.c (gdb_listfuncs): Don't call
+	BLOCK_SHOULD_SORT.
+	* library/browserwin.itb (BrowserWin::_fill_funcs_combo): Sort
+	the output of gdb_listfuncs.
+
 2002-02-07  Martin M. Hunt  <hunt@redhat.com>
 
 	* generic/gdbtk.c, generic/gdbtk-bp.c, generic/gdbtk-cmds.c,
