@@ -1,3 +1,8 @@
+2001-01-19  Fernando Nasser  <fnasser@redhat.com>
+
+	* library/prefs.tcl (pref_set_defaults): Set default value of
+	gdb/src/top_control to place the source window controls at the top.
+
 2001-01-18  Fernando Nasser  <fnasser@redhat.com>
 
         * library/srctextwin.itb (_highlightAsmLine): Add missing FUNCNAME
