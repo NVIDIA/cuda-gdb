@@ -29,7 +29,7 @@
 # ----------------------------------------------------------------------
 
 class PluginWindow {
-  inherit ManagedWin
+  inherit ManagedWin GDBEventHandler
 
   # ------------------------------------------------------------------
   #  CONSTRUCTOR - create widget
@@ -53,7 +53,6 @@ class PluginWindow {
 
     eval itk_initialize $args
     add_hook gdb_idle_hook [code $this stopped]
-    add_hook gdb_busy_hook [code $this running]
     add_hook gdb_no_inferior_hook [code $this no_inferior]
   }
 
@@ -62,7 +61,6 @@ class PluginWindow {
   # ------------------------------------------------------------------
   destructor {
     remove_hook gdb_idle_hook [code $this stopped]
-    remove_hook gdb_busy_hook [code $this running]
     remove_hook gdb_no_inferior_hook [code $this no_inferior]
 
     #destroy $this
@@ -91,11 +89,11 @@ class PluginWindow {
   }
 
   # ------------------------------------------------------------------
-  #  METHOD:  running
+  #  METHOD:  busy - BusyEvent handler
   #             Invoked when gdb is going to run the inferior
   # ------------------------------------------------------------------
-  protected method running {} {
-    debug "PluginWindow::running"
+  public method busy {event} {
+    debug "PluginWindow::busy"
     enable_ui 0
   }
 

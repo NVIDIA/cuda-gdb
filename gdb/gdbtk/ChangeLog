@@ -1,3 +1,56 @@
+2001-05-31  Keith Seitz  <keiths@redhat.com>
+
+	* library/interface.tcl (gdb_busy_hook): Deprecate.
+	(gdbtk_busy): Create and dispatch a BusyEvent instead
+	of running hooks.
+	* library/ehandler.ith (busy): New event handler.
+	* library/gdbevent.ith (BusyEvent): New event class.
+	* library/console.ith: Inherit from GDBEventHandler.
+	(busy): Match event handler definition.
+	* library/console.itb (busy): Ditto.
+	(constructor): Remove gdb_busy_event.
+	(destructor): Ditto.
+	* library/kod.ith (busy): Match event handler definition.
+	* library/kod.itb (busy): Ditto.
+	(constructor): Remove gdb_busy_hook.
+	(destructor): Ditto.
+	* library/memwin.ith (busy): Match event handler definition.
+	* library/memwin.itb (busy): Ditto.
+	(constructor): Remove gdb_busy_hook.
+	(destructor): Ditto.
+	* library/pluginwin.itcl (running): Rename to "busy" and
+	match event handler definition.
+	(consturctor): Remove gdb_busy_hook.
+	(destructor): Ditto.
+	* library/process.ith (busy): Match event handler definition.
+	* library/process.itb (busy): Ditto.
+	(constructor): Remove gdb_busy_hook.
+	(destructor): Ditto.
+	* library/regwin.ith (busy): Match event handler definition.
+	* library/regwin.itb (busy): Ditto.
+	(constructor): Remove gdb_busy_hook.
+	(destructor): Ditto.
+	* library/srcbar.itcl (constructor): Remove gdb_busy_hook.
+	(destructor): Ditto.
+	(busy): New method.
+	* library/srcwin.ith (busy): Match event handler definition.
+	* library/srcwin.itb (busy): Ditto.
+	Only do the "busy" stuff if do_updates is set.
+	(toggle_updates): Remove gdb_busy_hook.
+	(constructor): Ditto.
+	(destructor): Ditto.
+	* library/stackwin.ith (busy): Match event handler definition.
+	* library/stackwin.itb (busy): Ditto.
+	(constructor): Remove gdb_busy_hook.
+	(destructor): Ditto.
+	* library/variables.tcl (constructor): Ditto.
+	(destructor): Ditto.
+	(disable_ui): Rename to "busy" and match event handler
+	definition.
+	* library/plugins/rhabout/rhabout.itcl (running): Rename
+	to "busy" and match new event handler definition.
+	* library/tclIndex: Regenerated.
+
 2001-05-25  Keith Seitz  <keiths@cygnus.com>
 
 	* generic/gdbtk-cmds.c (bin2hex): New function.

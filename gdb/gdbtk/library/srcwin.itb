@@ -42,7 +42,6 @@ body SrcWin::constructor {args} {
     set update_hook_init 1
     add_hook gdb_update_hook "SrcWin::choose_and_update"
   }
-  add_hook gdb_busy_hook "$this busy"
   add_hook gdb_idle_hook "$this idle"
   add_hook gdb_no_inferior_hook "$this no_inferior"
   add_hook download_progress_hook "$this download_progress"
@@ -60,7 +59,6 @@ body SrcWin::constructor {args} {
 # ------------------------------------------------------------------
 body SrcWin::destructor {} {
   debug
-  remove_hook gdb_busy_hook "$this busy"
   remove_hook gdb_no_inferior_hook "$this no_inferior"
   remove_hook gdb_idle_hook "$this idle"
   remove_hook download_progress_hook "$this download_progress"
@@ -324,10 +322,8 @@ body SrcWin::_name {w {val ""}} {
 body SrcWin::toggle_updates {value} {
   if {$value} {
     add_hook gdb_update_hook "$this update"
-    add_hook gdb_busy_hook "$this busy"
   } else {
     remove_hook gdb_update_hook "$this update"
-    remove_hook gdb_busy_hook "$this busy"
   }
   # save state in do_updates so it will be preserved
   # in window reconfigs
@@ -547,19 +543,21 @@ body SrcWin::_update_title {name} {
 # ------------------------------------------------------------------
 #  PUBLIC METHOD:  busy - disable things when gdb is busy
 # ------------------------------------------------------------------
-body SrcWin::busy {} {
+body SrcWin::busy {event} {
   global gdb_loaded gdb_target_name
 #  debug "gdb_loaded=$gdb_loaded, gdb_target_name=$gdb_target_name"
 
-  enable_ui 0
-  if {$Running} {
-    $_toolbar configure -runstop running
-    if {$gdb_loaded || \
-	  ([TargetSelection::native_debugging] && $gdb_target_name != "remote")} {
-      set_status "Program is running."
-    } 
-  } else {
-    $_toolbar configure -runstop busy
+  if {$do_updates} {
+    enable_ui 0
+    if {$Running} {
+      $_toolbar configure -runstop running
+      if {$gdb_loaded || \
+	    ([TargetSelection::native_debugging] && $gdb_target_name != "remote")} {
+	set_status "Program is running."
+      } 
+    } else {
+      $_toolbar configure -runstop busy
+    }
   }
 }
 

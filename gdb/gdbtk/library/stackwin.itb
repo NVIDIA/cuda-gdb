@@ -21,7 +21,6 @@ body StackWin::constructor {args} {
   gdbtk_idle
   
   add_hook gdb_update_hook [code $this update]
-  add_hook gdb_busy_hook [code $this busy]
   add_hook gdb_no_inferior_hook [code $this no_inferior]
   add_hook gdb_idle_hook [code $this idle]
 }
@@ -32,7 +31,6 @@ body StackWin::constructor {args} {
 body StackWin::destructor {} {
   remove_hook gdb_update_hook [code $this update]
   remove_hook gdb_idle_hook [code $this idle]
-  remove_hook gdb_busy_hook [code $this busy]
   remove_hook gdb_no_inferior_hook [code $this no_inferior]
 }
 
@@ -146,13 +144,11 @@ body StackWin::reconfig {} {
 }
 
 # ------------------------------------------------------------------
-#  METHOD:  busy - gdb_busy_hook
-#
-#        This body StackWin::should accomplish blocking
-#        - clicks in the window
-#        - change mouse pointer
+#  PUBLIC METHOD:  busy - BusyEvent handler
+#                  This method should cause blocking of clicks in
+#                  the window and change mouse pointer.
 # ------------------------------------------------------------------
-body StackWin::busy {} {
+body StackWin::busy {event} {
   set Running 1
   cursor watch
 }

@@ -66,7 +66,6 @@ class SrcBar {
 
     eval itk_initialize $args
     add_hook gdb_idle_hook "$this enable_ui 1"
-    add_hook gdb_busy_hook "$this enable_ui 0"
     add_hook gdb_no_inferior_hook "$this enable_ui 2"
     add_hook gdb_trace_find_hook "$this handle_trace_find_hook"
   }
@@ -79,7 +78,6 @@ class SrcBar {
 
     unset GDBSrcBar_state($this)
     remove_hook gdb_idle_hook "$this enable_ui 1"
-    remove_hook gdb_busy_hook "$this enable_ui 0"
     remove_hook gdb_no_inferior_hook "$this enable_ui 2"
     remove_hook gdb_trace_find_hook "$this handle_trace_find_hook"
 
@@ -1068,6 +1066,13 @@ Do you want to continue?" \
 	set Collecting 0
      }
     }
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  busy - BusyEvent handler
+  # ------------------------------------------------------------------
+  method busy {event} {
+    enable_ui 0
   }
 
   ####################################################################

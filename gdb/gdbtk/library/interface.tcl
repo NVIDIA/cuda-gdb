@@ -47,6 +47,7 @@ proc gdbtk_tcl_set_variable {var val} {
 # For debugging purposes, please put debug statements at the very
 # beginning and ends of all GUI state hooks.
 
+# *** DEPRECATED: Use GDBEventHandler::busy instead.
 # GDB_BUSY_HOOK
 #   This hook is used to register a callback when the UI should
 #   be disabled because the debugger is either busy or talking
@@ -54,7 +55,7 @@ proc gdbtk_tcl_set_variable {var val} {
 #
 #   All callbacks should disable ALL user input which could cause
 #   any state changes in either the target or the debugger.
-define_hook gdb_busy_hook
+#define_hook gdb_busy_hook
 
 # GDB_IDLE_HOOK
 #   This hook is used to register a callback when the UI should
@@ -122,19 +123,17 @@ proc gdbtk_tcl_preloop { } {
 
 
 # ------------------------------------------------------------------
-#  PROCEDURE:  gdbtk_busy - run all busy hooks
+#  PROCEDURE:  gdbtk_busy - Dispatch a busy event
 #
 #         Use this procedure from within GUI code to indicate that
 #         the debugger is busy, either running the inferior or
-#         talking to the target. This will call all the registered
-#         gdb_busy_hook's.
+#         talking to the target.
 # ------------------------------------------------------------------
 proc gdbtk_busy {} {
 
-  set err [catch {run_hooks gdb_busy_hook} txt]
-  if {$err} { 
-    dbug E "$txt" 
-  }
+  set e [BusyEvent \#auto]
+  GDBEventHandler::dispatch $e
+  delete object $e
 
   # Force the screen to update
   update

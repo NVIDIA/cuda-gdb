@@ -19,7 +19,6 @@ body Console::constructor {args} {
   debug "$args"
   _build_win
   eval itk_initialize $args
-  add_hook gdb_busy_hook [list $this busy]
   add_hook gdb_idle_hook [list $this idle]
   add_hook gdb_no_inferior_hook [list $this idle]
 
@@ -40,7 +39,6 @@ body Console::constructor {args} {
 body Console::destructor {} {
   global gdbtk_state
   set gdbtk_state(console) ""
-  remove_hook gdb_busy_hook [list $this busy]
   remove_hook gdb_idle_hook [list $this idle]
   remove_hook gdb_no_inferior_hook [list $this idle]
 
@@ -205,7 +203,10 @@ body Console::idle {} {
   set _running 0
 }
 
-body Console::busy {} {
+# ------------------------------------------------------------------
+#  METHOD: busy - busy event handler
+# ------------------------------------------------------------------
+body Console::busy {event} {
   set _running 1
 }
 

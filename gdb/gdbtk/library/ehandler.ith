@@ -32,5 +32,8 @@ class GDBEventHandler {
 
     # Set variable
     method set_variable {event} {}
+
+    # Busy event
+    method busy {event} {}
   }
 }

@@ -62,7 +62,6 @@ class MemWin {
     method toggle_enabled {}
     method update {}
     method idle {}
-    method busy {}
     method newsize {height}
     method update_address_cb {}
     method update_address { {ae ""} }
@@ -75,5 +74,10 @@ class MemWin {
     method goto {addr}
     method memMoveCell {w x y}
     method error_dialog {msg {modality task} {type ok}}
+
+    #
+    # GDB Events
+    #
+    method busy {event}
   }
 }

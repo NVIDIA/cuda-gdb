@@ -147,3 +147,15 @@ class SetVariableEvent {
   public method get {what}
   public method handler {} { return "set_variable" }
 }
+
+# BUSY EVENT
+#
+# This event is created/dispatched whenever the GUI or GDB is "busy".
+# This could happen when the inferior is executing or when the GUI
+# is, for example, fetching memory from the target.
+
+class BusyEvent {
+  inherit GDBEvent
+
+  public method handler {} { return "busy" }
+}

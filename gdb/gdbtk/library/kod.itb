@@ -34,7 +34,6 @@ body KodWin::constructor {args} {
 
   # Add hooks for this object
   add_hook gdb_update_hook [code $this update]
-  add_hook gdb_busy_hook [code $this busy]
   add_hook gdb_idle_hook [code $this idle]
 }
 
@@ -400,7 +399,6 @@ body KodWin::destructor {} {
 
   remove_hook gdb_update_hook [code $this update]
   remove_hook gdb_idle_hook [code $this idle]
-  remove_hook gdb_busy_hook [code $this busy]
 }
 
 # ------------------------------------------------------------------
@@ -427,13 +425,13 @@ body KodWin::reconfig {} {
 }
 
 # ------------------------------------------------------------------
-#  METHOD:  busy - gdb_busy_hook
+#  METHOD:  busy - BusyEvent handler
 #
 #        This method should accomplish blocking
 #        - clicks in the window
 #        - change mouse pointer
 # ------------------------------------------------------------------
-body KodWin::busy {} {
+body KodWin::busy {event} {
   set Running 1
   _disable_buttons
   cursor watch

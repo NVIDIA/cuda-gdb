@@ -50,7 +50,6 @@ body MemWin::constructor {args} {
   gdbtk_idle
 
   add_hook gdb_update_hook "$this update"
-  add_hook gdb_busy_hook [list $this busy]
   add_hook gdb_idle_hook [list $this idle]
 }
 
@@ -62,7 +61,6 @@ body MemWin::destructor {} {
     $prefs_win cancel
   }
   remove_hook gdb_update_hook "$this update"
-  remove_hook gdb_busy_hook [list $this busy]
   remove_hook gdb_idle_hook [list $this idle]
 }
 
@@ -404,9 +402,10 @@ body MemWin::idle {} {
 
 
 # ------------------------------------------------------------------
-#  METHOD: busy - disable menus 'cause we're busy updating things
+#  METHOD: busy - BusyEvent handler
+#                 Disable menus 'cause we're busy updating things.
 # ------------------------------------------------------------------
-body MemWin::busy {} {
+body MemWin::busy {event} {
   # Fencepost
   set Running 1
 

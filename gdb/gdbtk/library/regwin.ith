@@ -62,12 +62,12 @@ class RegWin {
     method update {}
     method idle {}
     method reconfig {}
-    method busy {}
 
     #
     # Gdb Events
     #
     method set_variable {event}
+    method busy {event}
   }
 
 

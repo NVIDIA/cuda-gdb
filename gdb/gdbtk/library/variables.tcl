@@ -35,7 +35,6 @@ class VariableWin {
 	gdbtk_idle
 
 	add_hook gdb_update_hook "$this update"
-	add_hook gdb_busy_hook "$this disable_ui"
 	add_hook gdb_no_inferior_hook "$this no_inferior"
 	add_hook gdb_idle_hook [list $this idle]
 	add_hook gdb_clear_file_hook [code $this clear_file]
@@ -166,7 +165,6 @@ class VariableWin {
 
 	# Remove this window and all hooks
 	remove_hook gdb_update_hook "$this update"
-	remove_hook gdb_busy_hook "$this disable_ui"
 	remove_hook gdb_no_inferior_hook "$this no_inferior"
 	remove_hook gdb_idle_hook [list $this idle]
 	remove_hook gdb_clear_file_hook [code $this clear_file]
@@ -917,10 +915,10 @@ class VariableWin {
     }
 
     # ------------------------------------------------------------------
-    # METHOD:   disable_ui
+    #   PUBLIC METHOD:  busy - BusyEvent handler
     #           Disable all ui elements that could affect gdb's state
     # ------------------------------------------------------------------
-    method disable_ui {} {
+    method busy {event} {
 
 	# Set fencepost
 	set Running 1

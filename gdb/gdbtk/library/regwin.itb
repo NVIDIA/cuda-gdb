@@ -33,7 +33,6 @@ body RegWin::constructor {args} {
   
   gdbtk_idle
   add_hook gdb_update_hook "$this update"
-  add_hook gdb_busy_hook [list $this busy]
   add_hook gdb_idle_hook [list $this idle]
 }
 
@@ -44,7 +43,6 @@ body RegWin::destructor {} {
   debug
   save_reg_display_vars
   remove_hook gdb_update_hook "$this update"
-  remove_hook gdb_busy_hook [list $this busy]
   remove_hook gdb_idle_hook [list $this idle]
 }
   
@@ -677,9 +675,9 @@ body RegWin::reconfig {} {
 }
   
 # ------------------------------------------------------------------
-#  PRIVATE METHOD:  busy - gdb_busy_hook
+#  PUBLIC METHOD:  busy - BusyEvent handler
 # ------------------------------------------------------------------
-body RegWin::busy {} {
+body RegWin::busy {event} {
   # Cancel edits
   unedit
   

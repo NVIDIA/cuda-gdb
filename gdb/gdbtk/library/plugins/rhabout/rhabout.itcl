@@ -58,13 +58,13 @@ class RHAbout {
     window_name "About Red Hat Insight Plug-In"
   }
 
-  # You can overload the base class running method, but make sure
+  # You can overload the base class busy method, but make sure
   # to call it as well or the menu and button status will not be updated
   # (unless this is what you want)
-  private method running {} {
+  public method busy {event} {
     debug
     # Call the baseclass version
-    PluginWindow::running
+    PluginWindow::busy $event
 
     # Display something in the status area
     $_status configure -text "Running..."

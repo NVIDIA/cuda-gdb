@@ -28,7 +28,6 @@ body ProcessWin::constructor {args} {
 
   # Add hooks for this object
   add_hook gdb_update_hook [code $this update]
-  add_hook gdb_busy_hook [code $this busy]
   add_hook gdb_no_inferior_hook [code $this idle]
   add_hook gdb_idle_hook [code $this idle]
 }
@@ -130,7 +129,6 @@ body ProcessWin::change_context {y} {
 body ProcessWin::destructor {} {
   remove_hook gdb_update_hook [code $this update]
   remove_hook gdb_idle_hook [code $this idle]
-  remove_hook gdb_busy_hook [code $this busy]
   remove_hook gdb_no_inferior_hook [code $this no_inferior]
 }
 
@@ -143,13 +141,13 @@ body ProcessWin::reconfig {} {
 }
 
 # ------------------------------------------------------------------
-#  METHOD:  busy - gdb_busy_hook
+#  METHOD:  busy - BusyEvent handler
 #
 #        This method should accomplish blocking
 #        - clicks in the window
 #        - change mouse pointer
 # ------------------------------------------------------------------
-body ProcessWin::busy {} {
+body ProcessWin::busy {event} {
   set Running 1
   cursor watch
 }

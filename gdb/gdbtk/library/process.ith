@@ -28,7 +28,6 @@ class ProcessWin {
     method cursor {glyph}
     method change_frame {y}
     method update {}
-    method busy {}
     method idle {}
   }
 
@@ -36,5 +35,10 @@ class ProcessWin {
     method reconfig {}
     method constructor {args} 
     method destructor {}
+
+    #
+    # Event
+    #
+    method busy {event}    
   }
 }

@@ -27,7 +27,6 @@ class StackWin {
     method cursor {glyph}
     method change_frame {y}
     method update {}
-    method busy {}
     method no_inferior {}
     method idle {}
   }
@@ -36,6 +35,11 @@ class StackWin {
     method reconfig {}
     method constructor {args} 
     method destructor {}
+
+    #
+    # GDB Events
+    #
+    method busy {event}
   }
 
 }

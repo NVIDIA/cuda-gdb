@@ -18,7 +18,7 @@
 # ----------------------------------------------------------------------
 
 class Console {
-  inherit EmbeddedWin
+  inherit EmbeddedWin GDBEventHandler
 
   public {
     #Approximate maximum number of lines allowed in widget
@@ -27,13 +27,17 @@ class Console {
     method constructor {args}
     method destructor {}   
     method idle {}
-    method busy {}
     method insert {line}
     method einsert {line tag}
     method invoke {}
     method _insertion {args}
     method get_text {}
     method activate {{prompt {}}}
+
+    #
+    # GDB Events
+    #
+    method busy {event}
   }
 
   private {
