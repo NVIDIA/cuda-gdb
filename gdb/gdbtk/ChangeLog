@@ -1,9 +1,14 @@
+2004-04-15  Roland McGrath  <roland@redhat.com>
+
+	* generic/gdbtk-hooks.c (gdbtk_pre_add_symbol): Add const to arg type.
+	(pre_add_symbol): Likewise in extern decl.
+
 2004-04-05  Martin Hunt  <hunt@redhat.com>
 
-	* library/session.tcl: Make hostname and portname 
+	* library/session.tcl: Make hostname and portname
 	session-dependent. Add gdb_bg_num (the color
 	scheme number) as a per-session variable.
-	
+
 	* library/prefs.tcl (pref_read): If color schemes are in use,
 	set colors based on the current scheme.
 	(pref_save): Add "bg" section.
@@ -20,37 +25,37 @@
 	* library/csprefs.itb:
 	* library/csprefs.ith: New files. Implement color scheme
 	preferences.
-	
+
 	* library/util.tcl (set_bg_colors): New function.
 	(r_setcolors): New function.
-	
+
 	* library/regwin.itb (_prefs_changed): Deleted.
 	(reconfig): New function.  Updates tkTable color tags
 	if color scheme changes.
 	* library/regwin.ith: Update to reflect above changes.
-	
+
 	* library/srcbar.itcl (create_pref_menu): Add pulldown
 	menus for "Edit Color Schemes..." and "Use Color Schemes".
 	(reconfig): Fix up menu items for color schemes.
-	
-	* library/globalpref.itb (_init_var): Add 
+
+	* library/globalpref.itb (_init_var): Add
 	gdb/use_color_schemes to variable list.
 	(_build_win): Add a checkbutton to enable/disable
 	color schemes.
-	
-	* library/gdbmenubar.itcl (menubar_add_cascade): Add a class 
+
+	* library/gdbmenubar.itcl (menubar_add_cascade): Add a class
 	argument so cascade menus can be managed by class too.
 
-	* library/interface.tcl (gdbtk_tcl_fputs): Check for 
-	existence of gdbtk_state(console).  Stops annoying error 
+	* library/interface.tcl (gdbtk_tcl_fputs): Check for
+	existence of gdbtk_state(console).  Stops annoying error
 	messages.
 	(gdbtk_tcl_fputs_error): Ditto.
-	(gdbtk_tcl_fputs_log): Ditto.	
+	(gdbtk_tcl_fputs_log): Ditto.
 
 2004-03-29  Martin Hunt  <hunt@redhat.com>
 
 	* generic/gdbtk-register.c (map_arg_registers): If a specific
-	register was requested, just return it without validating it 
+	register was requested, just return it without validating it
 	has a name.
 	(get_register): Check DEPRECATED_REGISTER_CONVERTIBLE_P ().
 
@@ -59,6 +64,6 @@
 	* generic/gdbtk-register.c (Gdbtk_Register_Init): Replace
 	calls to register_gdbarch_swap with deprecated_register_gdbarch_swap.
 
-	* library/srcwin.itb: Remove an apparently redundant call 
+	* library/srcwin.itb: Remove an apparently redundant call
 	to gdbtk_locate_main and location. This actually broke in
 	situations where no source files were found.
