@@ -825,8 +825,13 @@ class VariableWin {
 	set variables [$Hlist info children {}]
 	foreach var $variables {
 	    # debug "VARIABLE: $var ($Update($this,$var))"
+            set numchild [$var numChildren]
 	    set UpdatedList [$var update]
-            if {[lindex $UpdatedList 0] == $var} {
+            # FIXME: For now, we can only infer that the type has changed
+            # if the variable is not a scalar; the varobj code will have to
+            # give us an indication that this happened.
+            if {([lindex $UpdatedList 0] == $var)
+                && ($numchild > 0)} {
               debug "Type changed."
               # We must fix the tree entry to correspond to the new type
               $Hlist delete offsprings $var
