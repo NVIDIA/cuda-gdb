@@ -1,3 +1,10 @@
+2001-07-16  Nick Duffek  <nsd@redhat.com>
+
+	* library/regwin.itb (RegWin::build_win): Add radio button
+	for unsigned register format.
+	(RegWin::reg_select): Iterate through 8 rather than 7 formats.
+	(RegWin::but3): Add menu option for unsigned register format.
+
 2001-07-13  Keith Seitz  <keiths@redhat.com>
 
 	* library/download.itb (constructor): Use the iwidgets
