@@ -38,7 +38,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.161 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.162 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3755,10 +3755,6 @@ register buffer at run-time.
 @findex REGISTER_NAME
 Return the name of register @var{i} as a string.  May return @code{NULL}
 or @code{NUL} to indicate that register @var{i} is not valid.
-
-@item REGISTER_NAMES
-@findex REGISTER_NAMES
-Deprecated in favor of @code{REGISTER_NAME}.
 
 @item DEPRECATED_REG_STRUCT_HAS_ADDR (@var{gcc_p}, @var{type})
 @findex DEPRECATED_REG_STRUCT_HAS_ADDR
