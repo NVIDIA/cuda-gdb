@@ -509,6 +509,19 @@ proc gdb_run_readline_command {command args} {
   global gdbtk_state
 #  debug "$command $args"
   set gdbtk_state(readlineArgs) $args
+  set gdbtk_state(readlineShowUser) 1
+  gdb_cmd $command
+}
+
+# ------------------------------------------------------------------
+# PROC: gdb_run_readline_command_no_output
+# Run a readline command, but don't show the commands to the user.
+# ------------------------------------------------------------------
+proc gdb_run_readline_command_no_output {command args} {
+  global gdbtk_state
+#  debug "$command $args"
+  set gdbtk_state(readlineArgs) $args
+  set gdbtk_state(readlineShowUser) 0
   gdb_cmd $command
 }
 
@@ -519,7 +532,7 @@ proc gdbtk_tcl_readline_begin {message} {
   global gdbtk_state
 #  debug "readline begin"
   set gdbtk_state(readline) 0
-  if {$gdbtk_state(console) != ""} {
+  if {$gdbtk_state(console) != "" && $gdbtk_state(readlineShowUser)} {
     $gdbtk_state(console) insert $message
   }
 }
@@ -533,7 +546,9 @@ proc gdbtk_tcl_readline {prompt} {
   if {[info exists gdbtk_state(readlineArgs)]} {
     # Not interactive, so pop the list, and print element.
     set cmd [lvarpop gdbtk_state(readlineArgs)]
-    command::insert_command $cmd
+    if {$gdbtk_state(readlineShowUser)} {
+      command::insert_command $cmd
+    }
   } else {
     # Interactive.
 #    debug "interactive"
@@ -1718,6 +1733,7 @@ proc initialize_gdbtk {} {
     # Only do this once...
     set gdbtk_state(readline) 0
     set gdbtk_state(console) ""
+    set gdbtk_state(readlineShowUser) 1
   }
 
   # check for existence of a kod command and get it's name and

@@ -1,3 +1,14 @@
+2001-10-06  Tom Tromey  <tromey@redhat.com>
+
+	* library/session.tcl (SESSION_recreate_bps): Use
+	gdb_run_readline_command_no_output to recreate breakpoints.
+	* library/interface.tcl (gdb_run_readline_command): Set
+	readlineShowUser element of gdbtk_state.
+	(gdb_run_readline_command_no_output): New proc.
+	(initialize_gdbtk): Initialize readlineShowUser element.
+	(gdbtk_tcl_readline_begin): Use readlineShowUser element.
+	(gdbtk_tcl_readline): Likewise.
+
 2001-10-05  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-bp.c (get_breakpoint_commands): New function.

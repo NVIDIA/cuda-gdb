@@ -91,7 +91,8 @@ proc SESSION_recreate_bps {specs} {
 
     if {[llength $commands]} {
       lappend commands end
-      gdb_cmd "commands \$bpnum\n[join $commands \n]"
+      eval gdb_run_readline_command_no_output [list "commands \$bpnum"] \
+	$commands
     }
   }
 }
