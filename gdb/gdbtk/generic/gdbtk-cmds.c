@@ -635,8 +635,8 @@ gdb_clear_file (clientData, interp, objc, objv)
     pop_target ();
 
   delete_command (NULL, 0);
-  exec_file_command (NULL, 0);
-  symbol_file_command (NULL, 0);
+  exec_file_clear (0);
+  symbol_file_clear (0);
 
   return TCL_OK;
 }
@@ -1344,7 +1344,10 @@ gdb_find_file_command (clientData, interp, objc, objv)
     filename = st->fullname;
 
   if (filename == NULL)
-    Tcl_SetStringObj (result_ptr->obj_ptr, "", 0);
+    {
+      Tcl_SetStringObj ( result_ptr->obj_ptr, "File not found in symtab (2)", -1);
+      return TCL_ERROR;
+    }
   else
     Tcl_SetStringObj (result_ptr->obj_ptr, filename, -1);
 

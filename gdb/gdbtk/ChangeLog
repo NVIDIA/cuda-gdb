@@ -1,3 +1,10 @@
+2001-01-26  Fernando Nasser  <fnasser@redhat.com>
+
+	* generic/gdbtk-cmds.c (gdb_clear_file): Call exec_file_clear() and
+	symbol_file_clear() instead of exec_file_command() and
+	symbol_file_command().
+	(gdb_find_file_command): Return the proper error text.
+
 2001-01-25  Fernando Nasser  <fnasser@redhat.com>
 
 	* library/srcbar.itcl: New file. Implement SrcBar, a menu and toolbar
