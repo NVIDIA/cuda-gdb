@@ -1,5 +1,23 @@
 2001-01-02  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
 
+	* library/gdbmenubar.itcl: New file. Define the GDBMenuBar class,
+	a generic menubar building facility for Insight windows (WIP).
+	* library/gdbtoolbar.itcl: New file. Define the GDBToolBar class,
+	a generic toolbar building facility for Insight windows (WIP).
+	* library/srcmenubar.itcl: New file. Define the SrcMenuBar class,
+	which implements the Source Window menubar (inherits GDBMenuBar).
+	* library/srctoolbar.itcl: New file. Define the SrcToolBar class,
+	which implements the Source Window toolbar (inherits GDBToolBar).
+	* library/srcwin.itb (_build_win): Use SrcMenuBar and SrcToolBar
+	instead of the obsolete GDBSrcBar.
+	* library/srcbar.tcl: Mark as OBSOLETE.
+	* library/toolbar.tcl: Mark as OBSOLETE. Rename class GDBToolBar
+	to avoid conflict with new class with the same name.
+	* library/Makefile (TCL): Include .itcl files.
+	* library/tclIndex: Regenerate.
+
+2001-01-02  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
+
 	* library/srcwin.itb (_build_win): If gdb is running a program, load
 	the window with source for that location (if available).
 	(download_progress): Calls to "update" must refer to the global

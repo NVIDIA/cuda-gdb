@@ -1,0 +1,345 @@
+# GDBToolBar
+# Copyright 2000 Red Hat, Inc.
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License (GPL) as published by
+# the Free Software Foundation; either version 2 of the License, or (at
+# your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# ----------------------------------------------------------------------
+# Implements a toolbar.
+#
+#   PUBLIC ATTRIBUTES:
+#
+#
+#   METHODS:
+#
+#     configure ....... used to change public attributes
+#
+#   PRIVATE METHODS
+#
+#   X11 OPTION DATABASE ATTRIBUTES
+#
+#
+# ----------------------------------------------------------------------
+
+class GDBToolBar {
+  inherit itk::Widget
+
+  # ------------------------------------------------------------------
+  #  CONSTRUCTOR - create widget
+  # ------------------------------------------------------------------
+  constructor {args} {
+
+    # Make a subframe so that the menu can't accidentally conflict
+    # with a name created by some subclass.
+    set ButtonFrame [frame $itk_interior.t]
+
+    pack $ButtonFrame $itk_interior -fill both -expand true
+
+    eval itk_initialize $args
+  }
+
+  # ------------------------------------------------------------------
+  #  DESTRUCTOR - destroy window containing widget
+  # ------------------------------------------------------------------
+  destructor {
+
+    #destroy $this
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  toolbar_show - show the toolbar
+  # ------------------------------------------------------------------
+  public method toolbar_show {} {
+
+    if {[llength $button_list]} {
+      eval standard_toolbar $ButtonFrame $button_list
+    }
+  }
+
+  ####################################################################
+  # Methods that deal with buttons.
+  ####################################################################
+ 
+  # ------------------------------------------------------------------
+  #  PRIVATE METHOD:  _register_button - Creates all the bookkeeping
+  #           for a button,  without actually inserting it in the toolbar.
+  #           If the button will not be immediately inserted (INS == 0),
+  #           sets its bindings and appearences to the same of a
+  #           standard_toolbar button.
+  # ------------------------------------------------------------------
+  private method _register_button {ins name class command balloon args} {
+    set bname $ButtonFrame.$name
+    set Buttons($name) $bname
+    set Buttons($bname,align) $button_align
+
+    eval button $bname -command \$command $args
+    balloon register $bname $balloon
+    foreach elem $class {
+      switch $elem {
+	None {}
+	default { 
+	  lappend button_classes($elem) $name
+	}
+      }
+    }
+
+   # If the button is not going to be inserted now...
+   if {! $ins} {
+     # This is a bit of a hack, but I need to bind the standard_toolbar bindings
+     # and appearances to these externally, since I am not inserting them in 
+     # the original toolbar...
+     # FIXME:  Have to add a method to the libgui toolbar to do this.
+
+     # Make sure the button acts the way we want, not the default Tk way.
+     $bname configure -takefocus 0 -highlightthickness 0 \
+                      -relief flat -borderwidth 1	
+     set index [lsearch -exact [bindtags $bname] Button]
+     bindtags $bname [lreplace [bindtags $bname] $index $index ToolbarButton]
+    }
+
+    return $bname
+  }
+ 
+  # ------------------------------------------------------------------
+  #  METHOD:  toolbar_create_button - Creates all the bookkeeping for a button,
+  #           without actually inserting it in the toolbar.
+  # ------------------------------------------------------------------
+  method toolbar_create_button {name class command balloon args} {
+
+    return [eval _register_button 0 \$name \$class \$command \$balloon $args]
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  toolbar_add_button - Creates a button, and inserts it at the end
+  #           of the button list.  Call this when the toolbar is being
+  #           set up, but has not yet been made.
+  # ------------------------------------------------------------------
+  method toolbar_add_button {name class command balloon args} {
+    
+    lappend button_list \
+            [eval _register_button 1 \$name \$class \$command \$balloon $args]
+    
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  toolbar_add_button_separator - 
+  # ------------------------------------------------------------------
+
+  method toolbar_add_button_separator {} {
+    lappend button_list -
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  toolbar_button_right_justify - 
+  # ------------------------------------------------------------------
+  
+  method toolbar_button_right_justify {} {
+    lappend button_list --
+    set button_align "right"
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  toolbar_add_label - Create a label to be inserted in the
+  #                               toolbar.
+  # ------------------------------------------------------------------
+
+  method toolbar_add_label {name text balloon args} {
+    set lname $ButtonFrame.$name
+    set Buttons($name) $lname
+    set Buttons($lname,align) $button_align
+    eval label $lname -text \$text $args
+    balloon register $lname $balloon
+    lappend button_list $lname    
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  toolbar_insert_button - Inserts button "name" before
+  #           button "before".
+  #           The toolbar must be made, and the buttons must have been
+  #           created before you run this.
+  # ------------------------------------------------------------------
+  method toolbar_insert_button {name before} {
+
+    if {[string first "-" $name] == 0} {
+      set name [string range $name 1 end]
+      set add_sep 1
+    } else {
+      set add_sep 0
+    }
+
+    if {![info exists Buttons($name)] || ![info exists Buttons($before)]} {
+      error "toolbar_insert_buttons called with non-existant button"
+    }
+
+    set before_col [gridCGet $Buttons($before) -column]
+    set before_row [gridCGet $Buttons($before) -row]
+
+    set slaves [grid slaves $ButtonFrame]
+
+    set incr [expr 1 + $add_sep]
+    foreach slave $slaves {
+      set slave_col [gridCGet $slave -column]
+      if {$slave_col >= $before_col} {
+	grid configure $slave -column [expr $slave_col + $incr]
+      }
+    }
+    if {$add_sep} {
+      grid $Buttons(-$name) -column $before_col -row $before_row
+    }
+
+    # Now grid our button.  Have to put in the pady since this button
+    # may not have been originally inserted by the libgui toolbar
+    # proc.
+
+    grid $Buttons($name) -column [expr $before_col + $add_sep] \
+      -row $before_row -pady 2
+    
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  toolbar_remove_button - 
+  # ------------------------------------------------------------------
+
+  method toolbar_remove_button {name} {
+
+    if {[string first "-" $name] == 0} {
+      set name [string range $name 1 end]
+      set remove_sep 1
+    } else {
+      set remove_sep 0
+    }
+
+    if {![info exists Buttons($name)] } {
+      error "toolbar_remove_buttons called with non-existant button $name"
+    }
+
+    set name_col [gridCGet $Buttons($name) -column]
+    set name_row [gridCGet $Buttons($name) -row]
+    
+    grid remove $Buttons($name)
+    if {$remove_sep} {
+      set Buttons(-$name) [grid slaves $ButtonFrame \
+			     -column [expr $name_col - 1] \
+			    -row $name_row]
+      grid remove $Buttons(-$name)
+    }
+
+    set slaves [grid slaves $ButtonFrame -row $name_row]
+    foreach slave $slaves {
+      set slave_col [gridCGet $slave -column]
+      if {($slave_col > $name_col)
+          && ! ([info exists Buttons($slave,align)]
+              && $Buttons($slave,align) == "right")} {
+	grid configure $slave -column [expr $slave_col - 1 - $remove_sep]
+      }
+    }    
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  toolbar_configure_button - 
+  # ------------------------------------------------------------------
+  
+  method toolbar_configure_button {button args} {
+    eval $Buttons($button) configure $args
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  toolbar_bind_button - 
+  # ------------------------------------------------------------------
+  
+  method toolbar_bind_button {button key cmd} {
+    eval [list bind $Buttons($button) $key $cmd]
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  toolbar_set_button_balloon - 
+  # ------------------------------------------------------------------
+  
+  method toolbar_set_button_balloon {button text} {
+    eval [list balloon register $Buttons($button) $text]
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  toolbar_swap_button_lists - 
+  # ------------------------------------------------------------------
+
+  method toolbar_swap_button_lists {in_list out_list} {
+    # Now swap out the buttons...
+    set first_out [lindex $out_list 0]
+    if {[info exists Buttons($first_out)] && [grid info $Buttons($first_out)] != ""} {
+      foreach button $in_list {
+	toolbar_insert_button $button $first_out
+      }
+      foreach button $out_list {
+	toolbar_remove_button $button
+      }
+    } elseif {[info exists Buttons($first_out)]} {
+      debug "Error in swap_button_list - $first_out not gridded..."
+    } else {
+      debug "Button $first_out is not in button list"
+    }
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  toolbar_button_class_find - Find a button class and returns
+  #                   its members.
+  # 
+  #  type - the token for the button class sought
+  #
+  #  RETURNS: class members (list) if the class exists, {} otherwise.
+  # ------------------------------------------------------------------
+  method toolbar_button_class_find {type} {
+    if {[info exists button_classes($type)]} {
+      return $button_classes($type)
+    } else {
+      return {}
+    }
+  }
+
+  ####################################################################
+  #
+  #  PRIVATE DATA
+  #
+  ####################################################################
+
+  # This is the list of buttons that are being built up
+  #
+  private variable button_list {}
+
+  # This is an array of buttons names -> Tk Window names
+  # and also of Tk Window names -> column position in grid
+  private variable Buttons
+
+  # This array holds the button classes.  The key is the class name,
+  # and the value is the list of buttons belonging to this class.
+  private variable button_classes
+
+  # Tell if we are inserting buttons left or right justified
+  private variable button_align "left"
+
+  #The frame to contain the buttons:
+  private variable ButtonFrame
+
+  ####################################################################
+  #
+  #  PROTECTED DATA
+  #
+  ####################################################################
+
+  # None.
+
+  ####################################################################
+  #
+  #  PUBLIC DATA
+  #
+  ####################################################################
+
+  # None.
+}

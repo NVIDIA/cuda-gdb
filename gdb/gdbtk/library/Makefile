@@ -1,5 +1,5 @@
 
-TCL := $(wildcard *.tcl *.ith *.itb)
+TCL := $(wildcard *.tcl *.itcl *.ith *.itb)
 
 ITCL_SH = itclsh3.0
 

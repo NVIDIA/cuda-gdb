@@ -1,0 +1,234 @@
+# GDBMenuBar
+# Copyright 2000 Red Hat, Inc.
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License (GPL) as published by
+# the Free Software Foundation; either version 2 of the License, or (at
+# your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# ----------------------------------------------------------------------
+# Implements a GDB menubar.
+#
+#   PUBLIC ATTRIBUTES:
+#
+#
+#   METHODS:
+#
+#     configure ....... used to change public attributes
+#
+#   PRIVATE METHODS
+#
+#   X11 OPTION DATABASE ATTRIBUTES
+#
+#
+# ----------------------------------------------------------------------
+
+class GDBMenuBar {
+  inherit itk::Widget
+
+  # ------------------------------------------------------------------
+  #  CONSTRUCTOR - create widget
+  # ------------------------------------------------------------------
+  constructor {args} {
+
+    set OtherMenus {}
+    set ControlMenus {}
+
+    set Menu [menu $itk_interior.m -tearoff 0]
+
+    eval itk_initialize $args
+  }
+
+  # ------------------------------------------------------------------
+  #  DESTRUCTOR - destroy window containing widget
+  # ------------------------------------------------------------------
+  destructor {
+
+    #destroy $this
+  }
+
+  ####################################################################
+  # Methods that deal with menus.
+  #
+  # The next set of methods control the menubar associated with the
+  # toolbar.  Currently, only sequential addition of submenu's and menu
+  # entries is allowed.  Here's what you do.  First, create a submenu
+  # with the "new_menu" command.  This submenu is the targeted menu. 
+  # Subsequent calls to add_menu_separator, and add_menu_command add
+  # separators and commands to the end of this submenu.
+  # If you need to edit a submenu, call clear_menu and then add all the
+  # items again.
+  #
+  # Each menu command also has a class list.  Transitions between states
+  #  of gdb will enable and disable different classes of menus.
+  #
+  # FIXME - support insert_command, and also cascade menus, whenever
+  # we need it...
+  ####################################################################
+
+  # ------------------------------------------------------------------
+  #  METHOD:  menubar_new_menu - Add a new cascade menu to the main menu.
+  #                      Also target this menu for subsequent
+  #                      menubar_add_menu_command calls.
+  #
+  #  name - the token for the new menu
+  #  label - The label used for the label
+  #  underline - the index of the underlined character for this menu item.
+  #
+  #  RETURNS: the cascade menu widget path.
+  # ------------------------------------------------------------------
+  method menubar_new_menu {name label underline} {
+    set current_menu $Menu.$name
+    set menu_list($name) [$Menu add cascade -menu  $current_menu \
+			     -label $label -underline $underline]
+    menu $current_menu -tearoff 0
+
+    set item_number -1
+    return $current_menu
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  menubar_menu_exists - Report whether a menu keyed by
+  #           NAME exists.
+  # 
+  #  name - the token for the menu sought
+  #
+  #  RETURNS: 1 if the menu exists, 0 otherwise.
+  # ------------------------------------------------------------------
+  method menubar_menu_exists {name} {
+    return [info exists menu_list($name)]
+
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  menubar_menu_class_find - Find a menu class and returns
+  #                   its members.
+  # 
+  #  type - the token for the menu class sought
+  #
+  #  RETURNS: class members (list) if the class exists, {} otherwise.
+  # ------------------------------------------------------------------
+  method menubar_menu_class_find {type} {
+    if {[info exists menu_classes($type)]} {
+      return $menu_classes($type)
+    } else {
+      return {}
+    }
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  menubar_clear_menu - Deletes the items from one of the
+  #                   main menu cascade menus. Also makes this menu
+  #                   the target menu.
+  # 
+  #  name - the token for the new menu
+  #
+  #  RETURNS: then item number of the menu, or "" if the menu is not found.
+  #
+  #  FIXME: Does not remove the deleted menus from their class lists.
+  # ------------------------------------------------------------------
+  method menubar_clear_menu {name} {
+    if {[info exists menu_list($name)]} {
+      set current_menu [$Menu entrycget $menu_list($name) -menu]
+      $current_menu delete 0 end
+      set item_number -1
+      return $current_menu
+    } else {
+      return ""
+    }
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  menubar_add_menu_separator - Adds a menu separator to
+  #                   the currently targeted submenu of the main menu.
+  # 
+  # ------------------------------------------------------------------
+  method menubar_add_menu_separator {} {
+    incr item_number
+    $current_menu add separator
+  }
+
+  # ------------------------------------------------------------------
+  #  METHOD:  menubar_add_menu_command - Adds a menu command item to
+  #                   the currently targeted submenu of the main menu.
+  #
+  #  class - The class of the command, used for disabling entries.
+  #  label - The text for the command.
+  #  command - The command for the menu entry
+  #  args  - Passed to the menu entry creation command (eval'ed) 
+  # ------------------------------------------------------------------
+  method menubar_add_menu_command {class label command args} {
+
+    eval $current_menu add command -label \$label -command \$command \
+	  $args
+      
+    incr item_number
+
+    switch $class {
+      None {}
+      default {
+        foreach elem $class {
+	  lappend menu_classes($elem) [list $current_menu $item_number]
+	}
+      }
+    }
+  }
+
+  # ------------------------------------------------------------------
+  # METHOD:  menubar_change_menu_state - Does the actual job of
+  #                  enabling menus...
+  #
+  # INPUT:  Pass normal or disabled for the state.
+  # ------------------------------------------------------------------
+  method menubar_change_menu_state {state menuList} {
+
+    foreach elem $menuList {
+      [lindex $elem 0] entryconfigure [lindex $elem 1] -state $state
+    }	
+  }
+
+  # ------------------------------------------------------------------
+  # METHOD:  menubar_set_current_menu - Change the current_menu pointer.
+  #          Returns the current value so it can be restored.
+  # ------------------------------------------------------------------
+  method menubar_set_current_menu {menup} {
+    set saved_menu $current_menu
+    set current_menu $menup
+    return $saved_menu
+  }
+
+  ####################################################################
+  #
+  #  PRIVATE DATA
+  #
+  ####################################################################
+
+  # This array holds the menu classes.  The key is the class name,
+  # and the value is the list of menus belonging to this class.
+  private variable menu_classes
+
+  private variable item_number -1
+  private variable current_menu {}
+
+  ####################################################################
+  #
+  #  PROTECTED DATA
+  #
+  ####################################################################
+
+  # The menu Tk widget
+  protected variable Menu
+
+  ####################################################################
+  #
+  #  PUBLIC DATA
+  #
+  ####################################################################
+
+  # None
+}

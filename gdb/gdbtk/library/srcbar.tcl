@@ -1,3 +1,5 @@
+# OBSOLETE: Please see gdbmenubar, gdbtoolbar, srcmenubar and srctoolbar
+#
 # GDBSrcBar
 # Copyright 1997, 1998, 1999 Cygnus Solutions
 #
