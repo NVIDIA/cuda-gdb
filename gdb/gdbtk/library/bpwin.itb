@@ -698,6 +698,8 @@ body BpWin::toggle_threads {} {
 body BpWin::reconfig {} {
   if {[winfo exists $itk_interior.f]} { destroy $itk_interior.f }
   if {[winfo exists $itk_interior.m]} { destroy $itk_interior.m }
+  if {[winfo exists $itk_interior.sbox]} { destroy $itk_interior.sbox }
+  if {[winfo exists $itk_interior.sf]} { destroy $itk_interior.sf }
   if {[winfo exists $itk_interior.pop]} { destroy $itk_interior.pop }
   build_win
 }

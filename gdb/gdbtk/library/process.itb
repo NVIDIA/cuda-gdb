@@ -139,6 +139,8 @@ body ProcessWin::destructor {} {
 # ------------------------------------------------------------------
 body ProcessWin::reconfig {} {
   destroy $itk_interior.s
+  if {[winfo exists $itk_interior.sbox]} { destroy $itk_interior.sbox }
+  if {[winfo exists $itk_interior.slbox]} { destroy $itk_interior.slbox }
   build_win
 }
 

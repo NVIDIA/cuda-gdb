@@ -96,6 +96,9 @@ class TdumpWin {
   #  METHOD:  reconfig - used when preferences change
   # ------------------------------------------------------------------
   method reconfig {} {
+    if {[winfo exists $itk_interior.sbox]} { destroy $itk_interior.sbox }
+    if {[winfo exists $itk_interior.stext]} { destroy $itk_interior.stext }
+    build_win
   }
 }
 

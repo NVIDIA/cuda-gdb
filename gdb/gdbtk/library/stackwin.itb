@@ -134,6 +134,7 @@ body StackWin::change_frame {} {
 # ------------------------------------------------------------------
 body StackWin::reconfig {} {
   destroy $itk_interior.s
+  if {[winfo exists $itk_interior.sbox]} { destroy $itk_interior.sbox }
   build_win
 }
 

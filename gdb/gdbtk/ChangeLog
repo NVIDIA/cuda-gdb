@@ -1,3 +1,19 @@
+2001-11-05  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/stackwin.itb (StcakWin::reconfig): Destroy sbox 
+	if it exists.
+
+	* library/process.itb (ProcessWin::reconfig): Destroy sbox 
+	if it exists. This fixes reconfig failures on Windows. Also 
+	destroy slbox.
+
+	* library/bpwin.itb (BpWin::reconfig): Destroy sbox if 
+	it exists.This fixes reconfig failures on Windows. Also 
+	destroy sf
+	
+	* library/tdump.tcl (TdumpWin::reconfig): Delete sbox
+	and stext then rebuild window.
+
 2001-11-05  Martin M. Hunt  <hunt@redhat.com>	
 
 	* library/debugwin.itb (DebugWin::build_win): 
