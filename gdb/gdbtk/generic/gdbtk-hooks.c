@@ -93,7 +93,7 @@ static void gdbtk_warning (const char *, va_list);
 static char *gdbtk_readline (char *);
 static void gdbtk_readline_begin (char *format,...);
 static void gdbtk_readline_end (void);
-static void gdbtk_pre_add_symbol (char *);
+static void gdbtk_pre_add_symbol (const char *);
 static void gdbtk_print_frame_info (struct symtab *, int, int, int);
 static void gdbtk_post_add_symbol (void);
 static void gdbtk_register_changed (int regno);
