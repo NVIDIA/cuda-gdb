@@ -194,16 +194,22 @@ proc gdbtk_idle {} {
   # could replace it.
   gdb_restore_fputs
 
+  set err [catch {run_hooks gdb_idle_hook}]
+  if {$err} {
+    dbug E "Error running gdb_idle_hook: $::errorInfo"
+  }
+
   set e [IdleEvent \#auto]
   GDBEventHandler::dispatch $e
   delete object $e
-  
+
   if {!$gdb_running} {
     set err [catch {run_hooks gdb_no_inferior_hook} txt]
     if {$err} { 
       dbug E "no_inferior_hook error: $txt" 
     }
-  }    
+  }
+
   # Force the screen to update
   update
 }

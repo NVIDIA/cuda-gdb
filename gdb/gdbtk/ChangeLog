@@ -1,5 +1,10 @@
 2001-05-31  Keith Seitz  <keiths@redhat.com>
 
+	* library/interface.tcl (gdbtk_idle): Run hooks, too,
+	until they're all gone.
+
+2001-05-31  Keith Seitz  <keiths@redhat.com>
+
 	* library/interface.tcl (gdb_idle_hook): Mark as deprecated.
 	(gdbtk_idle): Dispatch an IdleEvent. gdb_idle_hook is gone.
 	* library/ehandler.ith (idle): New event handler.
