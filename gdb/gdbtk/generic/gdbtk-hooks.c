@@ -661,23 +661,13 @@ breakpoint_notify (b, action)
      const char *action;
 {
   char *buf;
-  int v;
-  struct symtab_and_line sal;
-  char *filename;
 
   if (b->type != bp_breakpoint)
     return;
 
   /* We ensure that ACTION contains no special Tcl characters, so we
      can do this.  */
-  sal = find_pc_line (b->address, 0);
-  filename = symtab_to_filename (sal.symtab);
-  if (filename == NULL)
-    filename = "";
-
-  xasprintf (&buf, "gdbtk_tcl_breakpoint %s %d 0x%lx %d {%s} {%s} %d %d",
-	   action, b->number, (long) b->address, b->line_number, filename,
-	   bpdisp[b->disposition], b->enable, b->thread);
+  xasprintf (&buf, "gdbtk_tcl_breakpoint %s %d", action, b->number);
 
   if (Tcl_Eval (gdbtk_interp, buf) != TCL_OK)
     report_error ();
@@ -794,19 +784,10 @@ tracepoint_notify (tp, action)
      const char *action;
 {
   char *buf;
-  int v;
-  struct symtab_and_line sal;
-  char *filename;
 
   /* We ensure that ACTION contains no special Tcl characters, so we
      can do this.  */
-  sal = find_pc_line (tp->address, 0);
-
-  filename = symtab_to_filename (sal.symtab);
-  if (filename == NULL)
-    filename = "N/A";
-  xasprintf (&buf, "gdbtk_tcl_tracepoint %s %d 0x%lx %d {%s} %d", action, tp->number,
-	   (long) tp->address, sal.line, filename, tp->pass_count);
+  xasprintf (&buf, "gdbtk_tcl_tracepoint %s %d", action, tp->number);
 
   if (Tcl_Eval (gdbtk_interp, buf) != TCL_OK)
     report_error ();

@@ -11,6 +11,53 @@
 	(_state): Delete unused variable.
 	* library/tclIndex: Regenerated.
 
+	* generic/gdbtk-cmds.c (gdb_set_bp): Use create_breakpoint_hook
+	to notify gui of changes.
+	(gdb_set_bp_addr): Ditto.
+	(gdb_get_breakpoint_info): Update comments to match reality.
+	* generic/gdbtk-hooks.c (breakpoint_notify): Only pass the
+	breakpoint number which generated the event.
+	(tracepoint_notify): Ditto for tracepoints.
+	* library/interface.tcl (gdb_breakpoint_change_hook): Mark
+	as deprecated and comment out definition.
+	(gdbtk_tcl_breakpoint): Use new GDBEvent event "breakpoint"
+	to notify rest of UI about breakpoint event.
+	(gdbtk_tcl_tracepoint): Ditto for "tracepoint" event.
+	* library/bpwin.ith (update): Renamed to "breakpoint".
+	(breakpoint): New public method.
+	(tracepoint): New public method.
+	(bp_add): Take event as argument instead of number.
+	(bp_modify): Ditto.
+	(bp_delete): Ditto.
+	* library/bpwin.itb (constructor): Remove
+	gdb_breakpoint_changed_hook.
+	(destructor): Ditto.
+	(build_win): Insert any existing breakpoints by
+	making BreakpointEvents for them.
+	(breakpoint): Renamed from "update" to handle
+	breakpoint events.
+	Remove code to deal with tracepoints.
+	(tracepoint): New method to handle tracepoint
+	events.
+	(bp_add): Deal with breakpoint events, not breakpoint
+	numbers.
+	(bp_modify): Ditto.
+	(bp_delete): Ditto.
+	* library/srctextwin.ith: Inherit from GDBWin.
+	(breakpoint): New public method.
+	(tracepoint): New public method.
+	* library/srctextwin.itb (constructor): Remove
+	gdb_breakpoint_changed_hook.
+	(destructor): Ditto.
+	(breakpoint): New method to handle breakpoint event.
+	(tracepoint): New method to handle tracepoint event.
+	(do_bp): Handle duplicate breakpoints for asm, too.
+	(remove_bp_at_line): Delete breakpoints by number, not
+	linespec. clear_command removes breakpoints from the
+	breakpoint_chain BEFORE deleting the breakpoint. delete_command
+	does this afterward (so we can call gdb_get_breakpoint_info on
+	an about-to-be-deleted breakpoint).
+
 2001-04-18  Martin M. Hunt  <hunt@redhat.com>
 	
 	* generic/gdbtk.c (gdbtk_init): Initialize uiout.

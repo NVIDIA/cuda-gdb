@@ -3766,9 +3766,7 @@ gdb_loadfile (ClientData clientData, Tcl_Interp *interp, int objc,
  */
 
 /* This implements the tcl command "gdb_set_bp"
- * It sets breakpoints, and runs the Tcl command
- *     gdbtk_tcl_breakpoint create
- * to register the new breakpoint with the GUI.
+ * It sets breakpoints, and notifies the GUI.
  *
  * Tcl Arguments:
  *    filename: the file in which to set the breakpoint
@@ -3787,7 +3785,7 @@ gdb_set_bp (clientData, interp, objc, objv)
      Tcl_Obj *CONST objv[];
 {
   struct symtab_and_line sal;
-  int line, ret, thread = -1;
+  int line, thread = -1;
   struct breakpoint *b;
   char *buf, *typestr;
   Tcl_DString cmd;
@@ -3854,35 +3852,12 @@ gdb_set_bp (clientData, interp, objc, objv)
   free(buf);
 
   /* now send notification command back to GUI */
-
-  Tcl_DStringInit (&cmd);
-
-  Tcl_DStringAppend (&cmd, "gdbtk_tcl_breakpoint create ", -1);
-  xasprintf (&buf, "%d", b->number);
-  Tcl_DStringAppendElement (&cmd, buf);
-  free(buf);
-  xasprintf (&buf, "0x%lx", (long) sal.pc);
-  Tcl_DStringAppendElement (&cmd, buf);
-  Tcl_DStringAppendElement (&cmd, Tcl_GetStringFromObj (objv[2], NULL));
-  Tcl_DStringAppendElement (&cmd, Tcl_GetStringFromObj (objv[1], NULL));
-  Tcl_DStringAppendElement (&cmd, bpdisp[b->disposition]);
-  free(buf);
-  xasprintf (&buf, "%d", b->enable);
-  Tcl_DStringAppendElement (&cmd, buf);
-  free(buf);
-  xasprintf (&buf, "%d", b->thread);
-  Tcl_DStringAppendElement (&cmd, buf);
-  free(buf);
-
-  ret = Tcl_Eval (interp, Tcl_DStringValue (&cmd));
-  Tcl_DStringFree (&cmd);
-  return ret;
+  create_breakpoint_hook (b);
+  return TCL_OK;
 }
 
 /* This implements the tcl command "gdb_set_bp_addr"
- * It sets breakpoints, and runs the Tcl command
- *     gdbtk_tcl_breakpoint create
- * to register the new breakpoint with the GUI.
+ * It sets breakpoints, and notifies the GUI.
  *
  * Tcl Arguments:
  *    addr: the address at which to set the breakpoint
@@ -3898,7 +3873,7 @@ gdb_set_bp_addr (ClientData clientData, Tcl_Interp *interp, int objc,
      
 {
   struct symtab_and_line sal;
-  int ret, thread = -1;
+  int thread = -1;
   long addr;
   struct breakpoint *b;
   char *filename, *typestr, *buf;
@@ -3956,36 +3931,8 @@ gdb_set_bp_addr (ClientData clientData, Tcl_Interp *interp, int objc,
   b->addr_string = xstrdup (buf);
 
   /* now send notification command back to GUI */
-
-  Tcl_DStringInit (&cmd);
-
-  Tcl_DStringAppend (&cmd, "gdbtk_tcl_breakpoint create ", -1);
-  free(buf);
-  xasprintf (&buf, "%d", b->number);
-  Tcl_DStringAppendElement (&cmd, buf);
-  free(buf);
-  xasprintf (&buf, "0x%lx", addr);
-  Tcl_DStringAppendElement (&cmd, buf);
-  free(buf);
-  xasprintf (&buf, "%d", b->line_number);
-  Tcl_DStringAppendElement (&cmd, buf);
-
-  filename = symtab_to_filename (sal.symtab);
-  if (filename == NULL)
-    filename = "";
-  Tcl_DStringAppendElement (&cmd, filename);
-  Tcl_DStringAppendElement (&cmd, bpdisp[b->disposition]);
-  free(buf);
-  xasprintf (&buf, "%d", b->enable);
-  Tcl_DStringAppendElement (&cmd, buf);
-  free(buf);
-  xasprintf (&buf, "%d", b->thread);
-  Tcl_DStringAppendElement (&cmd, buf);
-
-  ret = Tcl_Eval (interp, Tcl_DStringValue (&cmd));
-  Tcl_DStringFree (&cmd);
-  free(buf);
-  return ret;
+  create_breakpoint_hook (b);
+  return TCL_OK;
 }
 
 /* This implements the tcl command "gdb_find_bp_at_line"
@@ -4085,7 +4032,7 @@ gdb_find_bp_at_addr (clientData, interp, objc, objv)
  * Tcl Result:
  *   A list with {file, function, line_number, address, type, enabled?,
  *                disposition, ignore_count, {list_of_commands},
- *                thread, hit_count}
+ *                condition, thread, hit_count}
  */
 
 static int

@@ -1,5 +1,5 @@
 # Interface between GDB and Insight.
-# Copyright 1997, 1998, 1999 Cygnus Solutions
+# Copyright 1997, 1998, 1999, 2001 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -16,9 +16,10 @@
 global gdbtk_state
 set gdbtk_state(busyCount) 0
 
+# *** DEPRECATED: Use GDBEventHandler::breakpoint instead.
 # This is run when a breakpoint changes.  The arguments are the
 # action, the breakpoint number, and the breakpoint info.
-define_hook gdb_breakpoint_change_hook
+#define_hook gdb_breakpoint_change_hook
 
 # This is run when a `set' command successfully completes in gdb.  The
 # first argument is the gdb variable name (as a Tcl list).  The second
@@ -443,17 +444,21 @@ proc gdbtk_tcl_end_variable_annotation {} {
 # ------------------------------------------------------------------
 # PROC: gdbtk_tcl_breakpoint -
 # ------------------------------------------------------------------
-proc gdbtk_tcl_breakpoint {action bpnum addr line file bp_type enabled thread} {
-#  debug "BREAKPOINT: $action $bpnum $addr $line $file $bp_type $enabled $thread "
-  run_hooks gdb_breakpoint_change_hook $action $bpnum $addr $line $file $bp_type $enabled $thread
+proc gdbtk_tcl_breakpoint {action bpnum} {
+#  debug "BREAKPOINT: $action $bpnum"
+  set e [BreakpointEvent \#auto -action $action -number $bpnum]
+  GDBEventHandler::dispatch $e
+  delete object $e
 }
 
 # ------------------------------------------------------------------
 # PROC: gdbtk_tcl_tracepoint -
 # ------------------------------------------------------------------
-proc gdbtk_tcl_tracepoint {action tpnum addr line file pass_count} {
-#  debug "TRACEPOINT: $action $tpnum $addr $line $file $pass_count"
-  run_hooks gdb_breakpoint_change_hook $action $tpnum $addr $line $file tracepoint
+proc gdbtk_tcl_tracepoint {action tpnum} {
+#  debug "TRACEPOINT: $action $tpnum"
+  set e [TracepointEvent \#auto -action $action -number $tpnum]
+  GDBEventHandler::dispatch $e
+  delete object $e
 }
 
 # ------------------------------------------------------------------

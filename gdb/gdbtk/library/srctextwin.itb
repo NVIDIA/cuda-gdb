@@ -1,5 +1,5 @@
- # Paned text widget for source code, for GDBtk.
-# Copyright 1997, 1998, 1999 Cygnus Solutions
+# Paned text widget for source code, for Insight
+# Copyright 1997, 1998, 1999, 2001 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -60,8 +60,6 @@ body SrcTextWin::constructor {args} {
   build_win
   
   # add hooks
-  add_hook gdb_breakpoint_change_hook "$this bp"
-  
   if {$Tracing} {
     add_hook control_mode_hook "$this set_control_mode"
     add_hook gdb_trace_find_hook "$this trace_find_hook"
@@ -83,7 +81,6 @@ body SrcTextWin::constructor {args} {
 #  DESTRUCTOR - destroy window containing widget
 # ------------------------------------------------------------------
 body SrcTextWin::destructor {} {
-  remove_hook gdb_breakpoint_change_hook "$this bp"
   if {$Tracing} {
     remove_hook control_mode_hook "$this set_control_mode"
   }
@@ -1454,6 +1451,28 @@ body SrcTextWin::removeBreakTag {win linenum tag } {
 }
 
 # ------------------------------------------------------------------
+#  PUBLIC METHOD:  breakpoint - Handle a breakpoint create, delete,
+#                   or modify event from the backend.
+# ------------------------------------------------------------------
+body SrcTextWin::breakpoint {bp_event} {
+
+  bp [$bp_event get action] [$bp_event get number] [$bp_event get address] \
+    [$bp_event get line] [$bp_event get file] [$bp_event get disposition]  \
+    [$bp_event get enabled] [$bp_event get thread]
+}
+
+# ------------------------------------------------------------------
+#  PUBLIC METHOD:  tracepoint - Handle a tracepoint create, delete,
+#                   modify event from the backend.
+# ------------------------------------------------------------------
+body SrcTextWin::tracepoint {tp_event} {
+
+  bp [$tp_event get action] [$tp_event get number] [$tp_event get address] \
+    [$tp_event get line] [$tp_event get file] tracepoint                   \
+    [$tp_event get pass_count]
+}
+
+# ------------------------------------------------------------------
 #  METHOD:  bp - set and remove breakpoints
 #
 #  if $addr is valid, the breakpoint will be set in the assembly or 
@@ -1462,7 +1481,7 @@ body SrcTextWin::removeBreakTag {win linenum tag } {
 # ------------------------------------------------------------------
 body SrcTextWin::bp {action bpnum addr {linenum {}} {file {}} {type 0} {enabled 0}  {thread -1}} {
 #  debug "$action addr=$addr line=$linenum file=$file type=$type current(filename)=$current(filename)"
-  
+
   switch $current(mode) {
     SOURCE {
       if {[string compare $file $current(filename)] == 0 && $linenum != {}} {
@@ -1501,15 +1520,23 @@ body SrcTextWin::bp {action bpnum addr {linenum {}} {file {}} {type 0} {enabled 
 # ------------------------------------------------------------------
 body SrcTextWin::do_bp { win action linenum type bpnum enabled thread asm} {
 #  debug "$action line=$linenum type=$type bpnum=$bpnum enabled=$enabled thread=$thread"
-  
+
   if {$dont_change_appearance} {
     return
   }
 
-  if {!$asm && $action == "delete" && [string compare $type tracepoint] != 0} {
+  if {$action == "delete" && [string compare $type tracepoint] != 0} {
     # make sure there are no more breakpoints on
     # this line.
-    set bps [gdb_find_bp_at_line $current(filename) $linenum]
+    if {!$asm} {
+      set bps [gdb_find_bp_at_line $current(filename) $linenum]
+    } else {
+      if {[info exists _map($Cname,line=$linenum)]} {
+	set bps [gdb_find_bp_at_addr $_map($Cname,line=$linenum)]
+      } else {
+	set bps {}
+      }
+    }
     if {[llength $bps] > 0} {
       foreach b $bps {
 	if {$b != $bpnum} {
@@ -1568,7 +1595,7 @@ body SrcTextWin::do_bp { win action linenum type bpnum enabled thread asm} {
       set tag_type thread_bp_tag
     }
     default {
-      dbug E "UNKNOWN BP TYPE $action $type"
+      dbug E "UNKNOWN BP TYPE action=\"$action\" type=\"$type\""
       $win insert $linenum.0 "X" bp_tag
       set tag_type bp_tag
     }
@@ -1903,16 +1930,20 @@ body SrcTextWin::remove_bp_at_line {{win {}} {y -1}} {
   if {$Running} {return}
   
   # Look up the line...  This foreach is an lassign...
-  
+
   foreach {name line addr type} [lookup_line $win $y] {
     break
   }
-  
-  if {[string compare $type src] == 0} {
-    gdb_cmd "clear $name:$addr"
-  } else {
-    gdb_cmd "clear *$addr"
+
+  # FIXME: if there are multiple bp/tp at a single line,
+  # we will (right now) always take the first one we find...
+  switch $type {
+    src { set bps [gdb_find_bp_at_line $name $addr] }
+    asm { set bps [gdb_find_bp_at_addr $addr] }
   }
+
+  set number [lindex $bps 0]
+  gdb_cmd "delete $number"
 }
 
 

@@ -1,5 +1,5 @@
 # Breakpoint window for GDBtk.
-# Copyright 1997, 1998, 1999 Cygnus Solutions
+# Copyright 1997, 1998, 1999, 2001 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -18,7 +18,6 @@
 body BpWin::constructor {args} {
   window_name "Breakpoints" "BPs"
   
-  add_hook gdb_breakpoint_change_hook "$this update"
   if {[pref getd gdb/bp/menu] != ""} {
     set mbar 0
   }
@@ -32,9 +31,7 @@ body BpWin::constructor {args} {
 # ------------------------------------------------------------------
 #  DESTRUCTOR:  destroy the breakpoint window
 # ------------------------------------------------------------------
-body BpWin::destructor {} {
-  remove_hook gdb_breakpoint_change_hook "$this update"
-}
+body BpWin::destructor {} {}
 
 
 # ------------------------------------------------------------------
@@ -168,12 +165,16 @@ body BpWin::build_win {} {
   if { $tracepoints == 0 } {
     # insert all breakpoints
     foreach i [gdb_get_breakpoint_list] {
-      bp_add $i
+      set e [BreakpointEvent \#auto -action create -number $i]
+      bp_add $e
+      delete object $e
     }
   } else {
     # insert all tracepoints
     foreach i [gdb_get_tracepoint_list] {
-      bp_add $i 1
+      set e [TracepointEvent \#auto -action create -number $i]
+      bp_add $e 1
+      delete object $e
     }
   }
 
@@ -185,25 +186,24 @@ body BpWin::build_win {} {
 # ------------------------------------------------------------------
 #  METHOD:  bp_add - add a breakpoint entry
 # ------------------------------------------------------------------
-body BpWin::bp_add { bpnum {tracepoint 0}} {
+body BpWin::bp_add {bp_event {tracepoint 0}} {
   global _bp_en _bp_disp tcl_platform _files
-  
+
+  set number [$bp_event get number]
+  set thread [$bp_event get thread]
+  set disposition [$bp_event get disposition]
+  set file [$bp_event get file]
+
   if {$tracepoint} {
-    set bpinfo [gdb_get_tracepoint_info $bpnum]
-    lassign $bpinfo file func line pc enabled pass_count \
-      step_count thread hit_count actions
-    set disposition tracepoint
+    set diposition tracepoint
     set bptype tracepoint
   } else {
-    set bpinfo [gdb_get_breakpoint_info $bpnum]
-    lassign $bpinfo file func line pc type enabled disposition \
-      ignore_count commands cond thread hit_count
     set bptype breakpoint
   }
 
-  debug "bp_add bpnum=$bpnum thread=$thread show=$show_threads"
+  debug "bp_add bpnum=$number thread=$thread show=$show_threads"
   set i $next_row
-  set _bp_en($i) $enabled
+  set _bp_en($i) [$bp_event get enabled]
   set _bp_disp($i) $disposition
   set temp($i) ""
   switch $disposition {
@@ -229,9 +229,9 @@ body BpWin::bp_add { bpnum {tracepoint 0}} {
   }
 
   if {$tracepoints} {
-    label $twin.num$i -text "$bpnum " -relief flat -anchor e -font src-font -bg $bg1
+    label $twin.num$i -text "$number " -relief flat -anchor e -font src-font -bg $bg1
   }
-  label $twin.addr$i -text "$pc " -relief flat -anchor e -font src-font -bg $bg1
+  label $twin.addr$i -text "[$bp_event get address] " -relief flat -anchor e -font src-font -bg $bg1
   if {[info exists _files(short,$file)]} {
     set file $_files(short,$file)
   } else {
@@ -243,11 +243,10 @@ body BpWin::bp_add { bpnum {tracepoint 0}} {
     label $twin.thread$i -text "$thread " -relief flat -anchor e -font src-font -bg $bg1
   }
   label $twin.file$i -text "$file " -relief flat -anchor e -font src-font -bg $bg1
-  label $twin.line$i -text "$line " -relief flat -anchor e -font src-font -bg $bg1
-  label $twin.func$i -text "$func " -relief flat -anchor e -font src-font -bg $bg1
-  
+  label $twin.line$i -text "[$bp_event get line] " -relief flat -anchor e -font src-font -bg $bg1
+  label $twin.func$i -text "[$bp_event get function] " -relief flat -anchor e -font src-font -bg $bg1
   if {$tracepoints} {
-    label $twin.pass$i -text "$pass_count " -relief flat -anchor e -font src-font -bg $bg1
+    label $twin.pass$i -text "[$bp_event get pass_count] " -relief flat -anchor e -font src-font -bg $bg1
   }
 
   if {$mbar} {
@@ -276,7 +275,7 @@ body BpWin::bp_add { bpnum {tracepoint 0}} {
   # This used to be the last row.  Fix it vertically again.
   grid rowconfigure $twin $i -weight 0
 
-  set index_to_bpnum($i) $bpnum
+  set index_to_bpnum($i) $number
   set Index_to_bptype($i) $bptype
   incr i
   set next_row $i
@@ -417,25 +416,24 @@ body BpWin::bp_select { r } {
 # ------------------------------------------------------------------
 #  METHOD:  bp_modify - modify a breakpoint entry
 # ------------------------------------------------------------------
-body BpWin::bp_modify { bpnum {tracepoint 0} } {
+body BpWin::bp_modify {bp_event {tracepoint 0}} {
   global _bp_en _bp_disp tcl_platform _files
 
+  set number [$bp_event get number]
+  set thread [$bp_event get thread]
+  set disposition [$bp_event get disposition]
+  set file [$bp_event get file]
+
   if {$tracepoint} {
-    set bpinfo [gdb_get_tracepoint_info $bpnum]
-    lassign $bpinfo file func line pc enabled pass_count \
-      step_count thread hit_count actions
     set disposition tracepoint
     set bptype tracepoint
   } else {
-    set bpinfo [gdb_get_breakpoint_info $bpnum]
-    lassign $bpinfo file func line pc type enabled disposition \
-      ignore_count commands cond thread hit_count
     set bptype breakpoint
   }
 
   set found 0
   for {set i 1} {$i < $next_row} {incr i} {
-    if { $bpnum == $index_to_bpnum($i)
+    if { $number == $index_to_bpnum($i)
 	 && "$Index_to_bptype($i)" == "$bptype"} {
       incr found
       break
@@ -443,12 +441,12 @@ body BpWin::bp_modify { bpnum {tracepoint 0} } {
   }
 
   if {!$found} {
-    debug "ERROR: breakpoint number $bpnum not found!"
+    debug "ERROR: breakpoint number $number not found!"
     return
   }
 
-  if {$_bp_en($i) != $enabled} {
-    set _bp_en($i) $enabled
+  if {$_bp_en($i) != [$bp_event get enabled]} {
+    set _bp_en($i) [$bp_event get enabled]
   }
 
   if {$_bp_disp($i) != $disposition} {
@@ -472,9 +470,9 @@ body BpWin::bp_modify { bpnum {tracepoint 0} } {
     $twin.en$i configure -selectcolor $color
   }
   if {$tracepoints} {
-    $twin.num$i configure  -text "$bpnum "
+    $twin.num$i configure  -text "$number "
   }
-  $twin.addr$i configure -text "$pc " 
+  $twin.addr$i configure -text "[$bp_event get address] " 
   if {[info exists _files(short,$file)]} {
     set file $_files(short,$file)
   } else {
@@ -486,10 +484,10 @@ body BpWin::bp_modify { bpnum {tracepoint 0} } {
     $twin.thread$i configure -text "$thread "
   }
   $twin.file$i configure -text "$file "
-  $twin.line$i configure  -text "$line "
-  $twin.func$i configure  -text "$func "
+  $twin.line$i configure  -text "[$bp_event get line] "
+  $twin.func$i configure  -text "[$bp_event get function] "
   if {$tracepoints} {
-    $twin.pass$i configure  -text "$pass_count "
+    $twin.pass$i configure  -text "[$bp_event get pass_count] "
   }
 }
 
@@ -562,9 +560,10 @@ body BpWin::bp_type { i } {
 # ------------------------------------------------------------------
 #  METHOD:  bp_delete - delete a breakpoint
 # ------------------------------------------------------------------
-body BpWin::bp_delete { bpnum } {
+body BpWin::bp_delete {bp_event} {
+  set number [$bp_event get number]
   for {set i 1} {$i < $next_row} {incr i} {
-    if { $bpnum == $index_to_bpnum($i) } {
+    if { $number == $index_to_bpnum($i) } {
       if {$tracepoints} {
 	grid forget $twin.en$i $twin.num$i $twin.addr$i $twin.file$i \
 	  $twin.line$i $twin.func$i $twin.pass$i
@@ -587,22 +586,36 @@ body BpWin::bp_delete { bpnum } {
 }
 
 # ------------------------------------------------------------------
-#  METHOD:  update - update widget when a breakpoint changes
+#  PUBLIC METHOD:  breakpoint - Update widget when a breakpoint
+#                   event is received from the backend.
 # ------------------------------------------------------------------
-body BpWin::update {action bpnum addr {linenum {}} {file {}} {type 0} args} {
-  #debug "bp update $action $bpnum $type"
+body BpWin::breakpoint {bp_event} {
 
-  if {$type == "tracepoint"} {
-    set tp 1
-  } else {
-    set tp 0
-  }
+  set action [$bp_event get action]
+  #debug "bp update $action [$bp_event get number] [$bp_event get type]"
 
   switch $action {
-    modify { bp_modify $bpnum $tp}
-    create { bp_add $bpnum $tp}
-    delete { bp_delete $bpnum }
-    default { debug "Unknown breakpoint action: $action" }
+    modify  { bp_modify $bp_event 0 }
+    create  { bp_add $bp_event 0 }
+    delete  { bp_delete $bp_event }
+    default { dbug E "Unknown breakpoint action: $action" }
+  }
+}
+
+# ------------------------------------------------------------------
+#  METHOD:  tracepoint - Update widget when a tracepoint event
+#            is received from the backend.
+# ------------------------------------------------------------------
+body BpWin::tracepoint {tp_event} {
+
+  set action [$tp_event get action]
+  #debug "tp update $action [$tp_event get number]"
+
+  switch $action {
+    modify  { bp_modify $tp_event 1 }
+    create  { bp_add $tp_event 1 }
+    delete  { bp_delete $tp_event }
+    default { dbug E "Unknown tracepoint action: $action" }
   }
 }
 
