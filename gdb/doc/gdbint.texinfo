@@ -46,7 +46,7 @@ regarded as a program in the language TeX).
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.1.1.9 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.1.1.10 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -1572,6 +1572,12 @@ Deprecated in favor of @var{REGISTER_NAME}.
 @item REG_STRUCT_HAS_ADDR (gcc_p, type)
 Define this to return 1 if the given type will be passed by pointer
 rather than directly.
+
+@item SAVE_DUMMY_FRAME_TOS (sp)
+Used in @samp{call_function_by_hand} to notify the target dependent code
+of the top-of-stack value that will be passed to the the inferior code.
+This is the value of the @var{SP} after both the dummy frame and space
+for parameters/results have been allocated on the stack.
 
 @item SDB_REG_TO_REGNUM
 Define this to convert sdb register numbers into GDB regnums.  If not
