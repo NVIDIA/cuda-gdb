@@ -622,6 +622,7 @@ gdb_eval (ClientData clientData, Tcl_Interp *interp,
   value_ptr val;
   struct ui_file *stb;
   long dummy;
+  char *result;
 
   if (objc != 2 && objc != 3)
     {
@@ -638,10 +639,13 @@ gdb_eval (ClientData clientData, Tcl_Interp *interp,
 
   /* "Print" the result of the expression evaluation. */
   stb = mem_fileopen ();
+  make_cleanup_ui_file_delete (stb);
   val_print (VALUE_TYPE (val), VALUE_CONTENTS (val),
 	     VALUE_EMBEDDED_OFFSET (val), VALUE_ADDRESS (val),
 	     stb, format, 0, 0, 0);
-  Tcl_SetObjResult (interp, Tcl_NewStringObj (ui_file_xstrdup (stb, &dummy), -1));
+  result = ui_file_xstrdup (stb, &dummy);
+  Tcl_SetObjResult (interp, Tcl_NewStringObj (result, -1));
+  xfree (result);
   result_ptr->flags |= GDBTK_IN_TCL_RESULT;
 
   do_cleanups (old_chain);
