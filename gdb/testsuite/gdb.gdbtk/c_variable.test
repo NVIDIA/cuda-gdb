@@ -173,19 +173,7 @@ gdbtk_test_run
 # Desc: create local variables
 gdbtk_test c_variable-1.4 {create local variables} {
   set results {}
-  foreach v {linteger lpinteger lcharacter lpcharacter} {
-    lappend results [create_variable $v]
-  }
-
-  # Create "llong" differently. Tell it to use the current frame. Test 2.14
-  # will check that this works.
-  set err [catch {gdb_variable create llong -expr llong -frame ""} v]
-  if {!$err} {
-    set var(llong) $v
-  }
-  lappend results $err
-
-  foreach v {lplong lfloat lpfloat ldouble lpdouble lsimple lpsimple func} {
+  foreach v {linteger lpinteger lcharacter lpcharacter llong lplong lfloat lpfloat ldouble lpdouble lsimple lpsimple func} {
     lappend results [create_variable $v]
   }
   set results
@@ -378,11 +366,13 @@ gdbtk_test c_variable-2.13 {change subroutine1 local i} {
 #  *l = 12
 gdb_cmd "step"
 
+# This test is no longer valid, since varobj now forces
+# re-evaluation in the current frame by default.
 # Test: c_variable-2.14
 # Desc: change do_locals_tests local llong
-gdbtk_test c_variable-2.14 {change do_locals_tests local llong} {
-  check_update
-} {llong {}}
+#gdbtk_test c_variable-2.14 {change do_locals_tests local llong} {
+#  check_update
+#} {llong {}}
 
 # Leave subroutine1
 gdb_cmd "next"
@@ -390,8 +380,8 @@ gdb_cmd "next"
 # Test: c_variable-2.15
 # Desc: check for out of scope subroutine1 locals
 gdbtk_test *c_variable-2.15 {check for out of scope subroutine1 locals (ops, we don't have a out-of-scope list yet)} {
-  check_update
-} {{} {i l}}
+  lindex [check_update] 1
+} {i l}
 
 # Test: c_variable-2.16
 # Desc: names of all editable variables

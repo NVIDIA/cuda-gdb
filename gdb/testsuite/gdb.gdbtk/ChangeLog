@@ -1,3 +1,21 @@
+2002-01-15  Keith Seitz  <keiths@redhat.com>
+
+	* c_variable.test (1.4,2.14): Remove test for local frame
+	variables. Varobj now forces evaluation in the current frame
+	by default.
+	(2.15): Ignore any changes and only check for out of scope
+	locals (which is still unsupported).
+	* cpp_variable.test (1.1): Support alternative names for
+	local scope.
+	(1.6a): Catch call to gdb_cmd to prevent an error from
+	throwing testsuite into la-la land. Add to test.
+	(1.7): Ignore results from children during step, since
+	they may or may not change value when the parent changes.
+	(2.2a): New test incorperating gdb_cmd (also wrapped in
+	catch).
+	(2.22a): Likewise.
+	(2.71a): Likewise.
+
 2001-12-20  Keith Seitz  <keiths@redhat.com>
 
 	* cpp_variable.test: Catch non-test calls in case we
