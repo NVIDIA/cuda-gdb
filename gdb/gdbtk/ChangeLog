@@ -1,5 +1,13 @@
 2003-06-11  David Carlton  <carlton@bactrian.org>
 
+	* generic/gdbtk-stack.c: Include dictionary.h.
+	(gdb_block_vars): Update use of ALL_BLOCK_SYMBOLS.
+	(gdb_get_blocks, gdb_get_vars_command): Ditto.
+	* generic/gdbtk-cmds.c: Include dictionary.h.
+	(gdb_listfuncs): Update use of ALL_BLOCK_SYMBOLS.
+
+2003-06-11  David Carlton  <carlton@bactrian.org>
+
 	* generic/gdbtk-register.c (get_register): REGISTER_CONVERTIBLE
 	and REGISTER_CONVERT_TO_VIRTUAL are deprecated.
 

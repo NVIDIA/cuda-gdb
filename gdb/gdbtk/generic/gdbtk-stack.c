@@ -23,6 +23,7 @@
 #include "breakpoint.h"
 #include "linespec.h"
 #include "block.h"
+#include "dictionary.h"
 
 #include <tcl.h>
 #include "gdbtk.h"
@@ -85,7 +86,7 @@ gdb_block_vars (ClientData clientData, Tcl_Interp *interp,
 		int objc, Tcl_Obj *CONST objv[])
 {
   struct block *block;
-  int i;
+  struct dict_iterator iter;
   struct symbol *sym;
   CORE_ADDR start, end;
 
@@ -108,7 +109,7 @@ gdb_block_vars (ClientData clientData, Tcl_Interp *interp,
     {
       if (BLOCK_START (block) == start && BLOCK_END (block) == end)
 	{
-	  ALL_BLOCK_SYMBOLS (block, i, sym)
+	  ALL_BLOCK_SYMBOLS (block, iter, sym)
 	    {
 	      switch (SYMBOL_CLASS (sym))
 		{
@@ -160,7 +161,8 @@ gdb_get_blocks (ClientData clientData, Tcl_Interp *interp,
 		int objc, Tcl_Obj *CONST objv[])
 {
   struct block *block;
-  int i, junk;
+  struct dict_iterator iter;
+  int junk;
   struct symbol *sym;
   CORE_ADDR pc;
 
@@ -173,7 +175,7 @@ gdb_get_blocks (ClientData clientData, Tcl_Interp *interp,
       while (block != 0)
 	{
 	  junk = 0;
-	  ALL_BLOCK_SYMBOLS (block, i, sym)
+	  ALL_BLOCK_SYMBOLS (block, iter, sym)
 	    {
 	      switch (SYMBOL_CLASS (sym))
 		{
@@ -280,6 +282,7 @@ gdb_get_vars_command (ClientData clientData, Tcl_Interp *interp,
   struct symbol *sym;
   struct block *block;
   char **canonical, *args;
+  struct dict_iterator iter;
   int i, arguments;
 
   if (objc > 2)
@@ -322,7 +325,7 @@ gdb_get_vars_command (ClientData clientData, Tcl_Interp *interp,
 
   while (block != 0)
     {
-      ALL_BLOCK_SYMBOLS (block, i, sym)
+      ALL_BLOCK_SYMBOLS (block, iter, sym)
 	{
 	  switch (SYMBOL_CLASS (sym))
 	    {

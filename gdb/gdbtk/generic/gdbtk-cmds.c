@@ -35,6 +35,7 @@
 #include "top.h"
 #include "annotate.h"
 #include "block.h"
+#include "dictionary.h"
 
 /* tcl header files includes varargs.h unless HAS_STDARG is defined,
    but gdb uses stdarg.h, so make sure HAS_STDARG is defined.  */
@@ -1402,7 +1403,8 @@ gdb_listfuncs (clientData, interp, objc, objv)
   struct blockvector *bv;
   struct block *b;
   struct symbol *sym;
-  int i, j;
+  int i;
+  struct dict_iterator iter;
   Tcl_Obj *funcVals[2];
 
   if (objc != 2)
@@ -1433,7 +1435,7 @@ gdb_listfuncs (clientData, interp, objc, objv)
   for (i = GLOBAL_BLOCK; i <= STATIC_BLOCK; i++)
     {
       b = BLOCKVECTOR_BLOCK (bv, i);
-      ALL_BLOCK_SYMBOLS (b, j, sym)
+      ALL_BLOCK_SYMBOLS (b, iter, sym)
 	{
 	  if (SYMBOL_CLASS (sym) == LOC_BLOCK)
 	    {
