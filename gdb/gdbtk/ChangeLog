@@ -1,3 +1,8 @@
+2002-09-18  Keith Seitz  <keiths@redhat.com>
+
+	* library/console.itb (_build_win): Bind control-c and control-v
+	to copy and paste.
+
 2002-08-15  Keith Seitz  <keiths@redhat.com>
 
 	* README: Massive update.

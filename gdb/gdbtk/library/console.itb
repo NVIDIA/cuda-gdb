@@ -192,7 +192,9 @@ body Console::_build_win {} {
   } [code $this _paste 1]]
   bind $_twin <<Paste>> "[code $this _paste 0]; break"
   bind $_twin <<PasteSelection>> "[code $this _paste 0]; break"
-  
+  bind_plain_key $_twin Control-c "event generate $_twin <<Copy>>"
+  bind_plain_key $_twin Control-v "[code $this _paste 1]; break"
+
   _setprompt
   pack $itk_interior.stext -expand yes -fill both
     
