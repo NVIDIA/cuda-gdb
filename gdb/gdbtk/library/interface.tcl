@@ -985,7 +985,7 @@ proc run_executable { {auto_start 1} } {
 
     # Attach
     if {$gdb_target_name == "" || [pref get gdb/src/run_attach]} {
-      if {[gdbtk_attach_target] == "ATTACH_CANCELED"} {
+      if {[gdbtk_attach_remote] == "ATTACH_CANCELED"} {
 	return
       }
     }
@@ -1103,7 +1103,7 @@ proc run_executable { {auto_start 1} } {
 }
 
 # ------------------------------------------------------------------
-#  PROC: gdbtk_attach_target - attach to the target
+#  PROC: gdbtk_attach_remote - attach to the target
 #        This proc returns the following status messages:
 #
 #        ATTACH_ERROR: An error occurred connecting to target.
@@ -1112,7 +1112,7 @@ proc run_executable { {auto_start 1} } {
 #        ATTACH_TARGET_UNCHANGED: Successfully attached, target unchanged.
 #        UNKNOWN: An unknown error occurred.
 # ------------------------------------------------------------------
-proc gdbtk_attach_target {} {
+proc gdbtk_attach_remote {} {
   global gdb_loaded
 
   debug "Attaching...."
@@ -1305,6 +1305,31 @@ proc gdbtk_detach {} {
 # ------------------------------------------------------------------
 proc gdbtk_run {} {
   run_executable
+}
+
+# ------------------------------------------------------------------
+# PROC:  gdbtk_attach_native: attach to a running target
+# ------------------------------------------------------------------
+proc gdbtk_attach_native {} {
+    ManagedWin::open_dlg AttachDlg ;#-transient
+
+    debug "ManagedWin got [AttachDlg::last_button] [AttachDlg::pid]"
+
+    if {[AttachDlg::last_button]} {
+	set pid [AttachDlg::pid]
+	set symbol_file [AttachDlg::symbol_file]
+	if {![_open_file $symbol_file]} {
+	    ManagedWin::open WarningDlg -transient \
+		    -message "Could not load symbols from $symbol_file."
+	    return
+	}
+	
+	if {[catch {gdb_cmd "attach $pid"} result]} {
+	    ManagedWin::open WarningDlg -transient \
+		    -message [list "Could not attach to $pid:\n$result"]
+	    return
+	}
+    }
 }
 
 # ------------------------------------------------------------------

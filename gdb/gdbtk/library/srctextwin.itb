@@ -578,6 +578,7 @@ body SrcTextWin::config_win {win {asm ""}} {
   bind_plain_key $win Control-p "$this do_key print"
   bind_plain_key $win Control-u "$this do_key debug; break"
   bind_plain_key $win Control-o [list $this do_key open]
+  bind_plain_key $win Control-a [list $this do_key attach]
   
   if {!$Browsing && [pref get gdb/control_target]} {
     # Ctrl+F5 is another accelerator for Run
@@ -1973,6 +1974,7 @@ body SrcTextWin::do_key {key} {
       thread_list  { catch {ManagedWin::open ProcessWin} }
       debug	     { catch {ManagedWin::open DebugWin} }
       kod          { catch {ManagedWin::open KodWin} }
+      attach       { catch {gdbtk_attach_native} }
       default      {
 	dbug E "Unknown key binding: \"$key\""
       }

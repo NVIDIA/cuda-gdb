@@ -469,27 +469,7 @@ class GDBSrcBar {
   # METHOD:  do_attach: attach to a running target
   # ------------------------------------------------------------------
   method do_attach {menu} {
-    ManagedWin::open_dlg AttachDlg ;#-transient
-
-    debug "ManagedWin got [AttachDlg::last_button] [AttachDlg::pid]"
-
-    if {[AttachDlg::last_button]} {
-      set pid [AttachDlg::pid]
-      set symbol_file [AttachDlg::symbol_file]
-      if {![_open_file $symbol_file]} {
-	ManagedWin::open WarningDlg -transient \
-	  -message "Could not load symbols from $symbol_file."
-	return
-      }
-      
-      if {[catch {gdb_cmd "attach $pid"} result]} {
-	ManagedWin::open WarningDlg -transient \
-	  -message [list "Could not attach to $pid:\n$result"]
-	return
-      }
-
-    }
-
+      gdbtk_attach_native
   }
 
   # ------------------------------------------------------------------
@@ -519,7 +499,7 @@ class GDBSrcBar {
 
     gdbtk_busy
 
-    set result [gdbtk_attach_target]
+    set result [gdbtk_attach_remote]
     switch $result {
       ATTACH_ERROR {
 	set successful 0
@@ -554,7 +534,7 @@ class GDBSrcBar {
       }
 
       default {
-	dbug E "Unhandled response from gdbtk_attach_target: \"$result\""
+	dbug E "Unhandled response from gdbtk_attach_remote: \"$result\""
 	set successful 0
       }
     }

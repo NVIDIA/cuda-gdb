@@ -1,3 +1,20 @@
+2000-03-10  Elena Zannoni  <ezannoni@kwikemart.cygnus.com>
+
+	* srcbar.tcl (do_attach): Just call gdbtk_attach_native.
+        (do_connect): Replace gdbtk_attach_target call with
+        gdbtk_attach_remote call.
+
+	* interface.tcl (gdbtk_attach_native): Renamed from do_attach method
+        and moved from srcbar.tcl.
+        (gdbtk_attach_remote): New proc. Renamed from gdb_attach_target, 
+	to better distinguish from the native version.
+        (run_executable): Change gdbtk_attach_target call into
+        gdbtk_attach_remote.
+
+        * srctextwin.itb: Add keyboard accelerator for Attach command.
+
+        * tclIndex: Rebuild.
+
 2000-03-09  Elena Zannoni  <ezannoni@kwikemart.cygnus.com>
 
 	From: James Ingham <jingham@leda.cygnus.com>: 
