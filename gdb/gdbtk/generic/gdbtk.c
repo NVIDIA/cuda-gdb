@@ -410,6 +410,10 @@ gdbtk_init (argv0)
 
       static char set_libs_path_script[] = "\
 	  set srcDir [file dirname [file dirname $env(TCL_LIBRARY)]];\n\
+          set cwd [pwd]\n\
+          cd $srcDir\n\
+          set srcDir [pwd]\n\
+          cd $cwd\n\
 \
 	  if {![info exists env(TCL_LIBRARY)]} {\n\
 	      set env(TCL_LIBRARY) [file join $srcDir tcl library]\n\

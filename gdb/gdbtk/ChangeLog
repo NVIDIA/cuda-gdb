@@ -1,5 +1,10 @@
 2001-08-16  Keith Seitz  <keiths@redhat.com>
 
+	* generic/gdbtk.c (gdbtk_init): Make sure we're working with
+	absolute pathnames in the *_LIBRAY variables.
+
+2001-08-16  Keith Seitz  <keiths@redhat.com>
+
 	From Ian Roxborough  <irox@redhat.com>
 	* generic/gdbtk-hooks.c (x_event): Deal with Tcl API insanity
 	for Tcl_ObjGetVar2 or Tcl_GetObjVar2.
