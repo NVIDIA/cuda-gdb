@@ -1,3 +1,10 @@
+2003-08-04  David Carlton  <carlton@kealia.com>
+
+	* generic/gdbtk.c (gdbtk_source_start_file): Add "%s" first
+	argument to error call.
+	(tk_command): Ditto.
+	(view_command): Ditto.
+
 2003-07-29  Martin Hunt  <hunt@redhat.com>
 
 	* library/prefs.tcl (pref_set_option_db): On Windows, fix 

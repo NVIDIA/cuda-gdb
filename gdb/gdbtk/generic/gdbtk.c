@@ -636,7 +636,7 @@ gdbtk_find_main";
 #else
       /* FIXME: cagney/2002-04-17: Wonder what the lifetime of
 	 ``msg'' is - does it need a cleanup?  */
-      error (msg);
+      error ("%s", msg);
 #endif
     }
 
@@ -731,7 +731,7 @@ tk_command (char *cmd, int from_tty)
   old_chain = make_cleanup (free, result);
 
   if (retval != TCL_OK)
-    error (result);
+    error ("%s", result);
 
   printf_unfiltered ("%s\n", result);
 
@@ -753,7 +753,7 @@ view_command (char *args, int from_tty)
       if (Tcl_Eval (gdbtk_interp, script) != TCL_OK)
 	{
 	  Tcl_Obj *obj = Tcl_GetObjResult (gdbtk_interp);
-	  error (Tcl_GetStringFromObj (obj, NULL));
+	  error ("%s", Tcl_GetStringFromObj (obj, NULL));
 	}
 
       do_cleanups (old_chain);
