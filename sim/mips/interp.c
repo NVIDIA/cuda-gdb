@@ -13,8 +13,8 @@
    THIS SOFTWARE INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
    MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
 
-   $Revision: 1.180 $
-   $Date: 1999/02/04 04:44:16 $             
+   $Revision: 1.181 $
+   $Date: 1999/02/18 06:56:19 $             
 
 NOTEs:
 
@@ -750,6 +750,7 @@ sim_store_register (sd,rn,memory,length)
 
   if (rn >= FGRIDX && rn < FGRIDX + NR_FGR)
     {
+      cpu->fpr_state[rn - FGRIDX] = fmt_uninterpreted;
       if (cpu->register_widths[rn] == 32)
 	{
 	  cpu->fgr[rn - FGRIDX] = T2H_4 (*(unsigned32*)memory);
