@@ -276,7 +276,7 @@ get_register (int regnum, void *arg)
       return;
     }
 
-  get_saved_register (raw_buffer, &optim, (CORE_ADDR *) NULL, selected_frame,
+  get_saved_register (raw_buffer, &optim, (CORE_ADDR *) NULL, deprecated_selected_frame,
 		      regnum, (enum lval_type *) NULL);
   if (optim)
     {
@@ -426,7 +426,7 @@ register_changed_p (int regnum, void *argp)
 {
   char *raw_buffer = alloca (MAX_REGISTER_RAW_SIZE);
 
-  if (!frame_register_read (selected_frame, regnum, raw_buffer))
+  if (!frame_register_read (deprecated_selected_frame, regnum, raw_buffer))
     return;
 
   if (memcmp (&old_regs[regnum * MAX_REGISTER_RAW_SIZE], raw_buffer,

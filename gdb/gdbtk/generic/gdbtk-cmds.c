@@ -2260,7 +2260,8 @@ gdb_loc (ClientData clientData, Tcl_Interp *interp, int objc, Tcl_Obj *CONST obj
 
   if (objc == 1)
     {
-      if (selected_frame && (selected_frame->pc != read_pc ()))
+      if (deprecated_selected_frame
+	  && (get_frame_pc (deprecated_selected_frame) != read_pc ()))
         {
           /* Note - this next line is not correct on all architectures.
 	     For a graphical debugger we really want to highlight the 
@@ -2268,11 +2269,8 @@ gdb_loc (ClientData clientData, Tcl_Interp *interp, int objc, Tcl_Obj *CONST obj
 	     Many architectures have the next instruction saved as the
 	     pc on the stack, so what happens is the next instruction 
 	     is highlighted. FIXME */
-	  pc = selected_frame->pc;
-	  sal = find_pc_line (selected_frame->pc,
-			      selected_frame->next != NULL
-			      && !(get_frame_type (selected_frame->next) == SIGTRAMP_FRAME)
-			      && !(get_frame_type (selected_frame->next) == DUMMY_FRAME));
+	  pc = get_frame_pc (deprecated_selected_frame);
+	  find_frame_sal (deprecated_selected_frame, &sal);
 	}
       else
         {

@@ -1,3 +1,11 @@
+2002-11-30  Andrew Cagney  <ac131313@redhat.com>
+
+	* generic/gdbtk-stack.c: Replace selected_frame with
+	deprecated_selected_frame.
+	* generic/gdbtk-register.c: Ditto.
+	* generic/gdbtk-cmds.c (gdb_loc): Replace selected_frame with
+	deprecated_selected_frame.  Use get_frame_pc and find_frame_sal.
+
 2002-11-27  Martin M. Hunt  <hunt@redhat.com>
 
 	* generic/gdbtk.c (gdbtk_init): Don't call Tix_Init.

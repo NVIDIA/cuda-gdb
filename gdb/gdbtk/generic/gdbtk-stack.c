@@ -95,13 +95,13 @@ gdb_block_vars (ClientData clientData, Tcl_Interp *interp,
     }
 
   Tcl_SetListObj (result_ptr->obj_ptr, 0, NULL);
-  if (selected_frame == NULL)
+  if (deprecated_selected_frame == NULL)
     return TCL_OK;
 
   start = string_to_core_addr (Tcl_GetStringFromObj (objv[1], NULL));
   end   = string_to_core_addr (Tcl_GetStringFromObj (objv[2], NULL));
   
-  block = get_frame_block (selected_frame, 0);
+  block = get_frame_block (deprecated_selected_frame, 0);
 
   while (block != 0)
     {
@@ -163,10 +163,10 @@ gdb_get_blocks (ClientData clientData, Tcl_Interp *interp,
 
   Tcl_SetListObj (result_ptr->obj_ptr, 0, NULL);
   
-  if (selected_frame != NULL)
+  if (deprecated_selected_frame != NULL)
     {
-      block = get_frame_block (selected_frame, 0);
-      pc = get_frame_pc (selected_frame);
+      block = get_frame_block (deprecated_selected_frame, 0);
+      pc = get_frame_pc (deprecated_selected_frame);
       while (block != 0)
 	{
 	  junk = 0;
@@ -309,10 +309,10 @@ gdb_get_vars_command (ClientData clientData, Tcl_Interp *interp,
   else
     {
       /* Specified currently selected frame */
-      if (selected_frame == NULL)
+      if (deprecated_selected_frame == NULL)
 	return TCL_OK;
 
-      block = get_frame_block (selected_frame, 0);
+      block = get_frame_block (deprecated_selected_frame, 0);
     }
 
   while (block != 0)
@@ -377,7 +377,7 @@ gdb_selected_block (ClientData clientData, Tcl_Interp *interp,
   char *start = NULL;
   char *end   = NULL;
 
-  if (selected_frame == NULL)
+  if (deprecated_selected_frame == NULL)
     {
       xasprintf (&start, "%s", "");
       xasprintf (&end, "%s", "");
@@ -385,7 +385,7 @@ gdb_selected_block (ClientData clientData, Tcl_Interp *interp,
   else
     {
       struct block *block;
-      block = get_frame_block (selected_frame, 0);
+      block = get_frame_block (deprecated_selected_frame, 0);
       xasprintf (&start, "0x%s", paddr_nz (BLOCK_START (block)));
       xasprintf (&end, "0x%s", paddr_nz (BLOCK_END (block)));
     }
@@ -417,12 +417,13 @@ gdb_selected_frame (ClientData clientData, Tcl_Interp *interp,
 {
   char *frame;
 
-  if (selected_frame == NULL)
+  if (deprecated_selected_frame == NULL)
     xasprintf (&frame, "%s","");
   else
     /* FIXME: cagney/2002-11-19: This should be using get_frame_id()
        to identify the frame and *NOT* get_frame_base().  */
-    xasprintf (&frame, "0x%s", paddr_nz (get_frame_base (selected_frame)));
+    xasprintf (&frame, "0x%s",
+	       paddr_nz (get_frame_base (deprecated_selected_frame)));
 
   Tcl_SetStringObj (result_ptr->obj_ptr, frame, -1);
 
