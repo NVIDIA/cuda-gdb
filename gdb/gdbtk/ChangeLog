@@ -1,3 +1,8 @@
+2002-02-05  Elena Zannoni  <ezannoni@redhat.com>
+
+        * generic/gdbtk-cmds.c (gdbtk_load_asm, gdbtk_print_asm): Use
+        TARGET_PRINT_INSN instead of tm_print_insn.
+
 2002-01-18  Keith Seitz  <keiths@redhat.com>
 
 	* library/console.ith (get_text): Delete.

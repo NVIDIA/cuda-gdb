@@ -2005,7 +2005,7 @@ gdbtk_load_asm (clientData, pc, di)
   gdb_flush (gdb_stdout);
 
   result_ptr->obj_ptr = client_data->result_obj[2];
-  pc += (*tm_print_insn) (pc, di);
+  pc += TARGET_PRINT_INSN (pc, di);
   gdb_flush (gdb_stdout);
 
   client_data->widget_line_no++;
@@ -2074,7 +2074,7 @@ gdbtk_print_asm (clientData, pc, di)
   fputs_unfiltered ("    ", gdb_stdout);
   print_address (pc, gdb_stdout);
   fputs_unfiltered (":\t    ", gdb_stdout);
-  pc += (*tm_print_insn) (pc, di);
+  pc += TARGET_PRINT_INSN (pc, di);
   fputs_unfiltered ("\n", gdb_stdout);
   gdb_flush (gdb_stdout);
   return pc;
