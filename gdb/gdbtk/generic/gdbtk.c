@@ -635,7 +635,7 @@ gdbtk_find_main";
 	 get to see the failure reason.  */
       MessageBox (NULL, msg, NULL, MB_OK | MB_ICONERROR | MB_TASKMODAL);
       {
-        struct exception e;
+        struct gdb_exception e;
         e.reason  = RETURN_ERROR;
         e.error   = GENERIC_ERROR;
         e.message = msg;

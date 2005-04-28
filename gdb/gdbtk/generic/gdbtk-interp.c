@@ -113,7 +113,7 @@ gdbtk_interpreter_display_prompt_p (void *data)
   return 1;
 }
 
-static struct exception
+static struct gdb_exception
 gdbtk_interpreter_exec (void *data, const char *command_str)
 {
   return exception_none;

@@ -1,3 +1,9 @@
+2005-04-28  Ben Elliston  <bje@au.ibm.com>
+
+	* generic/gdbtk-interp.c (gdbtk_interpreter_exec): Return struct
+	gdb_exception due to the 2005-04-26 renaming of struct exception.
+	* generic/gdbtk.c (gdbtk_source_start_file): Likewise.
+
 2005-02-25  Keith Seitz  <kseitz@sources.redhat.com>
 
 	* generic/gdbtk.c (gdbtk_source_start_file): In the _WIN32 case,
