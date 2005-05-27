@@ -1120,12 +1120,13 @@ gdb_listfiles (ClientData clientData, Tcl_Interp *interp,
   struct objfile *objfile;
   struct partial_symtab *psymtab;
   struct symtab *symtab;
-  char *lastfile, *pathname = NULL, **files;
+  const char *lastfile, *pathname = NULL;
+  const char **files;
   int files_size;
   int i, numfiles = 0, len = 0;
 
   files_size = 1000;
-  files = (char **) xmalloc (sizeof (char *) * files_size);
+  files = (const char **) xmalloc (sizeof (char *) * files_size);
 
   if (objc > 2)
     {
@@ -1140,14 +1141,14 @@ gdb_listfiles (ClientData clientData, Tcl_Interp *interp,
       if (numfiles == files_size)
 	{
 	  files_size = files_size * 2;
-	  files = (char **) xrealloc (files, sizeof (char *) * files_size);
+	  files = (const char **) xrealloc (files, sizeof (char *) * files_size);
 	}
       if (psymtab->filename)
 	{
 	  if (!len || !strncmp (pathname, psymtab->filename, len)
-	      || !strcmp (psymtab->filename, basename (psymtab->filename)))
+	      || !strcmp (psymtab->filename, lbasename (psymtab->filename)))
 	    {
-	      files[numfiles++] = basename (psymtab->filename);
+	      files[numfiles++] = lbasename (psymtab->filename);
 	    }
 	}
     }
@@ -1157,14 +1158,14 @@ gdb_listfiles (ClientData clientData, Tcl_Interp *interp,
       if (numfiles == files_size)
 	{
 	  files_size = files_size * 2;
-	  files = (char **) xrealloc (files, sizeof (char *) * files_size);
+	  files = (const char **) xrealloc (files, sizeof (char *) * files_size);
 	}
       if (symtab->filename && symtab->linetable && symtab->linetable->nitems)
 	{
 	  if (!len || !strncmp (pathname, symtab->filename, len)
-	      || !strcmp (symtab->filename, basename (symtab->filename)))
+	      || !strcmp (symtab->filename, lbasename (symtab->filename)))
 	    {
-	      files[numfiles++] = basename (symtab->filename);
+	      files[numfiles++] = lbasename (symtab->filename);
 	    }
 	}
     }
@@ -2278,7 +2279,7 @@ gdb_set_mem (ClientData clientData, Tcl_Interp *interp,
 	     int objc, Tcl_Obj *CONST objv[])
 {
   CORE_ADDR addr;
-  char buf[128];
+  gdb_byte buf[128];
   char *hexstr;
   int len, size;
 
@@ -2303,7 +2304,7 @@ gdb_set_mem (ClientData clientData, Tcl_Interp *interp,
   /* Convert hexstr to binary and write */
   if (hexstr[0] == '0' && hexstr[1] == 'x')
     hexstr += 2;
-  size = hex2bin (hexstr, buf, strlen (hexstr));
+  size = hex2bin (hexstr, (char *) buf, strlen (hexstr));
   if (size < 0)
     {
       /* Error in input */

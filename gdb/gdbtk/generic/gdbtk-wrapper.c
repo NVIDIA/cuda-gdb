@@ -192,7 +192,7 @@ wrap_val_print (char *a)
 {
   struct gdb_wrapper_arguments **args = (struct gdb_wrapper_arguments **) a;
   struct type *type;
-  char *valaddr;
+  const gdb_byte *valaddr;
   CORE_ADDR address;
   struct ui_file *stream;
   int format;
@@ -201,7 +201,7 @@ wrap_val_print (char *a)
   enum val_prettyprint pretty;
 
   type = (struct type *) (*args)->args[0];
-  valaddr = (char *) (*args)->args[1];
+  valaddr = (gdb_byte *) (*args)->args[1];
   address = *(CORE_ADDR *) (*args)->args[2];
   stream = (struct ui_file *) (*args)->args[3];
   format = (int) (*args)->args[4];

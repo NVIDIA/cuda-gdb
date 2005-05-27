@@ -1,3 +1,15 @@
+2005-05-26  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-cmds.c (gdb_set_mem): target_write_memory now takes
+	gdb_byte* instead of char*.
+	* generic/gdbtk-register.c (get_register): frame_register and val_print
+	take gdb_byte* instead of char*.
+	* generic/gdbtk-wrapper.c: Ditto the val_print part.
+
+	From Paul Schlie  <schlie@comcast.net>:
+	* generic/gdbtk-bp.c (gdb_set_bp): Use lbasename instead of basename.
+	* generic/gdbtk-cmds.c (gdb_listfiles): Likewise.
+
 2005-04-28  Ben Elliston  <bje@au.ibm.com>
 
 	* generic/gdbtk-interp.c (gdbtk_interpreter_exec): Return struct

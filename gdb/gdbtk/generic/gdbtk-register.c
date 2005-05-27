@@ -265,7 +265,7 @@ get_register (int regnum, void *arg)
   CORE_ADDR addr;
   enum lval_type lval;
   struct type *reg_vtype;
-  char buffer[MAX_REGISTER_SIZE];
+  gdb_byte buffer[MAX_REGISTER_SIZE];
   int optim, format;
   struct cleanup *old_chain = NULL;
   struct ui_file *stb;
