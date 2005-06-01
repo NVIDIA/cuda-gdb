@@ -105,6 +105,7 @@ static void gdbtk_set_hook (struct cmd_list_element *cmdblk);
  * See note there for details.
  */
 
+long gdbtk_read (struct ui_file *, char *, long);
 void gdbtk_fputs (const char *, struct ui_file *);
 static int gdbtk_load_hash (const char *, unsigned long);
 
@@ -220,12 +221,56 @@ gdbtk_two_elem_cmd (cmd_name, argv1)
 }
 
 struct ui_file *
+gdbtk_fileopenin (void)
+{
+  struct ui_file *file = ui_file_new ();
+  set_ui_file_read (file, gdbtk_read);
+  return file;
+}
+
+struct ui_file *
 gdbtk_fileopen (void)
 {
   struct ui_file *file = ui_file_new ();
   set_ui_file_fputs (file, gdbtk_fputs);
   return file;
 }
+
+/* This handles input from the gdb console.
+ */
+
+long
+gdbtk_read (struct ui_file *stream, char *buf, long sizeof_buf)
+{
+  int result;
+  size_t actual_len;
+
+  if (stream == gdb_stdtargin)
+    {
+      result = Tcl_Eval (gdbtk_interp, "gdbtk_console_read");
+      if (result != TCL_OK)
+	{
+	  report_error ();
+	  actual_len = 0;
+	}
+      else
+        actual_len = strlen (gdbtk_interp->result);
+
+      /* Truncate the string if it is too big for the caller's buffer.  */
+      if (actual_len >= sizeof_buf)
+	actual_len = sizeof_buf - 1;
+      
+      memcpy (buf, gdbtk_interp->result, actual_len);
+      buf[actual_len] = '\0';
+      return actual_len;
+    }
+  else
+    {
+      errno = EBADF;
+      return 0;
+    }
+}
+
 
 /* This handles all the output from gdb.  All the gdb printf_xxx functions
  * eventually end up here.  The output is either passed to the result_ptr

@@ -1,3 +1,11 @@
+2005-06-01  Keith Seitz  <keiths@redhat.com>
+
+	From James Lemke  <jim@wasabisystems.com>:
+	* generic/gdbtk-hooks.c (gdbtk_fileopenin, gdbtk_read): New functions
+	for target to read stdin from console window.
+	* generic/gdbtk-interp.c (_stdtargin): Added.
+	* generic/gdbtk.h (gdbtk_fileopenin): Add declaration.
+
 2005-05-26  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-cmds.c (gdb_set_mem): target_write_memory now takes

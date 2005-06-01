@@ -159,6 +159,7 @@ extern int gdbtk_two_elem_cmd (char *, char *);
 extern int target_is_native (struct target_ops *t);
 extern void gdbtk_fputs (const char *, struct ui_file *);
 extern struct ui_file *gdbtk_fileopen (void);
+extern struct ui_file *gdbtk_fileopenin (void);
 extern int gdbtk_disable_fputs;
 
 #ifdef _WIN32
