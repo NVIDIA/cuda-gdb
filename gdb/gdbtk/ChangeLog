@@ -1,5 +1,15 @@
 2005-06-06  Keith Seitz  <keiths@redhat.com>
 
+	* library/interface.tcl (gdbtk_tcl_fputs_error): gdbtk_state is in the global
+	namespace. Fix references.
+	(gdbtk_tcl_fputs_log): Likewise.
+	
+	From Steven Johnson  <johnson@sakuraindustries.com>:
+	* library/interface.tcl (gdbtk_tcl_warning): Filter some basic warnings
+	from gdb - "incomplete CFI.." and "Internal error".
+
+2005-06-06  Keith Seitz  <keiths@redhat.com>
+
 	From Steven Johnson  <sjohnson@sakraindustries.com>:
 	* generic/gcbtk-cmds.c (gdb_loc): Hand gdb_loc called before remote
 	target connected, where gdb_loc now returns the entry address as $pc.
