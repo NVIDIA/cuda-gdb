@@ -1,3 +1,9 @@
+2005-06-06  Keith Seitz  <keiths@redhat.com>
+
+	From Steven Johnson  <sjohnson@sakraindustries.com>:
+	* generic/gcbtk-cmds.c (gdb_loc): Hand gdb_loc called before remote
+	target connected, where gdb_loc now returns the entry address as $pc.
+
 2005-06-01  Keith Seitz  <keiths@redhat.com>
 
 	From James Lemke  <jim@wasabisystems.com>:

@@ -2115,8 +2115,18 @@ gdb_loc (ClientData clientData, Tcl_Interp *interp, int objc, Tcl_Obj *CONST obj
 
   if (objc == 1)
     {
-      if (deprecated_selected_frame
-	  && (get_frame_pc (deprecated_selected_frame) != read_pc ()))
+      /* This function can be called, before the target is properly
+         set-up, the following prevents an error, by trying to
+         read_pc when there is no pc to read. It defaults pc, 
+         before the target is connected to the entry point of the
+         program */
+      if (!target_has_registers)
+        {
+          pc = entry_point_address ();
+          sal = find_pc_line (pc, 0);
+        }  
+      else if (deprecated_selected_frame
+	       && (get_frame_pc (deprecated_selected_frame) != read_pc ()))
         {
           /* Note - this next line is not correct on all architectures.
 	     For a graphical debugger we really want to highlight the 
