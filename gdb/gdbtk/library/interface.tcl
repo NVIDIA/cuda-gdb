@@ -367,6 +367,7 @@ proc gdbtk_tcl_warning {message} {
         "Unable to find dynamic linker breakpoint function.*" {return}
 	"Internal error.*" { gdbtk_tcl_fputs_error $message }
         "incomplete CFI.*" { gdbtk_tcl_fputs_error $message }
+	"RTTI symbol not found for class.*" { gdbtk_tcl_fputs_error $message }
         default {show_warning $message}
        }
 }

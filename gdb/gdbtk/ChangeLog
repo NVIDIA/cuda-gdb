@@ -1,3 +1,9 @@
+2005-06-13  Keith Seitz  <keiths@redhat.com>
+
+	From Charles Brockman <mr hyphen chuck at att dot net>:
+	* library/interface.tcl (gdbtk_tcl_warning): Filter "RTTI symbol not found"
+	"warnings", too.
+
 2005-06-06  Keith Seitz  <keiths@redhat.com>
 
 	* library/interface.tcl (gdbtk_tcl_fputs_error): gdbtk_state is in the global
