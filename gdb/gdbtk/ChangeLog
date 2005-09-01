@@ -1,3 +1,10 @@
+2005-08-31  Keith Seitz  <keiths@redhat.com>
+
+	From Dieter Ruppert <dieter_ruppert@siemens.com>:
+	* library/memwin.itb (update_address): Change parameter name
+	so that it does not shadow a member variable.
+	Save the updated address internally.
+
 2005-06-13  Keith Seitz  <keiths@redhat.com>
 
 	From Charles Brockman <mr hyphen chuck at att dot net>:
