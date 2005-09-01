@@ -307,7 +307,7 @@ itcl::body BpWin::bp_store {} {
   foreach breakpoint [gdb_get_breakpoint_list] {
     # This is an lassign
     foreach {file function line_no address type \
-	       enable_p disp ignore cmds thread hit_count user_spec} \
+	       enable_p disp ignore cmds cond thread hit_count user_spec} \
       [gdb_get_breakpoint_info $breakpoint] {
 	break
       }
