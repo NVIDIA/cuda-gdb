@@ -1,5 +1,12 @@
 2005-08-31  Keith Seitz  <keiths@redhat.com>
 
+	* library/help/target.html: Update dialog options.
+	* library/targetselection.itb (help): Implement.
+	(build_win): Don't disable help button.
+	Only display "use tty" option on unix hosts.
+
+2005-08-31  Keith Seitz  <keiths@redhat.com>
+
 	* library/bpwin.itb (bp_store): gdb_get_breakpoint_info outputs
 	the breakpoint condition, too -- include it in the lassign.
 

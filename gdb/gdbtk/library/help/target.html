@@ -20,7 +20,10 @@ options.</P>
 <UL>
 <LI><A HREF="#options_run_until_main">Run until 'main'</A></LI>
 <LI><A HREF="#options_bp_at_exit">Set breakpoint at 'exit'</A></LI>
+<LI><A HREF="#options_set_bp_at">Set user-specifid breakpoint</A></LI>
 <LI><A HREF="#options_download_dialog">Display Download Dialog</A></LI>
+<LI><A HREF="#options_use_xterm">Use xterm for inferior's tty (unix only)
+    </A></LI>
 </UL>
 
 <h3><A HREF="#more_options">More Options</A></h3>
@@ -60,9 +63,14 @@ Three run options which may be selected include:
         <DD>Sets a breakpoint at main()
     <DT><A NAME="options_bp_at_exit">Set breakpoint at 'exit'</A>
         <DD>Sets a breakpoint at exit()
+    <DT><A NAME="options_set_bp_at">Set breakpoint at</A>
+        <DD>Sets a breakpoint at a user-specified locaiton</A>
     <DT><A NAME="options_download_dialog">Display Download Dialog</A>
         <DD>Displays a dialog showing the progress of the download to
             the target section by section
+    <DT><A NAME="options_use_xterm">Use xterm as inferior's tty</A>
+        <DD>Causes insight to open a tty for inferior I/O (unix versions
+            only)
 </DL>
 <BR>
 <H3><A NAME="more_options">More Options</A></H3>

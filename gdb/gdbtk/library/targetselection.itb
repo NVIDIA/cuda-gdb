@@ -1,5 +1,5 @@
 # Target selection dialog for Insight.
-# Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004 Red Hat, Inc.
+# Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -485,9 +485,12 @@ itcl::body TargetSelection::build_win {} {
   entry $f.fr.bp.func -textvariable [pref varname gdb/load/bp_func] -width 20
   checkbutton $f.fr.verb -text [gettext "Display Download Dialog"] \
     -variable [pref varname gdb/load/$target-verbose]
-  checkbutton $f.fr.xterm -text [gettext "Use xterm as inferior's tty"] \
-    -variable [pref varname gdb/process/xtermtty] \
-    -onvalue yes -offvalue no
+
+  if {$tcl_platform(platform) == "unix"} {
+    checkbutton $f.fr.xterm -text [gettext "Use xterm as inferior's tty"] \
+	-variable [pref varname gdb/process/xtermtty] \
+	-onvalue yes -offvalue no
+  }
 
   if {![pref get gdb/control_target]} {
     $f.fr.main configure -state disabled
@@ -585,8 +588,8 @@ itcl::body TargetSelection::build_win {} {
     -default active
   button $btns.cancel -text [gettext Cancel] -width 7 \
     -command [code $this cancel]
-  button $btns.help -text [gettext Help] -width 7 -command [code $this help] \
-    -state disabled
+  button $btns.help -text [gettext Help] -width 7 -command [code $this help]
+
   standard_button_box $btns
   bind $btns.ok <Return> "$btns.ok flash; $btns.ok invoke"
   bind $btns.cancel <Return> "$btns.cancel flash; $btns.cancel invoke"
@@ -974,6 +977,7 @@ itcl::body TargetSelection::set_check_button {name} {
 #  METHOD:  help - launches context sensitive help.
 # ------------------------------------------------------------------
 itcl::body TargetSelection::help {} {
+  open_help target.html
 }
 
 # ------------------------------------------------------------------
