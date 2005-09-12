@@ -419,10 +419,6 @@ gdbtk_init (void)
                      [file join $srcDir itcl iwidgets generic]\n\
 	  }\n\
 \
-	  if {![info exists env(TIX_LIBRARY)]} {\n\
-	      set env(TIX_LIBRARY) [file join $srcDir tix library]\n\
-	  }\n\
-\
 	  if {![info exists env(GDBTK_LIBRARY)]} {\n\
 	      set env(GDBTK_LIBRARY) [file join $srcDir gdb gdbtk library]\n\
 	  }\n\

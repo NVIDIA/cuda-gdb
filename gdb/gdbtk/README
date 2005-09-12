@@ -25,7 +25,7 @@ Building and Installing
 
 Building Insight is very straightforward.  It is configured/built by
 default when you checkout or download Insight.  Right now, Insight MUST
-be built using the versions of Tcl, Tk, Itcl, and Tix that come with
+be built using the versions of Tcl, Tk, and Itcl that come with
 the sources.  We're working to fix that, but it is going to take a lot
 of time.  (Want to help?)
 
@@ -62,7 +62,6 @@ install and the source trees.
 	----			-----------
 	TCL_LIBRARY		The location of the Tcl library files
 	TK_LIBRARY		The location of the Tk library files
-	TIX_LIBRARY		The location of the Tix library files
 	REDHAT_GUI_LIBRARY	The location of the libgui library files
 	GDBTK_LIBRARY		The location of the Insight library files
 	INSIGHT_PLUGINS		A colon-separated list of directories

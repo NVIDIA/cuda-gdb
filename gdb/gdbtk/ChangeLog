@@ -1,3 +1,8 @@
+2005-09-12  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk.c (gdbtk_init): Remove all mention of Tix.
+	* README: Ditto.
+
 2005-08-31  Keith Seitz  <keiths@redhat.com>
 
 	* library/help/target.html: Update dialog options.
