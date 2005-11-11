@@ -1,3 +1,9 @@
+2005-11-11  Keith Seitz  <keiths@redhat.com>
+
+	From Spencer Oliver <spencer.oliver@anglia.com>:
+	* library/targetselection.itb (build_win): Only pack the xterm checkbutton
+	on unix platforms.
+
 2005-09-12  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk.c (gdbtk_init): Remove all mention of Tix.
