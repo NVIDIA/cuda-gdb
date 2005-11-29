@@ -50,7 +50,8 @@ proc pref_read {} {
     set prefs_init_filename ".gdbtkinit"
   }
 
-  if {!$GDBStartup(inhibit_prefs)} {
+  if {!$GDBStartup(inhibit_prefs) \
+      || [info exists env(INSIGHT_FORCE_READ_PREFERENCES)]} {
     set file_opened 0
     if {[file exists $prefs_init_filename]} {
       if {[catch {open $prefs_init_filename r} fd]} {

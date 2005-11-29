@@ -72,6 +72,9 @@ install and the source trees.
 	GDBTK_DEBUGFILE		Filename to send debug output
 	GDBTK_TEST_RUNNING	Testsuite variable. See gdb/testsuite/gdb.gdbtk/README
 				for more information.
+	INSIGHT_FORCE_READ_PREFERENCES
+				If set, read .gdbtkinit (or gdb.ini on windows)
+				even when -nx is passed to GDB.
 
 All of the environment variables for controlling Insight are well documented
 in gdb/gdbtk/library/main.tcl. Search for "env" to find them all.

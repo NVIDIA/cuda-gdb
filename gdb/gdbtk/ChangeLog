@@ -1,3 +1,9 @@
+2005-11-29  Andrew Stubbs  <andrew.stubbs@st.com>
+
+	* library/prefs.tcl (pref_read): Read preferences file if environment
+	variable INSIGHT_FORCE_READ_PREFERENCES is set (regardless of -nx).
+	* README: Mention INSIGHT_FORCE_READ_PREFERENCES.
+
 2005-11-11  Keith Seitz  <keiths@redhat.com>
 
 	From Spencer Oliver <spencer.oliver@anglia.com>:
