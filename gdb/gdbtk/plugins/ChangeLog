@@ -1,3 +1,7 @@
+2005-12-23  Eli Zaretskii  <eliz@gnu.org>
+
+	* aclocal.m4: Update the FSF address.
+
 2002-08-14  Keith Seitz  <keiths@redhat.com>
 
 	* acinclude.m4, aclocal.m4, configure, configure.in,
