@@ -1,3 +1,20 @@
+2005-12-23  Eli Zaretskii  <eliz@gnu.org>
+
+	* generic/gdbtk.h: 
+	* generic/gdbtk.c: 
+	* generic/gdbtk-wrapper.h: 
+	* generic/gdbtk-wrapper.c: 
+	* generic/gdbtk-varobj.c: 
+	* generic/gdbtk-stack.c: 
+	* generic/gdbtk-register.c: 
+	* generic/gdbtk-main.c: 
+	* generic/gdbtk-interp.c: 
+	* generic/gdbtk-hooks.c: 
+	* generic/gdbtk-cmds.h: 
+	* generic/gdbtk-cmds.c: 
+	* generic/gdbtk-bp.c: Put (C) after Copyright.  Update the FSF
+	address.
+
 2005-11-29  Andrew Stubbs  <andrew.stubbs@st.com>
 
 	* library/prefs.tcl (pref_read): Read preferences file if environment
