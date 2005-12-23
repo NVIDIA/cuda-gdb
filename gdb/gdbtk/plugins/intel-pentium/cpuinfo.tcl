@@ -1,5 +1,5 @@
 # Display CPU information.
-# Copyright 1999, 2000, 2001 Red Hat, Inc.
+# Copyright (C) 1999, 2000, 2001 Red Hat, Inc.
 #
 # Written by Fernando Nasser  <fnasser@redhat.com>
 #

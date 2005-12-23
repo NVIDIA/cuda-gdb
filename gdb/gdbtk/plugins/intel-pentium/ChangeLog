@@ -1,3 +1,9 @@
+2005-12-23  Eli Zaretskii  <eliz@gnu.org>
+
+	* msrselection.ith: 
+	* msrselection.itb: 
+	* cpuinfo.tcl: Put (C) after Copyright.
+
 2002-08-14  Keith Seitz  <keiths@redhat.com>
 
 	Merged from Red Hat internal branch:
