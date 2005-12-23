@@ -1,5 +1,5 @@
 # Watch window for Insight.
-# Copyright 2002, 2003 Red Hat
+# Copyright (C) 2002, 2003 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by

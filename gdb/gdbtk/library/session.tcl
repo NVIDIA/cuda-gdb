@@ -1,5 +1,5 @@
 # Local preferences functions for Insight.
-# Copyright 2000, 2001, 2002, 2004 Red Hat, Inc.
+# Copyright (C) 2000, 2001, 2002, 2004 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by

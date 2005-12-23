@@ -1,5 +1,5 @@
 # Open a viewer for HTML help info
-# Copyright 2002, Red Hat, Inc.
+# Copyright (C) 2002, Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
