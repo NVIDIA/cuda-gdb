@@ -1,6 +1,11 @@
 2006-01-23  Keith Seitz  <keiths@redhat.com>
 
 	From Andrew Stubbs  <andrew.stubbs@st.com>:
+	* library/help/source.html: Add entries for the missing menu commands.
+
+2006-01-23  Keith Seitz  <keiths@redhat.com>
+
+	From Andrew Stubbs  <andrew.stubbs@st.com>:
 	* library/mempref.itb (MemPref::constructor): Allow the Byte Per Row
 	combo box to accept arbitrary values.
 	(MemPref::set_bytes_per_row): Validate the new value; reject invalid
