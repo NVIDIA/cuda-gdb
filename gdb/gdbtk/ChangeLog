@@ -1,3 +1,9 @@
+2006-01-23  Keith Seitz  <keiths@redhat.com>
+
+	From Andrew Stubbs  <andrew.stubbs@st.com>:
+	* library/helpviewer.tcl (open_help): Add firefox and opera to the
+	browser list used to display help.
+
 2006-01-23  Keith Seitz  <keiths@redhat.comt>
 
 	* ChangeLog: Cleared and saved to ...
