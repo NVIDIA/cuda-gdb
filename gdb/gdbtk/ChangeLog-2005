@@ -1,0 +1,214 @@
+2005-12-23  Eli Zaretskii  <eliz@gnu.org>
+
+	* library/attachdlg.itb: 
+	* library/actiondlg.tcl: 
+	* library/about.tcl: 
+	* library/ehandler.itb: 
+	* library/editor.tcl: 
+	* library/download.ith: 
+	* library/download.itb: 
+	* library/debugwin.ith: 
+	* library/debugwin.itb: 
+	* library/cspref.ith: 
+	* library/cspref.itb: 
+	* library/console.ith: 
+	* library/console.itb: 
+	* library/browserwin.ith: 
+	* library/browserwin.itb: 
+	* library/bpwin.ith: 
+	* library/bpwin.itb: 
+	* library/blockframe.ith: 
+	* library/managedwin.ith: 
+	* library/managedwin.itb: 
+	* library/main.tcl: 
+	* library/locals.tcl: 
+	* library/ipcpref.ith: 
+	* library/ipcpref.itb: 
+	* library/ipc.tcl: 
+	* library/interface.tcl: 
+	* library/helpviewer.tcl: 
+	* library/globalpref.ith: 
+	* library/globalpref.itb: 
+	* library/gdbwin.ith: 
+	* library/gdbtoolbar.itcl: 
+	* library/gdbmenubar.itcl: 
+	* library/gdbevent.ith: 
+	* library/gdbevent.itb: 
+	* library/embeddedwin.ith: 
+	* library/ehandler.ith: 
+	* library/srcwin.itb: 
+	* library/srctextwin.ith: 
+	* library/srctextwin.itb: 
+	* library/srcpref.ith: 
+	* library/srcpref.itb: 
+	* library/srcbar.itcl: 
+	* library/session.tcl: 
+	* library/regwin.ith: 
+	* library/regwin.itb: 
+	* library/process.ith: 
+	* library/process.itb: 
+	* library/prefs.tcl: 
+	* library/pluginwin.itcl: 
+	* library/modal.tcl: 
+	* library/memwin.ith: 
+	* library/memwin.itb: 
+	* library/mempref.ith: 
+	* library/mempref.itb: 
+	* library/watch.tcl: 
+	* library/watch.tcl: 
+	* library/warning.tcl: 
+	* library/vartree.ith: 
+	* library/vartree.itb: 
+	* library/util.tcl: 
+	* library/tracedlg.tcl: 
+	* library/toplevelwin.ith: 
+	* library/tfind_args.tcl: 
+	* library/tdump.tcl: 
+	* library/targetselection.ith: 
+	* library/targetselection.itb: 
+	* library/stackwin.ith: 
+	* library/stackwin.itb: 
+	* library/srcwin.ith: 
+	* generic/gdbtk.h: 
+	* generic/gdbtk.c: 
+	* generic/gdbtk-wrapper.h: 
+	* generic/gdbtk-wrapper.c: 
+	* generic/gdbtk-varobj.c: 
+	* generic/gdbtk-stack.c: 
+	* generic/gdbtk-register.c: 
+	* generic/gdbtk-main.c: 
+	* generic/gdbtk-interp.c: 
+	* generic/gdbtk-hooks.c: 
+	* generic/gdbtk-cmds.h: 
+	* generic/gdbtk-cmds.c: 
+	* generic/gdbtk-bp.c: Put (C) after Copyright.  Update the FSF
+	address.
+
+2005-11-29  Andrew Stubbs  <andrew.stubbs@st.com>
+
+	* library/prefs.tcl (pref_read): Read preferences file if environment
+	variable INSIGHT_FORCE_READ_PREFERENCES is set (regardless of -nx).
+	* README: Mention INSIGHT_FORCE_READ_PREFERENCES.
+
+2005-11-11  Keith Seitz  <keiths@redhat.com>
+
+	From Spencer Oliver <spencer.oliver@anglia.com>:
+	* library/targetselection.itb (build_win): Only pack the xterm checkbutton
+	on unix platforms.
+
+2005-09-12  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk.c (gdbtk_init): Remove all mention of Tix.
+	* README: Ditto.
+
+2005-08-31  Keith Seitz  <keiths@redhat.com>
+
+	* library/help/target.html: Update dialog options.
+	* library/targetselection.itb (help): Implement.
+	(build_win): Don't disable help button.
+	Only display "use tty" option on unix hosts.
+
+2005-08-31  Keith Seitz  <keiths@redhat.com>
+
+	* library/bpwin.itb (bp_store): gdb_get_breakpoint_info outputs
+	the breakpoint condition, too -- include it in the lassign.
+
+2005-08-31  Keith Seitz  <keiths@redhat.com>
+
+	From Dieter Ruppert <dieter_ruppert@siemens.com>:
+	* library/memwin.itb (update_address): Change parameter name
+	so that it does not shadow a member variable.
+	Save the updated address internally.
+
+2005-06-13  Keith Seitz  <keiths@redhat.com>
+
+	From Charles Brockman <mr hyphen chuck at att dot net>:
+	* library/interface.tcl (gdbtk_tcl_warning): Filter "RTTI symbol not found"
+	"warnings", too.
+
+2005-06-06  Keith Seitz  <keiths@redhat.com>
+
+	* library/interface.tcl (gdbtk_tcl_fputs_error): gdbtk_state is in the global
+	namespace. Fix references.
+	(gdbtk_tcl_fputs_log): Likewise.
+	
+	From Steven Johnson  <johnson@sakuraindustries.com>:
+	* library/interface.tcl (gdbtk_tcl_warning): Filter some basic warnings
+	from gdb - "incomplete CFI.." and "Internal error".
+
+2005-06-06  Keith Seitz  <keiths@redhat.com>
+
+	From Steven Johnson  <sjohnson@sakraindustries.com>:
+	* generic/gcbtk-cmds.c (gdb_loc): Hand gdb_loc called before remote
+	target connected, where gdb_loc now returns the entry address as $pc.
+
+2005-06-01  Keith Seitz  <keiths@redhat.com>
+
+	From James Lemke  <jim@wasabisystems.com>:
+	* generic/gdbtk-hooks.c (gdbtk_fileopenin, gdbtk_read): New functions
+	for target to read stdin from console window.
+	* generic/gdbtk-interp.c (_stdtargin): Added.
+	* generic/gdbtk.h (gdbtk_fileopenin): Add declaration.
+
+2005-05-26  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-cmds.c (gdb_set_mem): target_write_memory now takes
+	gdb_byte* instead of char*.
+	* generic/gdbtk-register.c (get_register): frame_register and val_print
+	take gdb_byte* instead of char*.
+	* generic/gdbtk-wrapper.c: Ditto the val_print part.
+
+	From Paul Schlie  <schlie@comcast.net>:
+	* generic/gdbtk-bp.c (gdb_set_bp): Use lbasename instead of basename.
+	* generic/gdbtk-cmds.c (gdb_listfiles): Likewise.
+
+2005-04-28  Ben Elliston  <bje@au.ibm.com>
+
+	* generic/gdbtk-interp.c (gdbtk_interpreter_exec): Return struct
+	gdb_exception due to the 2005-04-26 renaming of struct exception.
+	* generic/gdbtk.c (gdbtk_source_start_file): Likewise.
+
+2005-02-25  Keith Seitz  <kseitz@sources.redhat.com>
+
+	* generic/gdbtk.c (gdbtk_source_start_file): In the _WIN32 case,
+	use throw_exception (struct exception).
+
+2005-02-16  Martin Hunt  <hunt@redhat.com>
+
+	* generic/gdbtk-stack.c (get_frame_name): Replace
+	print_address_numeric with deprecated_print_address_numeric.
+	* generic/gdbtk-cmds.c (gdbtk_load_asm): Ditto.
+
+2005-02-07  Keith Seitz  <kseitz@sources.redhat.com>
+
+	* generic/gdbtk-cmds.c (gdb_eval): VALUE_EMBEDDED_OFFSET and
+	VALUE_CONTENTS are now functions.
+
+
+2005-01-19  Keith Seitz  <kseitz@sources.redhat.com>
+
+	* Makefile.in: Regenerate.
+	* aclocal.m4: Regenerate.
+	* plugins/Makefile.in; Regenerate.
+	* plugins/aclocal.m4: Regenerate.
+
+2005-01-17  Keith Seitz  <kseitz@sources.redhat.com>
+
+	* generic/gdbtk-varobj.c (variable_value): Remove all instances
+	of error_last_message. It's gone.
+
+	* generic/gdbtk-wrapper.c: Include exceptions.h
+	* generic/gdbtk-cmds.c: Likewise.
+	* generic/gdbtk-interp.c: Likewise.
+	(gdbtk_interpreter_exec): Change return type to struct
+	exception. Return exception_none.	
+
+2005-01-13  Keith Seitz  <keiths@redhat.com>
+
+	* configure.in: Rename to ...
+	* configure.ac: ... this.
+	* configure: Regenerate with autoconf 2.59.
+	* plugins/configure.in: Rename to ...
+	* plugins/configure.ac: ... this.
+	* pluginx/configure: Regenerate with autoconf 2.59.
+
