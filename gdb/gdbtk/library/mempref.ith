@@ -47,6 +47,7 @@ itcl::class MemPref {
     variable gformat 
     variable gnumbytes 
     variable gbpr 
+    variable gbprlist
     variable gascii  
     variable gascii_char 
     variable gvar

@@ -1,5 +1,5 @@
 # Memory display preferences window for Insight.
-# Copyright (C) 1998, 1999, 2002, 2003 Red Hat
+# Copyright (C) 1998, 1999, 2002, 2003, 2006 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -41,6 +41,7 @@ itcl::body MemPref::constructor {args} {
   
   set gnumbytes $numbytes
   set gbpr $bpr
+  set gbprlist [list 4 8 16 32 64 128]
   set gascii $ascii
   set gascii_char $ascii_char
   
@@ -153,14 +154,11 @@ itcl::body MemPref::build_win {} {
   label $fr.2.l -text "Bytes Per Row "
   set Widgets(b-bytes_per_row) [::combobox::combobox $fr.2.c \
 				  -command [code $this set_bytes_per_row]  \
-				  -width 4 -editable 0 -font global/fixed \
+				  -width 4 -editable 1 -font global/fixed \
 				  -bg $::Colors(textbg)]
-  $fr.2.c list insert end 4
-  $fr.2.c list insert end 8
-  $fr.2.c list insert end 16
-  $fr.2.c list insert end 32
-  $fr.2.c list insert end 64
-  $fr.2.c list insert end 128
+  foreach item $gbprlist {
+    $fr.2.c list insert end $item
+  }
   $fr.2.c configure -value $gbpr
 
   pack $fr.2.l -side left -anchor e
@@ -264,7 +262,36 @@ itcl::body MemPref::check_numbytes {var index mode} {
 #  METHOD:  set_bytes_per_row - combobox callback to set the bytes per row
 # ------------------------------------------------------------------
 itcl::body MemPref::set_bytes_per_row {w value} {
-  set gbpr $value
+  if {[string is integer -strict $value] && [expr {$value != 0}]} {
+    # The input is a value number.
+    set gbpr $value
+    set gbpr [string trim $gbpr]
+
+    # Too high a number will cause a Segmentation fault.
+    if {[expr {$gbpr > 150}]} {set gbpr 150}
+
+    # Insert the value into the combo box list, if it isn't there already.
+    set found [lsearch $gbprlist $gbpr]
+
+    if {$found == -1} {
+      lappend gbprlist $gbpr
+      $Widgets(b-bytes_per_row) list insert end $gbpr
+    }
+
+    set s $gsize
+    if {$s == 3} {set s 4}
+    if {$s == 5} {set s 8}
+    set rem [expr {$gbpr % $s}]
+    if {$rem != 0} {
+      # The bytes-per-row is not a multiple of the size.
+      set gbpr [expr {$gbpr + ($s - $rem)}]
+    }
+  }
+
+  # Set the display to the new value. This may be different if the input
+  # was zero or not a number, or if the user entered any whitespace.
+  $Widgets(b-bytes_per_row) delete 0 end
+  $Widgets(b-bytes_per_row) insert end $gbpr
 }
 
 # ------------------------------------------------------------------
@@ -318,6 +345,9 @@ itcl::body MemPref::apply {} {
     }
   }
 
+  # Ensure the value has been read from the text field.
+  set_bytes_per_row "" [$Widgets(b-bytes_per_row) get]
+
   # pass all the changed values back to parent
   debug "$win configChange -size $size -numbytes $numbytes \
 	     -format $format -ascii $gascii \
@@ -338,6 +368,10 @@ itcl::body MemPref::apply {} {
 #  METHOD:  enable_format - turn on the format radio buttons 
 # ------------------------------------------------------------------
 itcl::body MemPref::enable_format {} {
+  # First ensure bytes per row is a multiple of the size.
+  # Use the value of the widget, not $gbpr to ensure the typed value is kept.
+  set_bytes_per_row "" [$Widgets(b-bytes_per_row) get]
+
   if {!$format_disabled} {
     return
   }
@@ -353,6 +387,10 @@ itcl::body MemPref::enable_format {} {
 #  METHOD:  disable_format - turn off the format radio buttons 
 # ------------------------------------------------------------------
 itcl::body MemPref::disable_format {} {
+  # First ensure bytes per row is a multiple of the size.
+  # Use the value of the widget, not $gbpr to ensure the typed value is kept.
+  set_bytes_per_row "" [$Widgets(b-bytes_per_row) get]
+
   if {$format_disabled} {
     return
   }

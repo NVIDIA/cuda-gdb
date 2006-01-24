@@ -1,6 +1,20 @@
 2006-01-23  Keith Seitz  <keiths@redhat.com>
 
 	From Andrew Stubbs  <andrew.stubbs@st.com>:
+	* library/mempref.itb (MemPref::constructor): Allow the Byte Per Row
+	combo box to accept arbitrary values.
+	(MemPref::set_bytes_per_row): Validate the new value; reject invalid
+	entries and round up to a multiple of the word size.
+	(MemPref::apply): Read the value from the text box even if the user
+	has not pressed return.
+	(MemPref::enable_format): Ensure the bytes per row value is still valid.
+	(MemPref::disable_format): Likewise.
+	* library/mempref.ith (MemPref): Add $gbprlist.
+	* library/help/memory.html: Update.
+
+2006-01-23  Keith Seitz  <keiths@redhat.com>
+
+	From Andrew Stubbs  <andrew.stubbs@st.com>:
 	* library/helpviewer.tcl (open_help): Add firefox and opera to the
 	browser list used to display help.
 
