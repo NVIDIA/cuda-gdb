@@ -39,7 +39,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.236 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.237 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -6473,6 +6473,13 @@ finished, you'll get a summary that looks like this:
 # of unresolved testcases       3
 # of untested testcases         5
 @end smallexample
+
+To run a specific test script, type:
+@example
+make check RUNTESTFLAGS='@var{tests}'
+@end example
+where @var{tests} is a list of test script file names, separated by
+spaces.
 
 The ideal test run consists of expected passes only; however, reality
 conspires to keep us from this ideal.  Unexpected failures indicate
