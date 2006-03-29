@@ -1,3 +1,8 @@
+2006-03-29  Brian Dessent  <brian@dessent.net>
+
+	* generic/gdbtk-cmds.c: Include sys/cygwin.h if __CYGWIN__ defined.
+	(gdb_path_conv): Call cygwin_conv_to_full_win32_path instead.
+
 2006-01-23  Keith Seitz  <keiths@redhat.com>
 
 	From Andrew Stubbs  <andrew.stubbs@st.com>:

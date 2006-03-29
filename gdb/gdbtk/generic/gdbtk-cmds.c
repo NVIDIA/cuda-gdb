@@ -64,6 +64,10 @@
 #include "dis-asm.h"
 #include "gdbcmd.h"
 
+#ifdef __CYGWIN__
+#include <sys/cygwin.h>		/* for cygwin_conv_to_full_win32_path */
+#endif
+
 #ifdef HAVE_CTYPE_H
 #include <ctype.h>		/* for isprint() */
 #endif
@@ -2825,7 +2829,7 @@ gdb_path_conv (ClientData clientData, Tcl_Interp *interp,
   {
     char pathname[256], *ptr;
 
-    cygwin32_conv_to_full_win32_path (Tcl_GetStringFromObj (objv[1], NULL),
+    cygwin_conv_to_full_win32_path (Tcl_GetStringFromObj (objv[1], NULL),
 				      pathname);
     for (ptr = pathname; *ptr; ptr++)
       {
