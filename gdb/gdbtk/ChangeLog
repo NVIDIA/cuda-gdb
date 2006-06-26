@@ -1,3 +1,8 @@
+2006-06-26  Keith Seitz  <keiths@redhat.com>
+
+	* library/srcwin.itb (_build_win): Add invisible frame to workaround
+	the missing frame problem.
+
 2006-03-29  Brian Dessent  <brian@dessent.net>
 
 	* generic/gdbtk-cmds.c: Include sys/cygwin.h if __CYGWIN__ defined.
