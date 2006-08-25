@@ -440,7 +440,7 @@ proc pref_set_defaults {} {
   # IPC prefs
   # set prefs based on GDB version?
   #set vers [lindex [split [lindex [split [gdb_cmd "show version"]] end-1 ] \"] 1]
-  pref define gdb/ipc/enabled	1
+  pref define gdb/ipc/enabled		0
   pref define gdb/ipc/port		9909
   pref define gdb/ipc/stop_button	1
   pref define gdb/ipc/step_button	1
