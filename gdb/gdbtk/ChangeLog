@@ -1,3 +1,7 @@
+2006-08-25  Maciej W. Rozycki  <macro@mips.com>
+
+	* generic/gdbtk-cmds.c (gdb_update_mem): Use target_read.
+
 2006-08-25  Keith Seitz  <keiths@redhat.com>
 
 	* library/prefs.tcl (pref_set_defaults): Disable IPC, gdb/ipc/enabled,

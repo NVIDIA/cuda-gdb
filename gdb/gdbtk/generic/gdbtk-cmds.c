@@ -2429,15 +2429,12 @@ gdb_update_mem (ClientData clientData, Tcl_Interp *interp,
   memset (mbuf, 0, nbytes + 32);
   mptr = cptr = mbuf;
 
-  rnum = 0;
-  while (rnum < nbytes)
+  rnum = target_read (&current_target, TARGET_OBJECT_MEMORY, NULL,
+		      mbuf, addr, nbytes);
+  if (rnum <= 0)
     {
-      int error;
-      int num = target_read_memory_partial (addr + rnum, mbuf + rnum,
-					    nbytes - rnum, &error);
-      if (num <= 0)
-	break;
-      rnum += num;
+      gdbtk_set_result (interp, "Unable to read memory.");
+      return TCL_ERROR;
     }
 
   if (objc == 8)
