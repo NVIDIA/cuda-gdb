@@ -1,3 +1,8 @@
+2006-09-14  Keith Seitz  <keiths@redhat.com>
+
+	* README: Update startup info and add DISPLAY environment
+	variable.
+
 2006-08-25  Maciej W. Rozycki  <macro@mips.com>
 
 	* generic/gdbtk-cmds.c (gdb_update_mem): Use target_read.

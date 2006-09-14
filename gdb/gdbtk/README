@@ -75,6 +75,8 @@ install and the source trees.
 	INSIGHT_FORCE_READ_PREFERENCES
 				If set, read .gdbtkinit (or gdb.ini on windows)
 				even when -nx is passed to GDB.
+	DISPLAY			The display to use on unix/X platforms.
+				Not used on Windows platforms.
 
 All of the environment variables for controlling Insight are well documented
 in gdb/gdbtk/library/main.tcl. Search for "env" to find them all.
@@ -82,8 +84,10 @@ in gdb/gdbtk/library/main.tcl. Search for "env" to find them all.
 Using Insight
 =============
 
-Just run it like you would a normal GDB (in fact, it's actually called `gdb').
-If everything goes well, you should have several windows pop up.  To get going,
+You can start Insight by running the "insight" executable (for cross-platform
+targets, include the build triple, i.e., powerpc-elf-insight). Alternatively start
+Insight by telling GDB to start it with "gdb -w" or "gdb -i=insight". If
+everything goes well, you should have several windows pop up.  To get going,
 hit the Run button, and go exploring.
 
 If you want to use GDB in command line mode, just use the -nw option.  Or, you
