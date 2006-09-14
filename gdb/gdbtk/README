@@ -84,14 +84,14 @@ in gdb/gdbtk/library/main.tcl. Search for "env" to find them all.
 Using Insight
 =============
 
-You can start Insight by running the "insight" executable (for cross-platform
-targets, include the build triple, i.e., powerpc-elf-insight). Alternatively start
-Insight by telling GDB to start it with "gdb -w" or "gdb -i=insight". If
+You can start Insight by running the `insight' executable (for cross-platform
+targets, include the build triple, i.e., `powerpc-elf-insight'). Alternatively start
+Insight by telling GDB to start it with `gdb -w' or `gdb -i=insight'. If
 everything goes well, you should have several windows pop up.  To get going,
 hit the Run button, and go exploring.
 
-If you want to use GDB in command line mode, just use the -nw option.  Or, you
-can undefine the DISPLAY environment variable.
+If you want to use GDB in command line mode, just use the -nw option or the
+console interpreter (`insight -i=console').
 
 Insight comes with all your standard debugger windows, including:
 
