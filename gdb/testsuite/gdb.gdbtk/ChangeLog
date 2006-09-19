@@ -1,3 +1,8 @@
+2006-09-19  Keith Seitz  <keiths@redhat.com>
+
+	* Makefile.in: Change all instances of configure.in to refer to
+	configure.ac.
+
 2005-01-27  Keith Seitz  <keiths@redhat.com>
 
 	* configure.in: Rename to ...

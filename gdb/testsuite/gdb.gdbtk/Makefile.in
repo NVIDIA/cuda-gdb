@@ -32,5 +32,5 @@ distclean maintainer-clean realclean: clean
 	-rm -f *-init.exp
 	-rm -fr *.log summary detail *.plog *.sum *.psum site.*
 
-Makefile : $(srcdir)/Makefile.in $(srcdir)/configure.in
+Makefile : $(srcdir)/Makefile.in $(srcdir)/configure.ac
 	$(SHELL) ./config.status --recheck
