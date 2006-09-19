@@ -160,9 +160,10 @@ proc pref_read {} {
 #  PROC:  pref_save - save preferences to a file and delete window
 # ------------------------------------------------------------------
 proc pref_save {{win {}}} {
-  global prefs_init_filename GDBStartup
+  global prefs_init_filename GDBStartup env
 
-  if {!$GDBStartup(inhibit_prefs)} {
+  if {!$GDBStartup(inhibit_prefs)
+      || [info exists env(INSIGHT_FORCE_READ_PREFERENCES)]} {
     debug "pref_save $prefs_init_filename"
 
     if {[catch {open $prefs_init_filename w} fd]} {

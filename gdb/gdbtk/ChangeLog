@@ -1,3 +1,9 @@
+2006-09-19  Keith Seitz  <keiths@redhat.com>
+
+	From Andrew Stubbs  <andrew.stubbs@st.com>:
+	* library/prefs.tcl (pref_save): Save preferences if
+	INSIGHT_FORCE_READ_PREFERENCES is set in the environment.
+
 2006-09-14  Keith Seitz  <keiths@redhat.com>
 
 	* README: Update startup info and add DISPLAY environment
