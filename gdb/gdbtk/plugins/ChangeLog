@@ -1,3 +1,9 @@
+2006-09-28  Keith Seitz  <keiths@redhat.com>
+
+	* aclocal.m4: Regenerate.
+	* configure: Regenerate.
+	* Makefile.in: Regenerate.
+
 2005-12-23  Eli Zaretskii  <eliz@gnu.org>
 
 	* aclocal.m4: Update the FSF address.
