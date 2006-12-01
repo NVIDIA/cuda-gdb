@@ -1,5 +1,12 @@
 2006-11-30  Keith Seitz  <keiths@redhat.com>
 
+	insight/299:
+	* generic/gdbtk.c (gdbtk_init): Don't check if DISPLAY is set,
+	it isn't needed anymore. Gdb will not abort, and Tk_Init will
+	fail gracefully.
+
+2006-11-30  Keith Seitz  <keiths@redhat.com>
+
 	* library/targetselection.itb (constructor): "top" is unused.
 	Remove it.
 	(get_target_list): Use "scan" to parse "help target" output.

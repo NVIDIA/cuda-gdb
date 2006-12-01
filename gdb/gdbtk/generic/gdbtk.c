@@ -1,5 +1,5 @@
 /* Startup code for Insight
-   Copyright (C) 1994, 1995, 1996, 1997, 1998, 2001, 2002, 2003, 2004
+   Copyright (C) 1994, 1995, 1996, 1997, 1998, 2001, 2002, 2003, 2004, 2006
    Free Software Foundation, Inc.
 
    Written by Stu Grossman <grossman@cygnus.com> of Cygnus Support.
@@ -357,17 +357,6 @@ gdbtk_init (void)
   int element_count;
   const char **exec_path;
   CONST char *internal_exec_name;
-
-  /* If there is no DISPLAY environment variable, Tk_Init below will fail,
-     causing gdb to abort.  If instead we simply return here, gdb will
-     gracefully degrade to using the command line interface. */
-
-#ifndef _WIN32
-  if (getenv ("DISPLAY") == NULL)
-    {
-      return;
-    }
-#endif
 
   old_chain = make_cleanup (cleanup_init, 0);
 
