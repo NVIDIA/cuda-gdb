@@ -1,3 +1,9 @@
+2006-11-30  Keith Seitz  <keiths@redhat.com>
+
+	* library/targetselection.itb (constructor): "top" is unused.
+	Remove it.
+	(get_target_list): Use "scan" to parse "help target" output.
+
 2006-11-09  Keith Seitz  <keiths@redhat.com>
 
 	* help/trace/locals.html: Remove all references to gdb.ini. Even

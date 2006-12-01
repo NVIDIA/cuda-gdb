@@ -1,5 +1,5 @@
 # Target selection dialog for Insight.
-# Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005 Red Hat, Inc.
+# Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -21,7 +21,6 @@
 # ------------------------------------------------------------------
 itcl::body TargetSelection::constructor {args} {
   eval itk_initialize $args
-  set top [winfo toplevel $itk_interior]
   _init
   build_win
 }
@@ -907,20 +906,22 @@ itcl::body TargetSelection::port_list {} {
 itcl::body TargetSelection::get_target_list {} {
   set native [native_debugging]
   set names ""
-  set res [gdb_cmd "help target"]
-  foreach line [split $res \n] {
-    if {![string compare [lindex $line 0] "target"]} {
-      set name [lindex $line 1]
+  set res [gdb_cmd "help target"]; # this just screams MI...
 
+  # targets are listed with lines like "target NAME -- DESCRIPTION"
+  foreach line [split $res \n] {
+    if {[scan $line "target %s --" name] == 1} {
       # For cross debuggers, do not allow the target "exec"
       if {$name == "exec" && !$native} {
 	continue
       }
+
       lappend names $name
     }
   }
+
   lappend names gdbserver
-  return $names
+  return [lsort $names]
 }
 
 # ------------------------------------------------------------------
