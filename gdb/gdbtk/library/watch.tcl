@@ -1,5 +1,5 @@
 # Watch window for Insight.
-# Copyright (C) 2002, 2003 Red Hat
+# Copyright (C) 2002, 2003, 2006 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -59,6 +59,10 @@ itcl::class WatchWin {
     debug
     cursor {}
     set Running 0
+    foreach var $Watched {
+      $var delete
+    }
+    $tree remove all
   }
   
   # ------------------------------------------------------------------
@@ -114,12 +118,12 @@ itcl::class WatchWin {
 
   # ------------------------------------------------------------------
   #  METHOD: clear_file - Clear out state so that a new executable
-  #             can be loaded. For WatchWins, this means deleting
-  #             the Watched list.
+  #             can be loaded. For WatchWins, this means doing
+  #             everything that no_inferior does.
   # ------------------------------------------------------------------
   method clear_file {} {
     debug
-    set Watched {}
+    no_inferior
   }
 
   # ------------------------------------------------------------------

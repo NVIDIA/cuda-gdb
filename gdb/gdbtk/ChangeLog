@@ -1,5 +1,18 @@
 2006-11-30  Keith Seitz  <keiths@redhat.com>
 
+	insight/293:
+	* library/watch.tcl (no_inferior): Remove all varobjs and
+	clear the display.
+	(clear_file): Call no_inferior. Update comments.
+	* library/locals.tcl: Remove unused variables "Running"
+	and "Variables". Changed throughout.
+	(no_inferior): Delete the current frame and clear the display.
+	(clear_file): Call no_inferior. Update comments.
+	(context_switch): To delete an Itcl object, one uses
+	"delete object" not "destroy".
+
+2006-11-30  Keith Seitz  <keiths@redhat.com>
+
 	insight/299:
 	* generic/gdbtk.c (gdbtk_init): Don't check if DISPLAY is set,
 	it isn't needed anymore. Gdb will not abort, and Tk_Init will

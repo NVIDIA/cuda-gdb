@@ -1,5 +1,5 @@
 # Local Variable Window for Insight.
-# Copyright (C) 2002, 2003 Red Hat
+# Copyright (C) 2002, 2003, 2006 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -42,14 +42,12 @@ itcl::class LocalsWin {
   # ------------------------------------------------------------------
   method busy {event} {
     debug
-    set Running 1
     cursor watch
   }
 
   # Re-enable the UI
   method idle {event} {
     debug
-    set Running 0
     cursor {}
   }
 
@@ -60,8 +58,9 @@ itcl::class LocalsWin {
   method no_inferior {} {
     debug
     cursor {}
-    set Running 0
+    catch {delete object $_frame}
     set _frame {}
+    $tree remove all
   }
   
   # ------------------------------------------------------------------
@@ -90,12 +89,11 @@ itcl::class LocalsWin {
 
   # ------------------------------------------------------------------
   #  METHOD: clear_file - Clear out state so that a new executable
-  #             can be loaded. For LocalWins, this means deleting
-  #             the Variables list.
+  #             can be loaded. For LocalWins, this means doing
+  #             everything that no_inferior does.
   # ------------------------------------------------------------------
   method clear_file {} {
-    debug
-    set Variables {}
+    no_inferior
   }
 
   # ------------------------------------------------------------------
@@ -109,10 +107,6 @@ itcl::class LocalsWin {
     remove_hook gdb_no_inferior_hook "$this no_inferior"
     remove_hook gdb_clear_file_hook [code $this clear_file]
     remove_hook file_changed_hook [code $this clear_file]
-
-    foreach var $Variables {
-      $var delete
-    }
   }
 
   method context_switch {} {
@@ -124,7 +118,7 @@ itcl::class LocalsWin {
     if {$err && $_frame != ""} {
       # No current frame
       debug "no current frame"
-      catch {destroy $_frame}
+      catch {delete object $_frame}
       set _frame {}
       return 1
     } elseif {$current_frame == "" && $_frame == ""} {
@@ -158,7 +152,6 @@ itcl::class LocalsWin {
       
       # delete variables in tree
       $tree remove all
-      set Variables {}
 
       if {$_frame != ""} {
 	$tree add [$_frame variables]
@@ -172,8 +165,6 @@ itcl::class LocalsWin {
   }
   
   protected variable Entry
-  protected variable Variables {}
   protected variable tree
-  protected variable Running
   protected variable _frame {}
 }
