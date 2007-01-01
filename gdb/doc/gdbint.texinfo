@@ -39,7 +39,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.247 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.248 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -6176,6 +6176,10 @@ fill-column: 74
 version-control: never
 End:
 @end smallexample
+
+@item
+Add an entry for the newly created ChangeLog file (@file{ChangeLog-YYYY})
+in @file{gdb/config/djgpp/fnchange.lst}.
 
 @item
 Update the copyright year in the startup message
