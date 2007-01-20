@@ -39,7 +39,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.249 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.250 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -4905,8 +4905,9 @@ The opcodes library provides @value{GDBN}'s disassembler.  (It's a separate
 library because it's also used in binutils, for @file{objdump}).
 
 @section readline
-
-@section mmalloc
+@cindex readline library
+The @code{readline} library provides a set of functions for use by applications
+that allow users to edit command lines as they are typed in.
 
 @section libiberty
 @cindex @code{libiberty} library
