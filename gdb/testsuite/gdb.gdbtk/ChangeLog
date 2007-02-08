@@ -1,3 +1,8 @@
+2007-02-08  Andreas Schwab  <schwab@suse.de>
+
+	* insight-support.exp (gdbtk_start): Return error status instead
+	of aborting the whole testsuite run.
+
 2006-09-19  Keith Seitz  <keiths@redhat.com>
 
 	* Makefile.in: Change all instances of configure.in to refer to
