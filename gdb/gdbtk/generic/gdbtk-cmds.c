@@ -2129,23 +2129,29 @@ gdb_loc (ClientData clientData, Tcl_Interp *interp, int objc, Tcl_Obj *CONST obj
           pc = entry_point_address ();
           sal = find_pc_line (pc, 0);
         }  
-      else if (deprecated_selected_frame
-	       && (get_frame_pc (deprecated_selected_frame) != read_pc ()))
-        {
-          /* Note - this next line is not correct on all architectures.
-	     For a graphical debugger we really want to highlight the 
-	     assembly line that called the next function on the stack.
-	     Many architectures have the next instruction saved as the
-	     pc on the stack, so what happens is the next instruction 
-	     is highlighted. FIXME */
-	  pc = get_frame_pc (deprecated_selected_frame);
-	  find_frame_sal (deprecated_selected_frame, &sal);
-	}
       else
-        {
-          pc = read_pc ();
-          sal = find_pc_line (pc, 0);
-        }
+	{
+	  struct frame_info *frame;
+
+	  frame = get_selected_frame (NULL);
+
+	  if (get_frame_pc (frame) != read_pc ())
+	    {
+	      /* Note - this next line is not correct on all architectures.
+		 For a graphical debugger we really want to highlight the 
+		 assembly line that called the next function on the stack.
+		 Many architectures have the next instruction saved as the
+		 pc on the stack, so what happens is the next instruction 
+		 is highlighted. FIXME */
+	      pc = get_frame_pc (frame);
+	      find_frame_sal (frame, &sal);
+	    }
+	  else
+	    {
+	      pc = read_pc ();
+	      sal = find_pc_line (pc, 0);
+	    }
+	}
     }
   else if (objc == 2)
     {
