@@ -39,7 +39,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.254 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.255 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -4947,11 +4947,6 @@ user that another process may be running with the same executable.
 Defines the format for the name of a @file{/proc} device.  Should be
 defined in @file{nm.h} @emph{only} in order to override the default
 definition in @file{procfs.c}.
-
-@item PTRACE_ARG3_TYPE
-@findex PTRACE_ARG3_TYPE
-The type of the third argument to the @code{ptrace} system call, if it
-exists and is different from @code{int}.
 
 @item REGISTER_U_ADDR
 @findex REGISTER_U_ADDR
