@@ -21,6 +21,7 @@
 #include "defs.h"
 #include "frame.h"
 #include "value.h"
+#include "varobj.h"
 #include "block.h"
 #include "exceptions.h"
 #include "gdbtk-wrapper.h"
@@ -81,6 +82,10 @@ gdb_result GDB_find_relative_frame (struct frame_info *fi,
 
 gdb_result GDB_get_current_frame (struct frame_info **result);
 
+gdb_result GDB_varobj_update (struct varobj **varp,
+			      struct varobj ***changelist, int explicit,
+			      int *result);
+
 /*
  * Private functions for this file
  */
@@ -126,6 +131,8 @@ static int wrap_get_next_frame (char *opaque_arg);
 static int wrap_find_relative_frame (char *opaque_arg);
 
 static int wrap_get_current_frame (char *opaque_arg);
+
+static int wrap_varobj_update (char *opaque_arg);
 
 static gdb_result
 call_wrapped_function (catch_errors_ftype *fn, struct gdb_wrapper_arguments *arg)
@@ -721,3 +728,33 @@ wrap_get_current_frame (char *opaque_arg)
   return 1;
 }
 
+gdb_result
+GDB_varobj_update (struct varobj **varp, struct varobj ***changelist,
+		   int explicit, int *result)
+{
+  struct gdb_wrapper_arguments args;
+  gdb_result r;
+
+  args.args[0] = (char *) varp;
+  args.args[1] = (char *) changelist;
+  args.args[2] = (char *) explicit;
+
+  r = call_wrapped_function ((catch_errors_ftype *) wrap_varobj_update, &args);
+  if (r != GDB_OK)
+    return r;
+
+  *result = (int) args.result;
+  return GDB_OK;
+}
+
+static int wrap_varobj_update (char *opaque_arg)
+{
+  struct gdb_wrapper_arguments **args
+    = (struct gdb_wrapper_arguments **) opaque_arg;
+  struct varobj **varp = (struct varobj **) (*args)->args[0];
+  struct varobj ***changelist = (struct varobj ***) (*args)->args[1];
+  int explicit = (int) (*args)->args[2];
+
+  (*args)->result = (char *) varobj_update (varp, changelist, explicit);
+  return 1;
+}

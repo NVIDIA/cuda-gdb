@@ -39,6 +39,7 @@
 #include "filenames.h"
 #include "disasm.h"
 #include "value.h"
+#include "varobj.h"
 #include "exceptions.h"
 
 /* tcl header files includes varargs.h unless HAS_STDARG is defined,

@@ -26,6 +26,7 @@
 #include <tcl.h>
 #include "gdbtk.h"
 #include "gdbtk-cmds.h"
+#include "gdbtk-wrapper.h"
 
 /*
  * Public functions defined in this file
@@ -444,10 +445,12 @@ variable_update (Tcl_Interp *interp, struct varobj **var)
   Tcl_Obj *changed;
   struct varobj **changelist;
   struct varobj **vc;
+  int result;
 
-  /* varobj_update() can return -1 if the variable is no longer around,
-     i.e. we stepped out of the frame in which a local existed. */
-  if (varobj_update (var, &changelist) == -1)
+  /* varobj_update() throws an error for a non-root variable
+     and otherwise it returns a value < 0 if the variable is
+     not in scope, not valid anymore or has changed type.  */
+  if (GDB_varobj_update (var, &changelist, 1, &result) != GDB_OK || result < 0)
     return Tcl_NewStringObj ("-1", -1);
 
   changed = Tcl_NewListObj (0, NULL);  

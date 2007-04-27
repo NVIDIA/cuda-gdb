@@ -80,5 +80,8 @@ extern gdb_result GDB_find_relative_frame (struct frame_info *fi,
 					   int *start,
 					   struct frame_info **result);
 extern gdb_result GDB_get_current_frame (struct frame_info **result);
+extern gdb_result GDB_varobj_update (struct varobj **varp,
+				     struct varobj ***changelist, int explicit,
+				     int *result);
 #endif /* GDBTK_WRAPPER_H */
 

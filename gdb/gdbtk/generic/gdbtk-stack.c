@@ -24,6 +24,7 @@
 #include "linespec.h"
 #include "block.h"
 #include "dictionary.h"
+#include "varobj.h"
 
 #include <tcl.h>
 #include "gdbtk.h"

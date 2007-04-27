@@ -1,3 +1,14 @@
+2007-04-27  Maciej W. Rozycki  <macro@mips.com>
+
+	* generic/gdbtk-wrapper.c (GDB_varobj_update): New function.
+	(wrap_varobj_update): Likewise.
+	* generic/gdbtk-wrapper.h (GDB_varobj_update): New declaration.
+	* generic/gdbtk-varobj.c (variable_update): Call
+	GDB_varobj_update() rather than varobj_update() directly.  Take
+	the new semantics of the latter into account.
+	* generic/gdbtk-cmds.c: Include "varobj.h".
+	* generic/gdbtk-stack.c: Likewise.
+
 2007-03-13  Kevin Buettner  <kevinb@redhat.com>
 
 	* generic/gdbtk-cmds.c (gdb_loc): Eliminate use of
