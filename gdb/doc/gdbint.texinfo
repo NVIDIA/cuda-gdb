@@ -39,7 +39,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.260 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.261 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -4953,12 +4953,6 @@ twice; once when
 the shell execs, and once when the program itself execs.  If the actual
 number of traps is something other than 2, then define this macro to
 expand into the number expected.
-
-@item USE_PROC_FS
-@findex USE_PROC_FS
-This determines whether small routines in @file{*-tdep.c}, which
-translate register values between @value{GDBN}'s internal
-representation and the @file{/proc} representation, are compiled.
 
 @item U_REGS_OFFSET
 @findex U_REGS_OFFSET
