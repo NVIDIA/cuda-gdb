@@ -538,13 +538,13 @@ get_frame_name (Tcl_Interp *interp, Tcl_Obj *list, struct frame_info *fi)
 
   if (get_frame_type (fi) == DUMMY_FRAME)
     {
-      objv[0] = Tcl_NewStringObj ("<function called from gdb>\n", -1);
+      objv[0] = Tcl_NewStringObj ("<function called from gdb>", -1);
       Tcl_ListObjAppendElement (interp, list, objv[0]);
       return;
     }
   if ((get_frame_type (fi) == SIGTRAMP_FRAME))
     {
-      objv[0] = Tcl_NewStringObj ("<signal handler called>\n", -1);
+      objv[0] = Tcl_NewStringObj ("<signal handler called>", -1);
       Tcl_ListObjAppendElement (interp, list, objv[0]);
       return;
     }

@@ -1,3 +1,8 @@
+2007-05-22  Chris Dearman  <chris@mips.com>
+
+	* generic/gdbtk-stack.c (get_frame_name): Remove spurious
+	newlines from dummy/sigtramp frame names.
+
 2007-04-27  Maciej W. Rozycki  <macro@mips.com>
 
 	* generic/gdbtk-wrapper.c (GDB_varobj_update): New function.
