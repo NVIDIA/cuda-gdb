@@ -1,5 +1,5 @@
 /* Tcl/Tk command definitions for Insight - Registers
-   Copyright (C) 2001, 2002, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2004, 2007 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -312,8 +312,8 @@ get_register (int regnum, void *arg)
       ptr = buf + 2;
       for (j = 0; j < register_size (current_gdbarch, regnum); j++)
 	{
-	  int idx = TARGET_BYTE_ORDER == BFD_ENDIAN_BIG ? j
-	    : register_size (current_gdbarch, regnum) - 1 - j;
+	  int idx = ((gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_BIG)
+		     ? j : register_size (current_gdbarch, regnum) - 1 - j);
 	  sprintf (ptr, "%02x", (unsigned char) buffer[idx]);
 	  ptr += 2;
 	}
@@ -382,7 +382,8 @@ map_arg_registers (Tcl_Interp *interp, int objc, Tcl_Obj **objv,
      case, some entries of REGISTER_NAME will change depending upon
      the particular processor being debugged.  */
 
-  numregs = NUM_REGS + NUM_PSEUDO_REGS;
+  numregs = (gdbarch_num_regs (current_gdbarch)
+	     + gdbarch_num_pseudo_regs (current_gdbarch));
 
   if (objc == 0)		/* No args, just do all the regs */
     {
@@ -448,13 +449,17 @@ register_changed_p (int regnum, void *argp)
 static void
 setup_architecture_data ()
 {
+  int numregs;
+
   xfree (old_regs);
   xfree (regformat);
   xfree (regtype);
 
-  old_regs = xcalloc (1, (NUM_REGS + NUM_PSEUDO_REGS) * MAX_REGISTER_SIZE + 1);
-  regformat = (int *)xcalloc ((NUM_REGS + NUM_PSEUDO_REGS) , sizeof(int));
-  regtype = (struct type **)xcalloc ((NUM_REGS + NUM_PSEUDO_REGS), sizeof(struct type **));
+  numregs = (gdbarch_num_regs (current_gdbarch)
+	     + gdbarch_num_pseudo_regs (current_gdbarch));
+  old_regs = xcalloc (1, numregs * MAX_REGISTER_SIZE + 1);
+  regformat = (int *)xcalloc (numregs, sizeof(int));
+  regtype = (struct type **)xcalloc (numregs, sizeof(struct type **));
 }
 
 /* gdb_regformat sets the format for a register */
@@ -466,7 +471,7 @@ static int
 gdb_regformat (ClientData clientData, Tcl_Interp *interp,
 	       int objc, Tcl_Obj **objv)
 {
-  int fm, regno;
+  int fm, regno, numregs;
   struct type *type;
 
   if (objc != 3)
@@ -481,7 +486,9 @@ gdb_regformat (ClientData clientData, Tcl_Interp *interp,
   type = (struct type *)strtol (Tcl_GetStringFromObj (objv[1], NULL), NULL, 16);  
   fm = (int)*(Tcl_GetStringFromObj (objv[2], NULL));
 
-  if (regno >= NUM_REGS + NUM_PSEUDO_REGS)
+  numregs = (gdbarch_num_regs (current_gdbarch)
+	     + gdbarch_num_pseudo_regs (current_gdbarch));
+  if (regno >= numregs)
     {
       gdbtk_set_result (interp, "Register number %d too large", regno);
       return TCL_ERROR;
@@ -531,7 +538,7 @@ gdb_reggroup (ClientData clientData, Tcl_Interp *interp,
 {
   struct reggroup *group;
   char *groupname;
-  int regnum;
+  int regnum, num;
 
   if (objc != 1)
     {
@@ -557,7 +564,9 @@ gdb_reggroup (ClientData clientData, Tcl_Interp *interp,
   if (group == NULL)
     return TCL_ERROR;
 
-  for (regnum = 0; regnum < NUM_REGS + NUM_PSEUDO_REGS; regnum++)
+  num = (gdbarch_num_regs (current_gdbarch)
+	 + gdbarch_num_pseudo_regs (current_gdbarch));
+  for (regnum = 0; regnum < num; regnum++)
     {
       if (gdbarch_register_reggroup_p (current_gdbarch, regnum, group))
 	Tcl_ListObjAppendElement (NULL, result_ptr->obj_ptr, Tcl_NewIntObj (regnum));

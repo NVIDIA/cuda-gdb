@@ -1,5 +1,5 @@
 /* Tcl/Tk command definitions for Insight.
-   Copyright (C) 1994, 1995, 1996, 1997, 1998, 1999, 2001, 2002, 2003, 2004
+   Copyright (C) 1994, 1995, 1996, 1997, 1998, 1999, 2001, 2002, 2003, 2004, 2007
    Free Software Foundation, Inc.
 
    Written by Stu Grossman <grossman@cygnus.com> of Cygnus Support.
@@ -2259,7 +2259,7 @@ hex2bin (const char *hex, char *bin, int count)
   int incr = 2;
 
 
-  if (TARGET_BYTE_ORDER == BFD_ENDIAN_LITTLE)
+  if (gdbarch_byte_order (current_gdbarch) == BFD_ENDIAN_LITTLE)
     {
       /* need to read string in reverse */
       hex += count - 2;
