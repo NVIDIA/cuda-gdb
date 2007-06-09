@@ -323,7 +323,7 @@ get_register (int regnum, void *arg)
     {
       if ((TYPE_CODE (reg_vtype) == TYPE_CODE_UNION)
 	  && (strcmp (FIELD_NAME (TYPE_FIELD (reg_vtype, 0)), 
-		      REGISTER_NAME (regnum)) == 0))
+		      gdbarch_register_name (current_gdbarch, regnum)) == 0))
 	{
 	  val_print (FIELD_TYPE (TYPE_FIELD (reg_vtype, 0)), buffer, 0, 0,
 		     stb, format, 1, 0, Val_pretty_default);
@@ -349,7 +349,8 @@ get_register_name (int regnum, void *argp)
 {
   /* Non-zero if the caller wants the register numbers, too.  */
   int numbers = (int) argp;
-  Tcl_Obj *name = Tcl_NewStringObj (REGISTER_NAME (regnum), -1);
+  Tcl_Obj *name
+    = Tcl_NewStringObj (gdbarch_register_name (current_gdbarch, regnum), -1);
   Tcl_Obj *elt;
 
   if (numbers)
@@ -377,10 +378,10 @@ map_arg_registers (Tcl_Interp *interp, int objc, Tcl_Obj **objv,
   int regnum, numregs;
 
   /* Note that the test for a valid register must include checking the
-     REGISTER_NAME because NUM_REGS may be allocated for the union of
-     the register sets within a family of related processors.  In this
-     case, some entries of REGISTER_NAME will change depending upon
-     the particular processor being debugged.  */
+     gdbarch_register_name because gdbarch_num_regs may be allocated for
+     the union of the register sets within a family of related processors.
+     In this case, some entries of gdbarch_register_name will change
+     depending upon the particular processor being debugged.  */
 
   numregs = (gdbarch_num_regs (current_gdbarch)
 	     + gdbarch_num_pseudo_regs (current_gdbarch));
@@ -390,8 +391,8 @@ map_arg_registers (Tcl_Interp *interp, int objc, Tcl_Obj **objv,
       result_ptr->flags |= GDBTK_MAKES_LIST;
       for (regnum = 0; regnum < numregs; regnum++)
 	{
-	  if (REGISTER_NAME (regnum) == NULL
-	      || *(REGISTER_NAME (regnum)) == '\0')
+	  if (gdbarch_register_name (current_gdbarch, regnum) == NULL
+	      || *(gdbarch_register_name (current_gdbarch, regnum)) == '\0')
 	    continue;
 	  func (regnum, argp);
 	}      
