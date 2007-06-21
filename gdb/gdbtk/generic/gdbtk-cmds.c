@@ -1895,7 +1895,7 @@ gdbtk_load_asm (ClientData clientData, CORE_ADDR pc,
 
   result_ptr->obj_ptr = client_data->result_obj[2];
   /* FIXME: cagney/2003-09-08: This should use gdb_disassembly.  */
-  insn = gdb_print_insn (pc, gdb_stdout);
+  insn = gdb_print_insn (pc, gdb_stdout, NULL);
   gdb_flush (gdb_stdout);
 
   client_data->widget_line_no++;
