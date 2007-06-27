@@ -1,3 +1,7 @@
+2007-06-27  Maciej W. Rozycki  <macro@mips.com>
+
+	* c_variable.c: Include <stdlib.h> for a declaration of exit().
+
 2007-02-08  Andreas Schwab  <schwab@suse.de>
 
 	* insight-support.exp (gdbtk_start): Return error status instead

@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 struct _simple_struct {
   int integer;
   unsigned int unsigned_integer;
