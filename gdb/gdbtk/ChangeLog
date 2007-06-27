@@ -1,3 +1,10 @@
+2007-06-27  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-register.c (Gdbtk_Register_Init): Remove
+	calls to deprecated_register_gdbarch_swap.
+	Add "gdb_reg_arch_changed" command.
+	* library/regwin.itb (arch_changed): Call gdb_reg_arch_changed.
+
 2007-06-21  Maciej W. Rozycki  <macro@mips.com>
 
 	* generic/gdbtk-cmds.c (gdbtk_load_asm): Update the call to

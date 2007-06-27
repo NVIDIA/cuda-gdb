@@ -1,5 +1,5 @@
 # Register display window for Insight.
-# Copyright (C) 1998, 1999, 2001, 2002, 2003, 2004 Red Hat, Inc.
+# Copyright (C) 1998, 1999, 2001, 2002, 2003, 2004, 2007 Red Hat, Inc.
 #
 # Written by Keith Seitz (keiths@redhat.com)
 #        and Martin Hunt (hunt@redhat.com)
@@ -931,9 +931,10 @@ itcl::body RegWin::_select_group {} {
 # ------------------------------------------------------------------
 itcl::body RegWin::arch_changed {event} {
 
-  # When the arch changes, gdb will callback into gdbtk-register.c
-  # to swap out the old register set, so we need only redraw the
-  # window, updating the register names and numbers.
+  # Update internal register caches
+  gdb_reg_arch_changed
+
+  # Relayout the table
   _layout_table
 
   # Clear gdb's change list
