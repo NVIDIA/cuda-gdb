@@ -58,14 +58,11 @@ Gdbtk_Register_Init (Tcl_Interp *interp)
 {
   Tcl_CreateObjCommand (interp, "gdb_reginfo", gdbtk_call_wrapper,
                         gdb_register_info, NULL);
+  Tcl_CreateObjCommand (interp, "gdb_reg_arch_changed", gdbtk_call_wrapper,
+			setup_architecture_data, NULL);
 
   /* Register/initialize any architecture specific data */
   setup_architecture_data ();
-
-  deprecated_register_gdbarch_swap (&old_regs, sizeof (old_regs), NULL);
-  deprecated_register_gdbarch_swap (&regformat, sizeof (regformat), NULL);
-  deprecated_register_gdbarch_swap (&regtype, sizeof (regtype), NULL);
-  deprecated_register_gdbarch_swap (NULL, 0, setup_architecture_data);
 
   return TCL_OK;
 }
