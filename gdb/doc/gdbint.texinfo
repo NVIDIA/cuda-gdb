@@ -39,7 +39,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.262 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.263 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -1294,7 +1294,7 @@ be signaled.
 @deftypefun struct cleanup *make_cleanup_ui_out_list_begin_end (struct ui_out *@var{uiout}, const char *@var{id})
 Similar to @code{make_cleanup_ui_out_tuple_begin_end}, this function
 opens a list and then establishes cleanup (@pxref{Coding, Cleanups})
-that will close the list.list.
+that will close the list.
 @end deftypefun
 
 @subsection Item Output Functions
