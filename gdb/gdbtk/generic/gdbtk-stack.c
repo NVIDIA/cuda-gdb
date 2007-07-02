@@ -601,16 +601,6 @@ get_frame_name (Tcl_Interp *interp, Tcl_Obj *list, struct frame_info *fi)
 			      DMGL_ANSI);
 #endif
       objv[0] = Tcl_NewStringObj (funname != NULL ? funname : "??", -1);
-#ifdef PC_LOAD_SEGMENT
-      /* If we couldn't print out function name but if can figure out what
-         load segment this pc value is from, at least print out some info
-         about its load segment. */
-      if (!funname)
-	{
-	  Tcl_AppendStringsToObj (objv[0], " from ", PC_LOAD_SEGMENT (fi->pc),
-				  (char *) NULL);
-	}
-#endif
 #ifdef PC_SOLIB
       if (!funname)
 	{

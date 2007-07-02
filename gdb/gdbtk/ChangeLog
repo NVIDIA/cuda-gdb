@@ -1,3 +1,8 @@
+2007-07-02  Markus Deuling  <deuling@de.ibm.com>
+
+	* gdbtk/generic/gdbtk-stack.c (get_frame_name): Remove dead code
+	(PC_LOAD_SEGMENT).
+
 2007-06-27  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-register.c (Gdbtk_Register_Init): Remove
