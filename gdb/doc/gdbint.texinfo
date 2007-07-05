@@ -39,7 +39,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.265 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.266 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3827,11 +3827,6 @@ the address.
 and guess the starting and ending addresses of the compilation unit from
 them.
 @end itemize
-
-@item PC_LOAD_SEGMENT
-@findex PC_LOAD_SEGMENT
-If defined, print information about the load segment for the program
-counter.  (Defined only for the RS/6000.)
 
 @item int gdbarch_pc_regnum (@var{gdbarch})
 @findex gdbarch_pc_regnum
