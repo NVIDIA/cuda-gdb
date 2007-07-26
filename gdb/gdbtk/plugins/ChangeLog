@@ -1,3 +1,7 @@
+2007-07-26  Maciej W. Rozycki  <macro@mips.com>
+
+	* Make-rules (html): Add goal.
+
 2006-09-28  Keith Seitz  <keiths@redhat.com>
 
 	* aclocal.m4: Regenerate.

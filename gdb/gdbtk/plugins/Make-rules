@@ -112,6 +112,7 @@ install-generic:
 	    $(INSTALL_DATA) $(srcdir)/$$i $(libdir)/insight1.0/$(PLUGIN)/$$i ; \
 	done ;
 
+html:
 info:
 install-info:
 clean: $(CLEAN_TARGET)
