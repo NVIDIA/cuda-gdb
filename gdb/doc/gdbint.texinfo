@@ -39,7 +39,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.274 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.275 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -4674,10 +4674,6 @@ twice; once when
 the shell execs, and once when the program itself execs.  If the actual
 number of traps is something other than 2, then define this macro to
 expand into the number expected.
-
-@item CLEAR_SOLIB
-@findex CLEAR_SOLIB
-See @file{objfiles.c}.
 
 @end table
 
