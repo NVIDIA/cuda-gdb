@@ -39,7 +39,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.275 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.276 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -5973,6 +5973,12 @@ Update the copyright year in the startup message
 
 Update the copyright year in file @file{top.c}, function
 @code{print_gdb_version}.
+
+@item
+Add the new year in the copyright notices of all source and documentation
+files.  This can be done semi-automatically by running the @code{copyright.sh}
+script.  This script requires Emacs 22 or later to be installed.
+
 @end itemize
 
 @node Releasing GDB
