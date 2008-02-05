@@ -1,3 +1,8 @@
+2008-02-05  Maciej W. Rozycki  <macro@mips.com>
+
+	* generic/gdbtk-varobj.c (variable_children): Adjust
+	for varobj_list_children change.
+
 2007-07-02  Markus Deuling  <deuling@de.ibm.com>
 
 	* gdbtk/generic/gdbtk-stack.c (get_frame_name): Remove dead code

@@ -1,5 +1,5 @@
 /* Variable user interface layer for GDB, the GNU debugger.
-   Copyright (C) 1999, 2000, 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2001, 2002, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -413,26 +413,24 @@ static Tcl_Obj *
 variable_children (Tcl_Interp *interp, struct varobj *var)
 {
   Tcl_Obj *list;
-  struct varobj **childlist;
-  struct varobj **vc;
+  VEC(varobj_p) *children;
+  struct varobj *child;
   char *childname;
+  int ix;
 
   list = Tcl_NewListObj (0, NULL);
 
-  varobj_list_children (var, &childlist);
+  children = varobj_list_children (var);
 
-  vc = childlist;
-  while (*vc != NULL)
+  for (ix = 0; VEC_iterate (varobj_p, children, ix, child); ++ix)
     {
-      childname = varobj_get_objname (*vc);
+      childname = varobj_get_objname (child);
       /* Add child to result list and install the Tcl command for it. */
       Tcl_ListObjAppendElement (NULL, list,
 				Tcl_NewStringObj (childname, -1));
       install_variable (interp, childname);
-      vc++;
     }
 
-  xfree (childlist);
   return list;
 }
 
