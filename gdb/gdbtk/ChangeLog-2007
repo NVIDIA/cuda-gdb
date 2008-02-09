@@ -1,0 +1,60 @@
+2007-07-02  Markus Deuling  <deuling@de.ibm.com>
+
+	* gdbtk/generic/gdbtk-stack.c (get_frame_name): Remove dead code
+	(PC_LOAD_SEGMENT).
+
+2007-06-27  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-register.c (Gdbtk_Register_Init): Remove
+	calls to deprecated_register_gdbarch_swap.
+	Add "gdb_reg_arch_changed" command.
+	* library/regwin.itb (arch_changed): Call gdb_reg_arch_changed.
+
+2007-06-21  Maciej W. Rozycki  <macro@mips.com>
+
+	* generic/gdbtk-cmds.c (gdbtk_load_asm): Update the call to
+	gdb_print_insn().
+
+2007-06-09  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-register.c get_register): Replace REGISTER_NAME
+	with gdbarch_register_name.
+	(get_register_name): Ditto.
+	(map_arg_registers): Ditto.
+
+2007-06-04  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-cmds.c (hex2bin): Use gdbarch_byte_order instead
+	of TARGET_BYTE_ORDER.
+	* generic/gdbtk-register.c (get_register): Likewise.
+	(map_arg_registers): Use gdbarch_num_regs and gdbarch_num_pseduo_regs
+	instead of NUM_REGS and NUM_PSEUDO_REGS.
+	(setup_architecture_data): Likewise.
+	(gdb_regformat): Likewise.
+	(gdb_reggroup): Likewise.
+
+2007-05-22  Chris Dearman  <chris@mips.com>
+
+	* generic/gdbtk-stack.c (get_frame_name): Remove spurious
+	newlines from dummy/sigtramp frame names.
+
+2007-04-27  Maciej W. Rozycki  <macro@mips.com>
+
+	* generic/gdbtk-wrapper.c (GDB_varobj_update): New function.
+	(wrap_varobj_update): Likewise.
+	* generic/gdbtk-wrapper.h (GDB_varobj_update): New declaration.
+	* generic/gdbtk-varobj.c (variable_update): Call
+	GDB_varobj_update() rather than varobj_update() directly.  Take
+	the new semantics of the latter into account.
+	* generic/gdbtk-cmds.c: Include "varobj.h".
+	* generic/gdbtk-stack.c: Likewise.
+
+2007-03-13  Kevin Buettner  <kevinb@redhat.com>
+
+	* generic/gdbtk-cmds.c (gdb_loc): Eliminate use of
+	`deprecated_selected_frame'.
+	* generic/gdbtk-register.c (register_changed_p): Likewise.
+	* generic/gdbtk-stack.c (gdb_block_vars, gdb_get_blocks)
+	(gdb_get_vars_command, gdb_selected_block, gdb_selected_frame):
+	Likewise.
+

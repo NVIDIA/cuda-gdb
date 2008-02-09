@@ -1,0 +1,98 @@
+2006-11-30  Keith Seitz  <keiths@redhat.com>
+
+	insight/293:
+	* library/watch.tcl (no_inferior): Remove all varobjs and
+	clear the display.
+	(clear_file): Call no_inferior. Update comments.
+	* library/locals.tcl: Remove unused variables "Running"
+	and "Variables". Changed throughout.
+	(no_inferior): Delete the current frame and clear the display.
+	(clear_file): Call no_inferior. Update comments.
+	(context_switch): To delete an Itcl object, one uses
+	"delete object" not "destroy".
+
+2006-11-30  Keith Seitz  <keiths@redhat.com>
+
+	insight/299:
+	* generic/gdbtk.c (gdbtk_init): Don't check if DISPLAY is set,
+	it isn't needed anymore. Gdb will not abort, and Tk_Init will
+	fail gracefully.
+
+2006-11-30  Keith Seitz  <keiths@redhat.com>
+
+	* library/targetselection.itb (constructor): "top" is unused.
+	Remove it.
+	(get_target_list): Use "scan" to parse "help target" output.
+
+2006-11-09  Keith Seitz  <keiths@redhat.com>
+
+	* help/trace/locals.html: Remove all references to gdb.ini. Even
+	Cygwin now uses .gdbinit.
+	* help/trace/watch.html: Likewise.
+
+2006-09-28  Keith Seitz  <keiths@redhat.com>
+
+	* aclocal.m4: Regenerate.
+	* configure: Regenerate.
+	* Makefile.in: Regenerate.
+
+2006-09-19  Keith Seitz  <keiths@redhat.com>
+
+	From Andrew Stubbs  <andrew.stubbs@st.com>:
+	* library/prefs.tcl (pref_save): Save preferences if
+	INSIGHT_FORCE_READ_PREFERENCES is set in the environment.
+
+2006-09-14  Keith Seitz  <keiths@redhat.com>
+
+	* README: Update startup info and add DISPLAY environment
+	variable.
+
+2006-08-25  Maciej W. Rozycki  <macro@mips.com>
+
+	* generic/gdbtk-cmds.c (gdb_update_mem): Use target_read.
+
+2006-08-25  Keith Seitz  <keiths@redhat.com>
+
+	* library/prefs.tcl (pref_set_defaults): Disable IPC, gdb/ipc/enabled,
+	by default.
+
+2006-06-26  Keith Seitz  <keiths@redhat.com>
+
+	* library/srcwin.itb (_build_win): Add invisible frame to workaround
+	the missing frame problem.
+
+2006-03-29  Brian Dessent  <brian@dessent.net>
+
+	* generic/gdbtk-cmds.c: Include sys/cygwin.h if __CYGWIN__ defined.
+	(gdb_path_conv): Call cygwin_conv_to_full_win32_path instead.
+
+2006-01-23  Keith Seitz  <keiths@redhat.com>
+
+	From Andrew Stubbs  <andrew.stubbs@st.com>:
+	* library/help/source.html: Add entries for the missing menu commands.
+
+2006-01-23  Keith Seitz  <keiths@redhat.com>
+
+	From Andrew Stubbs  <andrew.stubbs@st.com>:
+	* library/mempref.itb (MemPref::constructor): Allow the Byte Per Row
+	combo box to accept arbitrary values.
+	(MemPref::set_bytes_per_row): Validate the new value; reject invalid
+	entries and round up to a multiple of the word size.
+	(MemPref::apply): Read the value from the text box even if the user
+	has not pressed return.
+	(MemPref::enable_format): Ensure the bytes per row value is still valid.
+	(MemPref::disable_format): Likewise.
+	* library/mempref.ith (MemPref): Add $gbprlist.
+	* library/help/memory.html: Update.
+
+2006-01-23  Keith Seitz  <keiths@redhat.com>
+
+	From Andrew Stubbs  <andrew.stubbs@st.com>:
+	* library/helpviewer.tcl (open_help): Add firefox and opera to the
+	browser list used to display help.
+
+2006-01-23  Keith Seitz  <keiths@redhat.comt>
+
+	* ChangeLog: Cleared and saved to ...
+	* ChagneLog-2005: ... here.
+
