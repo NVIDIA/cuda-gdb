@@ -1,5 +1,5 @@
 # Trace dump window for Insight
-# Copyright (C) 1998, 1999, 2001, 2002, 2004 Red Hat, Inc.
+# Copyright (C) 1998, 1999, 2001, 2002, 2004, 2008 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -45,8 +45,6 @@ itcl::class TdumpWin {
   #  METHOD:  build_win - build the main tdump window
   # ------------------------------------------------------------------
   method build_win {} {
-    global tcl_platform
-
     itk_component add stext {
       iwidgets::scrolledtext $itk_interior.stext -hscrollmode dynamic \
 	-vscrollmode dynamic -textfont global/fixed \

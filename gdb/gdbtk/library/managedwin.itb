@@ -1,5 +1,5 @@
 # Managed window for Insight.
-# Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004 Red Hat, Inc.
+# Copyright (C) 1998, 1999, 2000, 2001, 2002, 2004, 2008 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -104,7 +104,7 @@ itcl::body ManagedWin::reveal {} {
   # the window is visible.
   if {[info exists ::$_top._init_geometry]} {
     upvar ::$_top._init_geometry gm
-    if {$::tcl_platform(platform) == "unix"} {
+    if {$::gdbtk_platform(platform) == "unix"} {
       wm geometry $_top $gm
     }
     unset ::$_top._init_geometry
@@ -119,7 +119,7 @@ itcl::body ManagedWin::reveal {} {
   # NOT for Windows, though. Without the focus, we get, eg. a
   # register window on top of the source window, but the source window
   # will have the focus. This is not the proper model for Windows.
-  if {$::tcl_platform(platform) == "windows"} {
+  if {$::gdbtk_platform(platform) == "windows"} {
     focus -force [focus -lastfor $_top]
   }
 }
@@ -298,7 +298,7 @@ itcl::body ManagedWin::_create { class args } {
       set w .
     }
     wm transient $top $w
-  } elseif {$::tcl_platform(platform) == "unix"} {
+  } elseif {$::gdbtk_platform(platform) == "unix"} {
     # Modal dialogs DONT get Icons...
     if {[pref get gdb/use_icons] && ![$newwin isa ModalDialog]} {
       set icon [_make_icon_window ${top}_icon]

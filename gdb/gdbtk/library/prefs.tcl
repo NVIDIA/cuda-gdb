@@ -1,5 +1,5 @@
 # Local preferences functions for Insight.
-# Copyright (C) 1997, 1998, 1999, 2002, 2003, 2004 Red Hat
+# Copyright (C) 1997, 1998, 1999, 2002, 2003, 2004, 2008 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -32,10 +32,10 @@
 
 proc pref_read {} {
   global prefs_init_filename env gdb_ImageDir GDBTK_LIBRARY GDBStartup
-  global tcl_platform
+  global gdbtk_platform
 
   if {[info exists env(HOME)]} {
-    if {$tcl_platform(platform) == "windows"} {
+    if {$gdbtk_platform(platform) == "windows"} {
       set home [ide_cygwin_path to_win32 $env(HOME)]
     } else {
       set home $env(HOME)
@@ -44,7 +44,7 @@ proc pref_read {} {
     set home ""
   }
 
-  if {$tcl_platform(platform) == "windows"} {
+  if {$gdbtk_platform(platform) == "windows"} {
     set prefs_init_filename "gdbtk.ini"
   } else {
     set prefs_init_filename ".gdbtkinit"
@@ -287,7 +287,7 @@ proc unescape_value {val version} {
 #  PROC:  pref_set_defaults - set up default values
 # ------------------------------------------------------------------
 proc pref_set_defaults {} {
-  global GDBTK_LIBRARY tcl_platform gdb_ImageDir
+  global GDBTK_LIBRARY gdbtk_platform gdb_ImageDir
   debug
 
   # Gdb global defaults
@@ -302,9 +302,9 @@ proc pref_set_defaults {} {
   # some window managers can't deal with it.
 
   # OS compatibility. Valid values are "Windows", "GNOME", "KDE", and "default"
-  if {$tcl_platform(platform) == "windows"}  {
+  if {$gdbtk_platform(platform) == "windows"}  {
     pref define gdb/compat	"Windows"
-  } elseif {$tcl_platform(platform) == "unix"}  {
+  } elseif {$gdbtk_platform(platform) == "unix"}  {
     pref define gdb/compat	"GNOME"
   } else {
     pref define gdb/compat	"default"
@@ -318,7 +318,7 @@ proc pref_set_defaults {} {
   pref define gdb/load/bp_at_func 0
   pref define gdb/load/bp_func ""
   pref define gdb/load/baud 38400
-  if {$tcl_platform(platform) == "windows"}  {
+  if {$gdbtk_platform(platform) == "windows"}  {
     pref define gdb/load/port com1
   } else {
     pref define gdb/load/port "/dev/ttyS0"
@@ -469,7 +469,7 @@ proc pref_set_colors {home} {
   # To enable us to fix that without hardcoding colors, we create a color
   # array here and use it as needed to force widgets to the correct colors.
   
-  global Colors tcl_platform
+  global Colors
   debug
 
   # UNIX colors
@@ -735,7 +735,7 @@ proc pref_set_option_db {makebg} {
   option add *highlightBackground $Colors(bg)
   option add *selectBackground $Colors(sbg)
 
-  if {$::tcl_platform(platform) == "unix"}  {
+  if {$::gdbtk_platform(platform) == "unix"}  {
     option add *activeBackground $Colors(sbg)
   }
 
@@ -758,7 +758,7 @@ proc pref_set_option_db {makebg} {
 
   # Change the default select color for checkbuttons, etc to match 
   # selectBackground.
-  if {$::tcl_platform(platform) == "unix"}  {
+  if {$::gdbtk_platform(platform) == "unix"}  {
     option add *selectColor $Colors(sbg)
   }
 }

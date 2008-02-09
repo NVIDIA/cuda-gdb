@@ -1,5 +1,5 @@
 # Local preferences functions for Insight.
-# Copyright (C) 2000, 2001, 2002, 2004 Red Hat, Inc.
+# Copyright (C) 2000, 2001, 2002, 2004, 2008 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -18,10 +18,9 @@ namespace eval Session {
   # should use `realpath', but that is more work.  So for now we neglect
   # the possibility of symlinks.
   proc _exe_name {path} {
-    global tcl_platform
 
     # Get real directory.
-    if {[string compare $tcl_platform(platform) "windows"] == 0} {
+    if {[string compare $::gdbtk_platform(os) "cygwin"] == 0} {
       set path [ide_cygwin_path to_win32 $path]
     }
     set save [pwd]

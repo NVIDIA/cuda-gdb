@@ -1,5 +1,5 @@
 # Global preference class implementation for Insight.
-# Copyright (C) 1997, 1998, 1999, 2002, 2003, 2004 Red Hat
+# Copyright (C) 1997, 1998, 1999, 2002, 2003, 2004, 2008 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -76,7 +76,7 @@ itcl::body GlobalPref::destructor {} {
 #  METHOD:  _build_win - build the dialog
 # ------------------------------------------------------------------
 itcl::body GlobalPref::_build_win {} {
-  global tcl_platform GDBTK_LIBRARY
+  global gdbtk_platform GDBTK_LIBRARY
   debug
   frame $itk_interior.f
   frame $itk_interior.x
@@ -150,7 +150,7 @@ itcl::body GlobalPref::_build_win {} {
   set fam [lsort $fam]
   
   if {$font_cache == ""} {
-    if {$tcl_platform(platform) == "unix"} {
+    if {$gdbtk_platform(platform) == "unix"} {
       toplevel .c
       wm title .c "Scanning for fonts"
       message .c.m -width 3i -text "Scanning system for fonts\n\nPlease wait..." \
@@ -178,7 +178,7 @@ itcl::body GlobalPref::_build_win {} {
 
   _make_font_item $f fixed "Fixed Font:" $font_cache
 
-  if {$tcl_platform(platform) != "windows"} {
+  if {$gdbtk_platform(platform) != "windows"} {
     # Cannot change the windows menu font ourselves
     _make_font_item $f menu "Menu Font:" $fam
   }
@@ -203,7 +203,7 @@ itcl::body GlobalPref::_build_win {} {
     -width $tracing_labels(max_len) -anchor w
 
   # use_icons
-  if {$tcl_platform(platform) == "unix"} {
+  if {$gdbtk_platform(platform) == "unix"} {
     checkbutton $f.use_icons  \
       -text "Use builtin image as icon." -variable [scope _new(gdb/use_icons)]
   }
@@ -218,13 +218,13 @@ itcl::body GlobalPref::_build_win {} {
 
   grid $f.tracing -sticky w -padx 5 -pady 5
 
-  if {$tcl_platform(platform) == "unix"} {
+  if {$gdbtk_platform(platform) == "unix"} {
     grid $f.use_icons -sticky w -padx 5 -pady 5
   }
   grid $f.consolewrap -sticky w -padx 5 -pady 5
   grid $f.use_cs -sticky w -padx 5 -pady 5
 
-  if {$tcl_platform(platform) == "unix"} {
+  if {$gdbtk_platform(platform) == "unix"} {
     # Compatibility frame
     iwidgets::Labeledframe $frame.compat -labelpos nw -labeltext "OS Compatibility"
     set fc [$frame.compat childsite]
@@ -241,7 +241,7 @@ itcl::body GlobalPref::_build_win {} {
   pack $frame.icons.lab $frame.icons.cb -side left
   grid $frame.icons x -sticky w -pady 10
   grid $frame.d -columnspan 2 -sticky w
-  if {$tcl_platform(platform) == "unix"} {
+  if {$gdbtk_platform(platform) == "unix"} {
     grid $frame.compat $frame.misc -sticky we
   } else {
     grid $frame.misc x -sticky we

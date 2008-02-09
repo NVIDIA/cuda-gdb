@@ -1,5 +1,5 @@
 # Paned text widget for source code, for Insight
-# Copyright (C) 1997, 1998, 1999, 2001, 2002 Red Hat, Inc.
+# Copyright (C) 1997, 1998, 1999, 2001, 2002, 2008 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -884,14 +884,14 @@ itcl::body SrcTextWin::ClearTags {} {
 #                          has changed.
 # ------------------------------------------------------------------
 itcl::body SrcTextWin::_mtime_changed {filename} {
-  global tcl_platform
+  global gdbtk_platform
 
   if [catch {gdb_find_file $filename} f] {
     set r 1
   } elseif {$f == ""} {
     set r 1
   } else {
-    if {[string compare $tcl_platform(platform) "windows"] == 0} {
+    if {[string compare $gdbtk_platform(os) "cygwin"] == 0} {
       set f [ide_cygwin_path to_win32 $f]
     }
     if {[catch {file mtime $f} mtime]} {
@@ -2669,7 +2669,7 @@ itcl::body SrcTextWin::search {exp direction} {
 
 itcl::body SrcTextWin::LoadFromCache {w name asm lib} {
   debug "LoadFromCache $w $name $asm"
-  global tcl_platform
+  global gdbtk_platform
   upvar ${w}win win
   upvar _${w}pane pane
 
@@ -2715,7 +2715,7 @@ itcl::body SrcTextWin::LoadFromCache {w name asm lib} {
     # out.
 
     if {$loadingSource} {
-      if {[string compare $tcl_platform(platform) "windows"] == 0} {
+      if {[string compare $gdbtk_platform(os) "cygwin"] == 0} {
         set f [ide_cygwin_path to_win32 $name]
       } else {
         set f $name

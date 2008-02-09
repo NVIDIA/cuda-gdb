@@ -1,5 +1,5 @@
 # Source window for Insight.
-# Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
+# Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2008,
 # 2006 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
@@ -420,7 +420,7 @@ itcl::body SrcWin::fillFuncCB {name} {
 # linespec will be "{} {} {} 0 0x0 0x0" when GDB has not started debugging.
 # ------------------------------------------------------------------
 itcl::body SrcWin::location {tag linespec} {
-  global gdb_running gdb_exe_name _files tcl_platform
+  global gdb_running gdb_exe_name _files
 
   # We need to keep track of changes to the line, filename, function name
   # and address so we can keep the widgets up-to-date.  Otherwise we

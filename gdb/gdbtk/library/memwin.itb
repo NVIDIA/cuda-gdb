@@ -1,5 +1,5 @@
 # Memory display window class definition for Insight.
-# Copyright (C) 1998, 1999, 2001, 2002, 2005 Red Hat, Inc.
+# Copyright (C) 1998, 1999, 2001, 2002, 2005, 2008 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -63,7 +63,7 @@ itcl::body MemWin::destructor {} {
 #  METHOD:  build_win - build the main memory window
 # ------------------------------------------------------------------
 itcl::body MemWin::build_win {} {
-  global tcl_platform gdb_ImageDir _mem ${this}_memval
+  global gdb_ImageDir _mem ${this}_memval
 
   set maxlen 0
   set maxalen 0

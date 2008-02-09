@@ -1,5 +1,5 @@
 # Target selection dialog for Insight.
-# Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006 Red Hat, Inc.
+# Copyright (C) 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2008 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -278,9 +278,9 @@ itcl::body TargetSelection::init_target_db {} {
 }
 
 itcl::body TargetSelection::default_port {} {
-  global tcl_platform
-  switch -regexp $tcl_platform(os) {
-    Windows { set port com1 }
+  global gdbtk_platform
+  switch -regexp $gdbtk_platform(os) {
+    cygwin  { set port com1 }
     Linux   { set port /dev/ttyS0 }
     SunOS   { set port /dev/ttya }
     AIX     { set port /dev/foo1 }
@@ -290,7 +290,7 @@ itcl::body TargetSelection::default_port {} {
     NetBSD  { set port /dev/foo1 }
     HP-UX   { 
       # Special case...
-      switch -regexp $tcl_platform(osVersion) {
+      switch -regexp $gdbtk_platform(osVersion) {
 	A.09 { set port /dev/tty00 }
 	B.10 -
 	B.11 { set port /dev/tty0p0 }
@@ -385,7 +385,7 @@ itcl::body TargetSelection::_init {} {
 #  METHOD:  build_win - build the dialog
 # ------------------------------------------------------------------
 itcl::body TargetSelection::build_win {} {
-  global tcl_platform PREFS_state gdb_ImageDir gdb_target_name
+  global gdbtk_platform PREFS_state gdb_ImageDir gdb_target_name
 
   set f [frame $itk_interior.f]
   set opts [frame $itk_interior.moreoptions]
@@ -426,7 +426,7 @@ itcl::body TargetSelection::build_win {} {
     -width $Width
 
   # port combobox
-  if {$tcl_platform(platform) == "windows"} {
+  if {$gdbtk_platform(platform) == "windows"} {
     set editable 0
   } else {
     set editable 1
@@ -441,13 +441,13 @@ itcl::body TargetSelection::build_win {} {
   fill_rates
 
   # load port combobox
-  if {$tcl_platform(platform) == "windows"} {
+  if {$gdbtk_platform(platform) == "windows"} {
     foreach val [port_list] {
       $fr.port list insert end $val
     }
   } else {
     # fixme:  how do I find valid values for these????
-    switch $tcl_platform(os) {
+    switch $gdbtk_platform(os) {
       Linux { set ports [list /dev/cua0 /dev/ttyS0 /dev/ttyS1 /dev/ttyS2 /dev/ttyS3]}
       SunOS { set ports [list /dev/ttya /dev/ttyb] }
       AIX   { set ports [list /dev/foo1 /dev/foo2] }
@@ -457,7 +457,7 @@ itcl::body TargetSelection::build_win {} {
       NetBSD { set ports [list /dev/foo1 /dev/foo2] }
       HP-UX  { 
 	# Special case...
-	switch -regexp $tcl_platform(osVersion) {
+	switch -regexp $gdbtk_platform(osVersion) {
 	  A.09 { set ports [list /dev/tty00 /dev/tty01] }
 	  B.10 -
 	  B.11 { set ports [list /dev/tty0p0 /dev/tty1p0] }
@@ -485,7 +485,7 @@ itcl::body TargetSelection::build_win {} {
   checkbutton $f.fr.verb -text [gettext "Display Download Dialog"] \
     -variable [pref varname gdb/load/$target-verbose]
 
-  if {$tcl_platform(platform) == "unix"} {
+  if {$gdbtk_platform(platform) == "unix"} {
     checkbutton $f.fr.xterm -text [gettext "Use xterm as inferior's tty"] \
 	-variable [pref varname gdb/process/xtermtty] \
 	-onvalue yes -offvalue no
@@ -515,7 +515,7 @@ itcl::body TargetSelection::build_win {} {
   pack $f.fr.bp.at_func $f.fr.bp.func -side left
   grid $f.fr.bp -sticky w -padx 5 -pady 5
   grid $f.fr.verb -sticky w -padx 5 -pady 5
-  if {$tcl_platform(platform) == "unix"} {
+  if {$gdbtk_platform(platform) == "unix"} {
     grid $f.fr.xterm -sticky w -padx 5 -pady 5
   }
   if {![pref get gdb/control_target]} {

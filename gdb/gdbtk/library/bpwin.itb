@@ -1,5 +1,5 @@
 # Breakpoint window for Insight.
-# Copyright (C) 1997, 1998, 1999, 2001, 2002, 2003 Red Hat, Inc.
+# Copyright (C) 1997, 1998, 1999, 2001, 2002, 2003, 2008 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -44,7 +44,7 @@ itcl::body BpWin::destructor {} {}
 #  METHOD:  build_win - build the main breakpoint window
 # ------------------------------------------------------------------
 itcl::body BpWin::build_win {} {
-  global _bp_en _bp_disp tcl_platform
+  global _bp_en _bp_disp
   set bg1 $::Colors(bg)
 
   set hsmode dynamic
@@ -194,7 +194,7 @@ itcl::body BpWin::build_win {} {
 #  METHOD:  bp_add - add a breakpoint entry
 # ------------------------------------------------------------------
 itcl::body BpWin::bp_add {bp_event {tracepoint 0}} {
-  global _bp_en _bp_disp tcl_platform _files
+  global _bp_en _bp_disp gdbtk_platform _files
 
   set number [$bp_event get number]
   set thread [$bp_event get thread]
@@ -227,7 +227,7 @@ itcl::body BpWin::bp_add {bp_event {tracepoint 0}} {
   
   if {$thread != "-1"} {set color [pref get gdb/src/thread_fg]}
 
-  if {$tcl_platform(platform) == "windows"} {
+  if {$gdbtk_platform(platform) == "windows"} {
     checkbutton $twin.en$i -relief flat -variable _bp_en($i) \
       -activebackground $bg1 -command "$this bp_able $i" -fg $color 
   } else {
@@ -438,7 +438,7 @@ itcl::body BpWin::_select_and_popup {bp X Y} {
 #  METHOD:  bp_modify - modify a breakpoint entry
 # ------------------------------------------------------------------
 itcl::body BpWin::bp_modify {bp_event {tracepoint 0}} {
-  global _bp_en _bp_disp tcl_platform _files
+  global _bp_en _bp_disp gdbtk_platform _files
 
   set number [$bp_event get number]
   set thread [$bp_event get thread]
@@ -485,7 +485,7 @@ itcl::body BpWin::bp_modify {bp_event {tracepoint 0}} {
 
   if {$thread != "-1"} {set color [pref get gdb/src/thread_fg]}
 
-  if {$tcl_platform(platform) == "windows"} then {
+  if {$gdbtk_platform(platform) == "windows"} then {
     $twin.en$i configure -fg $color 
   } else {
     $twin.en$i configure -selectcolor $color

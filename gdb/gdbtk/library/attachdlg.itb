@@ -1,5 +1,5 @@
 # Attach Dialog for Insight.
-# Copyright (C) 1999, 2002, 2003 Red Hat, Inc.
+# Copyright (C) 1999, 2002, 2003, 2008 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -159,9 +159,9 @@ itcl::body AttachDlg::choose_symbol_file {} {
 # ------------------------------------------------------------------
 
 itcl::body AttachDlg::list_pids {{pattern *}} {
-  global tcl_platform
+  global gdbtk_platform
 
-  switch $tcl_platform(os) {
+  switch $gdbtk_platform(os) {
     Linux {
       set ps_cmd "ps axw"
     }

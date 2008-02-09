@@ -1,5 +1,5 @@
 # Open a viewer for HTML help info
-# Copyright (C) 2002, Red Hat, Inc.
+# Copyright (C) 2002, 2008, Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -24,7 +24,7 @@ proc open_help {hfile} {
   set link file://[file join $::GDBTK_LIBRARY help $hfile]
 
   # windows is easy
-  if {$::tcl_platform(platform) == "windows"} {
+  if {$::gdbtk_platform(platform) == "windows"} {
     ide_shell_execute open $link
     return
   }

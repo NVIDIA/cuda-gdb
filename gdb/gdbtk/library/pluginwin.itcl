@@ -1,5 +1,5 @@
 # PluginWindow
-# Copyright (C) 2001 Red Hat, Inc.
+# Copyright (C) 2001, 2008 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -121,7 +121,6 @@ itcl::class PluginWindow {
   #   2          off       on       gdb has no inferior, and is idle
   # ------------------------------------------------------------------
   public method enable_ui {on} {
-    global tcl_platform
     debug "$on"
 
     # Do the enabling so that all the disabling happens first, this way if a

@@ -1,5 +1,5 @@
 # Interface between GDB and Insight.
-# Copyright (C) 1997, 1998, 1999, 2001, 2002, 2004 Red Hat, Inc.
+# Copyright (C) 1997, 1998, 1999, 2001, 2002, 2004, 2008 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -301,7 +301,7 @@ proc gdbtk_cleanup {} {
 # PROC: gdbtk_tcl_query -
 # ------------------------------------------------------------------
 proc gdbtk_tcl_query {message {default yes}} {
-  global gdb_checking_for_exit gdbtk_state tcl_platform
+  global gdb_checking_for_exit gdbtk_state gdbtk_platform
 
   # FIXME We really want a Help button here.  But Tk's brain-damaged
   # modal dialogs won't really allow it.  Should have async dialog
@@ -317,7 +317,7 @@ proc gdbtk_tcl_query {message {default yes}} {
     set modal "system"
   }
   
-  if {$tcl_platform(platform) == "windows"} {
+  if {$gdbtk_platform(platform) == "windows"} {
     # On Windows, we want to only ask each question once.
     # If we're already asking the question, just wait for the answer
     # to come back.
@@ -376,7 +376,7 @@ proc gdbtk_tcl_warning {message} {
 # PROC: show_warning -
 # ------------------------------------------------------------------
 proc show_warning {message} {
-  global tcl_platform
+  global gdbtk_platform
 
   # FIXME We really want a Help button here.  But Tk's brain-damaged
   # modal dialogs won't really allow it.  Should have async dialog
@@ -395,7 +395,7 @@ proc show_warning {message} {
 # another thread is not required.
 
  
-  if {$tcl_platform(platform) == "windows"} {
+  if {$gdbtk_platform(platform) == "windows"} {
       ide_messageBox [list set r] -icon warning \
         -default ok -message $message -title $title \
         -type ok -modal $modal -parent .
@@ -916,7 +916,7 @@ proc set_exe {} {
 # ------------------------------------------------------------------
 
 proc _open_file {{file ""}} {
-  global gdb_running gdb_downloading tcl_platform
+  global gdb_running gdb_downloading gdbtk_platform
   
   if {$gdb_running || $gdb_downloading} {
     # We are already running/downloading something..
@@ -962,7 +962,7 @@ proc _open_file {{file ""}} {
   }
   # Add the base dir for this file to the source search path.
   set root [file dirname $file]
-  if {$tcl_platform(platform) == "windows"} {
+  if {$gdbtk_platform(platform) == "windows"} {
     set root [ide_cygwin_path to_posix $root]
     set file [ide_cygwin_path to_posix $file]
   }
@@ -1160,7 +1160,7 @@ necessary,\nmodify the port setting with the debugger preferences."
 proc run_executable { {auto_start 1} } {
   global gdb_loaded gdb_downloading gdb_target_name
   global gdb_exe_changed gdb_target_changed gdb_program_has_run
-  global gdb_running gdb_exe_name tcl_platform
+  global gdb_running gdb_exe_name gdbtk_platform
 
 #  debug "auto_start=$auto_start gdb_target_name=$gdb_target_name"
 
@@ -1256,7 +1256,7 @@ proc run_executable { {auto_start 1} } {
 
     # If the user requested it, start an xterm for use as the
     # inferior's tty.
-    if {$tcl_platform(platform) != "windows"
+    if {$gdbtk_platform(platform) != "windows"
 	&& [pref getd gdb/process/xtermtty] == "yes"} {
       tty::create
     }

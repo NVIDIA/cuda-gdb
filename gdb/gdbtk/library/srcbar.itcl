@@ -1,5 +1,5 @@
 # SrcBar
-# Copyright (C) 2001, 2002, 2004 Red Hat, Inc.
+# Copyright (C) 2001, 2002, 2004, 2008 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -144,7 +144,7 @@ itcl::class SrcBar {
   #                    Used really only to update the session list.
   # ------------------------------------------------------------------
   private method _update_file_menu {} {
-    global enable_external_editor tcl_platform gdb_exe_name
+    global enable_external_editor gdbtk_platform gdb_exe_name
 
     # Clear the File menu
     $Menu clear file
@@ -182,7 +182,7 @@ itcl::class SrcBar {
 
     $Menu add separator
 
-    if {$tcl_platform(platform) == "windows"} {
+    if {$gdbtk_platform(platform) == "windows"} {
       $Menu add command None "Page Setup..." \
 	[format {
 	  set top %s
@@ -235,7 +235,7 @@ itcl::class SrcBar {
     # I will hold off on the Windows implementation for now.
 
     if {$is_native} {
-      if {[string compare $::tcl_platform(platform) windows] != 0} {
+      if {[string compare $::gdbtk_platform(platform) windows] != 0} {
 	$Menu add command Attach "Attach to process" \
 	  [code $this do_attach $run_menu] \
 	  -underline 0 -accelerator "Ctrl+A"
@@ -255,7 +255,7 @@ itcl::class SrcBar {
     }
 
     if {$is_native} {
-      if {[string compare $::tcl_platform(platform) windows] != 0} {
+      if {[string compare $::gdbtk_platform(platform) windows] != 0} {
 	$Menu add command Detach "Detach" \
           [code $this do_detach $run_menu] \
 	  -underline 0 -state disabled
@@ -956,7 +956,6 @@ itcl::class SrcBar {
   #   2          off       on       off     gdb has no inferior, and is idle
   # ------------------------------------------------------------------
   public method enable_ui {on} {
-    global tcl_platform
     debug "$on - Browsing=$Browsing"
 
     # Do the enabling so that all the disabling happens first, this way if a

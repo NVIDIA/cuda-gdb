@@ -1,3 +1,40 @@
+2008-02-08  Keith Seitz  <keiths@redhat.com>
+
+	* library/main.tcl: Add gdbtk_platform definitions.
+	* library/attachdlg.itb (list_pids): Use gdbtk_platform
+	instead of tcl_platform.
+	* library/bpwin.itb (build_win): Likewise.
+	(_bp_add): Likewise.
+	(_bp_modify): Likewise.
+	* library/download.itb (download_it): Likewise.
+	* library/globalpref.itb (_build_win): Likewise.
+	* library/helpviewer.tcl (open_help): Likewise.
+	* library/interface.tcl (gdbtk_tcl_query): Likewise.
+	(show_warning): Likewise.
+	(open_file): Likewise.
+	(run_executable): Likewise.
+	* library/managedwin.itb (reveal): Likewise.
+	(_create): Likewise.
+	* library/prefs.tcl (pref_read): Likewise.
+	(pref_set_defaults): Likewise.
+	(pref_set_colors): Likewise.
+	* library/session.tcl (_exe_name): Likewise.
+	* library/srcbar.itcl (_update_file_menu): Likewise.
+	(create_run_menu): Likewise.
+	* library/srctextwin.itb (_mtime_changed): Likewise.
+	(LoadFromCache): Likewise.
+	* library/targetselection.itb (default_port): Likewise.
+	(build_win): Likewise.
+
+	* library/memwin.itb (build_win): Remove unused tcl_platform
+	declaration.
+	* library/pluginwin.itcl (enable_ui): Likewise.
+	* library/process.itb (build_win): Likewise.
+	* library/srcbar.itcl (enable_ui): Likewise.
+	* library/srcwin.itb (location): Likewise.
+	* library/stackwin.itb (build_win): Likewise.
+	* library/tdump.tcl (build_win): Likewise.
+
 2008-02-05  Maciej W. Rozycki  <macro@mips.com>
 
 	* generic/gdbtk-varobj.c (variable_children): Adjust

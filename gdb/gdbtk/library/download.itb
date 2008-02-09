@@ -167,8 +167,7 @@ itcl::body Download::download_hash { section num } {
 itcl::body Download::download_it { } {
   global gdb_exe_name gdb_downloading gdb_loaded
   global gdb_target_name gdb_pretty_name
-  global gdb_running
-  global tcl_platform
+  global gdb_running gdbtk_platform
 
   debug "exe=$gdb_exe_name downloading=$gdb_downloading"
   debug "    loaded=$gdb_loaded target=$gdb_target_name running=$gdb_running"
@@ -207,7 +206,7 @@ itcl::body Download::download_it { } {
     }
   }
 
-  if {[string compare $tcl_platform(platform) "windows"] == 0} {
+  if {[string compare $gdbtk_platform(platform) "windows"] == 0} {
     set f [ide_cygwin_path to_win32 $gdb_exe_name]
   } else {
     set f $gdb_exe_name

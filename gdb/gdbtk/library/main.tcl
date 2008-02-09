@@ -1,5 +1,5 @@
 # GDBtk (Insight) entry point
-# Copyright (C) 1997, 1998, 1999, 2002, 2003, 2004 Red Hat, Inc.
+# Copyright (C) 1997, 1998, 1999, 2002, 2003, 2004, 2008 Red Hat, Inc.
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -126,6 +126,26 @@ if {[info exists env(GDBTK_DEBUG)] && $env(GDBTK_DEBUG) != 0} {
 
 # For testing
 set _test(interactive) 0
+
+# Set up platform globals. We replace Tcl's tcl_platform with
+# our own version which knows the difference between cygwin and
+# mingw.
+global gdbtk_platform
+set gdbtk_platform(platform) $tcl_platform(platform)
+switch $tcl_platform(platform) {
+  windows {
+    if {[llength [info commands ide_cygwin_path]] == 0} {
+      set gdbtk_platform(os) "mingw"
+    } else {
+      set gdbtk_platform(os) "cygwin"
+    }
+  }
+
+  default {
+    set gdbtk_platform(os) $tcl_platform(os)
+  }
+}
+set gdbtk_platform(osVersion) $tcl_platform(osVersion)
 
 # set traces on state variables
 trace variable gdb_running w do_state_hook
