@@ -1,3 +1,9 @@
+2008-02-20  Keith Seitz  <keiths@redhat.com>
+
+	* stack1.c: Include stdlib.h
+	* simple.c: Likewise.
+	Include string.h.
+
 2007-06-27  Maciej W. Rozycki  <macro@mips.com>
 
 	* c_variable.c: Include <stdlib.h> for a declaration of exit().

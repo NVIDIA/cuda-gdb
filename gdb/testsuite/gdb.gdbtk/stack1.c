@@ -1,3 +1,5 @@
+#include <stdlib.h>
+
 /* Functions defined in other files */
 extern void extern_func1_1 (int a, char *b, unsigned long c);
 
