@@ -57,7 +57,9 @@
 
 #include <signal.h>
 #include <fcntl.h>
+#ifdef HAVE_SYS_IOCTL_H
 #include <sys/ioctl.h>
+#endif
 #include <sys/time.h>
 #include <sys/stat.h>
 

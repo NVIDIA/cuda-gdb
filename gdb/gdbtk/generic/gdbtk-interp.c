@@ -34,6 +34,12 @@
 #include "tk.h"
 #include "gdbtk.h"
 
+#ifdef __MINGW32__
+# define WIN32_LEAN_AND_MEAN
+# include <windows.h>
+#endif
+
+
 static void gdbtk_command_loop (void);
 static void hack_disable_interpreter_exec (char *, int);
 

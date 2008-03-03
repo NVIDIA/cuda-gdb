@@ -1,3 +1,22 @@
+2008-03-03  Keith Seitz  <keiths@redhat.com>
+
+	From Dave Murphy  <davem@devkitpro.org>:
+	* gdbtk-cmds.c: Guard <sys/ioctl.h> with HAVE_SYS_IOCTL_H.
+	* gdbtk-hooks.c: Ditto.
+	* gdbtk.c: Ditto.
+	* gdbtk-interp.c: Include windows.h under mingw32.
+	(gdbtk_start_timer, gdbtk_stop_timer): Remove timer calls under mingw.
+	(gdbtk_init): Include windows-specific commands under mingw without
+	cygwin path commands.
+	* library/download.itb (Download::download_it): Only use ide_cygwin_path
+	on cygwin hosts.
+	* library/interface.tcl (_open_file): Ditto.
+	* library/prefs.tcl (pref_read): Ditto.
+	* library/targetselection.itb (TargetSelection::default_port): Default
+	to "/dev/com1" under cygwin and "COM1" under mingw.
+	(TargetSelection::port_list): Use "/dev/com" under cygwin and
+        "COM" under mingw.
+
 2008-02-08  Keith Seitz  <keiths@redhat.com>
 
 	* library/main.tcl: Add gdbtk_platform definitions.

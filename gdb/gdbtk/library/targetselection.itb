@@ -280,7 +280,8 @@ itcl::body TargetSelection::init_target_db {} {
 itcl::body TargetSelection::default_port {} {
   global gdbtk_platform
   switch -regexp $gdbtk_platform(os) {
-    cygwin  { set port com1 }
+    cygwin  { set port /dev/com1 }
+    mingw   { set port COM1 }
     Linux   { set port /dev/ttyS0 }
     SunOS   { set port /dev/ttya }
     AIX     { set port /dev/foo1 }
@@ -873,6 +874,12 @@ itcl::body TargetSelection::change_baud {w {baud ""}} {
 #  METHOD:  port_list - return a list of valid ports for Windows
 # ------------------------------------------------------------------
 itcl::body TargetSelection::port_list {} {
+  global gdbtk_platform
+  if {[string compare $gdbtk_platform(os) "cygwin"] == 0} {
+    set device "/dev/com"
+  } else {
+    set device "COM"
+  }
   set plist ""
   # Scan com1 - com8 trying to open each one.
   # If permission is denied that means it is in use,
@@ -885,7 +892,7 @@ itcl::body TargetSelection::port_list {} {
       # Failed.  Find out why.
       if {[string first "permission denied" $msg] != -1} {
 	# Port is there, but busy right now. That's OK.
-	lappend plist /dev/com$i
+	lappend plist $device$i
       } elseif {$i > 4} {
 	# if we've scanned the first 4 ports, then quit when we find no more 
 	set quit 1
@@ -893,7 +900,7 @@ itcl::body TargetSelection::port_list {} {
     } else {
       # We got it.  Now close it and add to list.
       close $fd
-      lappend plist /dev/com$i
+      lappend plist $device$i
     }
   }
   return $plist

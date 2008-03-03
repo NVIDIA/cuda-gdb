@@ -49,7 +49,9 @@
 
 #include <fcntl.h>
 #include <sys/stat.h>
+#ifdef HAVE_SYS_IOCTL_H
 #include <sys/ioctl.h>
+#endif
 #include <sys/time.h>
 #include <signal.h>
 
@@ -63,6 +65,7 @@
 
 extern void _initialize_gdbtk (void);
 
+#ifndef __MINGW32__
 /* For unix natives, we use a timer to periodically keep the gui alive.
    See comments before x_event. */
 static sigset_t nullsigmask;
@@ -74,6 +77,7 @@ x_event_wrapper (int signo)
 {
   x_event (signo);
 }
+#endif
 
 /*
  * This variable controls the interaction with an external editor.
@@ -262,6 +266,7 @@ gdbtk_start_timer ()
     {
       /* first time called, set up all the structs */
       first = 0;
+#ifndef __MINGW32__
       sigemptyset (&nullsigmask);
 
       act1.sa_handler = x_event_wrapper;
@@ -281,14 +286,17 @@ gdbtk_start_timer ()
       it_off.it_interval.tv_usec = 0;
       it_off.it_value.tv_sec = 0;
       it_off.it_value.tv_usec = 0;
+#endif
     }
 
   if (target_should_use_timer (&current_target))
     {
       if (!gdbtk_timer_going)
 	{
+#ifndef __MINGW32__
 	  sigaction (SIGALRM, &act1, NULL);
 	  setitimer (ITIMER_REAL, &it_on, NULL);
+#endif
 	  gdbtk_timer_going = 1;
 	}
     }
@@ -302,8 +310,10 @@ gdbtk_stop_timer ()
   if (gdbtk_timer_going)
     {
       gdbtk_timer_going = 0;
+#ifndef __MINGW32__
       setitimer (ITIMER_REAL, &it_off, NULL);
       sigaction (SIGALRM, &act2, NULL);
+#endif
     }
   return;
 }
@@ -510,7 +520,7 @@ gdbtk_init (void)
    * These are the commands to do some Windows Specific stuff...
    */
 
-#ifdef __CYGWIN32__
+#ifdef __WIN32__
   if (ide_create_messagebox_command (gdbtk_interp) != TCL_OK)
     error ("messagebox command initialization failed");
   /* On Windows, create a sizebox widget command */
@@ -522,6 +532,8 @@ gdbtk_init (void)
     error ("windows print code initialization failed");
   if (ide_create_win_grab_command (gdbtk_interp) != TCL_OK)
     error ("grab support command initialization failed");
+#endif
+#ifdef __CYGWIN32__
   /* Path conversion functions.  */
   if (ide_create_cygwin_path_command (gdbtk_interp) != TCL_OK)
     error ("cygwin path command initialization failed");

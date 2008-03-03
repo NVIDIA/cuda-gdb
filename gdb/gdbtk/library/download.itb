@@ -206,7 +206,7 @@ itcl::body Download::download_it { } {
     }
   }
 
-  if {[string compare $gdbtk_platform(platform) "windows"] == 0} {
+  if {[string compare $gdbtk_platform(os) "cygwin"] == 0} {
     set f [ide_cygwin_path to_win32 $gdb_exe_name]
   } else {
     set f $gdb_exe_name

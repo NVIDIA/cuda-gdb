@@ -962,7 +962,7 @@ proc _open_file {{file ""}} {
   }
   # Add the base dir for this file to the source search path.
   set root [file dirname $file]
-  if {$gdbtk_platform(platform) == "windows"} {
+  if {$gdbtk_platform(os) == "cygwin"} {
     set root [ide_cygwin_path to_posix $root]
     set file [ide_cygwin_path to_posix $file]
   }

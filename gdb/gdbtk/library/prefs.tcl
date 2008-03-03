@@ -35,7 +35,7 @@ proc pref_read {} {
   global gdbtk_platform
 
   if {[info exists env(HOME)]} {
-    if {$gdbtk_platform(platform) == "windows"} {
+    if {$gdbtk_platform(os) == "cygwin"} {
       set home [ide_cygwin_path to_win32 $env(HOME)]
     } else {
       set home $env(HOME)
