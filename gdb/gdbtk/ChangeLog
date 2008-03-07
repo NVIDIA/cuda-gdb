@@ -1,3 +1,17 @@
+2008-03-07  Keith Seitz  <kseitz@sourceware.org>
+
+	* generic/gdbtk-register.c (map_arg): New data type
+	for passing arguments to mapping functions.
+	(map_func): New definition of mapping function.
+	Changed all callers to use these new types.
+	* generic/gdbtk-stack.c (gdb_get_vars_command): Change
+	cast to int to dereference of int *.
+	* generic/gdbtk-wrapper.c: Change all casts to char * for
+	results and args to use pointer or integer flavor of
+	gdb_wrapper_args.results and .args.
+	* generic/gdbtk-wrapper.h: struct gdb_wrapper_arguments
+	members result and args now return a union of void * and int.
+
 2008-03-03  Keith Seitz  <keiths@redhat.com>
 
 	From Dave Murphy  <davem@devkitpro.org>:

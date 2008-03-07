@@ -30,24 +30,34 @@
 #include "gdbtk.h"
 #include "gdbtk-cmds.h"
 
+/* Argument passed to our register-mapping functions */
+typedef union
+{
+  int integer;
+  void *ptr;
+} map_arg;
+
+/* Type of our mapping functions */
+typedef void (*map_func)(int, map_arg);
+
 /* This contains the previous values of the registers, since the last call to
    gdb_changed_register_list.
 
    It is an array of (NUM_REGS+NUM_PSEUDO_REGS)*MAX_REGISTER_RAW_SIZE bytes. */
 
 static int gdb_register_info (ClientData, Tcl_Interp *, int, Tcl_Obj **);
-static void get_register (int, void *);
-static void get_register_name (int, void *);
-static void get_register_size (int regnum, void *arg);
+static void get_register (int, map_arg);
+static void get_register_name (int, map_arg);
+static void get_register_size (int, map_arg);
 static int map_arg_registers (Tcl_Interp *, int, Tcl_Obj **,
-			      void (*)(int, void *), void *);
-static void register_changed_p (int, void *);
+			      map_func, map_arg);
+static void register_changed_p (int, map_arg);
 static void setup_architecture_data (void);
 static int gdb_regformat (ClientData, Tcl_Interp *, int, Tcl_Obj **);
 static int gdb_reggroup (ClientData, Tcl_Interp *, int, Tcl_Obj **);
 static int gdb_reggrouplist (ClientData, Tcl_Interp *, int, Tcl_Obj **);
 
-static void get_register_types (int regnum, void *arg);
+static void get_register_types (int regnum, map_arg);
 
 static char *old_regs = NULL;
 static int *regformat = (int *)NULL;
@@ -116,8 +126,8 @@ gdb_register_info (ClientData clientData, Tcl_Interp *interp, int objc,
                    Tcl_Obj **objv)
 {
   int index;
-  void *argp;
-  void (*func)(int, void *);
+  map_arg arg;
+  map_func func;
   static const char *commands[] = {"changed", "name", "size", "value", "type", 
 			     "format", "group", "grouplist", NULL};
   enum commands_enum { REGINFO_CHANGED, REGINFO_NAME, REGINFO_SIZE, REGINFO_VALUE, 
@@ -144,7 +154,7 @@ gdb_register_info (ClientData clientData, Tcl_Interp *interp, int objc,
     {
     case REGINFO_CHANGED:
       func = register_changed_p;
-      argp = NULL;
+      arg.ptr = NULL;
       break;
 
     case REGINFO_NAME:
@@ -153,12 +163,12 @@ gdb_register_info (ClientData clientData, Tcl_Interp *interp, int objc,
 	char *s = Tcl_GetStringFromObj (objv[0], &len);
 	if (objc != 0 && strncmp (s, "-numbers", len) == 0)
 	  {
-	    argp = (void *) 1;
+	    arg.integer = 1;
 	    objc--;
 	    objv++;
 	  }
 	else
-	  argp = NULL;
+	  arg.ptr = NULL;
 
 	func = get_register_name;
       }
@@ -166,17 +176,17 @@ gdb_register_info (ClientData clientData, Tcl_Interp *interp, int objc,
 
     case REGINFO_SIZE:
       func = get_register_size;
-      argp = NULL;
+      arg.ptr = NULL;
       break;
 
     case REGINFO_VALUE:
       func = get_register;
-      argp = NULL;
+      arg.ptr = NULL;
       break;
 
     case REGINFO_TYPE:
       func = get_register_types;
-      argp = NULL;
+      arg.ptr = NULL;
       break;
 
     case REGINFO_FORMAT:
@@ -192,11 +202,11 @@ gdb_register_info (ClientData clientData, Tcl_Interp *interp, int objc,
       return TCL_ERROR;
     }
 
-  return map_arg_registers (interp, objc, objv, func, argp);
+  return map_arg_registers (interp, objc, objv, func, arg);
 }
 
 static void
-get_register_size (int regnum, void *arg)
+get_register_size (int regnum, map_arg arg)
 {
   Tcl_ListObjAppendElement (gdbtk_interp, result_ptr->obj_ptr,
 			    Tcl_NewIntObj (register_size (current_gdbarch, regnum)));
@@ -207,7 +217,7 @@ get_register_size (int regnum, void *arg)
 /* special registers. */
 
 static void
-get_register_types (int regnum, void *arg)
+get_register_types (int regnum, map_arg arg)
 { 
   struct type *reg_vtype;
   int i,n;
@@ -256,7 +266,7 @@ get_register_types (int regnum, void *arg)
 
 
 static void
-get_register (int regnum, void *arg)
+get_register (int regnum, map_arg arg)
 {
   int realnum;
   CORE_ADDR addr;
@@ -342,10 +352,10 @@ get_register (int regnum, void *arg)
 }
 
 static void
-get_register_name (int regnum, void *argp)
+get_register_name (int regnum, map_arg arg)
 {
   /* Non-zero if the caller wants the register numbers, too.  */
-  int numbers = (int) argp;
+  int numbers = arg.integer;
   Tcl_Obj *name
     = Tcl_NewStringObj (gdbarch_register_name (current_gdbarch, regnum), -1);
   Tcl_Obj *elt;
@@ -370,7 +380,7 @@ get_register_name (int regnum, void *argp)
 
 static int
 map_arg_registers (Tcl_Interp *interp, int objc, Tcl_Obj **objv,
-		   void (*func) (int regnum, void *argp), void *argp)
+		   map_func func, map_arg arg)
 {
   int regnum, numregs;
 
@@ -391,7 +401,7 @@ map_arg_registers (Tcl_Interp *interp, int objc, Tcl_Obj **objv,
 	  if (gdbarch_register_name (current_gdbarch, regnum) == NULL
 	      || *(gdbarch_register_name (current_gdbarch, regnum)) == '\0')
 	    continue;
-	  func (regnum, argp);
+	  func (regnum, arg);
 	}      
       return TCL_OK;
     }
@@ -413,7 +423,7 @@ map_arg_registers (Tcl_Interp *interp, int objc, Tcl_Obj **objv,
 	}
 
       if (regnum >= 0  && regnum < numregs)
-	func (regnum, argp);
+	func (regnum, arg);
       else
 	{
 	  Tcl_SetStringObj (result_ptr->obj_ptr, "bad register number", -1);
@@ -424,7 +434,7 @@ map_arg_registers (Tcl_Interp *interp, int objc, Tcl_Obj **objv,
 }
 
 static void
-register_changed_p (int regnum, void *argp)
+register_changed_p (int regnum, map_arg arg)
 {
   char raw_buffer[MAX_REGISTER_SIZE];
 

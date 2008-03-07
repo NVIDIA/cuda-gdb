@@ -26,10 +26,18 @@ Boston, MA 02110-1301, USA.  */
 struct gdb_wrapper_arguments {
 
   /* Pointer to some result from the gdb function call, if any */
-  char *result;
+  union
+  {
+    int integer;
+    void *ptr;
+  } result;
 
   /* The list of arguments. */
-  char *args[10];
+  union
+  {
+    void *ptr;
+    int integer;
+  } args[10];
 };
 
 /* FIXME: cagney/2002-01-04: GDB no longer uses or supplies the
