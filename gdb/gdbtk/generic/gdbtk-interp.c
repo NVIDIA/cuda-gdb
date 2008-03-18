@@ -1,7 +1,7 @@
 /* Insight Definitions for GDB, the GNU debugger.
    Written by Keith Seitz <kseitz@sources.redhat.com>
 
-   Copyright (C) 2003, 2004 Free Software Foundation, Inc.
+   Copyright (C) 2003, 2004, 2008 Free Software Foundation, Inc.
 
    This file is part of Insight.
 
@@ -62,7 +62,7 @@ hack_disable_interpreter_exec (char *args, int from_tty)
 }
 
 static void *
-gdbtk_interpreter_init (void)
+gdbtk_interpreter_init (int top_level)
 {
   /* Disable interpreter-exec. It causes us big trouble right now. */
   struct cmd_list_element *cmd = NULL;

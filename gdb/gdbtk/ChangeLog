@@ -1,3 +1,8 @@
+2008-03-18  Maciej W. Rozycki  <macro@mips.com>
+
+	* generic/gdbtk-interp.c (gdbtk_interpreter_init): New parameter
+	top_level.
+
 2008-03-07  Keith Seitz  <kseitz@sourceware.org>
 
 	* generic/gdbtk-register.c (map_arg): New data type
