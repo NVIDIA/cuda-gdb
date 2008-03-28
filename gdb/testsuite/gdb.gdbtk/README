@@ -67,13 +67,13 @@ o Initializing the display
 o Determining if tests should be run
 o Results accounting
 o Compiling testcases in various languages
-o Repoting results to gdb's testsuite
+o Reporting results to gdb's testsuite
 
 There are various functions defined to facilitate the writing of tests. These
 functions currently reside in gdb's gdb.exp (src/gdb/testsuite/lib/gdb.exp) and
 include:
 
-Pulic functions:
+Public functions:
 proc gdbtk_initialize_display {}
 
   gdbtk_initialize_display should be the first function called from the
@@ -109,7 +109,7 @@ proc gdbtk_start {test}
     The location of the testsuite definitions file (i.e.,
     src/gdb/testsuite/gdb.gdbtk/defs)
 
-  Note that DEFS is converted to abs$lute tcl-style paths. On unix,
+  Note that DEFS is converted to absolute tcl-style paths. On unix,
   this means that DEFS would point to, for example,
   /home/keiths/insight/src/gdb/testsuite/gdb.gdbtk/defs. On Cygwin it
   would point to C:/cygwin/home/keiths/insight/src/gdb/testsuite/gdb.gdbtk/defs.
@@ -147,7 +147,7 @@ proc gdbtk_done {{results {}}}
 
 Private functions:
 proc _gdbtk_export_target_info
-  This functin exports information about the target into the environment
+  This function exports information about the target into the environment
   so that Insight's testsuite may run programs on any supported gdb
   target. This target information is passed into the Tcl testsuite
   via an environment variable, TARGET_INFO, which is really a Tcl array,
@@ -271,7 +271,7 @@ proc gdbtk_test_file {filename}
   gdb and Insight.
 
 proc gdbtk_test_run {{prog_args {}}}
-  gdbtk_test_run runs the previoiusly loaded executable, passing
+  gdbtk_test_run runs the previously loaded executable, passing
   the given arguments to the inferior. Like Insight's Run button,
   it will do whatever is necessary to get the executable running,
   including any target initialization (setting baud rate and remote

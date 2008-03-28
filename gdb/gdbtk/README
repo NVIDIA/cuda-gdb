@@ -131,7 +131,7 @@ look for main.tcl in the install directory, and finally it will try to find
 the tcl directory in the sources.
 
 A word about the different files in Insight is in order.  Insight is a hybrid of
-C code and "Tcl" code (actuall Incr Tcl code).  We use the following conventions
+C code and "Tcl" code (actually Incr Tcl code).  We use the following conventions
 for naming our tcl files (most of the time!).  Any file with a ".tcl" extension
 is simply vanilla tcl code.  Any file ending with ".itcl" is an Itcl file,
 class definition and implementation all in one.  So far so good.  Now comes the
