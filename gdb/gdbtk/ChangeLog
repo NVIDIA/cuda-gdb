@@ -1,3 +1,8 @@
+2008-04-21  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-cmds.c (symtab_to_filename): Call gdb's
+	open_source_file instead of find_and_open_source.
+
 2008-03-28  Maciej W. Rozycki  <macro@mips.com>
 
 	* README: Fix a typo.

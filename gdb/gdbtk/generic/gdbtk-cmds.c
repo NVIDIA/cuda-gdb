@@ -1,5 +1,5 @@
 /* Tcl/Tk command definitions for Insight.
-   Copyright (C) 1994, 1995, 1996, 1997, 1998, 1999, 2001, 2002, 2003, 2004, 2007
+   Copyright (C) 1994, 1995, 1996, 1997, 1998, 1999, 2001, 2002, 2003, 2004, 2007, 2008
    Free Software Foundation, Inc.
 
    Written by Stu Grossman <grossman@cygnus.com> of Cygnus Support.
@@ -3004,13 +3004,9 @@ gdb_CA_to_TAS (ClientData clientData, Tcl_Interp *interp,
  * with something similar, but different enough to break
  * Insight.
  */
-int find_and_open_source (struct objfile *objfile, const char *filename,
-			  const char *dirname, char **fullname);
-
 char *
 symtab_to_filename (struct symtab *s)
 {
-
   int r;
 
   if (!s)
@@ -3018,8 +3014,7 @@ symtab_to_filename (struct symtab *s)
 
   /* Don't check s->fullname here, the file could have been 
      deleted/moved/..., look for it again */
-  r = find_and_open_source (s->objfile, s->filename, s->dirname,
-			    &s->fullname);
+  r = open_source_file (s);
   if (r)
     close (r);
 
