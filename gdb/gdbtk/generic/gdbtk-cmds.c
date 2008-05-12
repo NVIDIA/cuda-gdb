@@ -41,6 +41,7 @@
 #include "value.h"
 #include "varobj.h"
 #include "exceptions.h"
+#include "language.h"
 
 /* tcl header files includes varargs.h unless HAS_STDARG is defined,
    but gdb uses stdarg.h, so make sure HAS_STDARG is defined.  */
@@ -631,7 +632,7 @@ gdb_eval (ClientData clientData, Tcl_Interp *interp,
   make_cleanup_ui_file_delete (stb);
   val_print (value_type (val), value_contents (val),
 	     value_embedded_offset (val), VALUE_ADDRESS (val),
-	     stb, format, 0, 0, 0);
+	     stb, format, 0, 0, 0, current_language);
   result = ui_file_xstrdup (stb, &dummy);
   Tcl_SetObjResult (interp, Tcl_NewStringObj (result, -1));
   xfree (result);

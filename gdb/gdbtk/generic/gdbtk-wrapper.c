@@ -24,6 +24,7 @@
 #include "varobj.h"
 #include "block.h"
 #include "exceptions.h"
+#include "language.h"
 #include "gdbtk-wrapper.h"
 
 /*
@@ -218,7 +219,7 @@ wrap_val_print (char *a)
   pretty = (enum val_prettyprint) (*args)->args[7].integer;
 
   val_print (type, valaddr, 0, address, stream, format, deref_ref,
-	     recurse, pretty);
+	     recurse, pretty, current_language);
   return 1;
 }
 

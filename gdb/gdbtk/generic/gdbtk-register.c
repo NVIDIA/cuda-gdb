@@ -25,6 +25,7 @@
 #include "value.h"
 #include "target.h"
 #include "gdb_string.h"
+#include "language.h"
 
 #include <tcl.h>
 #include "gdbtk.h"
@@ -333,11 +334,11 @@ get_register (int regnum, map_arg arg)
 		      gdbarch_register_name (current_gdbarch, regnum)) == 0))
 	{
 	  val_print (FIELD_TYPE (TYPE_FIELD (reg_vtype, 0)), buffer, 0, 0,
-		     stb, format, 1, 0, Val_pretty_default);
+		     stb, format, 1, 0, Val_pretty_default, current_language);
 	}
       else
 	val_print (reg_vtype, buffer, 0, 0,
-		   stb, format, 1, 0, Val_pretty_default);
+		   stb, format, 1, 0, Val_pretty_default, current_language);
     }
   
   res = ui_file_xstrdup (stb, &dummy);

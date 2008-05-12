@@ -1,3 +1,13 @@
+2008-05-12  Pierre Muller  <muller@ics.u-strasbg.fr>
+
+	* Update uses of val_print functions with additional language argument.
+	generic/gdbtk-cmds.c: Add "language.h" include.
+	(gdb_eval): Add current_language as new arg of val_print.
+	generic/gdbtk-register.c: Add "language.h" include.
+	(get_register): Add current_language as new arg of val_print.
+	generic/gdbtk-wrapper.c: Add "language.h" include.
+	(wrap_val_print): Add current_language as new arg of val_print.
+
 2008-04-21  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-cmds.c (symtab_to_filename): Call gdb's
