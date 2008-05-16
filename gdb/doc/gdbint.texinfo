@@ -39,7 +39,7 @@ Free Documentation License''.
 @page
 @tex
 \def\$#1${{#1}}  % Kluge: collect RCS revision info without $...$
-\xdef\manvers{\$Revision: 1.283 $}  % For use in headers, footers too
+\xdef\manvers{\$Revision: 1.284 $}  % For use in headers, footers too
 {\parskip=0pt
 \hfill Cygnus Solutions\par
 \hfill \manvers\par
@@ -3622,11 +3622,6 @@ to print information about the processor's vector unit.
 
 By default, the @samp{info vector} command will print all vector
 registers (the register's type having the vector attribute).
-
-@item int gdbarch_dwarf_reg_to_regnum (@var{gdbarch}, @var{dwarf_regnr})
-@findex gdbarch_dwarf_reg_to_regnum
-Convert DWARF register number @var{dwarf_regnr} into @value{GDBN} regnum.  If
-not defined, no conversion will be performed.
 
 @item int gdbarch_dwarf2_reg_to_regnum (@var{gdbarch}, @var{dwarf2_regnr})
 @findex gdbarch_dwarf2_reg_to_regnum
