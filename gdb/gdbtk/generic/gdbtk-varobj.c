@@ -440,28 +440,34 @@ variable_children (Tcl_Interp *interp, struct varobj *var)
 static Tcl_Obj *
 variable_update (Tcl_Interp *interp, struct varobj **var)
 {
+  int i;
   Tcl_Obj *changed;
-  struct varobj **changelist;
-  struct varobj **vc;
-  int result;
+  VEC (varobj_update_result) *changes;
+  varobj_update_result *r;
 
-  /* varobj_update() throws an error for a non-root variable
-     and otherwise it returns a value < 0 if the variable is
-     not in scope, not valid anymore or has changed type.  */
-  if (GDB_varobj_update (var, &changelist, 1, &result) != GDB_OK || result < 0)
+  if (GDB_varobj_update (var, 1, &changes) != GDB_OK)
     return Tcl_NewStringObj ("-1", -1);
 
-  changed = Tcl_NewListObj (0, NULL);  
-  vc = changelist;
-  while (*vc != NULL)
+  changed = Tcl_NewListObj (0, NULL);
+  for (i = 0; VEC_iterate (varobj_update_result, changes, i, r); ++i)
     {
-      /* Add changed variable object to result list */
-      Tcl_ListObjAppendElement (NULL, changed,
-				Tcl_NewStringObj (varobj_get_objname (*vc), -1));
-      vc++;
+      switch (r->status)
+	{
+	case VAROBJ_IN_SCOPE:
+	  {
+	    Tcl_Obj *var
+	      =  Tcl_NewStringObj (varobj_get_objname (r->varobj), -1);
+	    Tcl_ListObjAppendElement (NULL, changed, var);
+	  }
+	  break;
+
+	case VAROBJ_NOT_IN_SCOPE:
+	case VAROBJ_INVALID:
+	  /* These need to be (re-)implemented in the UI */
+	  break;
+	}
     }
 
-  xfree (changelist);
   return changed;
 }
 

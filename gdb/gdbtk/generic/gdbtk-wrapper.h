@@ -1,5 +1,5 @@
 /* longjmp-free interface between gdb and gdbtk.
-   Copyright (C) 1999, 2000, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2002, 2008 Free Software Foundation, Inc.
 
 This file is part of GDB.  It contains routines to safely call common gdb
 functions without the fear of longjmp'ing.
@@ -21,6 +21,8 @@ Boston, MA 02110-1301, USA.  */
 
 #ifndef GDBTK_WRAPPER_H
 #define GDBTK_WRAPPER_H
+#include "vec.h"
+
 /* Use this struct used to pass arguments to wrapper routines. We assume
    (arbitrarily) that no gdb function takes more than ten arguments. */
 struct gdb_wrapper_arguments {
@@ -88,8 +90,7 @@ extern gdb_result GDB_find_relative_frame (struct frame_info *fi,
 					   int *start,
 					   struct frame_info **result);
 extern gdb_result GDB_get_current_frame (struct frame_info **result);
-extern gdb_result GDB_varobj_update (struct varobj **varp,
-				     struct varobj ***changelist, int explicit,
-				     int *result);
+extern gdb_result GDB_varobj_update (struct varobj **varp, int explicit,
+				     VEC (varobj_update_result) **changes);
 #endif /* GDBTK_WRAPPER_H */
 

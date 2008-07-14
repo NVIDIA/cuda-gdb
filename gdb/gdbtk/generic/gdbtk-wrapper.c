@@ -1,5 +1,5 @@
 /* longjmp-free interface between gdb and gdbtk.
-   Copyright (C) 1999, 2000, 2002 Free Software Foundation, Inc.
+   Copyright (C) 1999, 2000, 2002, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -83,9 +83,8 @@ gdb_result GDB_find_relative_frame (struct frame_info *fi,
 
 gdb_result GDB_get_current_frame (struct frame_info **result);
 
-gdb_result GDB_varobj_update (struct varobj **varp,
-			      struct varobj ***changelist, int explicit,
-			      int *result);
+gdb_result GDB_varobj_update (struct varobj **varp, int explicit,
+			      VEC (varobj_update_result) **changes);
 
 /*
  * Private functions for this file
@@ -730,21 +729,20 @@ wrap_get_current_frame (char *opaque_arg)
 }
 
 gdb_result
-GDB_varobj_update (struct varobj **varp, struct varobj ***changelist,
-		   int explicit, int *result)
+GDB_varobj_update (struct varobj **varp, int explicit,
+		   VEC (varobj_update_result) **changes)
 {
   struct gdb_wrapper_arguments args;
   gdb_result r;
 
   args.args[0].ptr = varp;
-  args.args[1].ptr = changelist;
-  args.args[2].integer = explicit;
+  args.args[1].integer = explicit;
 
   r = call_wrapped_function ((catch_errors_ftype *) wrap_varobj_update, &args);
   if (r != GDB_OK)
     return r;
 
-  *result = args.result.integer;
+  *changes = args.result.ptr;
   return GDB_OK;
 }
 
@@ -753,9 +751,7 @@ static int wrap_varobj_update (char *opaque_arg)
   struct gdb_wrapper_arguments **args
     = (struct gdb_wrapper_arguments **) opaque_arg;
   struct varobj **varp = (struct varobj **) (*args)->args[0].ptr;
-  struct varobj ***changelist = (struct varobj ***) (*args)->args[1].ptr;
-  int explicit = (*args)->args[2].integer;
-
-  (*args)->result.integer = varobj_update (varp, changelist, explicit);
+  int explicit = (*args)->args[1].integer;
+  (*args)->result.ptr = varobj_update (varp, explicit);
   return 1;
 }

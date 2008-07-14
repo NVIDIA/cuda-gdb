@@ -1,5 +1,5 @@
 /* Tcl/Tk command definitions for Insight - Stack.
-   Copyright (C) 2001, 2002, 2003 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2003, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -116,16 +116,11 @@ gdb_block_vars (ClientData clientData, Tcl_Interp *interp,
 		{
 		case LOC_ARG:		  /* argument              */
 		case LOC_REF_ARG:	  /* reference arg         */
-		case LOC_REGPARM:	  /* register arg          */
 		case LOC_REGPARM_ADDR:    /* indirect register arg */
-		case LOC_LOCAL_ARG:	  /* stack arg             */
-		case LOC_BASEREG_ARG:	  /* basereg arg           */
 		case LOC_LOCAL:	          /* stack local           */
-		case LOC_BASEREG:	  /* basereg local         */
 		case LOC_STATIC:	  /* static                */
 		case LOC_REGISTER:        /* register              */
 		case LOC_COMPUTED:	  /* computed location     */
-		case LOC_COMPUTED_ARG:	  /* computed location arg */
 		  Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
 					    Tcl_NewStringObj (DEPRECATED_SYMBOL_NAME (sym),
 							      -1));
@@ -196,14 +191,9 @@ gdb_get_blocks (ClientData clientData, Tcl_Interp *interp,
 
 		case LOC_ARG:		  /* argument              */
 		case LOC_REF_ARG:	  /* reference arg         */
-		case LOC_REGPARM:	  /* register arg          */
 		case LOC_REGPARM_ADDR:    /* indirect register arg */
-		case LOC_LOCAL_ARG:	  /* stack arg             */
-		case LOC_BASEREG_ARG:	  /* basereg arg           */
-		case LOC_COMPUTED_ARG:	  /* computed location arg */
 
 		case LOC_LOCAL:	          /* stack local           */
-		case LOC_BASEREG:	  /* basereg local         */
 		case LOC_STATIC:	  /* static                */
 		case LOC_REGISTER:        /* register              */
 		case LOC_COMPUTED:	  /* computed location     */
@@ -295,7 +285,7 @@ gdb_get_vars_command (ClientData clientData, Tcl_Interp *interp,
       return TCL_ERROR;
     }
 
-  arguments = *(int*) clientData;
+  arguments = *(int*) &clientData;
 
   /* Initialize the result pointer to an empty list. */
 
@@ -344,17 +334,12 @@ gdb_get_vars_command (ClientData clientData, Tcl_Interp *interp,
 	      break;
 	    case LOC_ARG:	/* argument              */
 	    case LOC_REF_ARG:	/* reference arg         */
-	    case LOC_REGPARM:	/* register arg          */
 	    case LOC_REGPARM_ADDR:	/* indirect register arg */
-	    case LOC_LOCAL_ARG:	/* stack arg             */
-	    case LOC_BASEREG_ARG:	/* basereg arg           */
-	    case LOC_COMPUTED_ARG:	/* computed location arg */
 	      if (arguments)
 		Tcl_ListObjAppendElement (interp, result_ptr->obj_ptr,
 					  Tcl_NewStringObj (DEPRECATED_SYMBOL_NAME (sym), -1));
 	      break;
 	    case LOC_LOCAL:	/* stack local           */
-	    case LOC_BASEREG:	/* basereg local         */
 	    case LOC_STATIC:	/* static                */
 	    case LOC_REGISTER:	/* register              */
 	    case LOC_COMPUTED:	/* computed location     */

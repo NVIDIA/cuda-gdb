@@ -42,6 +42,7 @@
 #include "varobj.h"
 #include "exceptions.h"
 #include "language.h"
+#include "target.h"
 
 /* tcl header files includes varargs.h unless HAS_STDARG is defined,
    but gdb uses stdarg.h, so make sure HAS_STDARG is defined.  */
@@ -567,8 +568,8 @@ gdb_stop (ClientData clientData, Tcl_Interp *interp,
     }
   else
     {
-      if (target_stop != target_ignore)
-	target_stop ();
+      if (target_ignore != (void (*) (void)) current_target.to_stop)
+	target_stop (gdbtk_get_ptid ());
       else
 	quit_flag = 1;		/* hope something sees this */
     }
@@ -1889,7 +1890,7 @@ gdbtk_load_asm (ClientData clientData, CORE_ADDR pc,
   for (i = 0; i < 3; i++)
     Tcl_SetObjLength (client_data->result_obj[i], 0);
 
-  deprecated_print_address_numeric (pc, 1, gdb_stdout);
+  fputs_filtered (paddress (pc), gdb_stdout);
   gdb_flush (gdb_stdout);
 
   result_ptr->obj_ptr = client_data->result_obj[1];

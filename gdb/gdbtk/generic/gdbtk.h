@@ -1,5 +1,5 @@
 /* Tcl/Tk interface routines header file.
-   Copyright (C) 1994, 1995, 1996, 1997, 1998, 2000, 2001, 2003
+   Copyright (C) 1994, 1995, 1996, 1997, 1998, 2000, 2001, 2003, 2008
    Free Software Foundation, Inc.
 
    Written by Stu Grossman <grossman@cygnus.com> of Cygnus Support.
@@ -98,6 +98,7 @@ typedef struct gdbtk_result
 gdbtk_result;
 
 struct target_ops;
+struct ptid_t;
 
 /* These defines give the allowed values for the gdbtk_result.flags field. */
 
@@ -161,6 +162,7 @@ extern void gdbtk_fputs (const char *, struct ui_file *);
 extern struct ui_file *gdbtk_fileopen (void);
 extern struct ui_file *gdbtk_fileopenin (void);
 extern int gdbtk_disable_fputs;
+extern ptid_t gdbtk_get_ptid (void);
 
 #ifdef _WIN32
 extern void close_bfds ();

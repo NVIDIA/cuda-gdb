@@ -44,6 +44,11 @@ itcl::body TargetSelection::init_target_db {} {
   }
   set db_inited 1
 
+  # We really need to have the preferences defined, too,
+  # otherwise set_target and company won't work properly
+  # unless the user has first opened a TargetSelection dialog.
+  _init_prefs
+
   # Target Database
   # Set the following members:
   # TARGET,pretty-name: Name to display to user
@@ -323,6 +328,7 @@ itcl::body TargetSelection::_init_prefs {} {
   pref define gdb/load/default-port [default_port]
   pref define gdb/load/default-hostname ""
   pref define gdb/load/default-after_attaching {}
+  pref define gdb/load/default-portname 32767
 }
 
 itcl::body TargetSelection::_init_target {} {
@@ -371,7 +377,6 @@ itcl::body TargetSelection::_init {} {
   set trace_inited 1
 
   init_target_db	;# initialize database
-  _init_prefs	;# initialize load prefs 
   _init_target	;# initialize target prefs
   set_saved
 

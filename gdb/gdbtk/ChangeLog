@@ -1,3 +1,30 @@
+2008-07-14  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-stack.c (gdb_block_args): Remove deprecated values
+	LOC_LOCAL_ARG, LOC_COMPUTED_ARG, LOC_REGPARM, LOC_BASEARG_ARG, and
+	LOC_BASEARG.
+	(gdb_get_blocks): Likewise.
+	(gdb_get_vars_command): Likewise.
+	Fix type-punned pointer error introduced on 03-07.
+
+	* generic/gdbtk-cmds.c (gdbtk_load_asm): Use paddress instead
+	of deprecated_print_address_numeric.
+	(gdb_stop): Update use of target_stop.
+
+	* generic/gdbtk.h (gdbtk_get_ptid): Declare new function.
+	* generic/gdbtk-hooks.c (gdbtk_wait): Save inferior's ptid.
+	(gdbtk_get_ptid): Define new function.
+	* generic/gdbtk-varobj.c (variable_update): Update for recent
+	varobj_update API change.
+	* generic/gdbtk-wrapper.h (GDB_varobj_update): Likewise.
+	* generic/gdbtk-wrapper.c (GDB_varobj_update): Likewise.
+	(wrap_varobj_update): Likewise.
+
+	* library/targetselection.itb (init_target_db): Initialize
+	preferences here instead of ...
+	(_init): ... here.
+	(_init_prefs): Define gdb/load/default-portname, too.
+
 2008-05-12  Pierre Muller  <muller@ics.u-strasbg.fr>
 
 	* Update uses of val_print functions with additional language argument.

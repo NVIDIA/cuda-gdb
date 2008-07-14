@@ -1,6 +1,6 @@
 /* Startup code for Insight.
 
-   Copyright (C) 1994, 1995, 1996, 1997, 1998, 2000, 200, 2002, 2003, 2004
+   Copyright (C) 1994, 1995, 1996, 1997, 1998, 2000, 200, 2002, 2003, 2004, 2008
    Free Software Foundation, Inc.
 
    Written by Stu Grossman <grossman@cygnus.com> of Cygnus Support.
@@ -110,6 +110,8 @@ static void gdbtk_set_hook (struct cmd_list_element *cmdblk);
 long gdbtk_read (struct ui_file *, char *, long);
 void gdbtk_fputs (const char *, struct ui_file *);
 static int gdbtk_load_hash (const char *, unsigned long);
+
+static ptid_t gdbtk_ptid;
 
 /*
  * gdbtk_add_hooks - add all the hooks to gdb.  This will get called by the
@@ -665,6 +667,7 @@ gdbtk_wait (ptid_t ptid, struct target_waitstatus *ourstatus)
   gdbtk_start_timer ();
   ptid = target_wait (ptid, ourstatus);
   gdbtk_stop_timer ();
+  gdbtk_ptid = ptid;
 
   return ptid;
 }
@@ -835,4 +838,10 @@ static void
 gdbtk_architecture_changed (void)
 {
   Tcl_Eval (gdbtk_interp, "gdbtk_tcl_architecture_changed");
+}
+
+ptid_t
+gdbtk_get_ptid (void)
+{
+  return gdbtk_ptid;
 }
