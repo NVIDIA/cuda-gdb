@@ -1,3 +1,12 @@
+2008-07-25  Tom Tromey  <tromey@redhat.com>
+
+	* generic/gdbtk-hooks.c: Include observer.h, not gdb-events.h.
+	(gdbtk_add_hooks): Use observers, not events.
+	(gdbtk_architecture_changed): Add argument, for observer.
+	* generic/gdbtk-bp.c: Include observer.h.
+	(gdb_set_bp): Notify observer.
+	(gdb_set_bp_addr): Likewise.
+
 2008-07-14  Keith Seitz  <keiths@redhat.com>
 
 	* generic/gdbtk-stack.c (gdb_block_args): Remove deprecated values

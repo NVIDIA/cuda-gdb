@@ -29,10 +29,10 @@
 #include "gdbcore.h"
 #include "tracepoint.h"
 #include "demangle.h"
-#include "gdb-events.h"
 #include "top.h"
 #include "annotate.h"
 #include "cli/cli-decode.h"
+#include "observer.h"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -75,7 +75,7 @@ extern void gdbtk_create_tracepoint (int);
 extern void gdbtk_delete_tracepoint (int);
 extern void gdbtk_modify_tracepoint (int);
 
-static void gdbtk_architecture_changed (void);
+static void gdbtk_architecture_changed (struct gdbarch *);
 static void gdbtk_trace_find (char *arg, int from_tty);
 static void gdbtk_trace_start_stop (int, int);
 static void gdbtk_attach (void);
@@ -121,17 +121,14 @@ static ptid_t gdbtk_ptid;
 void
 gdbtk_add_hooks (void)
 {
-  static struct gdb_events handlers;
-
-  /* Gdb event handlers */
-  handlers.breakpoint_create = gdbtk_create_breakpoint;
-  handlers.breakpoint_modify = gdbtk_modify_breakpoint;
-  handlers.breakpoint_delete = gdbtk_delete_breakpoint;
-  handlers.tracepoint_create = gdbtk_create_tracepoint;
-  handlers.tracepoint_modify = gdbtk_modify_tracepoint;
-  handlers.tracepoint_delete = gdbtk_delete_tracepoint;
-  handlers.architecture_changed = gdbtk_architecture_changed;
-  deprecated_set_gdb_event_hooks (&handlers);
+  /* Gdb observers */
+  observer_attach_breakpoint_created (gdbtk_create_breakpoint);
+  observer_attach_breakpoint_modified (gdbtk_modify_breakpoint);
+  observer_attach_breakpoint_deleted (gdbtk_delete_breakpoint);
+  observer_attach_tracepoint_created (gdbtk_create_tracepoint);
+  observer_attach_tracepoint_modified (gdbtk_modify_tracepoint);
+  observer_attach_tracepoint_deleted (gdbtk_delete_tracepoint);
+  observer_attach_architecture_changed (gdbtk_architecture_changed);
 
   /* Hooks */
   deprecated_call_command_hook = gdbtk_call_command;
@@ -835,7 +832,7 @@ gdbtk_detach ()
 
 /* Called from gdbarch_update_p whenever the architecture changes. */
 static void
-gdbtk_architecture_changed (void)
+gdbtk_architecture_changed (struct gdbarch *ignore)
 {
   Tcl_Eval (gdbtk_interp, "gdbtk_tcl_architecture_changed");
 }

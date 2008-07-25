@@ -1,5 +1,5 @@
 /* Tcl/Tk command definitions for Insight - Breakpoints.
-   Copyright (C) 2001, 2002 Free Software Foundation, Inc.
+   Copyright (C) 2001, 2002, 2008 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -29,6 +29,7 @@
 #include <tcl.h>
 #include "gdbtk.h"
 #include "gdbtk-cmds.h"
+#include "observer.h"
 
 /* From breakpoint.c */
 extern struct breakpoint *breakpoint_chain;
@@ -541,7 +542,7 @@ gdb_set_bp (ClientData clientData, Tcl_Interp *interp,
   free(buf);
 
   /* now send notification command back to GUI */
-  breakpoint_create_event (b->number);
+  observer_notify_breakpoint_created (b->number);
   return TCL_OK;
 }
 
@@ -609,7 +610,7 @@ gdb_set_bp_addr (ClientData clientData, Tcl_Interp *interp, int objc,
   b->addr_string = xstrdup (saddr);
 
   /* now send notification command back to GUI */
-  breakpoint_create_event (b->number);
+  observer_notify_breakpoint_created (b->number);
   return TCL_OK;
 }
 
