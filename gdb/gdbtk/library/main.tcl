@@ -53,11 +53,10 @@ if {[info exists auto_path]} {
   }
 }
 
-
 # Require the packages we need.  Most are loaded already, but this will catch 
 # any odd errors... :
 
-foreach p {{Tcl 8.0} {Tk 8.0} {Itcl 3.0} {Itk 3.0} {Gdbtk 1.0} {combobox 2.2} {debug 1.0}} {
+foreach p {{Tcl 8.4} {Tk 8.4} {Itcl 3.3} {Itk 3.3} {Iwidgets 4.0} {Gdbtk 1.0} {combobox 2.2} {debug 1.0}} {
   if {[catch {package require [lindex $p 0] [lindex $p 1]} msg]} {
     if {![info exists ::env(GDBTK_TEST_RUNNING)] || $::env(GDBTK_TEST_RUNNING) == 0} {
       if {$::tcl_platform(platform) != "windows"} {
@@ -73,21 +72,6 @@ foreach p {{Tcl 8.0} {Tk 8.0} {Itcl 3.0} {Itk 3.0} {Gdbtk 1.0} {combobox 2.2} {d
 
 namespace import itcl::*
 namespace import debug::*
-
-# Finally, load Iwidgets
-if {[info exists IWIDGETS_LIBRARY]} {
-  lappend auto_path $IWIDGETS_LIBRARY
-}
-if {[catch {package require Iwidgets} msg]} {
-  if {![info exists ::env(GDBTK_TEST_RUNNING)] || $::env(GDBTK_TEST_RUNNING) == 0} {
-    if {$::tcl_platform(platform) != "windows"} {
-      puts stderr "Error: $msg"
-    }
-    catch {tk_messageBox -title Error -message $msg -icon error -type ok}
-  }
-  exit -1
-}
-
 
 # Environment variables controlling debugging:
 # GDBTK_TRACE

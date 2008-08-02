@@ -1,5 +1,5 @@
 # Source preferences dialog for Insight.
-# Copyright (C) 1998, 1999, 2002, 2003 Red Hat
+# Copyright (C) 1998, 1999, 2002, 2003, 2008 Red Hat
 #
 # This program is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License (GPL) as published by
@@ -49,7 +49,8 @@ itcl::body SrcPref::_build_win {} {
   set f $itk_interior.f.a
 
   # Colors frame
-  Labelledframe $f.colors -anchor nw -text {Colors}
+  set a [Labelledframe $f.colors]
+  $a configure -anchor nw -text {Colors}
   set w [$f.colors get_frame]
 
   set color [pref get gdb/src/PC_TAG]
@@ -100,7 +101,8 @@ itcl::body SrcPref::_build_win {} {
   frame $f.rmv
 
   # Debug Mode frame
-  Labelledframe $f.rmv.mode -anchor nw -text "Mouse Button-1 Behavior"
+  set a [Labelledframe $f.rmv.mode]
+  $a configure -anchor nw -text "Mouse Button-1 Behavior"
   set w [$f.rmv.mode get_frame]
 
   if {[pref get gdb/mode]} {
@@ -118,7 +120,8 @@ itcl::body SrcPref::_build_win {} {
   pack $w.async $w.sync -side top
 
   # Variable Balloons
-  Labelledframe $f.rmv.var -anchor nw -text "Variable Balloons"
+  set a [Labelledframe $f.rmv.var]
+  $a configure -anchor nw -text "Variable Balloons"
   set w [$f.rmv.var get_frame]
   set var _new(gdb/src/variableBalloons)
   radiobutton $w.var_on -text "On " -variable [scope $var] -value 1

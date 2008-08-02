@@ -1,3 +1,39 @@
+2008-08-02  Keith Seitz  <keiths@redhat.com>
+
+	* generic/gdbtk-cmds.c: Don't include itcl.h.
+	* generic/gdbtk-hooks.c: Likewise.
+	* generic/gdbtk.c: Include tcl.h and tk.h instead of itcl.h
+	and itk.h.
+	(gdbtk_init): Rewrite to accommodate using a system-provided
+	Tcl, Tk, Itcl, Itk.
+	(gdbtk_source_start_file) [!_WIN32]: Don't call error() when
+	we fail to source the start file. Just dump the message to stderr.
+	Throw an exception indicating the failure.
+	* library/ehandler.itb (GDBEventHander::dispatch): "itcl_info" is
+	deprecated: use "itcl::find objects" instead.
+	* library/managedwin.itb (window_instance): Ditto.
+	(restart): Ditto.
+	(shutdown): Ditto.
+	(_open): Ditto.
+	(find): Ditto.
+	* library/globalpref.itb (_build_win): Don't pass config arguments
+	for libgui widgets to the constructor. Configure the widget after
+	creation.
+	* library/srcpref.itb (_build_win): Ditto.
+	* library/main.tcl: Update Tcl, Tk, Itcl, Itk, and Iwidgets (just
+	added to this loop) version requirements.
+	No need to initialize Iwidgets separately.
+	* plugins/Make-rules (TCLHDIR): Renamed to TCL_INCLUDES. Change
+	all references.
+	(TCL_BUILD_LIB_SPEC): Renamed to TCL_LIBRARY. Change all references.
+	* plugins/acinclude.m4: Include the standard tcl.m4 instead
+	of the sourceware-derived one.
+	* plugins/configure.ac: Use Tcl's standard SC_* macros instead of
+	the sourceware-derived CYG_AC_* macros.
+	Add logic to deal with using a system-supplied Tcl/Tk.
+	* plugins/configure: Regenerated.
+	* plugins/Makefile.in: Regenerated.
+	
 2008-07-25  Tom Tromey  <tromey@redhat.com>
 
 	* generic/gdbtk-hooks.c: Include observer.h, not gdb-events.h.

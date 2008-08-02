@@ -173,7 +173,8 @@ itcl::body GlobalPref::_build_win {} {
     if {[winfo exists .c]} { destroy .c }
   }
   
-  Labelledframe $frame.d -text "Fonts"
+  set f [Labelledframe $frame.d]
+  $f configure -text "Fonts"
   set f [$frame.d get_frame]
 
   _make_font_item $f fixed "Fixed Font:" $font_cache

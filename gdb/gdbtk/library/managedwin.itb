@@ -75,7 +75,7 @@ itcl::body ManagedWin::window_name {wname {iname ""}} {
 # ------------------------------------------------------------
 itcl::body ManagedWin::window_instance {ins} {
   set win_instance $ins
-  foreach obj [itcl_info objects -isa ManagedWin] {
+  foreach obj [itcl::find objects -isa ManagedWin] {
     debug "$obj ManagedWin::_wname"
     $obj window_name ""
   }
@@ -133,7 +133,7 @@ itcl::body ManagedWin::restart {} {
   after idle gdbtk_idle
   
   # call the reconfig method for each object
-  foreach obj [itcl_info objects -isa ManagedWin] {
+  foreach obj [itcl::find objects -isa ManagedWin] {
     if {[catch {$obj reconfig} msg]} {
       dbug W "reconfig failed for $obj - $msg"
     } 
@@ -147,7 +147,7 @@ itcl::body ManagedWin::restart {} {
 # ------------------------------------------------------------------
 itcl::body ManagedWin::shutdown {} {
   set activeWins {}
-  foreach win [itcl_info objects -isa ManagedWin] {
+  foreach win [itcl::find objects -isa ManagedWin] {
     if {![$win isa ModalDialog] && ![$win _ignore_on_save]} {
       set g [wm geometry [winfo toplevel [namespace tail $win]]]
       pref setd gdb/geometry/[namespace tail $win] $g
@@ -220,7 +220,7 @@ itcl::body ManagedWin::_open { class args } {
 
   if {!$force} {
     # check all windows for one of this type
-    foreach obj [itcl_info objects -isa ManagedWin] {
+    foreach obj [itcl::find objects -isa ManagedWin] {
       if {[$obj isa $class]} {
 	$obj reveal
 	return $obj
@@ -363,7 +363,7 @@ itcl::body ManagedWin::_create { class args } {
 itcl::body ManagedWin::find { win } {
   debug "$win"
   set res ""
-  foreach obj [itcl_info objects -isa ManagedWin] {
+  foreach obj [itcl::find objects -isa ManagedWin] {
     if {[$obj isa $win]} {
       lappend res $obj
     }

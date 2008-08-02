@@ -22,7 +22,7 @@ itcl::body GDBEventHandler::dispatch {event} {
   set handler [$event handler]
 
   # invoke event handlers
-  foreach w [itcl_info objects -isa GDBEventHandler] {
+  foreach w [itcl::find objects -isa GDBEventHandler] {
     dbug I "posting event \"$handler\" to \"$w\""
     if {[catch {$w $handler $event}]} {
       dbug E "On $handler event, $w errored:\n$::errorInfo"

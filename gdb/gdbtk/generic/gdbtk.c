@@ -1,5 +1,5 @@
 /* Startup code for Insight
-   Copyright (C) 1994, 1995, 1996, 1997, 1998, 2001, 2002, 2003, 2004, 2006
+   Copyright (C) 1994, 1995, 1996, 1997, 1998, 2001, 2002, 2003, 2004, 2006, 2008
    Free Software Foundation, Inc.
 
    Written by Stu Grossman <grossman@cygnus.com> of Cygnus Support.
@@ -42,8 +42,8 @@
    but gdb uses stdarg.h, so make sure HAS_STDARG is defined.  */
 #define HAS_STDARG 1
 
-#include <itcl.h>
-#include <itk.h>
+#include <tcl.h>
+#include <tk.h>
 #include "guitcl.h"
 #include "gdbtk.h"
 
@@ -367,6 +367,8 @@ gdbtk_init (void)
   int element_count;
   const char **exec_path;
   CONST char *internal_exec_name;
+  Tcl_Obj *command_obj;
+  int running_from_builddir;
 
   old_chain = make_cleanup (cleanup_init, 0);
 
@@ -381,105 +383,6 @@ gdbtk_init (void)
   if (!gdbtk_interp)
     error ("Tcl_CreateInterp failed");
 
-  /* We need to check if we are being run from
-     a bin directory, if not then we may have to
-     set some environment variables. */
-
-  internal_exec_name = Tcl_GetNameOfExecutable ();
-
-  Tcl_SplitPath ((char *) internal_exec_name, &element_count, &exec_path);
-
-  if (strcmp (exec_path[element_count - 2], "bin") != 0)
-    {
-      /* We check to see if TCL_LIBRARY, TK_LIBRARY,
-	 ITCL_LIBRARY, ITK_LIBRARY, TIX_LIBRARY and maybe
-	 a couple other environment variables have been
-	 set (we don't want to override the User's settings).
-	 If the *_LIBRARY variable is not set, point it at
-	 the source directory. */
-
-      static char set_libs_path_script[] = "\
-	  set srcDir [file dirname [file dirname $env(TCL_LIBRARY)]];\n\
-\
-	  if {![info exists env(TK_LIBRARY)]} {\n\
-	      set env(TK_LIBRARY) [file join $srcDir tk library]\n\
-	  }\n\
-\
-	  if {![info exists env(ITCL_LIBRARY)]} {\n\
-	      set env(ITCL_LIBRARY) [file join $srcDir itcl itcl library]\n\
-	  }\n\
-\
-	  if {![info exists env(ITK_LIBRARY)]} {\n\
-	      set env(ITK_LIBRARY) [file join $srcDir itcl itk library]\n\
-	  }\n\
-\
-	  if {![info exists env(IWIDGETS_LIBRARY)]} {\n\
-	      set env(IWIDGETS_LIBRARY)\
-                     [file join $srcDir itcl iwidgets generic]\n\
-	  }\n\
-\
-	  if {![info exists env(GDBTK_LIBRARY)]} {\n\
-	      set env(GDBTK_LIBRARY) [file join $srcDir gdb gdbtk library]\n\
-	  }\n\
-\
-          # Append the directory with the itcl pkg index\n\
-          if {[info exists env(TCLLIBPATH)]} {\n\
-            append env(TCLLIBPATH) :[file joing $srcDir itcl]\n\
-          } else {\n\
-            set env(TCLLIBPATH) [file join $srcDir itcl]\n\
-          }\n\
-\
-          # We also need to append the iwidgets library path.\n\
-          # Unfortunately, there is no IWIDGETS_LIBRARY.\n\
-          set IWIDGETS_LIBRARY [file join $srcDir itcl iwidgets generic]\n";
-
-      Tcl_Obj *commandObj;
-
-      /* Before we can run our script we must set TCL_LIBRARY. */
-      if (Tcl_GetVar2 (gdbtk_interp, "env", "TCL_LIBRARY", TCL_GLOBAL_ONLY) == NULL)
-	{
-	  int i, count;
-	  char *src_dir = SRC_DIR;
-	  const char **src_path;
-	  const char **lib_path;
-	  Tcl_DString lib_dstring;
-
-	  Tcl_DStringInit (&lib_dstring);
-
-#ifdef __CYGWIN__
-	  /* SRC_DIR from configure is a posix path. Tcl really needs a
-	     windows path. */
-	  src_dir = (char *) alloca (cygwin_posix_to_win32_path_list_buf_size (SRC_DIR));
-	  cygwin_posix_to_win32_path_list (SRC_DIR, src_dir);
-#endif
-	  Tcl_SplitPath (src_dir, &count, &src_path);
-
-	  /* Append tcl/library to src_dir (src_dir=/foo/bar/gdb) */
-	  lib_path = (const char **) alloca ((count + 2) * sizeof (char *));
-	  for (i = 0; i < count - 1; i++)
-	    lib_path[i] = src_path[i];
-	  lib_path[i++] = "tcl";
-	  lib_path[i++] = "library";
-	  Tcl_JoinPath (i, lib_path, &lib_dstring);
-
-	  /* Set TCL_LIBRARY */
-	  Tcl_SetVar2 (gdbtk_interp, "env", "TCL_LIBRARY",
-		       Tcl_DStringValue (&lib_dstring) , TCL_GLOBAL_ONLY);
-	  Tcl_DStringFree (&lib_dstring);
-	  Tcl_Free ((char *) src_path);
-	}
-
-      commandObj = Tcl_NewStringObj (set_libs_path_script, -1);
-      Tcl_IncrRefCount (commandObj);
-      Tcl_EvalObj (gdbtk_interp, commandObj);
-      Tcl_DecrRefCount (commandObj);
-    }
-
-  Tcl_Free ((char *) exec_path);
-
-  if (Tcl_Init (gdbtk_interp) != TCL_OK)
-    error ("Tcl_Init failed: %s", gdbtk_interp->result);
-
   /* Set up some globals used by gdb to pass info to gdbtk
      for start up options and the like */
   xasprintf (&s, "%d", inhibit_gdbinit);
@@ -491,8 +394,105 @@ gdbtk_init (void)
      ``const''. */
   Tcl_SetVar2 (gdbtk_interp, "GDBStartup", "host_name", (char*) host_name, TCL_GLOBAL_ONLY);
   Tcl_SetVar2 (gdbtk_interp, "GDBStartup", "target_name", (char*) target_name, TCL_GLOBAL_ONLY);
+  {
+#ifdef __CYGWIN
+    char *srcdir = (char *) alloca (cygwin_posix_to_win32_path_list_buf_size (SRC_DIR));
+    cygwin_posix_to_win32_path_list (SRC_DIR, srcdir);
+#else /* !__CYGWIN */
+    char *srcdir = SRC_DIR;
+#endif /* !__CYGWIN */
+    Tcl_SetVar2 (gdbtk_interp, "GDBStartup", "srcdir", srcdir, TCL_GLOBAL_ONLY);
+  }
+
+  /* This is really lame, but necessary. We need to set the path to our
+     library sources in the global GDBTK_LIBRARY. This was only necessary
+     for running from the build dir, but when using a system-supplied
+     Tcl/Tk/Itcl, we cannot rely on the user installing Insight into
+     the same tcl library directory. */
+
+  internal_exec_name = Tcl_GetNameOfExecutable ();
+
+  Tcl_SplitPath ((char *) internal_exec_name, &element_count, &exec_path);
+  if (strcmp (exec_path[element_count - 2], "bin") == 0)
+    running_from_builddir = 0;
+  else
+    running_from_builddir = 1;
+  Tcl_Free ((char *) exec_path);
+
+  /* This seems really complicated, and that's because it is.
+     We would like to preserve the following ways of running
+     Insight (and having it work, of course):
+
+     1. Installed using installed Tcl et al
+     2. From build directory using installed Tcl et al
+     3. Installed using Tcl et al from the build tree
+     4. From build directory using Tcl et al from the build tree
+
+     When running from the builddir (nos. 2,4), we set all the
+     *_LIBRARY variables manually to point at the proper locations in
+     the source tree. (When Tcl et al are installed, their
+     corresponding variables get set incorrectly, but tcl_findLibrary
+     will still find the correct installed versions.)
+
+     When not running from the build directory, we must set GDBTK_LIBRARY,
+     just in case we are running from a non-standard install directory
+     (i.e., Tcl and Insight were installed into two different
+     install directories). One snafu: we use libgui's Paths
+     environment variable to do this, so we cannot actually
+     set GDBTK_LIBRARY until libgui is initialized. */
+
+  if (running_from_builddir)
+    {
+      /* We check to see if TCL_LIBRARY, TK_LIBRARY,
+	 ITCL_LIBRARY, ITK_LIBRARY, and maybe a couple other
+	 environment variables have been set (we don't want
+	 to override the User's settings).
+
+	 If the *_LIBRARY variable is is not set, point it at
+	 the source directory. */
+      static char set_lib_paths_script[] = "\
+          set srcDir [file dirname $GDBStartup(srcdir)]\n\
+          if {![info exists env(TCL_LIBRARY)]} {\n\
+              set env(TCL_LIBRARY) [file join $srcDir tcl library]\n\
+          }\n\
+\
+          if {![info exists env(TK_LIBRARY)]} {\n\
+              set env(TK_LIBRARY) [file join $srcDir tk library]\n\
+          }\n\
+\
+          if {![info exists env(ITCL_LIBRARY)]} {\n\
+              set env(ITCL_LIBRARY) [file join $srcDir itcl itcl library]\n\
+          }\n\
+\
+          if {![info exists env(ITK_LIBRARY)]} {\n\
+              set env(ITK_LIBRARY) [file join $srcDir itcl itk library]\n\
+          }\n\
+\
+          if {![info exists env(IWIDGETS_LIBRARY)]} {\n\
+              set env(IWIDGETS_LIBRARY) \
+                     [file join $srcDir itcl iwidgets generic]\n\
+          }\n\
+\
+	  if {![info exists env(GDBTK_LIBRARY)]} {\n\
+	      set env(GDBTK_LIBRARY) [file join $GDBStartup(srcdir) gdbtk library]\n\
+	  }\n\
+\
+          # Append the directory with the itcl/itk/iwidgets pkg indexes\n\
+          set startDir [file dirname [file dirname [info nameofexecutable]]]\n\
+          lappend ::auto_path [file join $startDir itcl itcl]\n\
+          lappend ::auto_path [file join $startDir itcl itk]\n\
+          lappend ::auto_path [file join $startDir itcl iwidgets]\n";
+
+      command_obj = Tcl_NewStringObj (set_lib_paths_script, -1);
+      Tcl_IncrRefCount (command_obj);
+      Tcl_EvalObj (gdbtk_interp, command_obj);
+      Tcl_DecrRefCount (command_obj);
+    }
 
   make_final_cleanup (gdbtk_cleanup, NULL);
+
+  if (Tcl_Init (gdbtk_interp) != TCL_OK)
+    error ("Tcl_Init failed: %s", gdbtk_interp->result);
 
   /* Initialize the Paths variable.  */
   if (ide_initialize_paths (gdbtk_interp, "") != TCL_OK)
@@ -501,21 +501,27 @@ gdbtk_init (void)
   if (Tk_Init (gdbtk_interp) != TCL_OK)
     error ("Tk_Init failed: %s", gdbtk_interp->result);
 
-  if (Itcl_Init (gdbtk_interp) == TCL_ERROR)
-    error ("Itcl_Init failed: %s", gdbtk_interp->result);
-  Tcl_StaticPackage (gdbtk_interp, "Itcl", Itcl_Init,
-		     (Tcl_PackageInitProc *) NULL);
-
-  if (Itk_Init (gdbtk_interp) == TCL_ERROR)
-    error ("Itk_Init failed: %s", gdbtk_interp->result);
-  Tcl_StaticPackage (gdbtk_interp, "Itk", Itk_Init,
-		     (Tcl_PackageInitProc *) NULL);
-
   if (Tktable_Init (gdbtk_interp) != TCL_OK)
     error ("Tktable_Init failed: %s", gdbtk_interp->result);
 
   Tcl_StaticPackage (gdbtk_interp, "Tktable", Tktable_Init,
 		     (Tcl_PackageInitProc *) NULL);
+
+  /* If we are not running from the build directory,
+     initialize GDBTK_LIBRARY. See comments above. */
+  if (!running_from_builddir)
+    {
+      static char set_gdbtk_library_script[] = "\
+	  if {![info exists env(GDBTK_LIBRARY)]} {\n\
+	      set env(GDBTK_LIBRARY) [file join [file dirname [file dirname $Paths(guidir)]] insight1.0]\n\
+	  }\n";
+
+      command_obj = Tcl_NewStringObj (set_gdbtk_library_script, -1);
+      Tcl_IncrRefCount (command_obj);
+      Tcl_EvalObj (gdbtk_interp, command_obj);
+      Tcl_DecrRefCount (command_obj);
+    }
+
   /*
    * These are the commands to do some Windows Specific stuff...
    */
@@ -620,6 +626,7 @@ gdbtk_find_main";
     
   if (Tcl_GlobalEval (gdbtk_interp, (char *) script) != TCL_OK)
     {
+      struct gdb_exception e;
       const char *msg;
 
       /* Force errorInfo to be set up propertly.  */
@@ -631,18 +638,18 @@ gdbtk_find_main";
 	 If GDB wasn't started from the DOS prompt, the user won't
 	 get to see the failure reason.  */
       MessageBox (NULL, msg, NULL, MB_OK | MB_ICONERROR | MB_TASKMODAL);
-      {
-        struct gdb_exception e;
-        e.reason  = RETURN_ERROR;
-        e.error   = GENERIC_ERROR;
-        e.message = msg;
-        throw_exception (e);
-      }
 #else
-      /* FIXME: cagney/2002-04-17: Wonder what the lifetime of
-	 ``msg'' is - does it need a cleanup?  */
-      error ("%s", msg);
+      /* gdb_stdout is already pointing to OUR stdout, so we cannot
+	 use *_[un]filtered here. Since we're "throwing" an exception
+         which should cause us to exit, just print out the error
+         to stderr. */
+      fputs (msg, stderr);
 #endif
+
+      e.reason  = RETURN_ERROR;
+      e.error   = GENERIC_ERROR;
+      e.message = msg;
+      throw_exception (e);
     }
 
   /* Now source in the filename provided by the --tclcommand option.
