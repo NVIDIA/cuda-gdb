@@ -1,0 +1,1285 @@
+2008-08-02  Keith Seitz  <keiths@redhat.com>
+
+	* tcl.m4: Remove. I changed my mind.
+	* acinclude.m4: Include ../config/tcl.m4.
+	(CY_AC_TCL_PRIVATE_HEADERS): New macro.
+	(CY_AC_TK_PRIVATE_HEADERS): New macro.
+	* configure.ac: When using in-tree tcl/tk, include
+	Tcl's/Tk's platform directory.
+	When using installed Tcl/Tk, use CY_AC_{TCL,TK}_PRIVATE_HEADERS
+	to find the private header files.
+	* aclocal.m4: Regenerated.
+	* configure: Regenerated.
+	* library/Makefile.in: Regenerated.
+	* src/Makefile.in: Regenerated.
+
+2008-07-22  Keith Seitz  <keiths@redhat.com>
+
+	* tcl.m4: New file.
+	* acinclude.m4: Include tcl.m4 instead of ../config/acinclude.m4
+	* aclocal.m4: Regenerated.
+	* configure.ac: Do not check for ITCL_SH.
+	Use SC_PATH_TCLCONFIG, SC_PATH_TKCONFIG, SC_LOAD_TCLCONFIG, and
+	SC_LOAD_TKCONFIG to find Tcl and Tk.
+	Add some logic for when using in-tree Tcl/Tk.
+	Change substitutes for TCL_BUILD_LIB_SPEC, TK_BUILD_LIB_SPEC, and
+	TCLHDIR to accommodate using system-supplied Tcl and Tk.
+	* configure: Regenerated.
+	* Makefile.in: Regenerated.
+	* library/Makefile.am: Replace ITCL_SH with TCLSH.
+	Remove TCL_SHARED rules.
+	(tclIndex): Update build rules.
+	* library/Makefile.in: Regenerate.
+	* library/balloon.tcl: Update for Itcl 3.2/3.3.
+	* library/cframe.tcl: Likewise.
+	* library/lframe.tcl: Likewise.
+	* library/multibox.tcl: Likewise.
+	* library/sendpr.tcl: Likewise.
+	* library/ventry.tcl: Likewise.
+	* library/wframe.tcl: Likewise.
+	* src/Makefile.am (INCLUDES): Update.
+	* src/Makefile.in: Regenerate.
+	* src/paths.c (init_script): Accommodate builddir != srcdir.
+	
+2005-03-23  Martin Hunt  <hunt@redhat.com>
+
+	* configure.ac: Remove -fwritable-strings from CFLAGS.
+	* configure: Regenerate.
+
+2005-01-13  Keith Seitz  <keiths@redhat.com>
+
+	* configure.in: Rename to ...
+	* configure.ac: ... this.
+	* configure: Regenerate with autoconf 2.59.
+
+2004-03-31  Martin Hunt  <hunt@redhat.com>
+
+	* library/combobox.tcl (::combobox::Configure): Remove
+	debug line.
+
+2003-12-02  Martin Hunt  <hunt@redhat.com>
+
+	* library/combobox.tcl: Merge in latest changes
+	from Bryan Oakley.  Fixes a problem with Solaris
+	X servers.
+
+2003-02-11  Martin M. Hunt  <hunt@redhat.com>
+
+	* src/Makefile.am (libgui_a_SOURCES): Remove files that
+	are not used in Insight. Removed xpmlib.c, tclmain.c, 
+	tclwinfont.c, tkCanvEdge.c, tkGraphCanvas.c, 
+	tkCanvLayout.c, tkCanvLayout.h, tclmapi.c, tclwinmode.c, 
+	tclhelp.c, and tclgetdir.c.
+	* src/Makefile.in: Rebuilt.
+	
+2003-02-10  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/balloon.tcl (Balloon): Don't bind MB 3.
+	
+2003-02-03  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/combobox.tcl: Import combobox 2.2.1
+	* library/pkgIndex.tcl: Change combobox version to 2.2.1.
+
+2003-01-21  Martin M. Hunt  <hunt@redhat.com>
+
+	* src/tkTabletcl.h: Change all references of "tkPriv"
+	to "tk::Priv". Change all references of "tkCancelRepeat"
+	to "tk::CancelRepeat". Needed for tk 8.4.1.
+	* src/tkTable.tcl.h: Ditto.
+	* library/combobox.tcl: Ditto.
+	
+	* src/Makefile.am: Remove tclsizebox.c. 
+	* src/Makefile.in: Rebuilt.
+
+	* aclocal.m4: Rebuilt.
+	* Makefile.in: Rebuilt.
+	* configure: Rebuilt.
+	
+2002-12-03  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/pane.tcl: auto_mkindex cannot rebuild
+	tclIndex because it does not recognize the namespace
+	import in main.tcl.  To get it to work again, rename the
+	following:
+		body -> itcl::body
+		configbody -> itcl::configbody
+		class -> itcl::class
+	* library/panedwindow.tcl: Ditto.
+
+	* library/tclIndex: Regenerated.
+
+	* library/pkgIndex.tcl: Regenerated.
+
+2002-11-26  Martin M. Hunt  <hunt@redhat.com>
+
+	* Makefile.in: Remove Tix references.
+	* library/Makefile.in: Remove Tix references.
+	* src/Makefile.in: Remove Tix references.
+
+2002-09-20  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
+
+	* library/combobox.tcl (build): Add line missing from previous patch.
+
+2002-09-20  Fernando Nasser  <fnasser@totem.toronto.redhat.com>
+
+	* library/combobox.tcl (build): New variable to save grabs.
+	(widgetProc): Save and restore previous grabs.
+
+2002-07-03  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/panedwindow.tcl (_placePlanes): Make certain things 
+	are initialized before attempting to move panes.
+
+2002-06-07  Martin M. Hunt  <hunt@redhat.com>
+
+	* src/tkTableTag.c (Table_TagCmd): Don't decrement past
+	beginning of array.
+
+	* library/combobox.tcl (::combobox::configure): Don't
+	force background to white.
+
+2002-03-07  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/balloon.tcl (_set_variable): Set the public
+	variable before calling notifiers.  Set the help text
+	from the public variable afterwards.
+	(BALLOON_command_variable): Fix call with no args to
+	return variable name.
+
+2002-02-25  Ian Roxborough  <irox@redhat.com>
+
+	* src/library/looknfeel.tcl (standard_look_and_feel):
+	Hard code Windows menu font name to MS Sans Serif 8.
+
+2002-02-24  Mo DeJong  <supermo@bayarea.net>
+
+        * src/Makefile.am: Add -DSTATIC_BUILD so
+        that no __declspec() is used in function
+        delarations. This fixes the build under VC++.
+        * src/Makefile.in: Regen.
+
+2002-02-05  Jim Blandy  <jimb@redhat.com>
+
+	De-Cygnify libgui.
+	
+	* library/Makefile.am (guidir): Name dir `redhat', not `cygnus'.
+	* src/Makefile.am (guidir): Same.
+	* library/Makefile.in, src/Makefile.in: Regenerated.
+	* library/sendpr.tcl (itcl_class Sendpr): Update company name in
+	PR headers.
+	* src/paths.c: Rename environment variables CYGNUS_GUI_LIBRARY
+	and CYGNUS_IDE_LIBRARY to REDHAT_GUI_LIBRARY and
+	REDHAT_IDE_LIBRARY.  Name dir `redhat', not `cygnus'.
+
+2002-01-04  Ian Roxborough  <irox@redhat.com>
+
+	* src/tkCanvEdge.c (CreateEdge, EdgeCoords, ConfigureEdge):
+	Objectify functions to use Tcl_Obj instead of char**.
+
+	* src/tkGraphCanvas.c: Cut and paste parts of the new
+	Tcl8.3 tagsearch code in to replace old.  Rewrite much
+	of the code to use the new tagsearch features.
+
+2001-10-28  Christopher Faylor  <cgf@redhat.com>
+
+	* configure.in: Modify 2001-10-12 change to check for cygwin host
+	rather than cygwin target.
+	* configure: Regenerate.
+
+2001-10-26  Keith Seitz  <keiths@redhat.com>
+
+	* configure.in (ac_win_build): Actually want "-DWIN32" with
+	cygwin hosts, not just cygwin targets.
+	* configure: Regenerate.
+
+2001-10-24  Keith Seitz  <keiths@redhat.com>
+
+	* configure.in (ac_win_build): Put "-DWIN32" back into LIBGUI_CFLAGS.
+	* configure: Regenerate.
+
+2001-10-12  Christopher Faylor  <cgf@redhat.com>
+
+	* win/configure.in: Add detection for -mwin32 option requirement under
+	cygwin.
+	* win/configure: Regenerate.
+
+2001-10-10  Ian Roxborough  <irox@redhat.com>
+
+       * library/looknfeel.tcl (standard_look_and_feel):
+       Font changes to improve default look and feel.
+       Increase default font size, use helvetica for
+       menus, status bar and balloon help.
+	
+2001-09-08  Ian Roxborough <irox@redhat.com>
+
+	* all: Tcl/Tk8.3 upgrade merge.
+
+2001-09-02  Martin M. Hunt  <hunt@redhat.com>
+
+	* library/panedwindow.tcl (fraction): Remove method.
+	(_resizeArray): Correct calculations of _max
+	and _min for each pane.
+	(_moveSash): Take a third parameter, direction.
+	(_caclPos): Rename to _calcPos. Take an optional
+	third parameter, direction. This is so recursive calls
+	to _calcPos continue adjusting panes upward or downward
+	ans does not loop infinitely.
+	
+2001-08-24  Keith Seitz  <keiths@redhat.com>
+
+	* src/tkTable.tcl: Use "string compare" instead of "string
+	equal". The latter is only available in newer versions of
+	tcl.
+
+2001-08-12  Mo DeJong  <mdejong@redhat.com>
+
+	* src/tkCanvEdge.c: Work around Windows gcc problem
+	initializing a static member with a dll imported
+	symbol by assigning the function pointer at runtime.
+	Static initialization works just fine in VC++ but
+	fails when compiling with the Windows version of gcc.
+
+2001-08-12  Keith Seitz  <keiths@redhat.com>
+
+	Update tkTable to version 2.7:
+	* src/tkTableCmds.c, src/tkTable.tcl.h, src/tkTableCellSort.c,
+	src/tkTableEdit.c, src/tkTableInitScript.h, src/tkTablePs.c,
+	src/tkTableUtil.c, doc/tkTable.html: New files.
+	* src/tkTable.c, src/tkTable.h, src/TkTable.tcl, src/tkTableCell.c,
+	src/tkTableTag.c, src/tkTableWin.c, src/tkTable_version.in: Update to
+	version 2.7.
+	* configure.in: If compiling with cygwin, we need to have
+	WIN32 defined to build tkTable modules.
+	* configure: Regenerate.
+	* src/Makefile.am: Add new tkTable files and update build rules
+	for new version of tkTable.
+	* src/Makefile.in: Regenerate.
+
+2001-08-06  Mo DeJong  <mdejong@redhat.com>
+
+	* Makefile.in: Regen.
+	* configure: Regen.
+	* configure.in: Remove unused ITCL_DIR variable.
+	* library/Makefile.in: Regen.
+	* src/Makefile.in: Regen.
+
+2001-08-06  Mo DeJong  <mdejong@redhat.com>
+
+	* Makefile.in:
+	* library/Makefile.in:
+	* src/Makefile.in:
+	Regenerate Makefiles to account for AR fix
+	on 2001-08-03.
+
+2001-08-03  Mo DeJong  <mdejong@redhat.com>
+
+	* configure: Regen.
+	* configure.in: Check for cross AR using the
+	AC_CHECK_TOOL macro to fix cross compile. Use
+	AC_CHECK_TOOL instead of AC_PROG_RANLIB for
+	ranlib. The ranlib change is not required
+	but it is more correct. Move the call to
+	AC_CANONICAL_HOST up in the file.
+
+2001-08-03  Mo DeJong  <mdejong@redhat.com>
+
+	* src/tclhelp.c (help_display_file_command): Pass int
+	address to Tcl_GetInt instead of an unsigned long to
+	avoid compiler warning.
+
+2001-08-03  Mo DeJong  <mdejong@redhat.com>
+
+	* src/subcommand.c:
+	* src/tclgetdir.c:
+	* src/tclhelp.c:
+	* src/tclmain.c:
+	* src/tclmsgbox.c:
+	* src/tclsizebox.c:
+	* src/tclwinmode.c:
+	* src/tclwinpath.c:
+	* src/tclwinprint.c:
+	* src/tkWinPrintCanvas.c:
+	* src/tkWinPrintText.c:
+	Use ckalloc/ckfree instead of Tcl_Alloc/Tcl_Free
+	or malloc/free so that allocations will
+	be marked with file positions when Tcl mem
+	debug is activated.
+
+2001-08-02  Mo DeJong  <mdejong@redhat.com>
+
+	* src/tkWinPrintCanvas.c (PrintCanvasCmd):
+	* src/tkWinPrintText.c (PrintTextCmd): Plug
+	memory leak by calling free on memory allocated
+	in PrintCanvasCmd and PrintTextCmd method. Make
+	sure error cases branch to the cleanup code at
+	the end of the method instead of just returning.
+
+2001-08-02  Mo DeJong  <mdejong@redhat.com>
+
+	* src/tkWinPrintText.c (DisplayDLineToDrawable): Fix
+	compiler warning by adding missing static modifier
+	to funciton declaration.
+
+2001-08-02  Mo DeJong  <mdejong@redhat.com>
+
+	* config.h.in: Regen.
+	* configure: Regen.
+	* configure.in: Don't check for strdup since it
+	is no longer used in libgui.
+	* src/tclhelp.c (help_initialize_command): Replace
+	use of strdup with calls to malloc and strcpy.
+
+2001-08-02  Mo DeJong  <mdejong@redhat.com>
+
+	* src/tclhelp.c (help_command_deleted): Free the
+	help_command_data->help_dir member allocated in
+	help_initialize_command.
+
+2001-08-02  Mo DeJong  <mdejong@redhat.com>
+
+	* src/tkGraphCanvas.c (GetEdgeNodes): Use ckalloc
+	and strcpy instead of calling strdup() since this
+	memory is deallocated with ckfree() later on.
+
+2001-08-02  Mo DeJong  <mdejong@redhat.com>
+
+	* Makefile.in: Regen.
+	* configure: Regen.
+	* configure.in: Check for cross AR using the
+	AC_CHECK_TOOL macro to fix cross compile. Use
+	AC_CHECK_TOOL instead of AC_PROG_RANLIB for
+	ranlib. The ranlib change is not required
+	but it is more correct. Move the call to
+	AC_CANONICAL_HOST up in the file. Don't
+	set or subst ITCL_DIR since it is not used
+	and depends on pre Itcl 3.1 paths.
+	* library/Makefile.in: Regen.
+	* src/Makefile.in: Regen.
+	
+2001-05-18  Keith Seitz  <keiths@cygnus.com>
+
+	* library/center.tcl (center_window): Allow centering
+	the toplevel on a window, too.
+
+2001-05-03  Keith Seitz  <keiths@cygnus.com>
+
+	* src/tkWarpPointer.c (WarpPointer): Implement for windows.
+
+2001-04-06  Christopher Faylor <cgf@redhat.com>
+
+	* configure.in: Add test for -mwin32 requirement switch when building
+	on cygwin.
+	* configure: Regenerate.
+
+2000-11-30  Tom Tromey  <tromey@cygnus.com>
+
+	* library/balloon.tcl (balloon): Document `balloon withdraw'.
+
+2000-11-27  Tom Tromey  <tromey@cygnus.com>
+
+	* library/debug.tcl (logfile): Also recognize stderr.
+
+2000-07-12  Syd Polk  <spolk@redhat.com>
+
+	* library/Makefile.am: Only regenerate tclIndex and pkgIndex.tcl
+	if this is configured with --enable-maintainer-mode.
+
+2000-07-11  Mo DeJong  <mdejong@redhat.com>
+
+	* README:
+	* library/Makefile.am:
+	* library/Makefile.in:
+	* library/tclIndex:
+	* library/tree.tcl:
+	* library/treetable.tcl:
+	* src/Makefile.am:
+	* src/Makefile.in:
+	* src/guitcl.h:
+	* src/tkTreeTable.c:
+	* src/tkTreeTable.h: Moved implementation of
+	"treetable" command out back into snavigator.
+
+2000-07-06  Mo DeJong  <mdejong@redhat.com>
+
+	* library/debug.tcl (logfile): Use non-blocking IO.
+	* library/tree.tcl (set_column_filter, bind, exchange,
+	ide_treetable): Don't fully qualify global commands.
+	Use itcl::delete. Use non-blocking IO. Rename bind
+	method to __bind. Brace exprs. Set default value
+	for when_post_menu variable. Itcl 3.0 fixups.
+
+2000-06-30  Mo DeJong  <mdejong@redhat.com>
+
+	* library/tree.tcl: Fix typo made in patch
+	from 2000-06-22.
+
+2000-06-30  Syd Polk  <spolk@cygnus.com>
+
+	* src/paths.c: Chris Faylor's path changes from 2000-06-09 blow
+	out MSVC's stupid path limitation. This is only a problem
+	for Source-Navigator.
+
+2000-06-22  Mo DeJong  <mdejong@redhat.com>
+
+	* library/tree.tcl: Remove use of watch
+	command. Add check to see if toplevel
+	exists to avoid error.
+
+2000-06-22  Mo DeJong  <mdejong@redhat.com>
+
+	* src/tkGraphCanvas.c (GetEdgeNodes): Fixed
+	crash in ckfree caused by call to strdup that
+	was later freed using ckfree.
+
+2000-06-19  Syd Polk  <spolk@redhat.com>
+
+	* configure.in: Use CYG_AC_PATH_ITCLCONFIG and CYG_AC_LOAD_ITCLCONFIG
+	instead of using exising itclsh.
+	* aclocal.m4: Regenerated with new ../config/acinclude.m4.
+	* configure: Regenerate.
+	* Makefile.in library/Makefile.in src/Makefile.in: Regenerate.
+
+Fri Jun  9 20:43:40 2000  Christopher Faylor <cgf@cygnus.com>
+
+	* src/paths.c (initialize_paths): Look in /usr/share for stuff.
+
+2000-04-18  James Ingham  <jingham@leda.cygnus.com>
+
+	* library/toolbar.tcl (TOOLBAR_button_up): If the pointer is still 
+	in the button, reraise the button after a press.
+
+2000-04-03  James Ingham  <jingham@leda.cygnus.com>
+
+	* src/paths.c: Follow links in determining the location of the
+	executable.
+
+Fri Sep 17 19:14:15 1999  Andrew Cagney  <cagney@b1.cygnus.com>
+
+	* src/guitcl.h (cyg_create_warp_pointer_command): Add declaration.
+
+1999-09-07  Jim Ingham <jingham@cygnus.com>
+
+        * library/tclIndex: Rebuild - this somehow got built wrong,
+	leaving out all the debug, and all the panedwindow references.
+
+1999-09-02  Syd Polk  <spolk@cygnus.com>
+
+	* library/Makefile.am: Revert bad merge
+	* library/Makefile.in: Regenerate
+
+1999-08-10  James Ingham  <jingham@leda.cygnus.com>
+
+	* library/balloon.tcl (BALLOON_command_withdraw): New command, use 
+	to remove the balloon before it's timeout has expired.
+
+1999-08-02  James Ingham  <jingham@leda.cygnus.com>
+
+	* library/combobox.tcl (::combobox::setValue): Call the combobox
+	command after idle, so the menu gets a chance to unpost itself
+	before the command is run.
+
+1999-05-26  Ian Roxborough <irox@cygnus.com>
+
+	* library/combobox.tcl: If a combobox is not editable then
+	make the background of the text box white.
+
+1999-04-29  Syd Polk  <spolk@cygnus.com>
+
+	* src/paths.c: Add a scaled-down version of path initialization
+	in Visual C++ build.
+
+1999-04-28  Syd Polk  <spolk@cygnus.com>
+
+	* acinclude.m4: Add from devo.
+	* aclocal.m4: Regenerate.
+	* configure: Regenerate.
+	* Makefile.in: Regenerate.
+	* library/Makefile.am: Use auto_mkindex to generate tclIndex. The
+	itcl1.5 one generates bogus entries sometimes.
+	* library/Makefile.in: Regenerate.
+	* src/Makefile.in: Regenerate.
+
+1999-04-17  Syd Polk  <spolk@cygnus.com>
+
+	* Revert merge. I checked in itcl3.0 code into a itcl 1.5 branch.
+
+1999-04-22  Khamis Abuelkomboz  <khamis@cygnus.com>
+
+	* library/tree.tcl (treetable_bindings): moved the default bindings
+ 	source code from SN into the file to build unseparated unit. The
+	bindings themself relay (compatible) on the listbox bindings.
+	-the bindings are defined when ever the file is loaded, so no
+	need to call the function extra.
+
+1999-04-07  Khamis Abuelkomboz  <khamis@cygnus.com>
+
+	* library/tree.tcl (print_dialog_box): deleted reference to -leader
+	option of the print dialog.
+	(Tree): added a new public variable to specify a customer
+	post command for the right-mouse menu.
+
+	* library/toolbar.tcl (TOOLBAR_button_leave): synchronize enter/leave
+	to not mismatch a relief change.
+
+1999-03-30  Khamis Abuelkomboz  <khamis@cygnus.com>
+
+	* library/tclIndex: regenerated.
+
+	* library/tree.tcl (start_motion): by changing column size use only a
+	black line.
+
+	* library/toolbar.tcl (TOOLBAR_button_up): patched toolbar procedures
+	to support buttons that interact like chechbuttons (remain flat or
+	sunken). The button keeps it's original relief after the pointer
+ 	leaves the widget.
+	(TOOLBAR_button_up): How the bindings are made for the toolbar buttons
+	is wrong. I patched it to work now for SN, but it must be a general
+	fix, even for gdbtk. When you bind events to the button use please
+	{+ ...} to keep existing bindings for the widget.
+	(TOOLBAR_command): new. To change the relief state of a checkbutton-
+	like widgets from the application.
+
+1999-03-29  Martin Hunt  <hunt@cygnus.com>
+
+	* library/combobox.tcl (::combobox::computeGeometry): Calculate
+	geometry based on whole thing, including scrollbar. This fixes
+	the problem from the last couple of months where the popup list
+	box was not below the dropdown button unless there was a scrollbar.
+
+1999-03-29  Syd Polk  <spolk@cygnus.com>
+
+	* src/paths.c: Added initialization back in for Visual C++
+	build. Pared it down so that VC++ can actually compile it.
+	Stupid MS 2048 character limit.
+
+1999-03-17  Khamis Abuelkomboz  <khamis@cygnus.com>
+
+	* library/tree.tcl (create_tabs): patched the tree table to support
+	resizing a column when moving around the column line.
+	(button_motion): new function realized resizing the columns using an
+	area mode.
+
+1999-03-15  Ian T Roxborough  <irox@cygnus.com>
+
+	* library/combobox.tcl(combobox::configure): On Windows draw a black
+	box around the popup for a better Windows look'n'feel.
+
+1999-03-15  Khamis Abuelkomboz  <khamis@cygnus.com>
+
+	* library/tree.tcl: Placed here from SN tree to allow other parties
+	to use it for there own applications. If you want to see how it is
+	used, please refer to snavigator/gui/*.tcl.
+
+	* library/Makefile.in: added tree.tcl as part of the library.
+
+	* library/Makefile.am: likewise.
+
+Wed Mar 10 19:44:31 1999  Geoffrey Noer  <noer@cygnus.com>
+
+	* src/tclgetdir.c: Need to also include shlobj.h if we're
+	using standard Win32 API headers (not the old set of Cygwin
+	headers).
+
+1999-03-09  Ian T Roxborough  <irox@cygnus.com>
+
+	* library/combobox.tcl(combobox::configure): On Windows
+	if -editable is 0, use a standard background for the
+	entry widget (better windowz look'n'feel)
+
+Fri Mar  5 11:00:54 1999  Khamis Abuelkombuz  <khamis@cygnus.com>
+
+	* src/tkGraphCanvas.c: fixed the hash problem. Uses a hash table that
+        is associated with the interp rather to use a static hash table.
+
+1999-03-04  Syd Polk  <spolk@cygnus.com>
+
+	* src/tkTreeTable.c: Re-fixed SunOS build problem.
+
+Wed Mar  3 16:57:21 1999  Khamis Abuelkombuz  <khamis@cygnus.com>
+
+	* src/tkGraphCanvas.c: fixed the hash problem. Uses a hash table that
+	is associated with the interp rather to use a static hash table.
+
+1999-03-03  James Ingham  <jingham@cygnus.com>
+
+	* library/combobox.tcl (::combobox::setValue): Call the command in 
+	an after idle, so that the combobox gets a chance to unpost before 
+	the action is taken.
+
+1999-02-23  Martin Hunt  <hunt@cygnus.com>
+
+	* src/paths.c: Change error message so that it says
+	it can't find "GUI" library instead of "IDE" library.
+
+1999-02-18  Martin Hunt  <hunt@cygnus.com>
+
+	* library/hooks.tcl (run_hooks): Cleanup error message.
+
+1999-02-17  Martin Hunt  <hunt@cygnus.com>
+
+	* library/internet.tcl (open_url): Change to open another
+	window for Netscape on Unix.  Returns 0 on failure, 1 on 
+	success.
+
+1999-02-11  Syd Polk  <spolk@cygnus.com>
+
+	* configure.in: Fixed problem with comparison to xcl.
+	* configure: Regenerated.
+
+1999-02-10  Syd Polk  <spolk@cygnus.com>
+
+	* configure.in: Find the correct itclsh.
+	Fixed problem with cygwin build. Should not need cygpath
+	to configure.
+	* configure: Regenerated.
+
+1999-02-10  Martin Hunt  <hunt@cygnus.com>
+
+	* library/bgerror.tcl (bgerror): Do not use the old debug
+	preferences.  Write errors into debug window.  Keep old
+	dialog for now, although it should probably either go away
+	or be replaced by instructions on how to file a PR.
+
+1999-02-09  Martin Hunt  <hunt@cygnus.com>
+
+	* library/panedwindow.tcl (cyg::PanedWindow): Add -sashcolor
+	option.
+	(cyg::PanedWindow::sashcolor): New config method.
+	(cyg::PanedWindow::_makeSashes): Set sash color.
+
+1999-02-01  James Ingham  <jingham@cygnus.com>
+
+	* src/paths.c: Put in some missing \n\'s.
+
+1999-01-22  Jim Ingham  <jingham@cygnus.com>
+
+       Merging changes in from gdbtk-980810-branch
+
+	1999-01-22  Martin Hunt  <hunt@cygnus.com>
+
+	* library/panedwindow.tcl (cyg::PanedWindow::delete): Fix
+	variable name so this function works again.
+	* src/tkWarpPointer.c: New file. Implements tcl function
+	warp_pointer, used by the testsuite. 
+	* src/Makefile.am: Added tkWarpPointer.c.
+	
+	1998-12-17  Martin M. Hunt  <hunt@cygnus.com>
+
+	* library/panedwindow.tcl (cyg::PanedWindow::sashwidth): Change
+	borderwidth to 2.
+	(cyg::PanedWindow::_makeSashes): Ditto.
+	(cyg::PanedWindow::delete): Free up the space in the _frac
+	array when a pane is deleted.
+	(cyg::PanedWindow::hide): Ditto.
+	(cyg::PanedWindow::replace): New function. Replaces an active
+	pane with an inactive (hidden) one. 
+	
+	1998-12-16  Martin M. Hunt  <hunt@cygnus.com>
+
+	* library/panedwindow.tcl: New file. Implements
+	cyg::PanedWindow which is a generic paned window supporting
+	non-resizable panes, individual max and min pane sizes. It
+	has a very different look from the iwidget panedwindow.
+	
+	* library/pane.tcl: New file.  Basically an extended pane.itk
+	from the iwidgets distribution.
+
+        1998-08-10  Jim Ingham   <jingham@cygnus.com>
+
+        * src/paths.c: Figure out how to run from the build tree.
+
+1999-01-14  Ben Elliston  <bje@cygnus.com>
+
+	* src/tkTreeTable.c: Remove unnecessary #includes that collide
+	with Tcl's compat headers.
+
+1998-12-14  Ian Roxborough  <irox@cygnus.com>
+
+	* src/tclwinfont.c (win_choose_font): convert all result strings
+	to utf8 format if using tcl/tk8.1.
+
+1998-12-12  Ian Roxborough  <irox@cygnus.com>
+	* src/tclgetdir.c (get_directory_command): Make sure that
+	the parent is getting redrawn if the dialog box moves.
+	* src/tclwinfont.c (win_choose_font): Make sure that
+	the parent is getting redrawn if the dialog box moves.
+
+1998-12-12  Khamis Abuelkomboz  <khamis@cygnus.com>
+
+	* src/tkTreeTable.c (DisplayRecursive): use metrics.descent by
+	displaying the active line.
+
+1998-12-11  Syd Polk  <spolk@cygnus.com>
+
+	* src/tkgetdir.c: The arguments to this need to be
+	converted from UTF-8 and the return value needs to
+	be converted to UTF-8 in Tcl 8.1.
+
+1998-11-30  Ian Roxborough  <irox@cygnus.com>
+
+	* src/tkWinPrintCanvas.c (PrintCanvasCmd): return OK
+	if the user hits cancel.
+	* src/tkGraphCanvas.c (GraphCanvasCmd): changed to free()s
+	to ckfree()s.
+
+1998-11-17  Ian Roxborough  <irox@cygnus.com>
+
+	* src/tkWinPrintText.c (PrintTextCmd): Disable the print
+	selection until it is implemented properly.
+
+1998-11-17  Ben Elliston  <bje@cygnus.com>
+
+	* src/tkTreeTable.h: Merge from Source-Navigator.
+
+	* src/tkTreeTable.c: Likewise.
+	
+1998-11-16  Ian Roxborough  <irox@cygnus.com>
+
+	* src/tkWinPrintText.c (PrintTextCmd): return OK
+	if the user hits cancel.
+
+1998-11-11  Khamis Abuelkomboz  <khamis@cygnus.com>
+
+	* src/tkTreeTable.c: using tcl/memory allocation functions.
+
+	* src/tkCanvLayout.c (LayoutClearGraph): check parent/succ for
+ 	availiability before freeing it.
+
+1998-06-04  Jim Blandy  <jimb@zwingli.cygnus.com>
+
+	* configure.in: Use AM_PROC_CC_STDC, since this directory requires
+	ANSI C in order to compile.
+	* aclocal.m4, configure: Regenerated.
+
+Thu Dec 17 11:46:04 1998  Keith Seitz  <keiths@cygnus.com>
+ 
+        * library/combobox.tcl (::combobox::computeGeometry): Allow
+        the listbox to expand larger than the limits of the combobox.
+        (::combobox::widgetProc): Pack the scrollbar before the listbox
+        so that scroll remains visible when the combobox shrinks.
+        (::combobox::build): Ditto for the button.
+
+Sun Nov  8 23:52:31 1998  Felix Lee  <flee@cygnus.com>
+
+	* configure.in (ac_win_build): quoting fix.
+	* configure: regenerated.
+
+Wed Nov  4 18:46:13 1998  Dave Brolley  <brolley@cygnus.com>
+
+	* acinclude.m4: New file.
+	* Makefile.in: Regenerated.
+	* aclocal.m4: Regenerated.
+	* configure: Regenerated.
+
+1998-11-04  Ian Roxborough  <irox@cygnus.com>
+
+	* src/tkWinPrintText.c (PrintTextCmd): For Tk 8.1 call
+	TkTextMakeByteIndex, otherwise call TkTextMakeIndex.
+	* src/tkWinPrintText.c: Remove some compiler warnings.
+	* src/tkWinPrintCanvas.c: Remove some compiler warnings.
+
+1998-11-02  Ben Elliston  <bje@cygnus.com>
+
+	* src/xpmlib.c (LONGBITS): Take the sizeof `long', not
+	`LONG'. Most UNIX environments have no such macro.
+
+1998-10-30  Ian Roxborough  <irox@cygnus.com>
+
+	* src/xpmlib.c (ImgXpmGetPixmapFromData): calculate the
+	bitmap pading the same the tk x-emulation layer does.
+
+1998-10-29  Ben Elliston  <bje@cygnus.com>
+
+	* configure.in: Look for itcl_sh in the PATH.
+	* configure: Regenerate.
+	* library/Makefile.am: Use discovered path to itcl_sh.
+	* library/Makefile.in: Regenerate.
+	* Makefile.in: Likewise.
+	* src/Makefile.in: Likewise.
+
+1998-10-28  Syd Polk  <spolk@cygnus.com>
+
+	* configure.in: Generate a TCL_LIBRARY for itcl_sh to use.
+	* configure: Regenerate
+	* library/Makefile.am: Use generated TCL_LIBRARY.
+	* library/Makefile.in: Regenerate.
+
+1998-10-28  Syd Polk  <spolk@cygnus.com>
+
+	* configure.in: Generate correctly formatted directories for itcl_sh
+	* configure: Regenerate
+	* library/Makefile.am: Pass correctly formatted directories to itcl
+	so that it does not get confused with cygwin paths when generating
+	tclIndex.
+	* library/Makefile.in: Regenerate
+
+1998-10-27  Syd Polk  <spolk@cygnus.com>
+
+	* configure.in: Add test and AM_CONDITIONAL for Windows.
+	* library/Makefile.am: On Windows, piping output straight from pwd
+	to itcl_sh.exe does not work if build is not on /. Wrap the pwd
+	in a cygpath.
+	* configure: Regenerate
+	* library/Makefile.in: Regenerate.
+
+1998-10-27  Syd Polk  <spolk@cygnus.com>
+
+	* src/Makefile.am: Fix TKHDIR problems.
+	* src/Makefile.in: Regenerate.
+
+1998-10-26  Syd Polk  <spolk@cygnus.com>
+
+	* configure.in: Use TCLHDIR instead of TCL_BUILD_INCLUDES and
+	TKHDIR instead of TK_BUILD_INCLUDES
+	* configure: Regenerate
+	* src/Makefile.am: Use TCLHDIR instead of TCL_BUILD_INCLUDES
+	TKHDIR instead of TK_BUILD_INCLUDES
+	* src/Makefile.in: Regenerate
+
+Mon Oct 26 09:19:34 1998  Ian Roxborough  <irox@cygnus.com>
+
+	* src/Makefile.am: Add tkWinPrintText.c and tkWinPrintCanvas.c
+	* src/tkWinPrintText.c: removed a MSVC++ headerfile and
+	protected the file with pragmas (_WIN32) so it isn't
+	compiled on Unix builds.
+	* src/tkWinPrintCanvas.c: Same as tkWinPrintText.c
+	* src/tkWinPrintText.c (PrintTextCmd): Trick TkTextXviewCmd into
+	calling UpdateDisplayInfo, this means tk doesn't need patched.
+	Cleaned up/added some comments.
+
+1998-10-20  Syd Polk  <spolk@cygnus.com>
+
+	* aclocal.m4: Added include for standard macros to locate tcl and tk
+	* configure.in: Use standard macros for tcl and tk
+	* configure: Regenerated
+	* Makefile.in: Regenerated with latest automake
+	* library/Makefile.in: Regenerated with latest automake
+	* src/Makefile.am: Don't use hard-coded pathnames for tcl and tk
+	directories; use variables instead
+	* src/Makefile.in: Regenerated
+
+1998-10-14  Syd Polk  <spolk@cygnus.com>
+
+	* src/tclwinfont.c: Compile fix for tcl 8.1.
+
+Wed Oct 14 13:01:00 1998  Ian Roxborough  <irox@cygnus.com>
+
+	*src/xpmlib.c (ImgXpmGetPixmapFromData): Fix pixmaps
+	on windows (SN problem), if pixmap mask width <= half the
+	bit padding, then things got messed up. (mayby a bug in
+	the X-emulation layer).
+	- Remove some old commented out code.
+
+Fri Oct  9 10:04:00 1998  Ian Roxborough  <irox@cygnus.com>
+
+	* src/xpmlib.c (ImgXpmGetPixmapFromData): set memory allocated
+	for the mask to zero before using.
+
+1998-10-05  Syd Polk  <spolk@cygnus.com>
+	
+	* configure: Regenerated with new autoconf
+
+Mon Oct  5 00:53:59 1998  Martin M. Hunt  <hunt@cygnus.com>
+
+	* library/balloon.tcl (showballoon): Add "keep" parameter
+	to tell balloon messages to not go away after 6 seconds.
+	(BALLOON_command_show): Ditto.
+
+Wed Sep 30 9:35:00 1998  Ian Roxborough  <irox@cygnus.com>
+
+	*src/tkprintcanvas.c: New file, for printing a canvas under windows.
+
+Mon Sep 21 15:45:17 1998  Martin M. Hunt  <hunt@cygnus.com>
+
+	* library/combobox.tcl (::combobox::setValue): Fix
+	instance when value has an embedded space.
+
+Thu Sep  3 19:10:00 1998  Sean Mahan  <smahan@cygnus.com>
+
+	* src/tclgetdir.c: Change C++ style comments to C style.
+
+Thu Sep  3 18:45:00 1998  Sean Mahan  <smahan@cygnus.com>
+
+	* src/tclhelp.c: Change C++ style comments to C style.
+
+Mon Aug 31 11:55:00 1998  Ian Roxborough  <irox@cygnus.com>
+
+	*src/tclgetdir.c: Add definition for SHBrowseForFolderA.
+	(it was missing from cygwin.)
+
+Mon Aug 31 11:33:00 1998  Syd Polk  <spolk@cygnus.com>
+
+	*configure.in library/Makefile.am src/Makefile.am: Tcl/Tk 8.1
+	require -fwritable strings.
+	*configure Makefile.in library/Makefile.in src/Makefile.in:
+	Regenerated.
+
+Fri Aug 28 18:15:25 1998  Ian Roxborough  <irox@cygnus.com>
+
+	*src/tclgetdir.c: Added missing (from cygwin) #defines for BFFM_*.
+
+Wed Aug 26 14:01:25 1998  Ian Roxborough  <irox@cygnus.com>
+
+	*src/tclgetdir.c (get_directory_command): free up
+	memory allocated with Tcl_DString.
+
+Wed Aug 26 14:01:25 1998  Ian Roxborough  <irox@cygnus.com>
+
+	Added "-initialdir <dir>" to the ide_get_directory
+	command.
+
+	*src/tclgetdir.c (get_directory_command): added flag
+	handling and set callback to change selected directory.
+	(MyBrowseCallbackProc): New function, sets selected
+	directory once initialization has been completed.
+
+Tue Aug 25 18:31:16 1998  Martin M. Hunt  <hunt@cygnus.com>
+
+	* library/combobox.tcl: Fix previous checkin.
+
+Tue Aug 25 17:22:36 1998  Martin M. Hunt  <hunt@cygnus.com>
+
+	* library/combobox.tcl (::combobox::configure): Remove
+	scrollbar width hack. Set foreground and background colors
+	for non-editable and disabled widgets.
+
+Tue Aug 25 16:06:34 1998  Martin M. Hunt  <hunt@cygnus.com>
+
+	* library/combobox.tcl (::combobox::doInternalWidgetCommand): 
+	Add "Curselection" widget command.
+
+Fri Aug 21 12:48:09 1998  Martin M. Hunt  <hunt@cygnus.com>
+
+	* library/combobox.tcl: Merge my changes into the
+	new 1.05 combobox code.
+	(entryset): New command that sets the contents of
+	the entry field without triggering any commands.
+
+Fri Aug 21 11:38:35 1998  Ian Roxborough  <irox@cygnus.com>
+
+	Integrated changes between Source-Navigator's
+	hyper/tkCanvas.c and libgui's src/tkGraphCanvas.c.
+	Add a new option (-gridlock) to switch between
+	SN style (-gridlock 1) and the old style.
+
+	*src/tkGraphCanvas.c (graphspecs[]): add gridlock
+	option (1 = ON, 0 = OFF).
+	(setedgegeom): added a new parameter (int i) and
+	code to keep lines running a X or Y axis only.
+	(GetGraphLayoutII): new function (same as GetGraphLayout
+	but takes TkCanvas as parameter).
+	(GraphCanvasCmd): use extra parameter when calling
+	setedgegeom.
+	*src/tkCanvLayout.c (struct Layout_Graph): add int
+	gridlock.
+	(LayoutCreateGraph): initalise 'gridlock'.
+	(GetLayoutConfig): copy 'gridlock' when getting.
+	(SetLayoutConfig): copy back 'gridlock' when setting.
+	*src/tkCanvLayout.h (struct LayoutConfig): add
+	'gridlock' member.
+
+1998-08-20  Keith Seitz  <keiths@cygnus.com>
+
+	* src/tclwinprint.c (winprint_print_text_options): Intialize the "initproc"
+	for struct print_text_options.
+
+
+Tue Aug 18 15:39:53 1998  Martin M. Hunt  <hunt@cygnus.com>
+
+	* library/Makefile.am (pkgIndex.tcl): Make this
+	require maintainer mode.
+
+Mon Aug 17 16:20:38 1998  Martin M. Hunt  <hunt@cygnus.com>
+
+	* library/Makefile.am (ITCL_SH): Revert previous change.
+
+Mon Aug 17 14:44:31 1998  Martin M. Hunt  <hunt@cygnus.com>
+
+	* library/Makefile.am (WISH): Run itcl_wish from the 
+	proper place.
+
+Mon Aug 17 13:20:09 1998  Martin M. Hunt  <hunt@cygnus.com>
+
+	* library/combobox.tcl (::combobox::build): Initialize
+	oldValue. Don't pack scrollbar.
+	(::combobox::widgetProc): When items are inserted or deleted 
+	from the list, pack or forget the scrollbar, depending on 
+	the size of the list and the max height.
+	(::combobox::setValue): Call the command callback even if 
+	the value selected was the same as the previous value.
+	(::combobox::configure): Change listbox width as well 
+	as entry width. This keeps the scrollbar from being
+	truncated.
+	(::combobox::configure): Replace "oldValue" with "oldval" 
+	to avoid confusion with the variable that saves the 
+	previous value for the entry. Fixes several bugs.
+	(::combobox::widgetProc): Unset tmpopt.
+	(::combobox::widgetProc): Pass the listbox widget to the 
+	computeGeometry proc so it can use it in its computations.
+	(::combobox::computeGeometry): Compute size of popup by 
+	requested size of listbox plus twice the bordersize of 
+	the popup.
+
+Thu Aug 13 22:55:36 1998  Martin M. Hunt  <hunt@cygnus.com>
+
+	* configure.in: Add AC_OBJEXT call.
+	* configure: Rebuilt.
+
+Thu Aug 13 00:47:08 1998  Martin M. Hunt  <hunt@cygnus.com>
+
+	* library/combobox.tcl: Fix -editable.
+
+Wed Aug 12 10:41:45 1998  Matt Leach  <mleach@cygnus.com>
+
+	* src/tclhelp.c: added !WIN32 entries for Webhelp
+
+=======
+Tue Aug 18 15:39:53 1998  Martin M. Hunt  <hunt@cygnus.com>
+
+	* library/Makefile.am (pkgIndex.tcl): Make this
+	require maintainer mode.
+
+Mon Aug  3 01:29:05 1998  Martin M. Hunt  <hunt@cygnus.com>
+
+	* library/combobox.tcl: New file. Windows style
+	combobox.
+	* library/pkgIndex.tcl: New file.
+	* library/Makefile.am: Added combobox.tcl.
+	* library/Makefile.in, library/tclIndex: Rebuilt.
+	* configure: Rebuilt.
+
+Mon Jul 20 13:36:33 1998  Ian Roxborough    <irox@cygnus.com>
+
+	* src/tclhelp.c: include missing headerfile on Windows.
+	* src/tkCanvEdge.c: defined F_OK to be 0 on Windows.
+	* src/tclmain.c: include missing headerfile on Windows.
+	* src/tclmsgbox.c (msgbox_thread): type should be WINAPI.
+	* src/paths.c (init_script[]): Due to string length limits
+	with the MSVC compiler, the init_script we now return a
+	error message when compiled with VC++.
+	* src/Makefile.am: Change all '.o' to '.$(OBJEXT)'
+	* configure.in: Added AC_OBJEXT and changed AM_EXEEXT to
+	AC_EXEEXT.
+
+Fri Jul 10 19:17:53 1998  Jim Ingham    <jingham@cygnus.com>
+
+	* src/tkTable* Upgraded tkTable to version 2.1
+
+Fri Jul 10 11:29:00 1998  Sean Mahan  <smahan@cygnus.com>
+
+	* src/paths.c (constant run_app_script): Fixed to work with
+	latest version of the TclPro debugger (1.0 beta 3).
+
+1998-06-30  Ben Elliston  <bje@cygnus.com>
+
+	* src/tclgetdir.c: Merged from S-N.
+
+	* src/tclwinprint.c: Merged from S-N.  Includes new options for 
+	PostScript printing and once-per-job initialisation.
+
+	* src/tkCanvLayout.c: Merged from S-N.  Mostly cleanup.
+
+	* src/tkCanvEdge.c: Merged from S-N.  Handle justified and
+	multi-line labels.
+
+Fri Jun 26 17:57:00 1998  Sean Mahan  <smahan@cygnus.com>
+
+	* src/paths.c (init_script): fixed `prefix' path.
+
+Mon Jun 22 14:15:36 1998  Drew Moseley  <dmoseley@cygnus.com>
+
+	* src/paths.c: Added TCLPRO_DEBUGGER code
+
+Thu Jun  4 18:00:27 1998  Martin M. Hunt  <hunt@cygnus.com>
+
+	* src/tkTable*: Imported Jeffrey Hobbs tkTable 2.0
+	widget.
+	* src/Makefile.am: Add tkTable stuff.
+	* src/Makefile.in: Rebuilt.
+	* Makefile.in: Rebuilt.	
+	* doc/tkTable.n: Man page for tkTable.
+	
+Thu May 14 10:45:00 1998  Sean Mahan  <smahan@cygnus.com>
+
+	* library/prefs.tcl (PREFS_cmd_init): Changed name of global
+	variable from "IDE" to "IDE_ENABLED".
+	* src/tclmain.c (ide_main): Setup TCL global variable based
+	on the defined value of "IDE_ENABLED".
+	* configure.in: Changed "IDE" define to "IDE_ENABLED".
+	* configure: regenerated.
+	* acconfig.h: Changed "IDE" to "IDE_ENABLED" and made sure that
+	"IDE_ENABLED" would always be defined (either as 0 or 1).
+	* config.h.in: regenerated.
+
+Wed May 13 10:05:00 1998  Sean Mahan  <smahan@cygnus.com>
+
+	* library/prefs.tcl (PREFS_cmd_init):  Revert change by hunt that 
+	used global variable "GDBTK_IDE" instead of libgui variable "IDE".
+	* configure.in: added support for "--enable-ide" option.
+	* configure: regenerated.
+	* acconfig.h: added define for "IDE".
+	* config.h.in: regenerated.
+
+Wed May  6 14:54:47 1998  Ben Elliston  <bje@cygnus.com>
+
+	* src/xpmlib.c (ImgXpmGetData): Preinitialise some local variables.
+	(GetColor): Removed an unused local variable.
+	(ImgXpmGetPixmapFromData): Likewise.
+
+Thu Apr 30 19:16:13 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* src/paths.c (run_app_script): Don't crash if Paths(appdir) or
+	Paths(idedir) was not set.
+
+Thu Apr 23 13:52:13 1998  Tom Tromey  <tromey@cygnus.com>
+
+	* src/tclgetdir.c (get_directory_command): Pass -choosedir to
+	tk_getOpenFile.
+
+Wed Apr 15 16:47:00 1998  Sean Mahan  <smahan@cygnus.com>
+
+	* src/tclhelp.c (help_display_file_command): new function to
+	display a specified help file.
+	(ide_subcommand_table): added `display_file' subcommand.
+
+Thu Apr  9 14:19:08 1998  Martin M. Hunt  <hunt@cygnus.com>
+
+	* library/prefs.tcl (PREFS_cmd_init): Use global
+	variable "GDBTK_IDE" instead of "IDE".
+
+Tue Apr  7 12:41:59 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* src/Makefile.am (libgui_a_SOURCES): Add tclcursor.c.
+	(tclcursor.o): New target.
+	* src/Makefile.in: Rebuild.
+
+Tue Mar 31 14:52:31 1998  Tom Tromey  <tromey@cygnus.com>
+
+	* library/Makefile.in: Rebuilt.
+	* library/Makefile.am (TCL): Added ventry.tcl.
+	* library/ventry.tcl: Moved from libide.
+
+Tue Mar 31 16:58:34 1998  Ian Lance Taylor  <ian@cygnus.com>
+
+	* src/paths.c: Rewrite Tcl code to search $prefix/share/cygnus for
+	gui and ide directories.  Change environment variable names to
+	CYGNUS_GUI_LIBRARY and CYGNUS_IDE_LIBRARY.  Permit application
+	directory to be a sibling of the parent of the gui or ide
+	directory.
+	* library/Makefile.am (guidir): Add `cygnus' between `$(datadir)'
+	and `gui'.
+	* library/Makefile.in: Rebuild.
+	* configure: Rebuild with current autoconf.
+
+Mon Mar 30 12:28:06 1998  Tom Tromey  <tromey@cygnus.com>
+
+	* library/tclIndex: Rebuilt.
+
+	* library/Makefile.in: Rebuilt.
+	* library/Makefile.am (TCL): Added new files.
+	* library/advice.tcl, library/path.tcl, library/sendpr.tcl: Moved
+	from libide.
+
+	* src/Makefile.in: Rebuilt.
+	* src/Makefile.am (tclwinmode.o): New target.
+	(libgui_a_SOURCES): Added tclwinmode.c.
+	* src/tclwinmode.c: Moved from libide.
+	* src/tclcursor.c: Likewise.
+
+Fri Mar 27 20:10:14 1998  Keith Seitz  <keiths@onions.cygnus.com>
+
+	* library/looknfeel.tcl (standard_look_and_feel): windows-menu is a font
+	family, not a symbolic font.
+
+Fri Mar 27 00:19:04 1998  Keith Seitz  <keiths@onions.cygnus.com>
+
+	* library/looknfeel.tcl (standard_look_and_feel): Define font global/menu
+	to allow changing the menu font on unix.
+
+Tue Mar 24 02:06:59 1998  Martin M. Hunt  <hunt@cygnus.com>
+
+	* src/Makefile.am (libgui_a_SOURCES): Add tclmsgbox.c.
+	* src/Makefile.in: Rebuilt.
+	* src/tclmsgbox.c: New file.
+	
+Sun Mar 22 19:29:10 1998  Elena Zannoni  <ezannoni@kwikemart.cygnus.com>
+
+	* library/email.tcl: removed and replaced with internet.tcl.
+	* library/internet.tcl: added 
+
+Sat Mar 21 21:18:06 1998  Elena Zannoni  <ezannoni@kwikemart.cygnus.com>
+
+	Merged the files in library with the corresponding files in Foundry
+         
+        - Tom Tromey  <tromey@cygnus.com>
+	* library/balloon.tcl 
+        (destructor): Cancel any pending after handlers.
+        (showballoon): Unshow balloon after 6 seconds.
+        (showballoon): On Windows, position balloon
+        according to cursor position.  (Disabled for now.)
+        (_recent_parent): New variable.
+        (_enter): If new parent the same as old parent, eliminate delay.
+        (showballoon): Set _recent_parent.
+	* library/bgerror.tcl 
+        (bgerror): Display errorCode as well.
+	* library/center.tcl 
+        (center_window): Run "update idletasks" after
+        setting window geometry.
+	* library/debug.tcl
+        (debug_log): Set buffering on log file to "line".
+        (DEBUG_window): Removed.
+        (DEBUG_after_source): Changed indexing into DEBUG_state array.
+        (re_source): Likewise.
+        (debug_log): New proc.
+        (DEBUG_state): Initialize log_file, window elements.
+        (debug): Log to file if user requested it.
+        (DEBUG_state): New array.
+        (DEBUG_after_source): New proc.
+        (source): Likewise.
+        (re_source): Likewise.
+	* library/hooks.tcl
+        (define_hook): Renamed.
+	* library/looknfeel.tcl
+        (add): Define global/italic font in a way
+        that actually works on Windows.
+
+        - Martin M. Hunt  <hunt@cygnus.com>
+	* library/list.tcl
+        (lrep): New function.  Replace an element in a list with a 
+        new one.
+	* library/prefs.tcl
+        (PREFS_cmd_getd): Rewrite to call define then get. 
+         Fixes strange problem.
+
+        - Ian Lance Taylor  <ian@cygnus.com>
+	* library/print.tcl
+        Expand tabs to spaces assuming there are tabstops every 
+        8 spaces.
+
+
+Tue Feb 24 19:49:12 1998  Jonathan Larmour  <jlarmour@cygnus.co.uk>
+
+	* configure.in, src/Makefile.am: Add --enable-install-libgui
+	option to install libgui.a and header files if required
+	
+	* Makefile.in, aclocal.m4, configure, library/Makefile.in,
+	src/Makefile.in: regenerate with latest automake
+
+Wed Jan 14 12:36:49 1998  Keith Seitz  <keiths@pizza.cygnus.com>
+
+	* library/Makefile.am (SET_LIB_PATH): Macro to add Tcl's build dir
+	to host's ld search path (LD_LIBRARY_PATH or what have you) for
+	builds where Tcl was built using shared libraries. This macro is
+	empty otherwise.
+	(tclIndex): Call SET_LIB_PATH.
+
+	* library/Makefile.in: Regenerate.
+	
+	* configure.in: Define TCL_SHARED if using shared library for Tcl
+
+	* configure: Regenerate.
+
+Tue Dec 16 16:50:40 1997  Ian Lance Taylor  <ian@cygnus.com>
+
+	New directory to hold GUI support code.
