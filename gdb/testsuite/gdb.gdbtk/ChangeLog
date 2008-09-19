@@ -1,6 +1,11 @@
+2008-09-19  Denis Pilat  <denis.pilat@st.com>
+
+	* insight-support.exp (gdbtk_start): test TCL_LIBRARY env. variable
+	before being unset.
+
 2008-03-28  Maciej W. Rozycki  <macro@mips.com>
 
-        * README: Fix a few typos throughout.
+	* README: Fix a few typos throughout.
 
 2008-02-20  Keith Seitz  <keiths@redhat.com>
 

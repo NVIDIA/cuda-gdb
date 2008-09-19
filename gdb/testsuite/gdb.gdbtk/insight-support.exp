@@ -98,7 +98,9 @@ proc gdbtk_start {test} {
   set env(SRCDIR) $abs_srcdir
   set env(GDBTK_VERBOSE) 1
   set env(GDBTK_LOGFILE) [to_tcl_path [file join $objdir gdb.log]]
-  unset -nocomplain env(TCL_LIBRARY)
+  if {[info exists env(TCL_LIBRARY)]} {
+    unset -nocomplain env(TCL_LIBRARY)
+  }
 
   set err [catch {exec $INSIGHT -nx -q --tclcommand=$test} res]
   if { $err } {
