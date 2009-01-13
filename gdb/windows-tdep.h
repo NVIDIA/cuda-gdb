@@ -15,25 +15,12 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
-#include "windows-tdep.h"
-#include "gdb_obstack.h"
-#include "xml-support.h"
+#ifndef WINDOWS_TDEP_H
+#define WINDOWS_TDEP_H
 
-void
-windows_xfer_shared_library (const char* so_name, CORE_ADDR load_addr,
-			     struct obstack *obstack)
-{
-  char *p;
-  obstack_grow_str (obstack, "<library name=\"");
-  p = xml_escape_text (so_name);
-  obstack_grow_str (obstack, p);
-  xfree (p);
-  obstack_grow_str (obstack, "\"><segment address=\"0x");
-  /* The symbols in a dll are offset by 0x1000, which is the the
-     offset from 0 of the first byte in an image - because of the file
-     header and the section alignment. */
-  p = paddr_nz (load_addr + 0x1000);
-  obstack_grow_str (obstack, p);
-  obstack_grow_str (obstack, "\"/></library>");
-}
+struct obstack;
+
+extern void windows_xfer_shared_library (const char* so_name,
+					 CORE_ADDR load_addr,
+					 struct obstack *obstack);
+#endif
