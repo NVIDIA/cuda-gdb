@@ -1,3 +1,95 @@
+2009-10-03  Paul Reed  <paulreed@paddedcell.com>
+
+	* arm-dis.c (print_insn): Check symtab_size not *symtab.
+
+2009-10-02  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* i386-opc.tbl: Drop Disp64 on jump and loop instructions.
+	* i386-tbl.h: Regenerated.
+
+2009-10-02  Peter Bergner  <bergner@vnet.ibm.com>
+
+	* ppc-dis.c (ppc_opts): Add "476" entry.
+	* ppc-opc.c (PPC476): Define.
+	(powerpc_opcodes): Update mnemonics where required for 476.
+
+2009-10-01  Peter Bergner  <bergner@vnet.ibm.com>
+
+	* ppc-opc.c (PPCA2): Use renamed mask PPC_OPCODE_A2.
+	* ppc-dis.c (ppc_opts): Likewise.
+	Rename "ppca2" to "a2".
+
+2009-10-01  M R Swami Reddy <MR.Swami.Reddy@nsc.com>
+
+	* crx-dis.c (match_opcode): Truncate mcode to 32-bit.
+
+2009-09-29  DJ Delorie  <dj@redhat.com>
+
+	* Makefile.am: Add RX files.
+	* configure.in: Add support for RX target.
+	* disassemble.c: Likewise.
+	* Makefile.in: Regenerate.
+	* configure: Regenerate.
+	* opc2c.c: New file.
+	* rx-decode.c: New file.
+	* rx-decode.opc: New file.
+	* rx-dis.c: New file.
+
+2009-09-29  Peter Bergner  <bergner@vnet.ibm.com>
+
+	* ppc-opc.c (powerpc_opcodes): Remove support for the the "lxsdux",
+	"lxvd2ux", "lxvw4ux", "stxsdux", "stxvd2ux" and "stxvw4ux" opcodes.
+
+2009-09-25  Michael Eager  <eager@eagercon.com>
+
+	* microblaze-dis.c (get_insn_microblaze, microblaze_get_target_address,
+	microblaze_decode_insn): Add declarations.
+	(get_delay_slots_microblaze): Remove.
+
+2009-09-25  Martin Thuresson  <martint@google.com>
+
+	Update sources to make arc and arm targets compile cleanly with
+	-Wc++-compat:
+	* arc-dis.c Fix casts.
+	* arc-ext.c: Add casts.
+	* arm-dis.c (enum opcode_sentinel_enum): Gave name to anonymous
+	enum.
+
+2009-09-24  H.J. Lu  <hongjiu.lu@intel.com>
+
+	* i386-gen.c (opcode_modifiers): Remove Vex256.
+	(set_bitfield): Handle XXX=V.
+
+	* i386-opc.h (Vex): Update comments.
+	(Vex256): Removed.
+	(VexNDS): Updated.
+	(i386_opcode_modifier): Change vex to 2 bits.  Remove vex256.
+
+	* i386-opc.tbl: Replace "Vex|Vex256" with Vex=2.
+	* i386-tbl.h: Regenerated.
+
+2009-09-23  Nick Clifton  <nickc@redhat.com>
+
+	* po/fr.po: Updated French translation.
+
+2009-09-21  Ben Elliston  <bje@au.ibm.com>
+	    Peter Bergner  <bergner@vnet.ibm.com>
+
+	* ppc-dis.c (ppc_opts): Add "ppca2" entry.
+	* ppc-opc.c (powerpc_opcodes): Add eratilx, eratsx, eratsx.,
+	eratre, wchkall, eratwe, ldawx., mdfcrx., mfdcr. mtdcrx., icswx,
+	icswx., mtdcr., dci, wclrone, wclrall, wclr, erativax, tlbsrx.,
+	ici mnemonics.
+	(ERAT_T): New operand.
+	(XWC_MASK): New mask.
+	(XOPL2): New macro.
+	(PPCA2): Define.
+
+2009-09-18  Nick Clifton  <nickc@redhat.com>
+
+	* po/es.po: Updated Spanish translation.
+	* po/vi.po: Updated Vietnamese translation.
+
 2009-09-15  H.J. Lu  <hongjiu.lu@intel.com>
 
 	* i386-dis.c (OP_E_memory): Don't print '-' in Intel mode if
@@ -27,11 +119,11 @@
 	* mri.c: Add casts. (mri_draw_tree): Use enum name instead of integer.
 
 2009-09-10  Andreas Krebbel  <Andreas.Krebbel@de.ibm.com>
-	
+
 	* s390-dis.c (print_insn_s390): Avoid 'long long'.
 
 2009-09-10  Andreas Krebbel  <Andreas.Krebbel@de.ibm.com>
-	
+
 	* s390-dis.c (s390_extract_operand): Remove the shift for pcrel operands.
 	(print_insn_s390): Signextend and shift pcrel operands before printing.
 
@@ -265,7 +357,7 @@
 	* Makefile.in: Regenerate.
 	* configure.in: Add bfd_microblaze_arch target.
 	* configure: Regenerate.
-	* disassemble.c: Define ARCH_microblaze, return 
+	* disassemble.c: Define ARCH_microblaze, return
 	print_insn_microblaze().
 	* microblaze-dis.c: New MicroBlaze disassembler.
 	* microblaze-opc.h: New MicroBlaze opcode definitions.
@@ -346,7 +438,7 @@
 	* m32r-opc.h, * m32r-opinst.c, * mt-desc.c, * mt-desc.h,
 	* mt-opc.c, * mt-opc.h, * openrisc-desc.c, * openrisc-desc.h,
 	* openrisc-opc.c, * openrisc-opc.h, * xc16x-desc.c, * xc16x-desc.h,
-	* xc16x-opc.c, * xc16x-opc.h, * xstormy16-desc.c, * xstormy16-desc.h, 
+	* xc16x-opc.c, * xc16x-opc.h, * xstormy16-desc.c, * xstormy16-desc.h,
 	* xstormy16-opc.c, * xstormy16-opc.h: Regenerate.
 
 2009-07-07  Chung-Lin Tang  <cltang@pllab.cs.nthu.edu.tw>
@@ -391,7 +483,7 @@
 	(VEX_LEN_3A7E_P_2,VEX_LEN_3A7F_P_2): New.
 	(get_vex_imm8): New. handle FMA4.
 	(OP_EX_VexReg): Ditto.
-	
+
 2009-06-30  Nick Clifton  <nickc@redhat.com>
 
 	PR 10288
@@ -420,7 +512,7 @@
 	(print_insn_arm): Likewise.
 	(print_insn_thumb16): Likewise.
 	(print_insn_thumb32): Likewise.
-	
+
 	PR 10297
 	* arm-dis.c (UNDEFINED_INSTRUCTION): New macro for a description
 	of an undefined instruction.
@@ -588,7 +680,7 @@
 	(OP_DREX_FCMP): Delete.
 	(DREX_*): Delete.
 	(THREE_BYTE_0F24, THREE_BYTE_0F25, THREE_BYTE_0f7B): Delete.
-	
+
 2009-05-22  Alan Modra  <amodra@bigpond.net.au>
 
 	* Makefile.am: Run "make dep-am".
@@ -893,7 +985,7 @@
 
 2009-01-28  Chao-ying Fu  <fu@mips.com>
 
-        * mips-opc.c (suxc1): Add the flag of FP_D.
+	* mips-opc.c (suxc1): Add the flag of FP_D.
 
 2009-01-20  Alan Modra  <amodra@bigpond.net.au>
 
@@ -1054,7 +1146,7 @@
 	(PREFIX_VEX_3ADF): Likewise.
 	(VEX_LEN_3ADF_P_2): Likewise.
 	(prefix_table): Remove PREFIX_VEX_3A48...PREFIX_VEX_3A4A,
-	PREFIX_VEX_3A5C...PREFIX_VEX_3A5F, 
+	PREFIX_VEX_3A5C...PREFIX_VEX_3A5F,
 	PREFIX_VEX_3A68...PREFIX_VEX_3A6F and
 	PREFIX_VEX_3A78...PREFIX_VEX_3A7F.  Add
 	PREFIX_VEX_3896...PREFIX_VEX_389F,
@@ -1072,10 +1164,10 @@
 	instructions.  Add new FMA instructions.
 	* i386-tbl.h: Regenerated.
 
-2009-01-02  Matthias Klose  <doko@ubuntu.com> 
+2009-01-02  Matthias Klose  <doko@ubuntu.com>
 
-	* or32-opc.c (or32_print_register, or32_print_immediate, 
-	disassemble_insn): Don't rely on undefined sprintf behaviour. 
+	* or32-opc.c (or32_print_register, or32_print_immediate,
+	disassemble_insn): Don't rely on undefined sprintf behaviour.
 
 For older changes see ChangeLog-2008
 
