@@ -1,11 +1,30 @@
-2009-09-30  Pierre Muller  <muller@ics.u-strasbg.fr>
+2009-10-04  Pedro Alves  <pedro@codesourcery.com>
+
+	* gdb.texinfo (Remote Protocol): Don't mention vCont;T.
+
+2009-09-26  Pierre Muller  <muller@ics.u-strasbg.fr>
 
 	* gdb.texinfo (Cygwin Native): Mention support for Ctrl-BREAK.
+
+2009-09-23  Joel Brobecker  <brobecker@adacore.com>
+
+	* observer.texi (solib_unloaded): Document explicitly the fact that
+	this observer is called before the associated symbols are unloaded.
+
+2009-09-19  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* gdb.texinfo (GDB/MI Stack Manipulation): Document
+	-stack-list-variables.
 
 2009-09-18  Tom Tromey  <tromey@redhat.com>
 
 	* gdb.texinfo (GDB/MI Variable Objects): -enable-pretty-printing
 	is experimental.
+
+2009-09-17  Paul Pluzhnikov  <ppluzhnikov@google.com>
+
+	* gdb.texinfo (convenince variables): Mention
+	$_siginfo could be empty.
 
 2009-09-15  Tom Tromey  <tromey@redhat.com>
 
@@ -7041,7 +7060,7 @@ Wed Feb 26 18:04:40 1992  K. Richard Pixley  (rich@cygnus.com)
 
 	* Makefile.in, configure.in: removed traces of namesubdir,
 	  -subdirs, $(subdir), $(unsubdir), some rcs triggers.  Forced
-	  copyrights to '92, '09, changed some from Cygnus to FSF.
+	  copyrights to '92, changed some from Cygnus to FSF.
 
 Fri Dec 13 09:47:31 1991  John Gilmore  (gnu at cygnus.com)
 
