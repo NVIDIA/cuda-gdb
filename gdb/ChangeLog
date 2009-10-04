@@ -1,55 +1,60 @@
-2009-10-02  H.J. Lu  <hongjiu.lu@intel.com>
+2009-10-04  Pedro Alves  <pedro@codesourcery.com>
 
-	PR gdb/10649
-	* Makefile.in (GDB_DATADIR_PATH): Renamed to ...
-	(GDB_DATADIR): This.
-	(xml-syscall-install): Updated.
+	* gdbinit.in: Set data-directory to @srcdir@.
+
+2009-10-02  Pedro Alves  <pedro@codesourcery.com>
+
+	* linux-nat.c (TRAP_IS_SYSCALL, TRAP_REMOVE_SYSCALL_FLAG): Delete.
+	(SYSCALL_SIGTRAP): New.
+	(status_to_str): Adjust.
+	(get_pending_status): Pending events in lp->waitstatus don't map
+	to any signal.  Simplify.
+	(linux_handle_syscall_trap): New.
+	(linux_handle_extended_wait): When handling PTRACE_EVENT_CLONE
+	events, use linux_ops->to_resume instead of direct ptrace with
+	PTRACE_CONT.  Remove all TRAP_IS_SYSCALL handling.
+	(wait_lwp): Handle syscall traps with linux_handle_syscall_trap,
+	and clear the sysgood bit.
+	(status_callback): Make it clearer and add comments.
+	(cancel_breakpoints_callback): Ignore if LP has waitstatus set.
+	(linux_nat_filter_event): Handle syscall traps with
+	linux_handle_syscall_trap, and clear the sysgood bit.  Move the
+	check for storing siginfo to after handling extended statuses and
+	syscall traps.  Store status in the lwp object.
+	(linux_wait_1): Don't swap the pending status out of the lwp
+	object until after deciding we found an lwp with an interesting
+	event.  Requeue a new pending signal if we find one while getting
+	rid or a pending SIGSTOP we sent ourselves.  Don't clear the
+	sysgood bit here.
+
+	* infrun.c (deal_with_syscall_event): Rename to ...
+	(handle_syscall_event): ... this.  Always context switch and set
+	stop_pc, even if not catching the syscall.  If not catching the
+	syscall, always resume with keep_going.
+	(handle_inferior_event): Adjust.
+
+2009-10-02  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	Fix compatibility of --with-system-readline and readline-6.0+.
+	* configure.ac <--with-system-readline> (for readline_echoing_p): New
+	test.
+	* config.in: Regenerate.
+	* configure: Regenerate.
 
 2009-10-01  Joel Brobecker  <brobecker@adacore.com>
 
 	* MAINTAINERS: Move Don Lee to the correct section (Write After
 	Approval).
 
-2009-10-01  Joel Brobecker  <brobecker@adacore.com>
+2009-10-01  Phil Muldoon  <pmuldoon@redhat.com>
 
-	* configure.ac: Disable -Werror by default.
-	* configure: Regenerate.
-
-2009-09-30  Joel Brobecker  <brobecker@adacore.com>
-
-	* version.in: Set version to 6.8.92.20090930-cvs.
-
-2009-09-30  Joel Brobecker  <brobecker@adacore.com>
-
-	GDB 6.8.92 released.
-
-2009-09-30  Joel Brobecker  <brobecker@adacore.com>
-
-	* README: Update GDB version number to 6.8.92.
-	* version.in: Likewise.
-
-2009-09-30  Pierre Muller  <muller@ics.u-strasbg.fr>
-
-	* windows-nat.c (ctrl_c_handler): Also handle CTRL_BREAK_EVENT.
+	* infcall.c (call_function_by_hand): Add a new cleanup branch for
+	std::terminate breakpoints.
 
 2009-09-29  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
 	* ia64-tdep.c (ia64_convert_from_func_ptr_addr): New variable buf.
 	Check first the descriptor memory is readable.
-
-2009-09-29  Ulrich Weigand  <uweigand@de.ibm.com>
-
-	Revert 2009-09-28 commit:
-	* eval.c (evaluate_subexp_standard) [OP_OBJC_MSGCALL]: Support
-	platforms that use function descriptors.  Prefer to use function
-	pointer types instead of function types.
-	* linespec.c (decode_objc): Support function descriptors.  Fully
-	initialize SAL result.
-	* objc-lang.c (find_methods): Support function descriptors.
-	Do not require function symbol to point to text section.
-
-	* ppc-sysv-tdep.c (ppc64_sysv_abi_push_dummy_call): When calling
-	via a function pointer, use the descriptor it points to.
 
 2009-09-29  Tom Tromey  <tromey@redhat.com>
 
@@ -60,7 +65,14 @@
 	* s390-tdep.c (s390_displaced_step_fixup): Use type ULONGEST
 	instead of CORE_ADDR for "amode".
 
-2009-09-29  Ulrich Weigand  <uweigand@de.ibm.com>
+2009-09-29  Joel Brobecker  <brobecker@adacore.com>
+
+	* ia64-tdep.c: Update the comments on how we insert/remove
+	breakpoints for L-X instructions.
+	(ia64_memory_insert_breakpoint, ia64_memory_remove_breakpoint):
+	Update the comments inside these functions.
+
+2009-09-28  Ulrich Weigand  <uweigand@de.ibm.com>
 
 	* gdbarch.sh (displaced_step_hw_singlestep): New callback.
 	* gdbarch.c, gdbarch.h: Regenerate.
@@ -76,18 +88,6 @@
 	for displaced stepping.
 	(maybe_software_singlestep): Do not handle displaced stepping.
 
-2009-09-29  Hui Zhu  <teawater@gmail.com>
-
-	* record.c (record_open): Change "query" to "error".
-	(cmd_record_stop): Change "query" to "printf_unfiltered".
-
-2009-09-29  Joel Brobecker  <brobecker@adacore.com>
-
-	* ia64-tdep.c: Update the comments on how we insert/remove
-	breakpoints for L-X instructions.
-	(ia64_memory_insert_breakpoint, ia64_memory_remove_breakpoint):
-	Update the comments inside these functions.
-
 2009-09-28  Ulrich Weigand  <uweigand@de.ibm.com>
 
 	* eval.c (evaluate_subexp_standard) [OP_OBJC_MSGCALL]: Support
@@ -100,21 +100,6 @@
 
 	* ppc-sysv-tdep.c (ppc64_sysv_abi_push_dummy_call): When calling
 	via a function pointer, use the descriptor it points to.
-
-2009-09-28  Ulrich Weigand  <uweigand@de.ibm.com>
-
-	* valops.c (value_assign): Respect parent offset when
-	assigning to a bitfield.
-
-2009-09-28  Ulrich Weigand  <uweigand@de.ibm.com>
-
-	* s390-tdep.c (op_bctr, op_bctgr, op_bct, op1_bctg, op2_bctg,
-	op_bxh, op1_bxhg, op2_bxhg, op_bxle, op1_bxleg, op2_bxleg,
-	op1_brct, op2_brct, op1_brctg, op2_brctg, op_brxh, op1_brxhg,
-	op2_brxhg, op_brxle, op1_brxlg, op2_brxlg): New enum values.
-	(is_rsi, is_rie): New insn format decoder routines.
-	(s390_displaced_step_fixup): New function.
-	(s390_gdbarch_init): Install displaced stepping routines.
 
 2009-09-28  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
@@ -142,15 +127,80 @@
 	and the type of instruction before deciding which slot to save
 	in the breakpoint shadown contents.
 
+2009-09-28  Doug Evans  <dje@google.com>
+
+	* linux-nat.c (status_to_str): Handle TRAP_IS_SYSCALL.
+	(TRAP_REMOVE_SYSCALL_FLAG): New macro.
+	(linux_nat_wait_1): Mask off is-syscall bit in wait status for
+	TRAP_IS_SYSCALL before passing value to caller.
+
+2009-09-28  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* valops.c (value_assign): Respect parent offset when
+	assigning to a bitfield.
+
 2009-09-28  Hui Zhu  <teawater@gmail.com>
 
 	* i386-tdep.c (i386_process_record): Remove "0x" that
 	don't need.
 
+2009-09-27  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* s390-tdep.c (op_bctr, op_bctgr, op_bct, op1_bctg, op2_bctg,
+	op_bxh, op1_bxhg, op2_bxhg, op_bxle, op1_bxleg, op2_bxleg,
+	op1_brct, op2_brct, op1_brctg, op2_brctg, op_brxh, op1_brxhg,
+	op2_brxhg, op_brxle, op1_brxlg, op2_brxlg): New enum values.
+	(is_rsi, is_rie): New insn format decoder routines.
+	(s390_displaced_step_fixup): New function.
+	(s390_gdbarch_init): Install displaced stepping routines.
+
+2009-09-27  Ulrich Weigand  <uweigand@de.ibm.com>
+
+	* configure.tgt (powerpc-*-linux* | powerpc64-*-linux*):
+	Add linux-tdep.o to gdb_target_obs.
+	(s390*-*-*): Likewise.
+
+2009-09-27  Don Lee  <don.lee@sunplusct.com>
+
+	* score-tdep.c: Comment out some simulator dependent codes.
+	* score-tdep.h: Delete some simulator dependent macro definitions.
+
+2009-09-27  Hui Zhu  <teawater@gmail.com>
+
+	* record.c (record_open): Change "query" to "error".
+	(cmd_record_stop): Change "query" to "printf_unfiltered".
+
 2009-09-26  Pierre Muller  <muller@ics.u-strasbg.fr>
 
 	* i386-nat.c (i386_stopped_data_address): Also check that
 	hitted watch register is not vacant.
+
+2009-09-25  Tom Tromey  <tromey@redhat.com>
+
+	PR python/10664:
+	* language.h (struct language_defn) <la_get_string>: Add
+	'char_type' argument.
+	(LA_GET_STRING): Likewise.
+	(default_get_string, c_get_string): Update.
+	* language.c (default_get_string): Add 'char_type' argument.
+	* c-valprint.c (c_textual_element_type): Rename from
+	textual_element_type.  No longer static.  Update callers.
+	* c-lang.h (c_textual_element_type): Declare.
+	* c-lang.c (c_get_string): Add 'char_type' argument.
+
+2009-09-25  Tom Tromey  <tromey@redhat.com>
+
+	* charset.c (iconv_open): Use UTF-16 and UTF-32, not UCS-2 and
+	UCS-4.
+	(iconv): Rename 'ucs_flag'.
+	(GDB_DEFAULT_TARGET_WIDE_CHARSET): Use UTF-32.
+	* c-lang.c (charset_for_string_type): Use UTF-16 and UTF-32, not
+	UCS-2 and UCS-4.
+	(convert_ucn): Use UTF-32.
+
+2009-09-25  Nick Roberts  <nickrob@snap.net.nz>
+
+	* mi/gdb-mi.el: Remove file.
 
 2009-09-23  Joel Brobecker  <brobecker@adacore.com>
 
@@ -191,19 +241,42 @@
 	* eval.c (evaluate_subexp_standard) <do_call_it>: Handle internal
 	functions in EVAL_AVOID_SIDE_EFFECTS case.
 
+2009-09-22  Jie Zhang  <jie.zhang@analog.com>
+
+	* MAINTAINERS: Add myself under Write After Approval.
+
+2009-09-22  Pierre Muller  <muller@ics.u-strasbg.fr>
+
+	* windows-nat.c (ctrl_c_handler): Also handle CTRL_BREAK_EVENT.
+
+2009-09-18  Keith Seitz  <keiths@redhat.com>
+
+	* cp-support.h (cp_validate_operator): Declare new function.
+	* cp-support.c (cp_validate_operator): New function.
+	* linespec.c (decode_compound): For C++ check for a valid operator.
+
+2009-09-21  Keith Seitz  <keiths@redhat.com>
+
+	* c-exp.y (qualified_name): Call CHECK_TYPEDEF before deciding
+	that a type is not an aggregate type.
+
 2009-09-21  Jason Orendorff  <jason.orendorff@gmail.com>
 
 	PR python/10666:
 	* python/py-function.c (fnpy_init): Use xstrdup.
 
-2009-09-21  Phil Muldoon  <pmuldoon@redhat.com>
+2009-09-21  Jie Zhang  <jie.zhang@analog.com>
+
+	* doc/gdb.texinfo: Escape "{" and "}".
+
+2009-09-21  Phil Muldoon <pmuldoon@redhat.com>
 
 	PR python/10633
 
 	* c-lang.c (c_printstr): Do not loop past  options->print_max when
 	iterating with wchar_iterate.
 
-2009-09-21  Phil Muldoon  <pmuldoon@redhat.com>
+2009-09-21  Phil Muldoon <pmuldoon@redhat.com>
 
 	* python/py-value.c (valpy_getitem): Test value before allowing
 	subscript operation.
@@ -252,18 +325,33 @@
 
 	* gdbarch.sh (process_record_signal): New interface.
 
-2009-09-19  Maxim Grigoriev  <maxim2405@gmail.com>
-
-	* xtensa-tdep.c (call0_analyze_prologue): Replace INT_MAX by UNIT_MAX.
-
 2009-09-19  Matt Rice <ratmice@gmail.com>  (tiny change)
 
 	Checked in by Joel Brobecker  <brobecker@gnat.com>
 	* varobj.c (varobj_update): Initialize children_changed.
 
+2009-09-19  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* mi/mi-cmd-stack.c (list_args_or_locals): Workaround
+	gcc warning.
+
+2009-09-19  Vladimir Prus  <vladimir@codesourcery.com>
+
+	* mi/mi-cmds.h (mi_cmd_stack_list_variables): Declare.
+	* mi/mi-cmds.c (mi_cmds): Register -stack-list-variables.
+	* mi/mi-cmd-stack.c (enum what_to_list): New.
+	(list_args_or_locals): Accept what_to_list parameter.
+	Use 'variables' as output name of all are requested.
+	(mi_cmd_stack_list_variables): New.
+	(mi_cmd_stack_list_locals, mi_cmd_stack_list_args): Adjust.
+
 2009-09-19  Eli Zaretskii  <eliz@gnu.org>
 
 	* config/djgpp/fnchange.lst: Add missing edits.
+
+2009-09-18  Maxim Grigoriev  <maxim2405@gmail.com>
+
+        * xtensa-tdep.c (call0_analyze_prologue): Replace INT_MAX by UNIT_MAX.
 
 2009-09-18  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
@@ -284,23 +372,17 @@
 	introduced after field syscall_id inside struct target_waitstatus
 	has been renamed into syscall_number.
 
-2009-09-16  Joel Brobecker  <brobecker@adacore.com>
+2009-09-16  H.J. Lu  <hongjiu.lu@intel.com>
 
-	* version.in: Set version to 6.8.91.20090916-cvs.
-
-2009-09-16  Joel Brobecker  <brobecker@adacore.com>
-
-	GDB 6.8.91 released.
-
-2009-09-16  Joel Brobecker  <brobecker@adacore.com>
-
-	* README: Update GDB version number to 6.8.91.
-	* version.in: Likewise.
+	PR gdb/10649
+	* Makefile.in (GDB_DATADIR_PATH): Renamed to ...
+	(GDB_DATADIR): This.
+	(xml-syscall-install): Updated.
 
 2009-09-16  Joel Brobecker  <brobecker@adacore.com>
 
 	GDB 7.0 branch created (branch timestamp: 2009-09-16 19:00 UTC)
-	* version.in: Bump version to 6.8.90.20090916-cvs.
+	* version.in: Bump version to 7.0.50.20090916-cvs.
 
 2009-09-15  Tom Tromey  <tromey@redhat.com>
 
