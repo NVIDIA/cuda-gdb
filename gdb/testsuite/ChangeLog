@@ -1,3 +1,33 @@
+2009-10-05  Pierre Muller  <muller@ics.u-strasbg.fr>
+
+	* lib/gdb.exp (default_gdb_init): Set current value of match_max 
+	to default.
+
+2009-10-02  Pierre Muller  <muller@ics.u-strasbg.fr>
+
+	* lib/gdb.exp (gdb_compile): Add --enable-auto-import option for 
+	mingw and cygwin targets.
+
+2009-10-02  Pierre Muller  <muller@ics.u-strasbg.fr>
+	    Pedro Alves  <pedro@codesourcery.com>
+
+	* lib/gdb.exp (gdb_compile): Avoid adding 
+	gdb_saved_unbuffered_mode_obj if -nostdlib option is used.
+
+2009-10-01  Pierre Muller  <muller@ics.u-strasbg.fr>
+
+	* gdb.base/shr1.c: Use %p in format string.
+	* gdb.base/unload.c: Avoid warning in fprintf.
+	* gdb.base/watchpoint-solib.c: Idem.
+
+2009-10-01  Pierre Muller  <muller@ics.u-strasbg.fr>
+
+	* gdb.base/fileio.c (test_lseek): typecast ofs_t ret variable to
+	long type.
+	(test_unlink): Correct printf string.
+	* gdb.base/checkpoint.c (main): Correct fprintf string for variable i.
+	* gdb.threads/attachstop-mt.c: Add #include <string.h>.
+
 2009-09-29  Jan Kratochvil  <jan.kratochvil@redhat.com>
 
 	* gdb.base/breakpoint-shadow.exp: Move the ia64 part into ...
@@ -17,23 +47,23 @@
 	* gdb.threads/thread-specific.exp (get_thread_list): Support targets
 	that detect new threads during "info threads".
 
-2009-09-28  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+2009-09-27  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
 
 	* gdb.threads/manythreads.c (main): Increase thread stack size
 	to 2*PTHREAD_STACK_MIN.
 	* gdb.threads/multi-create.c (main): Likewise.
 	(create_function): Likewise.
 
-2009-09-28  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+2009-09-27  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
 
 	* gdb.base/dump.exp: Pass difference of pointer types instead
 	of integer types as offset to restore in intarr3.srec case.
 
-2009-09-28  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+2009-09-27  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
 
 	* gdb.cp/gdb2495.exp: Skip test on spu*-*-*.
 
-2009-09-28  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
+2009-09-27  Ulrich Weigand  <Ulrich.Weigand@de.ibm.com>
 
 	* gdb.base/pie-support.exp: Pass "quiet" flag to gdb_compile.
 
@@ -44,11 +74,41 @@
 	* testsuite/gdb.base/watchpoints.c: New file.
 	* testsuite/gdb.base/watchpoints.exp: New file.
 
+2009-09-25  Tom Tromey  <tromey@redhat.com>
+
+	* gdb.base/charset.exp: Test utf-16 strings with Python.
+
+2009-09-25  Tom Tromey  <tromey@redhat.com>
+
+	* gdb.base/charset.exp: Use UTF-16 and UTF-32, not UCS-2 and
+	UCS-4.
+	* gdb.base/charset.c (utf_32_string): Rename.
+	(init_utf32): Rename.
+	(main): Update.
+
 2009-09-22  Tom Tromey  <tromey@redhat.com>
 
 	* gdb.python/py-function.exp: Add regression tests.
 
-2009-09-21  Phil Muldoon  <pmuldoon@redhat.com>
+2009-09-21  Keith Seitz  <keiths@redhat.com>
+
+	* gdb.cp/cplusfuncs.exp (do_tests): Add check for proper error message
+	with invalid operator.
+
+2009-09-21  Keith Seitz  <keiths@redhat.com>
+
+	* gdb.cp/classes.exp (do_tests): Add tests to print a constructor
+	and destructor using typedef name of class.
+	* gdb.cp/classes.cc (class Base1): Add a destructor.
+	(base1): New typedef.
+	(use_methods): Instanitate an object of type base1.
+	* gdb.cp/templates.exp (test_template_typedef): New procedure.
+	(do_tests): Call test_template_typedef.
+	* gdb.cp/templates.cc (Baz::~Baz): New method.
+	(intBazOne): New typedef.
+	(main): Instantiate intBazOne.
+
+2009-09-21  Phil Muldoon <pmuldoon@redhat.com>
 
 	PR python/10633
 
@@ -56,12 +116,16 @@
 	Function.
 	(run_lang_tests): Add print elements test.
 
-2009-09-21  Phil Muldoon  <pmuldoon@redhat.com>
+2009-09-21  Phil Muldoon <pmuldoon@redhat.com>
 
 	* gdb.python/py-value.exp (test_subscript_regression): New
 	function.  Test for invalid subscripts.
 	* gdb.python/py-value.c (main): Add test array, and pointer to it.
 	(ptr_ref): New function.
+
+2009-09-17  Paul Pluzhnikov  <ppluzhnikov@google.com>
+
+	* gdb.base/default.exp: Fix "show convenience".
 
 2009-09-15  Tom Tromey  <tromey@redhat.com>
 

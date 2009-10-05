@@ -1731,7 +1731,10 @@ proc gdb_compile {source dest type options} {
                     lappend options "additional_flags=-L${outdir}"
                 } elseif { [istarget "mips-sgi-irix*"] } {
                     lappend options "additional_flags=-rpath ${outdir}"
-                }
+                } elseif { ([istarget "*-*-mingw*"]
+			    || [istarget *-*-cygwin*]) } {
+		    lappend new_options "additional_flags=-Wl,--enable-auto-import"
+		} 
             }
 	} elseif { $opt == "shlib_load" } {
 	    if { ([istarget "*-*-mingw*"]
@@ -1824,7 +1827,11 @@ proc gdb_compile {source dest type options} {
 	    # reverse link order.  In that case, we can use ldflags to
 	    # avoid copying the object file to the host multiple
 	    # times.
-	    lappend options "ldflags=$gdb_saved_set_unbuffered_mode_obj"
+	    # This object can only be added if standard libraries are
+	    # used. Thus, we need to disable it if -nostdlib option is used
+	    if {[lsearch -regexp $options "-nostdlib"] < 0 } {
+		lappend options "ldflags=$gdb_saved_set_unbuffered_mode_obj"
+	    }
 	}
     }
 
@@ -2326,6 +2333,8 @@ proc default_gdb_init { args } {
     # a very large amount of output.  We therefore increase the expect
     # buffer size to be able to contain the entire test output.
     match_max -d 30000
+    # Also set this value for the currently running GDB. 
+    match_max [match_max -d]
 
     # We want to add the name of the TCL testcase to the PASS/FAIL messages.
     if { [llength $args] > 0 } {
