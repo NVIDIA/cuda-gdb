@@ -884,8 +884,8 @@ evaluate_subexp_standard (struct type *expect_type,
 	  LONGEST low_bound, high_bound;
 
 	  /* get targettype of elementtype */
-	  while (TYPE_CODE (check_type) == TYPE_CODE_RANGE ||
-		 TYPE_CODE (check_type) == TYPE_CODE_TYPEDEF)
+	  while (TYPE_CODE (check_type) == TYPE_CODE_RANGE
+		 || TYPE_CODE (check_type) == TYPE_CODE_TYPEDEF)
 	    check_type = TYPE_TARGET_TYPE (check_type);
 
 	  if (get_discrete_bounds (element_type, &low_bound, &high_bound) < 0)
@@ -919,14 +919,14 @@ evaluate_subexp_standard (struct type *expect_type,
 		range_low_type = TYPE_TARGET_TYPE (range_low_type);
 	      if (TYPE_CODE (range_high_type) == TYPE_CODE_RANGE)
 		range_high_type = TYPE_TARGET_TYPE (range_high_type);
-	      if ((TYPE_CODE (range_low_type) != TYPE_CODE (range_high_type)) ||
-		  (TYPE_CODE (range_low_type) == TYPE_CODE_ENUM &&
-		   (range_low_type != range_high_type)))
+	      if ((TYPE_CODE (range_low_type) != TYPE_CODE (range_high_type))
+		  || (TYPE_CODE (range_low_type) == TYPE_CODE_ENUM
+		      && (range_low_type != range_high_type)))
 		/* different element modes */
 		error (_("POWERSET tuple elements of different mode"));
-	      if ((TYPE_CODE (check_type) != TYPE_CODE (range_low_type)) ||
-		  (TYPE_CODE (check_type) == TYPE_CODE_ENUM &&
-		   range_low_type != check_type))
+	      if ((TYPE_CODE (check_type) != TYPE_CODE (range_low_type))
+		  || (TYPE_CODE (check_type) == TYPE_CODE_ENUM
+		      && range_low_type != check_type))
 		error (_("incompatible POWERSET tuple elements"));
 	      if (range_low > range_high)
 		{
@@ -1161,8 +1161,13 @@ evaluate_subexp_standard (struct type *expect_type,
 	if (addr)
 	  {
 	    struct symbol *sym = NULL;
-	    /* Is it a high_level symbol?  */
 
+	    /* The address might point to a function descriptor;
+	       resolve it to the actual code address instead.  */
+	    addr = gdbarch_convert_from_func_ptr_addr (exp->gdbarch, addr,
+						       &current_target);
+
+	    /* Is it a high_level symbol?  */
 	    sym = find_pc_function (addr);
 	    if (sym != NULL) 
 	      method = value_of_variable (sym, 0);
@@ -1216,11 +1221,20 @@ evaluate_subexp_standard (struct type *expect_type,
 	  {
 	    if (TYPE_CODE (value_type (method)) != TYPE_CODE_FUNC)
 	      error (_("method address has symbol information with non-function type; skipping"));
+
+	    /* Create a function pointer of the appropriate type, and replace
+	       its value with the value of msg_send or msg_send_stret.  We must
+	       use a pointer here, as msg_send and msg_send_stret are of pointer
+	       type, and the representation may be different on systems that use
+	       function descriptors.  */
 	    if (struct_return)
-	      set_value_address (method, value_as_address (msg_send_stret));
+	      called_method
+		= value_from_pointer (lookup_pointer_type (value_type (method)),
+				      value_as_address (msg_send_stret));
 	    else
-	      set_value_address (method, value_as_address (msg_send));
-	    called_method = method;
+	      called_method
+		= value_from_pointer (lookup_pointer_type (value_type (method)),
+				      value_as_address (msg_send));
 	  }
 	else
 	  {
@@ -1275,7 +1289,7 @@ evaluate_subexp_standard (struct type *expect_type,
 	  {
 	    /* Function objc_msg_lookup returns a pointer.  */
 	    deprecated_set_value_type (argvec[0],
-				       lookup_function_type (lookup_pointer_type (value_type (argvec[0]))));
+				       lookup_pointer_type (lookup_function_type (value_type (argvec[0]))));
 	    argvec[0] = call_function_by_hand (argvec[0], nargs + 2, argvec + 1);
 	  }
 
@@ -1648,8 +1662,8 @@ evaluate_subexp_standard (struct type *expect_type,
 	struct value_print_options opts;
 
 	get_user_print_options (&opts);
-        if (opts.objectprint && TYPE_TARGET_TYPE(type) &&
-            (TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_CLASS))
+        if (opts.objectprint && TYPE_TARGET_TYPE(type)
+            && (TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_CLASS))
           {
             real_type = value_rtti_target_type (arg1, &full, &top, &using_enc);
             if (real_type)
