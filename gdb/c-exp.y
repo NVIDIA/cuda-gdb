@@ -703,6 +703,7 @@ variable:	block COLONCOLON name
 qualified_name:	typebase COLONCOLON name
 			{
 			  struct type *type = $1;
+			  CHECK_TYPEDEF (type);
 			  if (TYPE_CODE (type) != TYPE_CODE_STRUCT
 			      && TYPE_CODE (type) != TYPE_CODE_UNION
 			      && TYPE_CODE (type) != TYPE_CODE_NAMESPACE)
@@ -718,6 +719,7 @@ qualified_name:	typebase COLONCOLON name
 			{
 			  struct type *type = $1;
 			  struct stoken tmp_token;
+			  CHECK_TYPEDEF (type);
 			  if (TYPE_CODE (type) != TYPE_CODE_STRUCT
 			      && TYPE_CODE (type) != TYPE_CODE_UNION
 			      && TYPE_CODE (type) != TYPE_CODE_NAMESPACE)
@@ -775,9 +777,9 @@ variable:	name_not_typename
 			    {
 			      if (symbol_read_needs_frame (sym))
 				{
-				  if (innermost_block == 0 ||
-				      contained_in (block_found, 
-						    innermost_block))
+				  if (innermost_block == 0
+				      || contained_in (block_found, 
+						       innermost_block))
 				    innermost_block = block_found;
 				}
 
@@ -794,8 +796,9 @@ variable:	name_not_typename
 			      /* C++: it hangs off of `this'.  Must
 			         not inadvertently convert from a method call
 				 to data ref.  */
-			      if (innermost_block == 0 || 
-				  contained_in (block_found, innermost_block))
+			      if (innermost_block == 0
+				  || contained_in (block_found,
+						   innermost_block))
 				innermost_block = block_found;
 			      write_exp_elt_opcode (OP_THIS);
 			      write_exp_elt_opcode (OP_THIS);
@@ -2172,9 +2175,9 @@ yylex (void)
     /* Input names that aren't symbols but ARE valid hex numbers,
        when the input radix permits them, can be names or numbers
        depending on the parse.  Note we support radixes > 16 here.  */
-    if (!sym && 
-        ((tokstart[0] >= 'a' && tokstart[0] < 'a' + input_radix - 10) ||
-         (tokstart[0] >= 'A' && tokstart[0] < 'A' + input_radix - 10)))
+    if (!sym 
+        && ((tokstart[0] >= 'a' && tokstart[0] < 'a' + input_radix - 10)
+	    || (tokstart[0] >= 'A' && tokstart[0] < 'A' + input_radix - 10)))
       {
  	YYSTYPE newlval;	/* Its value is ignored.  */
 	hextype = parse_number (tokstart, namelen, 0, &newlval);
