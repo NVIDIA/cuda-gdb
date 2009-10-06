@@ -1,3 +1,68 @@
+2009-10-05   Rafael Espindola  <espindola@google.com>
+
+	* plugin-api.h (ld_plugin_status): Add LDPS_BAD_HANDLE.
+	(ld_plugin_get_input_file): New.
+	(ld_plugin_release_input_file): New.
+	(ld_plugin_add_input_library): New.
+	(ld_plugin_message): Mark format const.
+	(ld_plugin_level): Add LDPT_GET_INPUT_FILE, LDPT_RELEASE_INPUT_FILE and
+	LDPT_ADD_INPUT_LIBRARY.
+	(ld_plugin_tv): Add tv_get_input_file, tv_release_input_file and
+	tv_add_input_library.
+
+2009-10-04  Jerry Quinn  <jlquinn@optonline.net>
+
+	* plugin-api.h: Fix compile.
+
+2009-09-29  Jason Merrill  <jason@redhat.com>
+
+	* demangle.h (enum demangle_component_type): Add
+	DEMANGLE_COMPONENT_LAMBDA, DEMANGLE_COMPONENT_DEFAULT_ARG,
+	DEMANGLE_COMPONENT_UNNAMED_TYPE.
+	(struct demangle_component): Add s_unary_num.
+
+2009-09-29  DJ Delorie  <dj@redhat.com>
+
+	* dis-asm.h: Add prototype for print_insn_rx.
+
+2009-09-25  Dodji Seketeli  <dodji@redhat.com>
+
+	* dwarf2.h (enum dwarf_tag): Rename DW_TAG_template_parameter_pack and
+	DW_TAG_formal_parameter_pack into DW_TAG_GNU_template_parameter_pack
+	and DW_TAG_formal_parameter_pack until DWARF 5 is out.
+
+2009-09-25  Cary Coutant  <ccoutant@google.com>
+
+	Add rest of new values from DWARF Version 4.
+	* dwarf2.h (DW_TAG_rvalue_reference_type, DW_TAG_template_alias):
+	New tags.
+	(DW_FORM_ref_sig8): New name for DW_FORM_sig8.
+	(DW_AT_main_subprogram, DW_AT_data_bit_offset, DW_AT_const_expr,
+	DW_AT_enum_class, DW_AT_linkage_name, DW_AT_GNU_guarded_by,
+	DW_AT_GNU_pt_guarded_by, DW_AT_GNU_guarded, DW_AT_GNU_pt_guarded,
+	DW_AT_GNU_locks_excluded, DW_AT_GNU_exclusive_locks_required,
+	DW_AT_GNU_shared_locks_required, DW_AT_GNU_odr_signature): New
+	attributes.
+	(DW_LANG_Python): New language.
+
+2009-09-24  Cary Coutant  <ccoutant@google.com>
+
+	* dwarf2.h (DW_TAG_rvalue_reference_type, DW_TAG_template_alias):
+	New tags.
+	(DW_FORM_ref_sig8): New name for DW_FORM_sig8.
+	(DW_AT_main_subprogram, DW_AT_data_bit_offset, DW_AT_const_expr,
+	DW_AT_enum_class, DW_AT_linkage_name, DW_AT_GNU_guarded_by,
+	DW_AT_GNU_pt_guarded_by, DW_AT_GNU_guarded, DW_AT_GNU_pt_guarded,
+	DW_AT_GNU_locks_excluded, DW_AT_GNU_exclusive_locks_required,
+	DW_AT_GNU_shared_locks_required, DW_AT_GNU_odr_signature): New
+	attributes.
+	(DW_LANG_Python): New language.
+
+2009-09-22  Dodji Seketeli  <dodji@redhat.com>
+
+	* dwarf2.h (enum dwarf_tag): Add
+	DW_TAG_template_parameter_pack and DW_TAG_formal_parameter_pack.
+
 2009-09-09  Martin Thuresson  <martin@mtme.org>
 
 	* bfdlink.h (struct bfd_link_hash_common_entry): Move to top
