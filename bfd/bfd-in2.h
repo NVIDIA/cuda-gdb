@@ -642,8 +642,8 @@ extern struct bfd_link_needed_list *bfd_elf_get_needed_list
 extern bfd_boolean bfd_elf_get_bfd_needed_list
   (bfd *, struct bfd_link_needed_list **);
 extern bfd_boolean bfd_elf_size_dynamic_sections
-  (bfd *, const char *, const char *, const char *, const char * const *,
-   struct bfd_link_info *, struct bfd_section **,
+  (bfd *, const char *, const char *, const char *, const char *, const char *,
+   const char * const *, struct bfd_link_info *, struct bfd_section **,
    struct bfd_elf_version_tree *);
 extern bfd_boolean bfd_elf_size_dynsym_hash_dynstr
   (bfd *, struct bfd_link_info *);
@@ -2047,6 +2047,8 @@ enum bfd_architecture
 #define bfd_mach_cris_v0_v10   255
 #define bfd_mach_cris_v32      32
 #define bfd_mach_cris_v10_v32  1032
+  bfd_arch_rx,        /* Renesas RX.  */
+#define bfd_mach_rx            0x75
   bfd_arch_s390,      /* IBM s390 */
 #define bfd_mach_s390_31       31
 #define bfd_mach_s390_64       64
@@ -3843,6 +3845,32 @@ instructions  */
 /* This is a 6 bit reloc for the AVR that stores offset for adiw/sbiw
 instructions  */
   BFD_RELOC_AVR_6_ADIW,
+
+/* Renesas RX Relocations.  */
+  BFD_RELOC_RX_NEG8,
+  BFD_RELOC_RX_NEG16,
+  BFD_RELOC_RX_NEG24,
+  BFD_RELOC_RX_NEG32,
+  BFD_RELOC_RX_16_OP,
+  BFD_RELOC_RX_24_OP,
+  BFD_RELOC_RX_32_OP,
+  BFD_RELOC_RX_8U,
+  BFD_RELOC_RX_16U,
+  BFD_RELOC_RX_24U,
+  BFD_RELOC_RX_DIR3U_PCREL,
+  BFD_RELOC_RX_DIFF,
+  BFD_RELOC_RX_GPRELB,
+  BFD_RELOC_RX_GPRELW,
+  BFD_RELOC_RX_GPRELL,
+  BFD_RELOC_RX_SYM,
+  BFD_RELOC_RX_OP_SUBTRACT,
+  BFD_RELOC_RX_ABS8,
+  BFD_RELOC_RX_ABS16,
+  BFD_RELOC_RX_ABS32,
+  BFD_RELOC_RX_ABS16U,
+  BFD_RELOC_RX_ABS16UW,
+  BFD_RELOC_RX_ABS16UL,
+  BFD_RELOC_RX_RELAX,
 
 /* Direct 12 bit.  */
   BFD_RELOC_390_12,
