@@ -24,15 +24,18 @@
 #define STATIC_TABLE
 #define DEFINE_TABLE
 
-#include "microblaze-opc.h"
 #include "dis-asm.h"
 #include <strings.h>
+#include "microblaze-opc.h"
+#include "microblaze-dis.h"
 
 #define get_field_rd(instr)        get_field (instr, RD_MASK, RD_LOW)
 #define get_field_r1(instr)        get_field (instr, RA_MASK, RA_LOW)
 #define get_field_r2(instr)        get_field (instr, RB_MASK, RB_LOW)
 #define get_int_field_imm(instr)   ((instr & IMM_MASK) >> IMM_LOW)
 #define get_int_field_r1(instr)    ((instr & RA_MASK) >> RA_LOW)
+
+
 
 static char *
 get_field (long instr, long mask, unsigned short low)
@@ -388,8 +391,8 @@ print_insn_microblaze (bfd_vma memaddr, struct disassemble_info * info)
   /* Say how many bytes we consumed.  */
   return 4;
 }
-#if 0
-static enum microblaze_instr
+
+enum microblaze_instr
 get_insn_microblaze (long inst,
   		     bfd_boolean *isunsignedimm,
   		     enum microblaze_instr_type *insn_type,
@@ -412,21 +415,6 @@ get_insn_microblaze (long inst,
       *delay_slots = op->delay_slots;
       return op->instr;
     }
-}
-
-short
-get_delay_slots_microblaze (long inst)
-{
-  bfd_boolean isunsignedimm;
-  enum microblaze_instr_type insn_type;
-  enum microblaze_instr op;
-  short delay_slots;
-
-  op = get_insn_microblaze (inst, &isunsignedimm, &insn_type, &delay_slots);
-  if (op == invalid_inst)
-    return 0;
-  else
-    return delay_slots;
 }
 
 enum microblaze_instr
@@ -524,4 +512,3 @@ microblaze_get_target_address (long inst, bfd_boolean immfound, int immval,
     *targetvalid = FALSE;
   return targetaddr;
 }
-#endif
