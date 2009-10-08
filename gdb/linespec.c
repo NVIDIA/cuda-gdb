@@ -30,6 +30,7 @@
 #include "value.h"
 #include "completer.h"
 #include "cp-abi.h"
+#include "cp-support.h"
 #include "parser-defs.h"
 #include "block.h"
 #include "objc-lang.h"
@@ -1171,11 +1172,19 @@ decode_objc (char **argptr, int funfirstline, struct symtab *file_symtab,
 	}
       else
 	{
-	  /* The only match was a non-debuggable symbol.  */
-	  values.sals[0].symtab = NULL;
-	  values.sals[0].line = 0;
-	  values.sals[0].end = 0;
-	  values.sals[0].pc = SYMBOL_VALUE_ADDRESS (sym_arr[0]);
+	  /* The only match was a non-debuggable symbol, which might point
+	     to a function descriptor; resolve it to the actual code address
+	     instead.  */
+	  struct minimal_symbol *msymbol = (struct minimal_symbol *)sym_arr[0];
+	  struct objfile *objfile = msymbol_objfile (msymbol);
+	  struct gdbarch *gdbarch = get_objfile_arch (objfile);
+	  CORE_ADDR pc = SYMBOL_VALUE_ADDRESS (msymbol);
+
+	  pc = gdbarch_convert_from_func_ptr_addr (gdbarch, pc,
+						   &current_target);
+
+	  init_sal (&values.sals[0]);
+	  values.sals[0].pc = pc;
 	}
       return values;
     }
@@ -1257,6 +1266,9 @@ decode_compound (char **argptr, int funfirstline, char ***canonical,
       /* Move pointer ahead to next double-colon.  */
       while (*p && (p[0] != ' ') && (p[0] != '\t') && (p[0] != '\''))
 	{
+	  if (current_language->la_language == language_cplus)
+	    p += cp_validate_operator (p);
+
 	  if (p[0] == '<')
 	    {
 	      temp_end = find_template_name_end (p);
@@ -1334,6 +1346,15 @@ decode_compound (char **argptr, int funfirstline, char ***canonical,
 	  while (*p && *p != ' ' && *p != '\t' && *p != ',' && *p != ':')
 	    p++;
 	  /* At this point p->"".  String ended.  */
+	  /* Nope, C++ operators could have spaces in them
+	     ("foo::operator <" or "foo::operator delete []").
+	     I apologize, this is a bit hacky...  */
+	  if (current_language->la_language == language_cplus
+	      && *p == ' ' && p - 8 - *argptr + 1 > 0)
+	    {
+	      /* The above loop has already swallowed "operator".  */
+	      p += cp_validate_operator (p - 8) - 8;
+	    }
 	}
 
       /* Allocate our own copy of the substring between argptr and
@@ -1474,26 +1495,16 @@ find_method (int funfirstline, char ***canonical, char *saved_arg,
     }
   else
     {
-      char *tmp;
-
-      if (is_operator_name (copy))
-	{
-	  tmp = (char *) alloca (strlen (copy + 3) + 9);
-	  strcpy (tmp, "operator ");
-	  strcat (tmp, copy + 3);
-	}
-      else
-	tmp = copy;
       if (not_found_ptr)
         *not_found_ptr = 1;
-      if (tmp[0] == '~')
+      if (copy[0] == '~')
 	cplusplus_error (saved_arg,
 			 "the class `%s' does not have destructor defined\n",
 			 SYMBOL_PRINT_NAME (sym_class));
       else
 	cplusplus_error (saved_arg,
 			 "the class %s does not have any method named %s\n",
-			 SYMBOL_PRINT_NAME (sym_class), tmp);
+			 SYMBOL_PRINT_NAME (sym_class), copy);
     }
 }
 

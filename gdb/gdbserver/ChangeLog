@@ -1,4 +1,4 @@
-2009-09-28  Ulrich Weigand  <uweigand@de.ibm.com>
+2009-09-27  Ulrich Weigand  <uweigand@de.ibm.com>
 
 	* spu-low.c (spu_kill): Wait for inferior to terminate.
 	Call clear_inferiors.

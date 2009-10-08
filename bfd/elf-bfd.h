@@ -305,6 +305,10 @@ struct eh_cie_fde
  	asection *sec;
       } u;
 
+      /* The offset of the personality data from the start of the CIE,
+	 or 0 if the CIE doesn't have any.  */
+      unsigned int personality_offset : 8;
+
       /* True if we have marked relocations associated with this CIE.  */
       unsigned int gc_mark : 1;
 
@@ -312,8 +316,13 @@ struct eh_cie_fde
 	 a PC-relative one.  */
       unsigned int make_lsda_relative : 1;
 
-      /* True if the CIE contains personality data and if that data
-	 uses a PC-relative encoding.  */
+      /* True if we have decided to turn an absolute personality
+	 encoding into a PC-relative one.  */
+      unsigned int make_per_encoding_relative : 1;
+
+      /* True if the CIE contains personality data and if that
+	 data uses a PC-relative encoding.  Always true when
+	 make_per_encoding_relative is.  */
       unsigned int per_encoding_relative : 1;
 
       /* True if we need to add an 'R' (FDE encoding) entry to the
@@ -322,6 +331,9 @@ struct eh_cie_fde
 
       /* True if we have merged this CIE with another.  */
       unsigned int merged : 1;
+
+      /* Unused bits.  */
+      unsigned int pad1 : 18;
     } cie;
   } u;
   unsigned int reloc_index;
@@ -1491,6 +1503,10 @@ struct elf_obj_tdata
      one.  */
   const char *dt_name;
 
+  /* The linker emulation needs to know what audit libs
+     are used by a dynamic object.  */ 
+  const char *dt_audit;
+
   /* Records the result of `get_program_header_size'.  */
   bfd_size_type program_header_size;
 
@@ -1620,6 +1636,7 @@ struct elf_obj_tdata
 #define elf_local_got_offsets(bfd) (elf_tdata(bfd) -> local_got.offsets)
 #define elf_local_got_ents(bfd) (elf_tdata(bfd) -> local_got.ents)
 #define elf_dt_name(bfd)	(elf_tdata(bfd) -> dt_name)
+#define elf_dt_audit(bfd)	(elf_tdata(bfd) -> dt_audit)
 #define elf_dyn_lib_class(bfd)	(elf_tdata(bfd) -> dyn_lib_class)
 #define elf_bad_symtab(bfd)	(elf_tdata(bfd) -> bad_symtab)
 #define elf_flags_init(bfd)	(elf_tdata(bfd) -> flags_init)

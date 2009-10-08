@@ -496,8 +496,8 @@ record_open (char *name, int from_tty)
 
   /* Check if record target is already running.  */
   if (current_target.to_stratum == record_stratum)
-     error (_("Process record target already running.  Use \"record stop\" to "
- 	     "stop record target first."));
+    error (_("Process record target already running.  Use \"record stop\" to "
+             "stop record target first."));
 
   /*Reset the beneath function pointers.  */
   record_beneath_to_resume = NULL;
