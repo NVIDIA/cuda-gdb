@@ -1,13 +1,3 @@
-2010-04-21  H.J. Lu  <hongjiu.lu@intel.com>
-
-	PR corefiles/11523
-	* amd64-linux-tdep.c (amd64_linux_core_read_description): Check
-	XCR0 first.
-
-	* i386-linux-tdep.c (i386_linux_core_read_xcr0): Return 0 if
-	there is no .reg-xstate section.
-	(i386_linux_core_read_description): Check XCR0 first.
-
 2010-04-21  Mike Frysinger  <vapier@gentoo.org>
 
 	* gdb/sparc-tdep.c (sparc32_store_return_value): Add gdb_assert ()
@@ -17,8 +7,8 @@
 
 	PR 9167
 	* cp-valprint.c (cp_print_value_fields): Replaced obstack_base()
-	method of popping recursion-detection stack with a method based on
-	obstack_object_size().
+        method of popping recursion-detection stack with a method based on
+        obstack_object_size().
 
 2010-04-21  Pierre Muller  <muller@ics.u-strasbg.fr>
 
