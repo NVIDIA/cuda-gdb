@@ -1,4 +1,4 @@
-/* 32-bit ELF support for TI C6X
+/* TI C6X ELF attributes.
    Copyright 2010
    Free Software Foundation, Inc.
 
@@ -19,8 +19,7 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
-extern int elf32_tic6x_merge_arch_attributes (int, int);
+/* Define the TAG macro before including this file; it takes a tag
+   name and value.  */
 
-/* This function is provided for use from the assembler.  */
-
-extern void elf32_tic6x_set_use_rela_p (bfd *, bfd_boolean);
+TAG(Tag_C6XABI_Tag_CPU_arch, 2)
