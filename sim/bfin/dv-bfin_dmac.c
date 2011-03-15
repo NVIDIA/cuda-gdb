@@ -487,8 +487,7 @@ bfin_dmac_finish (struct hw *me)
     }
 }
 
-const struct hw_descriptor dv_bfin_dmac_descriptor[] =
-{
+const struct hw_descriptor dv_bfin_dmac_descriptor[] = {
   {"bfin_dmac", bfin_dmac_finish,},
   {NULL, NULL},
 };

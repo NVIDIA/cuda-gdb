@@ -207,8 +207,7 @@ bfin_cec_finish (struct hw *me)
   cec->ipend = IVG_RST_B | IVG_IRPTEN_B;
 }
 
-const struct hw_descriptor dv_bfin_cec_descriptor[] =
-{
+const struct hw_descriptor dv_bfin_cec_descriptor[] = {
   {"bfin_cec", bfin_cec_finish,},
   {NULL, NULL},
 };

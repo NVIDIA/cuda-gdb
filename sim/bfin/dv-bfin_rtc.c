@@ -190,8 +190,7 @@ bfin_rtc_finish (struct hw *me)
   /* Initialize the RTC.  */
 }
 
-const struct hw_descriptor dv_bfin_rtc_descriptor[] =
-{
+const struct hw_descriptor dv_bfin_rtc_descriptor[] = {
   {"bfin_rtc", bfin_rtc_finish,},
   {NULL, NULL},
 };

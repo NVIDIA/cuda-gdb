@@ -453,8 +453,7 @@ bfin_ebiu_amc_finish (struct hw *me)
   bfin_ebiu_amc_write_amgctl (me, amc, amgctl);
 }
 
-const struct hw_descriptor dv_bfin_ebiu_amc_descriptor[] =
-{
+const struct hw_descriptor dv_bfin_ebiu_amc_descriptor[] = {
   {"bfin_ebiu_amc", bfin_ebiu_amc_finish,},
   {NULL, NULL},
 };

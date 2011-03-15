@@ -196,8 +196,7 @@ bfin_ebiu_sdc_finish (struct hw *me)
   sdc->sdbctl |= EBE | EBSZ_64 | EBCAW_10;
 }
 
-const struct hw_descriptor dv_bfin_ebiu_sdc_descriptor[] =
-{
+const struct hw_descriptor dv_bfin_ebiu_sdc_descriptor[] = {
   {"bfin_ebiu_sdc", bfin_ebiu_sdc_finish,},
   {NULL, NULL},
 };
