@@ -321,6 +321,14 @@ struct value
   /* Register number if the value is from a register.  */
   short regnum;
 
+  /* CUDA - register cache */
+  /* If nonzero, this value was recovered from CUDA PTX cache */
+  char cached;
+
+  /* CUDA - regmap extrapolation */
+  /* If nonzero, this value has been extrapolated */
+  char extrapolated;
+
   /* Actual contents of the value.  Target byte-order.  NULL or not
      valid if lazy is nonzero.  */
   gdb_byte *contents;
@@ -675,6 +683,8 @@ allocate_value_lazy (struct type *type)
   VALUE_REGNUM (val) = -1;
   val->lazy = 1;
   val->optimized_out = 0;
+  /* CUDA - register cache */
+  val->cached = 0;
   val->embedded_offset = 0;
   val->pointed_to_offset = 0;
   val->modifiable = 1;
@@ -1059,6 +1069,32 @@ set_value_optimized_out (struct value *value, int val)
   value->optimized_out = val;
 }
 
+/* CUDA - register cache */
+int
+value_cached (const struct value *value)
+{
+  return value->cached;
+}
+
+void
+set_value_cached (struct value *value, int val)
+{
+  value->cached = val;
+}
+
+/* CUDA - regmap extrapolation */
+int
+value_extrapolated (const struct value *value)
+{
+  return value->extrapolated;
+}
+
+void
+set_value_extrapolated (struct value *value, int val)
+{
+  value->extrapolated = val;
+}
+
 int
 value_entirely_optimized_out (const struct value *value)
 {
@@ -1388,6 +1424,7 @@ value_copy (struct value *arg)
   VALUE_REGNUM (val) = VALUE_REGNUM (arg);
   val->lazy = arg->lazy;
   val->optimized_out = arg->optimized_out;
+  val->stack = arg->stack; /* CUDA - cuda_read_memory relies on this */
   val->embedded_offset = value_embedded_offset (arg);
   val->pointed_to_offset = arg->pointed_to_offset;
   val->modifiable = arg->modifiable;
@@ -1980,6 +2017,12 @@ set_internalvar (struct internalvar *var, struct value *val)
       get_internalvar_function (VALUE_INTERNALVAR (val),
 				&new_data.fn.function);
       /* Copies created here are never canonical.  */
+      break;
+
+    case TYPE_CODE_INT:
+      new_kind = INTERNALVAR_INTEGER;
+      new_data.integer.type = value_type (val);
+      new_data.integer.val = value_as_long (val);
       break;
 
     default:

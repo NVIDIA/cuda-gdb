@@ -19,6 +19,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "symtab.h"
 #include "frame.h"
@@ -845,14 +863,16 @@ print_thread_info (struct ui_out *uiout, char *requested_threads, int pid)
       if (ui_out_is_mi_like_p (uiout))
 	{
 	  /* Compatibility.  */
-	  if (ptid_equal (tp->ptid, current_ptid))
+          if (ptid_equal (tp->ptid, current_ptid) &&
+              !cuda_focus_is_device () /* CUDA - focus */)
 	    ui_out_text (uiout, "* ");
 	  else
 	    ui_out_text (uiout, "  ");
 	}
       else
 	{
-	  if (ptid_equal (tp->ptid, current_ptid))
+          if (ptid_equal (tp->ptid, current_ptid) &&
+              !cuda_focus_is_device () /* CUDA - focus */)
 	    ui_out_field_string (uiout, "current", "*");
 	  else
 	    ui_out_field_skip (uiout, "current");
@@ -984,11 +1004,24 @@ switch_to_thread (ptid_t ptid)
       set_current_inferior (inf);
     }
 
-  if (ptid_equal (ptid, inferior_ptid))
-    return;
+  /* CUDA - focus */
+  /* We can only compare ptid equivalence (for early exit) if
+     we're not focused on the device, as otherwise it can prevent
+     the full switch from happening when changing focus from the
+     device to a host thread (as the host thread ID may not have
+     changed based on the user's switch). */
+  if (!cuda_focus_is_device ())
+    if (ptid_equal (ptid, inferior_ptid))
+      return;
+
+  /* CUDA - focus */
+  cuda_coords_invalidate_current ();
 
   inferior_ptid = ptid;
   reinit_frame_cache ();
+
+  /* CUDA - focus */
+  registers_changed ();
 
   /* We don't check for is_stopped, because we're called at times
      while in the TARGET_RUNNING state, e.g., while handling an
@@ -1074,6 +1107,8 @@ struct current_thread_cleanup
   int was_stopped;
   int inf_id;
   int was_removable;
+  /* CUDA - focus */
+  cuda_coords_t cuda_coords;
 };
 
 static void
@@ -1095,6 +1130,13 @@ do_restore_current_thread_cleanup (void *arg)
     {
       restore_current_thread (null_ptid);
       set_current_inferior (find_inferior_id (old->inf_id));
+    }
+
+  /* CUDA - focus */
+  if (old->cuda_coords.valid)
+    {
+      cuda_coords_set_current (&old->cuda_coords);
+      switch_to_cuda_thread (NULL);
     }
 
   /* The running state of the originally selected thread may have
@@ -1136,6 +1178,9 @@ make_cleanup_restore_current_thread (void)
   old->inferior_ptid = inferior_ptid;
   old->inf_id = current_inferior ()->num;
   old->was_removable = current_inferior ()->removable;
+  /* CUDA - focus */
+  old->cuda_coords = CUDA_INVALID_COORDS;
+  cuda_coords_get_current (&old->cuda_coords);
 
   if (!ptid_equal (inferior_ptid, null_ptid))
     {
@@ -1273,6 +1318,13 @@ thread_command (char *tidstr, int from_tty)
     {
       if (ptid_equal (inferior_ptid, null_ptid))
 	error (_("No thread selected"));
+
+      /* CUDA - focus */
+      if (cuda_focus_is_device ())
+        {
+          printf_unfiltered (_("Focus not set on any host thread.\n"));
+          return;
+        }
 
       if (target_has_stack)
 	{

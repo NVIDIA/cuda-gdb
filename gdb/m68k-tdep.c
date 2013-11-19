@@ -560,7 +560,7 @@ m68k_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 /* Convert a dwarf or dwarf2 regnumber to a GDB regnum.  */
 
 static int
-m68k_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int num)
+m68k_dwarf_reg_to_regnum (struct gdbarch *gdbarch, reg_t num)
 {
   if (num < 8)
     /* d0..7 */
@@ -1300,5 +1300,8 @@ extern initialize_file_ftype _initialize_m68k_tdep; /* -Wmissing-prototypes */
 void
 _initialize_m68k_tdep (void)
 {
+  /* CUDA - gdbarch */
+  return;
+
   gdbarch_register (bfd_arch_m68k, m68k_gdbarch_init, m68k_dump_tdep);
 }

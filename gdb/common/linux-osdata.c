@@ -259,7 +259,7 @@ get_process_owner (uid_t *owner, PID_T pid)
    elements.  */
 
 static int
-get_cores_used_by_process (PID_T pid, int *cores)
+get_cores_used_by_process (PID_T pid, int *cores, int num_cores)
 {
   char taskdir[sizeof ("/proc/") + MAX_PID_T_STRLEN + sizeof ("/task") - 1];
   DIR *dir;
@@ -285,6 +285,13 @@ get_cores_used_by_process (PID_T pid, int *cores)
 
 	  if (core >= 0)
 	    {
+	      if (core >= num_cores)
+	        {
+	          printf ("Warning: Adjusting return value of linux_common_core_of_thread (pid=%lu, tid=%lu).\n"
+                          "         core = %d >= num_cores = %d!\n",
+	                  (unsigned long)pid, (unsigned long)tid, core, num_cores);
+	          core = num_cores-1;
+	        }
 	      ++cores[core];
 	      ++task_count;
 	    }
@@ -319,7 +326,12 @@ linux_xfer_osdata_processes (gdb_byte *readbuf,
       dirp = opendir ("/proc");
       if (dirp)
 	{
+#ifndef __arm__
 	  const int num_cores = sysconf (_SC_NPROCESSORS_ONLN);
+#else
+	  /* On ARM, count both online and offline CPUs */
+	  const int num_cores = sysconf (_SC_NPROCESSORS_CONF);
+#endif
 	  struct dirent *dp;
 
 	  while ((dp = readdir (dirp)) != NULL)
@@ -347,7 +359,7 @@ linux_xfer_osdata_processes (gdb_byte *readbuf,
 
 	      /* Find CPU cores used by the process.  */
 	      cores = (int *) xcalloc (num_cores, sizeof (int));
-	      task_count = get_cores_used_by_process (pid, cores);
+	      task_count = get_cores_used_by_process (pid, cores, num_cores);
 	      cores_str = (char *) xcalloc (task_count, sizeof ("4294967295") + 1);
 
 	      for (i = 0; i < num_cores && task_count > 0; ++i)

@@ -18,6 +18,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "frame.h"
 #include "inferior.h"
@@ -245,6 +263,65 @@ i386_darwin_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   return sp + 8;
 }
 
+/* CUDA - siginfo */
+/* Darwin does not create a siginfo convenience variable, but the CUDA target
+   does. Make sure we have on both the host and device side. */
+static struct type *
+i386_darwin_get_siginfo_type (struct gdbarch *gdbarch)
+{
+  struct type *int_type, *uint_type, *long_type, *ulong_type;
+  struct type *void_ptr_type, *pad_type;
+  struct type *sigval_type;
+  struct type *uid_type, *pid_type;
+  struct type *siginfo_type;
+
+  /* basic types */
+  int_type = arch_integer_type (gdbarch, gdbarch_int_bit (gdbarch),
+			 	0, "int");
+  uint_type = arch_integer_type (gdbarch, gdbarch_int_bit (gdbarch),
+				 1, "unsigned int");
+  long_type = arch_integer_type (gdbarch, gdbarch_long_bit (gdbarch),
+				 0, "long int");
+  ulong_type = arch_integer_type (gdbarch, gdbarch_long_bit (gdbarch),
+		                  0, "unsigned long int");
+  void_ptr_type = lookup_pointer_type (builtin_type (gdbarch)->builtin_void);
+  pad_type = init_vector_type (ulong_type, 7);
+
+  /* union sigval */
+  sigval_type = arch_composite_type (gdbarch, NULL, TYPE_CODE_UNION);
+  TYPE_NAME (sigval_type) = xstrdup ("union sigval");
+  append_composite_type_field (sigval_type, "sival_int", int_type);
+  append_composite_type_field (sigval_type, "sival_ptr", void_ptr_type);
+
+  /* __pid_t */
+  pid_type = arch_type (gdbarch, TYPE_CODE_TYPEDEF, TYPE_LENGTH (int_type),
+			xstrdup ("pid_t"));
+  TYPE_TARGET_TYPE (pid_type) = int_type;
+  TYPE_TARGET_STUB (pid_type) = 1;
+
+  /* __uid_t */
+  uid_type = arch_type (gdbarch, TYPE_CODE_TYPEDEF, TYPE_LENGTH (uint_type),
+			xstrdup ("uid_t"));
+  TYPE_TARGET_TYPE (uid_type) = uint_type;
+  TYPE_TARGET_STUB (uid_type) = 1;
+
+  /* struct siginfo */
+  siginfo_type = arch_composite_type (gdbarch, NULL, TYPE_CODE_STRUCT);
+  TYPE_NAME (siginfo_type) = xstrdup ("siginfo");
+  append_composite_type_field (siginfo_type, "si_signo", int_type);
+  append_composite_type_field (siginfo_type, "si_errno", int_type);
+  append_composite_type_field (siginfo_type, "si_code", int_type);
+  append_composite_type_field (siginfo_type, "si_pid", pid_type);
+  append_composite_type_field (siginfo_type, "si_uid", uid_type);
+  append_composite_type_field (siginfo_type, "si_status", int_type);
+  append_composite_type_field (siginfo_type, "si_addr", void_ptr_type);
+  append_composite_type_field (siginfo_type, "si_value", sigval_type);
+  append_composite_type_field (siginfo_type, "si_band", long_type);
+  append_composite_type_field (siginfo_type, "__pad", pad_type); 
+
+  return siginfo_type;
+}
+
 static void
 i386_darwin_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
@@ -270,6 +347,9 @@ i386_darwin_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
      bits, a `long double' actually takes up 128, probably to enforce
      alignment.  */
   set_gdbarch_long_double_bit (gdbarch, 128);
+
+  /* CUDA - siginfo */
+  set_gdbarch_get_siginfo_type (gdbarch, i386_darwin_get_siginfo_type);
 
   set_solib_ops (gdbarch, &darwin_so_ops);
 }

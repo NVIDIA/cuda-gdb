@@ -28,6 +28,14 @@ case $targ in
     ;;
 esac
 
+# CUDA files
+gdb_target_cuda_obs="cuda-api.o  cuda-autostep.o  cuda-asm.o  cuda-commands.o  cuda-context.o \
+   cuda-coords.o cuda-elf-image.o  cuda-events.o  cuda-exceptions.o cuda-frame.o cuda-gdb.o \
+   cuda-iterator.o  cuda-kernel.o cuda-linux-nat.o cuda-modules.o cuda-convvars.o \
+   cuda-notifications.o cuda-options.o cuda-packet-manager.o cuda-regmap.o cuda-special-register.o \
+   cuda-state.o cuda-tdep.o cuda-textures.o cuda-utils.o cuda-darwin-nat.o \
+   libcudbg.o libcudbgipc.o remote-cuda.o"
+
 # map target info into gdb names.
 
 case "${targ}" in
@@ -89,6 +97,9 @@ arm*-*-linux*)
 	# Target: ARM based machine running GNU/Linux
 	gdb_target_obs="arm-tdep.o arm-linux-tdep.o glibc-tdep.o \
 			solib-svr4.o symfile-mem.o linux-tdep.o"
+	if test "x$enable_cuda" = "xyes"; then
+	    gdb_target_obs="${gdb_target_cuda_obs} ${gdb_target_obs}"
+	fi
 	build_gdbserver=yes
 	;;
 arm*-*-netbsd* | arm*-*-knetbsd*-gnu)
@@ -180,6 +191,9 @@ i[34567]86-*-darwin*)
 	    # Target: GNU/Linux x86-64
 	    gdb_target_obs="amd64-tdep.o amd64-darwin-tdep.o ${gdb_target_obs}"
 	fi
+	if test "x$enable_cuda" = "xyes"; then
+	    gdb_target_obs="${gdb_target_cuda_obs} ${gdb_target_obs}"
+	fi
 	;;
 i[34567]86-*-dicos*)
 	# Target: DICOS/i386
@@ -225,17 +239,26 @@ i[34567]86-*-linux*)
 	    # Target: GNU/Linux x86-64
 	    gdb_target_obs="amd64-tdep.o amd64-linux-tdep.o ${gdb_target_obs}"
 	fi
+	if test "x$enable_cuda" = "xyes"; then
+	    gdb_target_obs="${gdb_target_cuda_obs} ${gdb_target_obs}"
+	fi
 	build_gdbserver=yes
 	;;
 i[34567]86-*-gnu*)
 	# Target: Intel 386 running the GNU Hurd
 	gdb_target_obs="i386-tdep.o i387-tdep.o i386gnu-tdep.o solib-svr4.o"
+	if test "x$enable_cuda" = "xyes"; then
+	    gdb_target_obs="${gdb_target_cuda_obs} ${gdb_target_obs}"
+	fi
 	;;
 i[34567]86-*-cygwin*)
 	# Target: Intel 386 running win32
 	gdb_target_obs="i386-tdep.o i386-cygwin-tdep.o i387-tdep.o \
 			windows-tdep.o"
 	build_gdbserver=yes
+	if test "x$enable_cuda" = "xyes"; then
+	    gdb_target_obs="${gdb_target_cuda_obs} ${gdb_target_obs}"
+	fi
 	;;
 i[34567]86-*-mingw32*)
 	# Target: Intel 386 running win32
@@ -644,6 +667,9 @@ x86_64-*-linux*)
 	gdb_target_obs="amd64-tdep.o amd64-linux-tdep.o i386-tdep.o \
 			i387-tdep.o i386-linux-tdep.o glibc-tdep.o \
 			solib-svr4.o symfile-mem.o linux-tdep.o linux-record.o"
+	if test "x$enable_cuda" = "xyes"; then
+	    gdb_target_obs="${gdb_target_cuda_obs} ${gdb_target_obs}"
+	fi
 	build_gdbserver=yes
 	;;
 x86_64-*-freebsd* | x86_64-*-kfreebsd*-gnu)

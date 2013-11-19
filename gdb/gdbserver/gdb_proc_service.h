@@ -50,7 +50,9 @@ typedef enum
 } ps_err_e;
 
 #ifndef HAVE_LWPID_T
+#ifndef __ANDROID__
 typedef unsigned int lwpid_t;
+#endif
 #endif
 
 #ifndef HAVE_PSADDR_T

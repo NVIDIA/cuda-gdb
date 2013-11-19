@@ -275,7 +275,7 @@ clean-info: force
 gdbserver$(EXEEXT): $(OBS) ${ADD_DEPS} ${CDEPS} $(LIBGNU)
 	rm -f gdbserver$(EXEEXT)
 	${CC-LD} $(INTERNAL_CFLAGS) $(INTERNAL_LDFLAGS) -o gdbserver$(EXEEXT) $(OBS) \
-	$(LIBGNU) $(GDBSERVER_LIBS) $(XM_CLIBS)
+	  $(LIBGNU) $(GDBSERVER_LIBS) $(XM_CLIBS) $(LDFLAGS)
 
 $(LIBGNU) $(GNULIB_H): all-lib
 all-lib: $(GNULIB_BUILDDIR)/Makefile
@@ -402,6 +402,15 @@ stamp-xml: $(XML_DIR)/feature_to_c.sh Makefile $(XML_FILES)
 	$(SHELL) $(XML_DIR)/feature_to_c.sh xml-builtin.tmp $(XML_FILES)
 	$(SHELL) $(srcdir)/../../move-if-change xml-builtin.tmp xml-builtin.c
 	echo stamp > stamp-xml
+
+cuda-notifications.o: $(srcdir)/../cuda-notifications.c $(srcdir)/../cuda-notifications.h
+	${CC} -c ${INTERNAL_CFLAGS} $< -I$(srcdir)/.. -DGDBSERVER
+cuda-utils.o: $(srcdir)/../cuda-utils.c $(srcdir)/../cuda-utils.h
+	${CC} -c ${INTERNAL_CFLAGS} $< -I$(srcdir)/.. -DGDBSERVER
+libcudbg.o: $(srcdir)/../libcudbg.c $(srcdir)/../libcudbg.h
+	${CC} -c ${INTERNAL_CFLAGS} $< -I$(srcdir)/.. -DGDBSERVER
+libcudbgipc.o: $(srcdir)/../libcudbgipc.c $(srcdir)/../libcudbgipc.h
+	${CC} -c ${INTERNAL_CFLAGS} $< -I$(srcdir)/.. -DGDBSERVER
 
 .PRECIOUS: xml-builtin.c
 

@@ -1880,7 +1880,7 @@ bfd_ar_hdr_from_filesystem (bfd *abfd, const char *filename, bfd *member)
     {
       /* Assume we just "made" the member, and fake it.  */
       struct bfd_in_memory *bim = (struct bfd_in_memory *) member->iostream;
-      time (&status.st_mtime);
+      time ((time_t *)&status.st_mtime);
       status.st_uid = getuid ();
       status.st_gid = getgid ();
       status.st_mode = 0644;

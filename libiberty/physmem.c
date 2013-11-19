@@ -49,7 +49,11 @@
 #endif
 
 #if HAVE_SYS_SYSCTL_H
+#ifdef __ANDROID__
+# include <linux/sysctl.h>
+#else
 # include <sys/sysctl.h>
+#endif
 #endif
 
 #if HAVE_SYS_SYSTEMCFG_H

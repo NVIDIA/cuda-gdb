@@ -487,6 +487,17 @@ ui_out_field_fmt_int (struct ui_out *uiout,
 }
 
 /* Documented in ui-out.h.  */
+void
+ui_out_field_long_long (struct ui_out *uiout,
+			const char *fldname,
+			long long value)
+{
+  char str[32];
+
+  snprintf (str, sizeof(str), "%lld", value);
+
+  ui_out_field_string (uiout, fldname, str);
+}
 
 void
 ui_out_field_core_addr (struct ui_out *uiout,

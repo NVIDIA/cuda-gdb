@@ -43,12 +43,20 @@
 #include "gdb_stat.h"
 #include <sys/vfs.h>
 #include <sys/uio.h>
+#include "../cuda-notifications.h"
+bool cuda_has_resumed_devices (void);
+
 #ifndef ELFMAG0
 /* Don't include <linux/elf.h> here.  If it got included by gdb_proc_service.h
    then ELFMAG0 will have been defined.  If it didn't get included by
    gdb_proc_service.h then including it will likely introduce a duplicate
    definition of elf_fpregset_t.  */
 #include <elf.h>
+#endif
+
+#ifdef __ANDROID__
+#undef HAVE_ELF32_AUXV_T
+#undef HAVE_ELF64_AUXV_T
 #endif
 
 #ifndef SPUFS_MAGIC
@@ -369,6 +377,10 @@ my_waitpid (int pid, int *status, int flags)
   if (debug_threads)
     fprintf (stderr, "my_waitpid (%d, 0x%x)\n", pid, flags);
 
+  /* CUDA - notifications */
+  if (cuda_has_resumed_devices())
+    cuda_notification_accept ();
+
   if (flags & __WALL)
     {
       sigset_t block_mask, org_mask, wake_mask;
@@ -424,6 +436,10 @@ my_waitpid (int pid, int *status, int flags)
       while (ret == -1 && errno == EINTR);
       out_errno = errno;
     }
+
+  /* CUDA - notifications */
+  if (cuda_has_resumed_devices())
+    cuda_notification_block ();
 
   if (debug_threads)
     fprintf (stderr, "my_waitpid (%d, 0x%x): status(%x), %d\n",
@@ -2833,7 +2849,7 @@ kill_lwp (unsigned long lwpid, int signo)
   /* Use tkill, if possible, in case we are using nptl threads.  If tkill
      fails, then we are not using nptl threads and we should be using kill.  */
 
-#ifdef __NR_tkill
+#ifdef __linux__
   {
     static int tkill_failed;
 
@@ -4037,8 +4053,9 @@ regsets_fetch_inferior_registers (struct regcache *regcache)
 	}
       else
 	data = buf;
-
-#ifndef __sparc__
+#ifdef __ANDROID__
+      res = ptrace (regset->get_request, pid, (void *)nt_type, (void *)data);
+#elif !defined(__sparc__)
       res = ptrace (regset->get_request, pid,
 		    (PTRACE_ARG3_TYPE) (long) nt_type, data);
 #else
@@ -4112,7 +4129,9 @@ regsets_store_inferior_registers (struct regcache *regcache)
       else
 	data = buf;
 
-#ifndef __sparc__
+#ifdef __ANDROID__
+      res = ptrace (regset->get_request, pid, (void *)nt_type, (void *)data);
+#elif !defined(__sparc__)
       res = ptrace (regset->get_request, pid,
 		    (PTRACE_ARG3_TYPE) (long) nt_type, data);
 #else
@@ -4125,7 +4144,9 @@ regsets_store_inferior_registers (struct regcache *regcache)
 	  regset->fill_function (regcache, buf);
 
 	  /* Only now do we write the register set.  */
-#ifndef __sparc__
+#ifdef __ANDROID__
+      res = ptrace (regset->get_request, pid, (void *)nt_type, (void *)data);
+#elif !defined(__sparc__)
 	  res = ptrace (regset->set_request, pid,
 			(PTRACE_ARG3_TYPE) (long) nt_type, data);
 #else
@@ -4919,9 +4940,9 @@ siginfo_fixup (siginfo_t *siginfo, void *inf_siginfo, int direction)
   if (!done)
     {
       if (direction == 1)
-	memcpy (siginfo, inf_siginfo, sizeof (siginfo_t));
+	memcpy (siginfo, inf_siginfo, sizeof (*siginfo));
       else
-	memcpy (inf_siginfo, siginfo, sizeof (siginfo_t));
+	memcpy (inf_siginfo, siginfo, sizeof (*siginfo));
     }
 }
 
@@ -5958,6 +5979,8 @@ initialize_low (void)
 {
   struct sigaction sigchld_action;
   memset (&sigchld_action, 0, sizeof (sigchld_action));
+  /* CUDA - initialize */
+  initialize_cuda_target_ops (&linux_target_ops);
   set_target_ops (&linux_target_ops);
   set_breakpoint_data (the_low_target.breakpoint,
 		       the_low_target.breakpoint_len);

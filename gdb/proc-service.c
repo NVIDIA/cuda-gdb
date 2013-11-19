@@ -27,7 +27,12 @@
 
 #include "gdb_proc_service.h"
 
+#ifndef __ANDROID__
 #include <sys/procfs.h>
+#else
+#include <asm/elf.h>
+#include <thread_db.h>
+#endif
 
 /* Prototypes for supply_gregset etc.  */
 #include "gregset.h"
@@ -181,7 +186,7 @@ ps_lsetxregs (gdb_ps_prochandle_t ph, lwpid_t lwpid, caddr_t xregset)
 
 /* Log (additional) diognostic information.  */
 
-void
+ATTRIBUTE_PRINTF(1, 2) void
 ps_plog (const char *fmt, ...)
 {
   va_list args;

@@ -858,7 +858,25 @@ libpthread_solib_p (struct so_list *so)
   return libpthread_name_p (so->so_name);
 }
 
-/* Read in symbolic information for any shared objects whose names
+/* Return non-zero if SO is the CUDA library */
+static int
+libcuda_solib_p (struct so_list *so)
+{
+  return strstr (so->so_name, "/libcuda") != NULL;
+}
+
+/* GLOBAL FUNCTION
+
+   solib_add -- read in symbol info for newly added shared libraries
+
+   SYNOPSIS
+
+   void solib_add (char *pattern, int from_tty, struct target_ops
+   *TARGET, int readsyms)
+
+   DESCRIPTION
+
+   Read in symbolic information for any shared objects whose names
    match PATTERN.  (If we've already read a shared object's symbol
    info, leave it alone.)  If PATTERN is zero, read them all.
 
@@ -902,8 +920,9 @@ solib_add (char *pattern, int from_tty,
              exception for the pthread library, because we sometimes
              need the library symbols to be loaded in order to provide
              thread support (x86-linux for instance).  */
+          /* CUDA - load libcuda symbols even if readsyms is 0 */
           const int add_this_solib =
-            (readsyms || libpthread_solib_p (gdb));
+            (readsyms || libpthread_solib_p (gdb) || libcuda_solib_p (gdb));
 
 	  any_matches = 1;
 	  if (add_this_solib)

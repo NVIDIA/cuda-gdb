@@ -28,14 +28,13 @@
 #include "gdb_assert.h"
 #include "gdb_string.h"
 #include "gdb_ptrace.h"
+#include "gdb_stat.h"
 #include "gdb_wait.h"
 #include <signal.h>
 
 #include "inf-ptrace.h"
 #include "inf-child.h"
 #include "gdbthread.h"
-
-
 
 #ifdef PT_GET_PROCESS_STATE
 
@@ -48,7 +47,7 @@ inf_ptrace_follow_fork (struct target_ops *ops, int follow_child)
   pid = ptid_get_pid (inferior_ptid);
 
   if (ptrace (PT_GET_PROCESS_STATE, pid,
-	       (PTRACE_TYPE_ARG3)&pe, sizeof pe) == -1)
+	       (PTRACE_TYPE_ARG3)&pe, (PTRACE_TYPE_ARG4)sizeof pe) == -1)
     perror_with_name (("ptrace"));
 
   gdb_assert (pe.pe_report_event == PTRACE_FORK);
@@ -72,7 +71,7 @@ inf_ptrace_follow_fork (struct target_ops *ops, int follow_child)
 	 it.  */
       remove_breakpoints ();
 
-      if (ptrace (PT_DETACH, pid, (PTRACE_TYPE_ARG3)1, 0) == -1)
+      if (ptrace (PT_DETACH, pid, (PTRACE_TYPE_ARG3)1, (PTRACE_TYPE_ARG4)0) == -1)
 	perror_with_name (("ptrace"));
 
       /* Switch inferior_ptid out of the parent's way.  */
@@ -88,7 +87,7 @@ inf_ptrace_follow_fork (struct target_ops *ops, int follow_child)
       /* Breakpoints have already been detached from the child by
 	 infrun.c.  */
 
-      if (ptrace (PT_DETACH, fpid, (PTRACE_TYPE_ARG3)1, 0) == -1)
+      if (ptrace (PT_DETACH, fpid, (PTRACE_TYPE_ARG3)1, (PTRACE_TYPE_ARG4)0) == -1)
 	perror_with_name (("ptrace"));
     }
 
@@ -104,7 +103,7 @@ static void
 inf_ptrace_me (void)
 {
   /* "Trace me, Dr. Memory!"  */
-  ptrace (PT_TRACE_ME, 0, (PTRACE_TYPE_ARG3)0, 0);
+  ptrace (PT_TRACE_ME, 0, (PTRACE_TYPE_ARG3)0, (PTRACE_TYPE_ARG4)0);
 }
 
 /* Start a new inferior Unix child process.  EXEC_FILE is the file to
@@ -158,7 +157,7 @@ inf_ptrace_post_startup_inferior (ptid_t pid)
   memset (&pe, 0, sizeof pe);
   pe.pe_set_event |= PTRACE_FORK;
   if (ptrace (PT_SET_EVENT_MASK, ptid_get_pid (pid),
-	      (PTRACE_TYPE_ARG3)&pe, sizeof pe) == -1)
+	      (PTRACE_TYPE_ARG3)&pe, (PTRACE_TYPE_ARG4)sizeof pe) == -1)
     perror_with_name (("ptrace"));
 }
 
@@ -229,7 +228,20 @@ inf_ptrace_attach (struct target_ops *ops, char *args, int from_tty)
   errno = 0;
   ptrace (PT_ATTACH, pid, (PTRACE_TYPE_ARG3)0, 0);
   if (errno != 0)
-    perror_with_name (("ptrace"));
+    {
+#ifdef __linux__
+      struct stat stat_dummy;
+      if (errno == EPERM && 
+          stat("/proc/sys/kernel/yama/ptrace_scope", &stat_dummy) == 0)
+        {
+	      fprintf_unfiltered (gdb_stderr,
+            _("Could not attach to process.  If your uid matches the uid of the target\n"
+              "process, check the setting of /proc/sys/kernel/yama/ptrace_scope, or try\n"
+              "again as the root user.\n"));
+        }
+#endif
+      perror_with_name (("ptrace"));
+    }
 #else
   error (_("This system does not support attaching to a process"));
 #endif
@@ -291,7 +303,7 @@ inf_ptrace_detach (struct target_ops *ops, char *args, int from_tty)
      previously attached to the inferior.  It *might* work if we
      started the process ourselves.  */
   errno = 0;
-  ptrace (PT_DETACH, pid, (PTRACE_TYPE_ARG3)1, sig);
+  ptrace (PT_DETACH, pid, (PTRACE_TYPE_ARG3)1, (PTRACE_TYPE_ARG4)sig);
   if (errno != 0)
     perror_with_name (("ptrace"));
 #else
@@ -316,7 +328,7 @@ inf_ptrace_kill (struct target_ops *ops)
   if (pid == 0)
     return;
 
-  ptrace (PT_KILL, pid, (PTRACE_TYPE_ARG3)0, 0);
+  ptrace (PT_KILL, pid, (PTRACE_TYPE_ARG3)0, (PTRACE_TYPE_ARG4)0);
   waitpid (pid, &status, 0);
 
   target_mourn_inferior ();
@@ -370,7 +382,13 @@ inf_ptrace_resume (struct target_ops *ops,
      where it was.  If GDB wanted it to start some other way, we have
      already written a new program counter value to the child.  */
   errno = 0;
-  ptrace (request, pid, (PTRACE_TYPE_ARG3)1, gdb_signal_to_host (signal));
+  ptrace (request, pid, (PTRACE_TYPE_ARG3)1, (PTRACE_TYPE_ARG4)gdb_signal_to_host (signal));
+
+  /* ptracing zombie is illegal (ptrace(PT_CONTINUE,ZOMBIE_PID) sets errno to ESRCH)
+   * but POSIX endorses shooting zeroth signal at it (i.e. kill(ZOMBIE_PID,0)==0) */
+  if (errno == ESRCH && kill (pid, 0) == 0)
+    return;
+
   if (errno != 0)
     perror_with_name (("ptrace"));
 }
@@ -424,7 +442,7 @@ inf_ptrace_wait (struct target_ops *ops,
       pid_t fpid;
 
       if (ptrace (PT_GET_PROCESS_STATE, pid,
-		  (PTRACE_TYPE_ARG3)&pe, sizeof pe) == -1)
+		  (PTRACE_TYPE_ARG3)&pe, (PTRACE_TYPE_ARG4)sizeof pe) == -1)
 	perror_with_name (("ptrace"));
 
       switch (pe.pe_report_event)
@@ -546,7 +564,7 @@ inf_ptrace_xfer_partial (struct target_ops *ops, enum target_object object,
 	    errno = 0;
 	    ptrace (PT_WRITE_D, pid,
 		    (PTRACE_TYPE_ARG3)(uintptr_t)rounded_offset,
-		    buffer.word);
+		    (PTRACE_TYPE_ARG4)buffer.word);
 	    if (errno)
 	      {
 		/* Using the appropriate one (I or D) is necessary for
@@ -554,7 +572,7 @@ inf_ptrace_xfer_partial (struct target_ops *ops, enum target_object object,
 		errno = 0;
 		ptrace (PT_WRITE_I, pid,
 			(PTRACE_TYPE_ARG3)(uintptr_t)rounded_offset,
-			buffer.word);
+			(PTRACE_TYPE_ARG4)buffer.word);
 		if (errno)
 		  return 0;
 	      }
@@ -565,7 +583,7 @@ inf_ptrace_xfer_partial (struct target_ops *ops, enum target_object object,
 	    errno = 0;
 	    buffer.word = ptrace (PT_READ_I, pid,
 				  (PTRACE_TYPE_ARG3)(uintptr_t)rounded_offset,
-				  0);
+				  (PTRACE_TYPE_ARG4)0);
 	    if (errno)
 	      return 0;
 	    /* Copy appropriate bytes out of the buffer.  */
@@ -802,7 +820,7 @@ inf_ptrace_store_register (const struct regcache *regcache, int regnum)
   for (i = 0; i < size / sizeof (PTRACE_TYPE_RET); i++)
     {
       errno = 0;
-      ptrace (PT_WRITE_U, pid, (PTRACE_TYPE_ARG3)(uintptr_t)addr, buf[i]);
+      ptrace (PT_WRITE_U, pid, (PTRACE_TYPE_ARG3)(uintptr_t)addr, (PTRACE_TYPE_ARG4)buf[i]);
       if (errno != 0)
 	error (_("Couldn't write register %s (#%d): %s."),
 	       gdbarch_register_name (gdbarch, regnum),

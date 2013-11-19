@@ -28,6 +28,7 @@
 #include "c-lang.h"
 #include "cp-abi.h"
 #include "target.h"
+#include "cuda-utils.h"
 
 
 /* A helper for c_textual_element_type.  This checks the name of the
@@ -145,6 +146,14 @@ c_val_print (struct type *type, const gdb_byte *valaddr,
   struct type *unresolved_type = type;
   unsigned eltlen;
   CORE_ADDR addr;
+
+  /* CUDA cached value*/
+  if (original_value && value_cached (original_value))
+    fprintf_filtered (stream, "(cached) ");
+
+  /* CUDA extrapolated value*/
+  if (original_value && value_extrapolated (original_value))
+    fprintf_filtered (stream, "(possibly) ");
 
   CHECK_TYPEDEF (type);
   switch (TYPE_CODE (type))
@@ -452,6 +461,12 @@ c_val_print (struct type *type, const gdb_byte *valaddr,
 			 &c_decorations);
       break;
     }
+  /* CUDA - managed variables */
+  if (recurse == 0 && cuda_is_host_address_resident_on_gpu())
+    {
+      fprintf_filtered (stream, " // Resident on GPU");
+      cuda_set_host_address_resident_on_gpu (false);
+    }
   gdb_flush (stream);
 }
 
@@ -537,6 +552,9 @@ c_value_print (struct value *val, struct ui_file *stream,
 	{
 	  /* normal case */
 	  fprintf_filtered (stream, "(");
+          /* CUDA - managed_variables */
+          if (cuda_is_value_managed_pointer (val))
+            fprintf_filtered (stream, "@managed ");
 	  type_print (value_type (val), "", stream, -1);
 	  fprintf_filtered (stream, ") ");
 	}

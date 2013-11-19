@@ -17,6 +17,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 
 #include "symtab.h"
@@ -43,6 +61,7 @@
 #include "exceptions.h"
 #include "mach-o.h"
 #include "mach-o/external.h"
+#include "cuda-tdep.h"
 
 struct gdb_dyld_image_info
 {
@@ -70,7 +89,7 @@ struct gdb_dyld_all_image_infos
 
 /* Current all_image_infos version.  */
 #define DYLD_VERSION_MIN 1
-#define DYLD_VERSION_MAX 12
+#define DYLD_VERSION_MAX 14
 
 /* Per PSPACE specific data.  */
 struct darwin_info
@@ -121,6 +140,100 @@ darwin_dyld_version_ok (const struct darwin_info *info)
     && info->all_image.version <= DYLD_VERSION_MAX;
 }
 
+/* CUDA - Support static linker on Mac OS X 10.7 */
+struct dyld_all_image_infos_offsets
+{
+  int version;                          /* verison 1 */
+  int infoArrayCount;                   /* version 1 */
+  int infoArray;                        /* version 1 */
+  int notification;                     /* version 1 */
+  int processDetachedFromSharedRegion;  /* version 1 */
+  int libSystemInitialized;             /* version 2 */
+  int dyldImageLoadAddress;             /* version 2 */
+  int jitInfo;                          /* version 3 */
+  int dyldVersion;                      /* version 5 */
+  int errorMessage;                     /* version 5 */
+  int terminationFlags;                 /* version 5 */
+  int coreSymbolicationShmPage;         /* version 6 */
+  int systemOrderFlag;                  /* version 7 */
+  int uuidArrayCount;                   /* version 8 */
+  int uuidArray;                        /* version 8 */
+  int dyldAllImageInfosAddress;         /* version 9 */
+  int initialImageCount;                /* version 10 */
+  int errorKind;                        /* version 11 */
+  int errorClientOfDylibPath;           /* version 11 */
+  int errorTargetDylibPath;             /* version 11 */
+  int errorSymbol;                      /* version 11 */
+  int sharedCacheSlide;                 /* version 12 */
+};
+
+/* CUDA - Support static linker on Mac OS X 10.7 */
+/* CUDA - word size */
+static CORE_ADDR
+cuda_dyld_compute_adjustment (CORE_ADDR dyld_all_image_addr)
+{
+  int wordsize = cuda_inferior_word_size ();
+  int p = wordsize;  /* pointers, uintptr_t */
+  int b = 1;         /* bools */
+  int i = 4;         /* ints */
+  enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
+  unsigned long version;
+  unsigned long dyldAllImageInfosAddress;
+  int image_infos_size;
+  gdb_byte version_buf[4];
+  gdb_byte *buf;
+  CORE_ADDR adjustment = 0;
+
+  /* Should use /usr/include/mach-o/dyld_images.h instead but the header file
+     is not present on Linux */
+  struct dyld_all_image_infos_offsets offsets =
+    { .version                         = 0,
+      .infoArrayCount                  = i,
+      .infoArray                       = i + i,
+      .notification                    = i + i + p,
+      .processDetachedFromSharedRegion = i + i + p + p,
+      .libSystemInitialized            = i + i + p + p + b,
+      /* there is padding inserted before the next word-aligned field */
+      .dyldImageLoadAddress            = i + i + p + p + b + b + (p - 2 * b),
+      .jitInfo                         = i + i + p + p + b + b + (p - 2 * b) + p,
+      .dyldVersion                     = i + i + p + p + b + b + (p - 2 * b) + p + p,
+      .errorMessage                    = i + i + p + p + b + b + (p - 2 * b) + p + p + p,
+      .terminationFlags                = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p,
+      .coreSymbolicationShmPage        = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p,
+      .systemOrderFlag                 = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p,
+      .uuidArrayCount                  = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p + p,
+      .uuidArray                       = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p + p + p,
+      .dyldAllImageInfosAddress        = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p + p + p + p,
+      .initialImageCount               = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p + p + p + p + p,
+      .errorKind                       = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p + p + p + p + p + p,
+      .errorClientOfDylibPath          = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p + p + p + p + p + p + p,
+      .errorTargetDylibPath            = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p + p + p + p + p + p + p + p,
+      .errorSymbol                     = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p + p + p + p + p + p + p + p + p,
+      .sharedCacheSlide                = i + i + p + p + b + b + (p - 2 * b) + p + p + p + p + p + p + p + p + p + p + p + p + p + p + p,
+    };
+
+  /* Read the dyld version */
+  target_read_memory (dyld_all_image_addr, version_buf, 4);
+  version = extract_unsigned_integer (version_buf, 4, byte_order);
+
+  /* No adjustment requirement before version 9 */
+  if (version < 9)
+    return 0;
+
+  image_infos_size = offsets.dyldAllImageInfosAddress + p;
+
+  /* Read the dyld all image infos address */
+  buf = (gdb_byte *) alloca (image_infos_size);
+  target_read_memory (dyld_all_image_addr, buf, image_infos_size);
+  dyldAllImageInfosAddress = extract_unsigned_integer (buf + offsets.dyldAllImageInfosAddress, wordsize, byte_order);
+
+  /* Compute the adjustment when needed */
+  if (dyldAllImageInfosAddress)
+    adjustment = dyld_all_image_addr - (CORE_ADDR) dyldAllImageInfosAddress;
+
+  return adjustment;
+}
+
 /* Read dyld_all_image from inferior.  */
 
 static void
@@ -130,6 +243,7 @@ darwin_load_image_infos (struct darwin_info *info)
   enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   struct type *ptr_type = builtin_type (target_gdbarch ())->builtin_data_ptr;
   int len;
+  CORE_ADDR adjustment;
 
   /* If the structure address is not known, don't continue.  */
   if (info->all_image_addr == 0)
@@ -154,6 +268,11 @@ darwin_load_image_infos (struct darwin_info *info)
   info->all_image.info = extract_typed_address (buf + 8, ptr_type);
   info->all_image.notifier = extract_typed_address
     (buf + 8 + ptr_type->length, ptr_type);
+
+  /* CUDA - Support static linker on Mac OS X 10.7 */
+  adjustment = cuda_dyld_compute_adjustment (info->all_image_addr);
+  info->all_image.info     += adjustment;
+  info->all_image.notifier += adjustment;
 }
 
 /* Link map info to include in an allocated so_list entry.  */

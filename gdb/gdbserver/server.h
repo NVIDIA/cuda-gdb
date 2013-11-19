@@ -172,6 +172,10 @@ struct process_info *get_thread_process (struct thread_info *);
 
 void initialize_low ();
 
+/* CUDA functions declaration */
+void initialize_cuda_remote ();
+void initialize_cuda_target_ops (struct target_ops *t);
+
 /* From inferiors.c.  */
 
 extern struct inferior_list all_processes;
@@ -265,6 +269,14 @@ extern void initialize_event_loop (void);
 extern int handle_serial_event (int err, gdb_client_data client_data);
 extern int handle_target_event (int err, gdb_client_data client_data);
 
+/* CUDA - Functions from cuda-packet-manager.c */
+extern void handle_cuda_packet (char *buf);
+extern int handle_vCuda (char *, int, int *);
+
+/* CUDA - Fuctions from cuda-tdep-server.c */
+extern void cuda_cleanup_trace_messages (void);
+extern void cuda_append_api_finalize_res (char *buf);
+
 /* Functions from hostio.c.  */
 extern int handle_vFile (char *, int, int *);
 
@@ -327,6 +339,8 @@ int hexify (char *hex, const char *bin, int count);
 int remote_escape_output (const gdb_byte *buffer, int len,
 			  gdb_byte *out_buf, int *out_len,
 			  int out_maxlen);
+int remote_unescape_input (const gdb_byte *buffer, int len,
+			   gdb_byte *out_buf, int out_maxlen);
 char *unpack_varlen_hex (char *buff,  ULONGEST *result);
 
 void clear_symbol_cache (struct sym_cache **symcache_p);

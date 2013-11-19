@@ -73,7 +73,9 @@ unchanged.
 #endif
 #include <stdio.h>
 #ifdef HAVE_STDIO_EXT_H
+#ifndef __ANDROID__
 #include <stdio_ext.h>
+#endif
 #endif
 
 #include "libiberty.h"

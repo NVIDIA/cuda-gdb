@@ -2709,7 +2709,9 @@ record_full_save (char *recfilename)
            bfd_errmsg (bfd_get_error ()));
   bfd_set_section_size (obfd, osec, save_size);
   bfd_set_section_vma (obfd, osec, 0);
-  bfd_set_section_alignment (obfd, osec, 0);
+  /* bfs_set_section_alignment() could not fail. */
+  if (!bfd_set_section_alignment (obfd, osec, 0))
+    error (_("bfd_set_section_alignment() failed!"));
   bfd_section_lma (obfd, osec) = 0;
 
   /* Save corefile state.  */

@@ -1669,6 +1669,7 @@ When the program being debugged stops, gdb selects the innermost frame.\n\
 The commands below can be used to select other frames by number or address."),
 	   &cmdlist);
   add_cmd ("running", class_run, NULL, _("Running the program."), &cmdlist);
+  add_cmd ("cuda ", class_cuda, NULL, _("CUDA commands."), &cmdlist);
 
   /* Define general commands.  */
 

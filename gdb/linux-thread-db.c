@@ -448,7 +448,9 @@ thread_from_lwp (ptid_t ptid)
   struct thread_get_info_inout io = {0};
 
   /* Just in case td_ta_map_lwp2thr doesn't initialize it completely.  */
+#ifndef __ANDROID__
   th.th_unique = 0;
+#endif
 
   /* This ptid comes from linux-nat.c, which should always fill in the
      LWP.  */
@@ -706,9 +708,14 @@ static const char *
 dladdr_to_soname (const void *addr)
 {
   Dl_info info;
+#ifndef __ANDROID__
 
   if (dladdr (addr, &info) != 0)
     return info.dli_fname;
+#else
+  if (dladdr ((void *)addr, &info) != 0)
+    return info.dli_fname;
+#endif
   return NULL;
 }
 
@@ -1171,6 +1178,14 @@ check_thread_signals (void)
 void
 check_for_thread_db (void)
 {
+  /* CUDA - detach */
+  /* While detaching from a running CUDA application, we may
+     need to resume the application temporarily, which might cause
+     libthread_db to be reinitialized and cause problems. This must
+     be prevented. */
+  if (cuda_api_get_attach_state () == CUDA_ATTACH_STATE_DETACHING)
+    return;
+
   /* Do nothing if we couldn't load libthread_db.so.1.  */
   if (!thread_db_load ())
     return;
@@ -1450,7 +1465,17 @@ check_event (ptid_t ptid)
 	case TD_DEATH:
 
 	  if (!in_thread_list (ptid))
-	    error (_("Spurious thread death event."));
+            {
+              /* CUDA - notifications */
+              /* Do not error out on spurious thread death events, and
+                 instead, treat them as warnings.  This can happen in
+                 conjunction with CUDA notifications, because the two
+                 events can arrive simulataneously, and the thread death
+                 event could go unhandled.  The next time around, the
+                 thread has already exited and we hit this case. */
+                warning (_("Spurious thread death event."));
+                return;
+            }
 
 	  detach_thread (ptid);
 

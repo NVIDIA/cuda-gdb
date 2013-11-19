@@ -16,6 +16,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 /* Parse a C expression from text in a string,
    and return the result as a  struct expression  pointer.
    That structure contains arithmetic operations in reverse polish,
@@ -1046,19 +1064,37 @@ variable:	name_not_typename
 			}
 	;
 
-space_identifier : '@' NAME
-		{ insert_type_address_space (copy_name ($2.stoken)); }
+/* CUDA - address spaces */
+/* To accept @local, @const,... address space qualifiers, few things must happen:
+
+     1. we must accept more names than just NAME. The 'space_identifier' rule
+        needs to be adjusted accordingly and accept 'name' instead of 'NAME'.
+        Accordingly, the action rules must copy the name from the token
+        directly instead of the stoken field.
+
+     2. we must get rid of the reduce/reduce conflicts caused by the empty rules in
+        const_or_volatile and const_or_volatile_or_space_identifier. I rewrote
+        the rules and the caller of those rules to avoid that situation.
+        It decreases the number of reduce/reduce conflicts.
+        Remaining conflicts are unrelated to the '@ name' notation.
+
+  The new set of rules for const, volatile, and space identifiers fully replace
+  the original rules. The callers have been updated accordingly.
+*/
+
+space_identifier : '@' name
+		{ insert_type_address_space (copy_name ($2)); }
 	;
 
 const_or_volatile: const_or_volatile_noopt
 	|
 	;
 
-cv_with_space_id : const_or_volatile space_identifier const_or_volatile
-	;
-
-const_or_volatile_or_space_identifier_noopt: cv_with_space_id
-	| const_or_volatile_noopt 
+const_or_volatile_or_space_identifier_noopt: CONST_KEYWORD const_or_volatile_or_space_identifier
+		{ insert_type (tp_const); }
+	|	VOLATILE_KEYWORD const_or_volatile_or_space_identifier
+		{ insert_type (tp_volatile); }
+	|	space_identifier const_or_volatile_or_space_identifier
 	;
 
 const_or_volatile_or_space_identifier: 

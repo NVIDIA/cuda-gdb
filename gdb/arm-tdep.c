@@ -4064,10 +4064,10 @@ arm_register_type (struct gdbarch *gdbarch, int regnum)
    number.  */
 
 static int
-arm_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
+arm_dwarf_reg_to_regnum (struct gdbarch *gdbarch, reg_t reg)
 {
   /* Core integer regs.  */
-  if (reg >= 0 && reg <= 15)
+  if (reg <= 15)
     return reg;
 
   /* Legacy FPA encoding.  These were once used in a way which
@@ -4103,7 +4103,7 @@ arm_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
     {
       char name_buf[4];
 
-      xsnprintf (name_buf, sizeof (name_buf), "s%d", reg - 64);
+      xsnprintf (name_buf, sizeof (name_buf), "s%ld", (long)(reg - 64));
       return user_reg_map_name_to_regnum (gdbarch, name_buf,
 					  strlen (name_buf));
     }
@@ -4114,7 +4114,7 @@ arm_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
     {
       char name_buf[4];
 
-      xsnprintf (name_buf, sizeof (name_buf), "d%d", reg - 256);
+      xsnprintf (name_buf, sizeof (name_buf), "d%ld", (long)(reg - 256));
       return user_reg_map_name_to_regnum (gdbarch, name_buf,
 					  strlen (name_buf));
     }
@@ -10898,7 +10898,7 @@ arm_record_extension_space (insn_decode_record *arm_insn_r)
       && !INSN_RECORDED(arm_insn_r))
     {
       /* Handle MLA(S) and MUL(S).  */
-      if (0 <= insn_op1 && 3 >= insn_op1)
+      if (3 >= insn_op1)
       {
         record_buf[0] = bits (arm_insn_r->arm_insn, 12, 15);
         record_buf[1] = ARM_PS_REGNUM;
@@ -12443,7 +12443,7 @@ decode_insn (insn_decode_record *arm_record, record_type_t record_type,
 {
 
   /* (Starting from numerical 0); bits 25, 26, 27 decodes type of arm instruction.  */
-  static const sti_arm_hdl_fp_t const arm_handle_insn[8] =                    
+  static const sti_arm_hdl_fp_t arm_handle_insn[8] =
   {
     arm_record_data_proc_misc_ld_str,   /* 000.  */
     arm_record_data_proc_imm,           /* 001.  */
@@ -12456,7 +12456,7 @@ decode_insn (insn_decode_record *arm_record, record_type_t record_type,
   };
 
   /* (Starting from numerical 0); bits 13,14,15 decodes type of thumb instruction.  */
-  static const sti_arm_hdl_fp_t const thumb_handle_insn[8] =
+  static const sti_arm_hdl_fp_t thumb_handle_insn[8] =
   { \
     thumb_record_shift_add_sub,        /* 000.  */
     thumb_record_add_sub_cmp_mov,      /* 001.  */

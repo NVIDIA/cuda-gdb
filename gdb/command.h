@@ -15,6 +15,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #if !defined (COMMAND_H)
 #define COMMAND_H 1
 
@@ -39,6 +57,8 @@ enum command_class
   class_support, class_info, class_breakpoint, class_trace,
   class_alias, class_bookmark, class_obscure, class_maintenance,
   class_pseudo, class_tui, class_user, class_xdb,
+  /* CUDA - cuda commands */
+  class_cuda,
   no_set_class	/* Used for "show" commands that have no corresponding
 		   "set" command.  */
 };

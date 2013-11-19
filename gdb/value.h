@@ -323,6 +323,13 @@ extern int value_contents_equal (struct value *val1, struct value *val2);
 extern int value_optimized_out (struct value *value);
 extern void set_value_optimized_out (struct value *value, int val);
 
+/* CUDA - register cache */
+extern int value_cached (const struct value *value);
+extern void set_value_cached (struct value *value, int val);
+/* CUDA - regmap extrapolation */
+extern int value_extrapolated (const struct value *value);
+extern void set_value_extrapolated (struct value *value, int val);
+
 /* Like value_optimized_out, but return false if any bit in the object
    is valid.  */
 extern int value_entirely_optimized_out (const struct value *value);

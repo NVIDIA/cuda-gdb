@@ -18,6 +18,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "top.h"
 #include "mi-cmds.h"
@@ -70,6 +88,17 @@ static struct mi_cmd mi_cmds[] =
                    &mi_suppress_notification.breakpoint),
   DEF_MI_CMD_MI_1 ("catch-unload", mi_cmd_catch_unload,
                    &mi_suppress_notification.breakpoint),
+  DEF_MI_CMD_MI ("cuda-info-devices", mi_cmd_cuda_info_devices),
+  DEF_MI_CMD_MI ("cuda-info-sms", mi_cmd_cuda_info_sms),
+  DEF_MI_CMD_MI ("cuda-info-warps", mi_cmd_cuda_info_warps),
+  DEF_MI_CMD_MI ("cuda-info-lanes", mi_cmd_cuda_info_lanes),
+  DEF_MI_CMD_MI ("cuda-info-kernels", mi_cmd_cuda_info_kernels),
+  DEF_MI_CMD_MI ("cuda-info-blocks", mi_cmd_cuda_info_blocks),
+  DEF_MI_CMD_MI ("cuda-info-threads", mi_cmd_cuda_info_threads),
+  DEF_MI_CMD_MI ("cuda-info-launch-trace", mi_cmd_cuda_info_launch_trace),
+  DEF_MI_CMD_MI ("cuda-info-contexts",  mi_cmd_cuda_info_contexts),
+  DEF_MI_CMD_MI ("cuda-focus-query", mi_cmd_cuda_focus_query),
+  DEF_MI_CMD_MI ("cuda-focus-switch", mi_cmd_cuda_focus_switch),
   DEF_MI_CMD_MI ("data-disassemble", mi_cmd_disassemble),
   DEF_MI_CMD_MI ("data-evaluate-expression", mi_cmd_data_evaluate_expression),
   DEF_MI_CMD_MI ("data-list-changed-registers",

@@ -19,6 +19,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "gdb_string.h"
 #include "bfd.h"
@@ -37,6 +55,8 @@
 #include "gdb_assert.h"
 #include "hashtab.h"
 #include "exceptions.h"
+#include "cuda-tdep.h"
+#include "cuda-textures.h"
 
 /* Initialize BADNESS constants.  */
 
@@ -525,6 +545,8 @@ address_space_name_to_int (struct gdbarch *gdbarch, char *space_identifier)
 							space_identifier,
 							&type_flags))
     return type_flags;
+  else if (!strcmp (space_identifier, "global"))
+    return TYPE_INSTANCE_FLAG_CUDA_GLOBAL;
   else
     error (_("Unknown address space specifier: \"%s\""), space_identifier);
 }
@@ -1526,6 +1548,10 @@ check_typedef (struct type *type)
   int instance_flags = TYPE_INSTANCE_FLAGS (type);
 
   gdb_assert (type);
+
+  /* CUDA - textures */
+  if (IS_TEXTURE_TYPE (type))
+    cuda_texture_set_address_class (type);
 
   while (TYPE_CODE (type) == TYPE_CODE_TYPEDEF)
     {
@@ -3547,7 +3573,30 @@ copy_type (const struct type *type)
 
   return new_type;
 }
-
+
+/* CUDA - find the target type with the same instance flags */
+struct type *
+find_target_type_with_instance_flags (struct type *type)
+{
+  struct type *cur_target = TYPE_TARGET_TYPE(type);
+  if (cur_target == NULL)
+    return cur_target;
+
+  /* Search through the ring (circularly linked list) of target types that
+     only differ in their instance flags. Find the target type that matches
+     the instance flags of type. */
+  do {
+    if (TYPE_INSTANCE_FLAGS(type) == TYPE_INSTANCE_FLAGS(cur_target))
+      return cur_target;
+    cur_target = TYPE_CHAIN(cur_target);
+  } while (cur_target != TYPE_TARGET_TYPE(type));
+
+  /* If the target type with the same instance flags is not found then we
+     return the default one, which is the target type pointed to by the main
+     type. */
+  return TYPE_TARGET_TYPE(type);
+}
+
 /* Helper functions to initialize architecture-specific types.  */
 
 /* Allocate a type structure associated with GDBARCH and set its

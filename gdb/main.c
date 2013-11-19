@@ -17,6 +17,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "top.h"
 #include "target.h"
@@ -42,6 +60,7 @@
 #include "python/python.h"
 #include "objfiles.h"
 #include "auto-load.h"
+#include "cuda-gdb.h"
 
 #include "filenames.h"
 
@@ -94,7 +113,7 @@ int return_child_result_value = -1;
 
 
 /* GDB as it has been invoked from the command line (i.e. argv[0]).  */
-static char *gdb_program_name;
+char *gdb_program_name;
 
 static void print_gdb_help (struct ui_file *);
 
@@ -187,7 +206,7 @@ get_init_files (char **system_gdbinit,
 	    {
 	      /* Append the part of SYSTEM_GDBINIT that follows GDB_DATADIR
 		 to gdb_datadir.  */
-	      char *tmp_sys_gdbinit = xstrdup (SYSTEM_GDBINIT + datadir_len);
+	      char *tmp_sys_gdbinit = xstrdup (&SYSTEM_GDBINIT[datadir_len]);
 	      char *p;
 
 	      for (p = tmp_sys_gdbinit; IS_DIR_SEPARATOR (*p); ++p)
@@ -345,7 +364,14 @@ captured_main (void *data)
 
 #ifdef HAVE_SBRK
   /* Set this before calling make_command_stats_cleanup.  */
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
   lim_at_start = (char *) sbrk (0);
+#pragma clang diagnostic pop
+#else
+  lim_at_start = (char *) sbrk (0);
+#endif /* __clang__ */
 #endif
 
   pre_stat_chain = make_command_stats_cleanup (0);
@@ -444,7 +470,8 @@ captured_main (void *data)
       OPT_NOWINDOWS,
       OPT_WINDOWS,
       OPT_IX,
-      OPT_IEX
+      OPT_IEX,
+      OPT_CUDA_USE_LOCKFILE
     };
     static struct option long_options[] =
     {
@@ -512,6 +539,7 @@ captured_main (void *data)
       {"args", no_argument, &set_args, 1},
       {"l", required_argument, 0, 'l'},
       {"return-child-result", no_argument, &return_child_result, 1},
+      {"cuda-use-lockfile", required_argument, 0, OPT_CUDA_USE_LOCKFILE},
       {0, no_argument, 0, 0}
     };
 
@@ -577,6 +605,13 @@ captured_main (void *data)
 	    interpreter_p = xstrdup (INTERP_CONSOLE);
 	    use_windows = 0;
 	    break;
+	  case OPT_CUDA_USE_LOCKFILE:
+            {
+              /* Whether cuda-gdb should create a global lock file */
+              extern int cuda_use_lockfile;
+              cuda_use_lockfile = (atoi (optarg) != 0);
+              break;
+            }
 	  case 'f':
 	    annotation_level = 1;
 	    /* We have probably been invoked from emacs.  Disable
@@ -1068,9 +1103,9 @@ print_gdb_help (struct ui_file *stream)
   get_init_files (&system_gdbinit, &home_gdbinit, &local_gdbinit);
 
   fputs_unfiltered (_("\
-This is the GNU debugger.  Usage:\n\n\
-    gdb [options] [executable-file [core-file or process-id]]\n\
-    gdb [options] --args executable-file [inferior-arguments ...]\n\n\
+This is the GNU debugger with CUDA support.  Usage:\n\n\
+    cuda-gdb [options] [executable-file [core-file or process-id]]\n\
+    cuda-gdb [options] --args executable-file [inferior-arguments ...]\n\n\
 Options:\n\n\
 "), stream);
   fputs_unfiltered (_("\
@@ -1133,6 +1168,14 @@ Options:\n\n\
   --xdb              XDB compatibility mode.\n\
 "), stream);
   fputs_unfiltered (_("\n\
+CUDA-specific options:\n\n\
+"), stream);
+  fputs_unfiltered (_("\
+  --cuda-use-lockfile=VALUE\n\
+                     If VALUE == 0, don't create a lock file for cuda-gdb.\n\
+                     Default behavior is to create a lock file.\n\
+"), stream);
+  fputs_unfiltered (_("\n\
 At startup, GDB reads the following init files and executes their commands:\n\
 "), stream);
   if (system_gdbinit)
@@ -1147,9 +1190,16 @@ At startup, GDB reads the following init files and executes their commands:\n\
     fprintf_unfiltered (stream, _("\
    * local init file (see also 'set auto-load local-gdbinit'): ./%s\n\
 "), local_gdbinit);
+/* CUDA */
+    fprintf_unfiltered (stream, _("\
+   * local cuda-gdb init file: ./%s\n\
+"), GDBINIT_FILENAME);
   fputs_unfiltered (_("\n\
 For more information, type \"help\" from within GDB, or consult the\n\
 GDB manual (available as on-line info or a printed manual).\n\
+For more information about CUDA-related features, type \"help cuda\"\n\
+or \"help info cuda\" from within GDB, or consult the CUDA-GDB manual.\n\
+Report CUDA-related bugs to \"cuda-debugger-bugs@nvidia.com\".\n\
 "), stream);
   if (REPORT_BUGS_TO[0] && stream == gdb_stdout)
     fprintf_unfiltered (stream, _("\

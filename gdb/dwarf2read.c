@@ -24,6 +24,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 /* FIXME: Various die-reading functions need to be more careful with
    reading off the end of the section.
    E.g., load_partial_dies, read_partial_die.  */
@@ -73,6 +91,9 @@
 #include "gdb_string.h"
 #include "gdb_assert.h"
 #include <sys/types.h>
+
+#include "cuda-tdep.h"
+#include "cuda-textures.h"
 
 typedef struct symbol *symbolp;
 DEF_VEC_P (symbolp);
@@ -1411,7 +1432,7 @@ static void dwarf_decode_lines (struct line_header *, const char *,
 				struct dwarf2_cu *, struct partial_symtab *,
 				int);
 
-static void dwarf2_start_subfile (char *, const char *, const char *);
+static void dwarf2_start_subfile (char *, const char *, const char *, struct objfile *);
 
 static void dwarf2_start_symtab (struct dwarf2_cu *,
 				 const char *, const char *, CORE_ADDR);
@@ -1732,6 +1753,24 @@ static void free_dwo_file_cleanup (void *);
 static void process_cu_includes (void);
 
 static void check_producer (struct dwarf2_cu *cu);
+
+/* CUDA - Memory Segments */
+typedef struct {
+  struct objfile *objfile;
+  struct symbol *sym;
+  int flags;
+} cuda_sti_t;
+DEF_VEC_O (cuda_sti_t);
+static VEC (cuda_sti_t) *cuda_types_to_be_segmented = NULL;
+
+static void cuda_dwarf2_process_segmented_types (void);
+static void cuda_dwarf2_add_address_class (struct symbol *,
+                               struct attribute *, struct dwarf2_cu *,
+                               bool is_variable);
+
+static void make_segmented_type (struct objfile *objfile,
+                                 struct type **sym_type,
+                                 int flags);
 
 #if WORDS_BIGENDIAN
 
@@ -7065,6 +7104,8 @@ process_full_comp_unit (struct dwarf2_per_cu_data *per_cu,
       pst->readin = 1;
     }
 
+  cuda_dwarf2_process_segmented_types ();
+
   /* Push it for inclusion processing later.  */
   VEC_safe_push (dwarf2_per_cu_ptr, dwarf2_per_objfile->just_read_cus, per_cu);
 
@@ -8107,7 +8148,7 @@ setup_type_unit_groups (struct die_info *die, struct dwarf2_cu *cu)
 
 	  if (fe->dir_index)
 	    dir = lh->include_dirs[fe->dir_index - 1];
-	  dwarf2_start_subfile (fe->name, dir, NULL);
+	  dwarf2_start_subfile (fe->name, dir, NULL, objfile);
 
 	  /* Note: We don't have to watch for the main subfile here, type units
 	     don't have DW_AT_name.  */
@@ -9443,6 +9484,12 @@ read_func_scope (struct die_info *die, struct dwarf2_cu *cu)
   VEC (symbolp) *template_args = NULL;
   struct template_symbol *templ_func = NULL;
 
+/* CUDA - inline frame support */
+/* For the sm_1x architectures, the DWARF is missing the DW_AT_call_file/line
+   attributes. But we still want this function to proceed to register the
+   function names. The call stack will look broken to the user (just file/line
+   info), but we will still be able to set breakpoints on inlined functions. */
+#if 0
   if (inlined_func)
     {
       /* If we do not have call site information, we can't show the
@@ -9456,6 +9503,7 @@ read_func_scope (struct die_info *die, struct dwarf2_cu *cu)
 	  return;
 	}
     }
+#endif
 
   baseaddr = ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
 
@@ -9482,6 +9530,13 @@ read_func_scope (struct die_info *die, struct dwarf2_cu *cu)
 		   die->offset.sect_off);
       return;
     }
+
+  /* CUDA - intercept functions with 0x0 low_pc and high_pc */
+  /* With CNP and SM35, weak definitions of functions with no strong
+     definition lead to DWARF nodes with zero addresses that
+     should just be ignored. */
+  if (lowpc == 0 && highpc == 0)
+    return;
 
   lowpc += baseaddr;
   highpc += baseaddr;
@@ -11706,6 +11761,81 @@ process_enumeration_scope (struct die_info *die, struct dwarf2_cu *cu)
     }
 
   new_symbol (die, this_type, cu);
+}
+
+/* CUDA - Memory Segments */
+static void
+make_segmented_type_aux (struct type **sym_type, int flags, htab_t marked_types)
+{
+  unsigned int i;
+  int ptr_flags = 0;
+  int is_ptr = 0;
+  void **slot;
+
+  /* Bail out if sym_type has already been handled. Otherwise mark it as handled
+     before processing its FIELDS. */
+  slot = htab_find_slot (marked_types, sym_type, INSERT);
+  if (*slot != NULL)
+    return;
+  else
+    *slot = sym_type;
+
+  /* If this is a pointer type, save off the current flags. */
+  if (TYPE_CODE (*sym_type) == TYPE_CODE_PTR)
+    {
+      is_ptr = 1;
+      ptr_flags = TYPE_INSTANCE_FLAGS (*sym_type);
+    }
+
+  /* Set the address class for this symbol's type. */
+  *sym_type = make_type_with_address_space (*sym_type, flags);
+
+  /* CUDA Fix. If it's an enum type, we're done processing it. The 'type' of
+     its TYPE_FIELDS is undetermined, therefore there is no need to parse the
+     TYPE_FIELDS.  Enum types have no TARGET_TYPEs either. */
+  if (TYPE_CODE (*sym_type) == TYPE_CODE_ENUM)
+    return;
+
+  /* We need to follow this type's fields, if there are any */
+  for (i = 0; i < TYPE_NFIELDS (*sym_type); i++)
+    make_segmented_type_aux (&TYPE_FIELDS (*sym_type)[i].type,
+                             flags, marked_types);
+
+  /* We need to follow target types */
+  if (TYPE_TARGET_TYPE (*sym_type))
+    make_segmented_type_aux (&TYPE_TARGET_TYPE (*sym_type),
+                             is_ptr ? ptr_flags : flags, marked_types);
+}
+
+static void
+make_segmented_type (struct objfile *objfile, struct type **sym_type, int flags)
+{
+  htab_t copied_types;
+  htab_t marked_types;
+
+  /* Sanity check */
+  if (!objfile || !sym_type || !*sym_type)
+    return;
+
+  /* Create required hash tables */
+  copied_types = create_copied_types_hash (objfile);
+  marked_types = htab_create_alloc_ex (1, htab_hash_pointer, htab_eq_pointer,
+                                       NULL, &objfile->objfile_obstack,
+                                       hashtab_obstack_allocate,
+                                       dummy_obstack_deallocate);
+
+  /* First, we need to make a deep copy of the type, so it is not overwritten
+     with subsequent passes (and so this pass doesn't overwrite any previous
+     passes. */
+  *sym_type = copy_type_recursive (objfile, *sym_type, copied_types);
+
+  /* Then we mark the segment for each field of the type, marking the types that
+     have already been visited using marked_types. */
+  make_segmented_type_aux (sym_type, flags, marked_types);
+
+  /* Cleanup */
+  htab_delete (copied_types);
+  htab_delete (marked_types);
 }
 
 /* Extract all information from a DW_TAG_array_type DIE and put it in
@@ -14844,6 +14974,15 @@ dwarf2_attr (struct die_info *die, unsigned int name, struct dwarf2_cu *cu)
 
       for (i = 0; i < die->num_attrs; ++i)
 	{
+
+          /* CUDA - DW_AT_abstract_origin */
+          /* The Open64 compiler may incorrectly generate zero
+             DW_AT_abstract_origin attribute, Simply ignore the whole attribute
+             when it happens. */
+          if (die->attrs[i].name == DW_AT_abstract_origin &&
+              dwarf2_get_ref_die_offset (&die->attrs[i]).sect_off == 0)
+            continue;
+
 	  if (die->attrs[i].name == name)
 	    return &die->attrs[i];
 	  if (die->attrs[i].name == DW_AT_specification
@@ -15305,7 +15444,7 @@ dwarf_decode_lines_1 (struct line_header *lh, const char *comp_dir,
           if (fe->dir_index)
             dir = lh->include_dirs[fe->dir_index - 1];
 
-	  dwarf2_start_subfile (fe->name, dir, comp_dir);
+	  dwarf2_start_subfile (fe->name, dir, comp_dir, objfile);
 	}
 
       /* Decode the table.  */
@@ -15487,7 +15626,7 @@ dwarf_decode_lines_1 (struct line_header *lh, const char *comp_dir,
                     if (!decode_for_pst_p)
                       {
                         last_subfile = current_subfile;
-                        dwarf2_start_subfile (fe->name, dir, comp_dir);
+                        dwarf2_start_subfile (fe->name, dir, comp_dir, objfile);
                       }
                   }
               }
@@ -15614,7 +15753,7 @@ dwarf_decode_lines (struct line_header *lh, const char *comp_dir,
 	  fe = &lh->file_names[i];
 	  if (fe->dir_index)
 	    dir = lh->include_dirs[fe->dir_index - 1];
-	  dwarf2_start_subfile (fe->name, dir, comp_dir);
+	  dwarf2_start_subfile (fe->name, dir, comp_dir, objfile);
 
 	  /* Skip the main file; we don't need it, and it must be
 	     allocated last, so that it will show up before the
@@ -15630,35 +15769,15 @@ dwarf_decode_lines (struct line_header *lh, const char *comp_dir,
     }
 }
 
-/* Start a subfile for DWARF.  FILENAME is the name of the file and
-   DIRNAME the name of the source directory which contains FILENAME
-   or NULL if not known.  COMP_DIR is the compilation directory for the
-   linetable's compilation unit or NULL if not known.
-   This routine tries to keep line numbers from identical absolute and
-   relative file names in a common subfile.
-
-   Using the `list' example from the GDB testsuite, which resides in
-   /srcdir and compiling it with Irix6.2 cc in /compdir using a filename
-   of /srcdir/list0.c yields the following debugging information for list0.c:
-
-   DW_AT_name:          /srcdir/list0.c
-   DW_AT_comp_dir:              /compdir
-   files.files[0].name: list0.h
-   files.files[0].dir:  /srcdir
-   files.files[1].name: list0.c
-   files.files[1].dir:  /srcdir
-
-   The line number information for list0.c has to end up in a single
-   subfile, so that `break /srcdir/list0.c:1' works as expected.
-   start_subfile will ensure that this happens provided that we pass the
-   concatenation of files.files[1].dir and files.files[1].name as the
-   subfile's name.  */
-
 static void
 dwarf2_start_subfile (char *filename, const char *dirname,
-		      const char *comp_dir)
+                      const char *comp_dir, struct objfile *objfile)
 {
   char *fullname;
+
+  if (dirname != NULL && comp_dir != NULL &&
+      strcmp (dirname, comp_dir)==0)
+    dirname = NULL;
 
   /* While reading the DIEs, we call start_symtab(DW_AT_name, DW_AT_comp_dir).
      `start_symtab' will always pass the contents of DW_AT_comp_dir as
@@ -15764,6 +15883,89 @@ var_decode_location (struct attribute *attr, struct symbol *sym,
     cu->has_loclist = 1;
 }
 
+/* CUDA - Memory Segments */
+
+/* Track the address class for all variables (not just pointers).  This will
+   be used to indicate which memory segment is associated with a given symbol. */
+static void
+cuda_dwarf2_add_address_class (struct symbol *sym, struct attribute *attr,
+                               struct dwarf2_cu *cu, bool is_variable)
+{
+  int addr_class = DW_ADDR_none;
+  int flags = 0;
+  cuda_sti_t sti;
+
+  if (!attr)
+    return;
+
+  addr_class = DW_UNSND (attr);
+  if (!addr_class)
+    return;
+
+  flags = cuda_address_class_type_flags (0 /*bogus*/, addr_class);
+  sti.objfile = cu->objfile;
+  sti.flags = cuda_address_class_type_flags (0 /*bogus*/, addr_class);
+  sti.sym = sym;
+
+  /* CUDA - Managed variable */
+  if (sti.flags ==  TYPE_INSTANCE_FLAG_CUDA_GLOBAL && is_variable)
+    {
+      const char *name = SYMBOL_LINKAGE_NAME (sym);
+      struct symtab *symtab = SYMBOL_SYMTAB (sym);
+      struct minimal_symbol *msym = lookup_minimal_symbol ( name, NULL, symtab ? symtab->objfile : NULL);
+      if (msym && MSYMBOL_TARGET_FLAG_1(msym)) sti.flags = TYPE_INSTANCE_FLAG_CUDA_MANAGED;
+    }
+
+  VEC_safe_push (cuda_sti_t, cuda_types_to_be_segmented, &sti);
+}
+
+static void
+cuda_dwarf2_process_segmented_types (void)
+{
+  int ix;
+  cuda_sti_t *sti;
+
+  if (VEC_empty (cuda_sti_t, cuda_types_to_be_segmented)) return;
+
+  for (ix = 0;
+       VEC_iterate (cuda_sti_t, cuda_types_to_be_segmented, ix, sti); ix++)
+    {
+      make_segmented_type (sti->objfile, &SYMBOL_TYPE(sti->sym), sti->flags);
+      TYPE_INSTANCE_FLAGS(SYMBOL_TYPE(sti->sym)) |= sti->flags;
+    }
+
+  VEC_free (cuda_sti_t, cuda_types_to_be_segmented);
+  cuda_types_to_be_segmented = NULL;
+}
+
+/* CUDA - Runtime Built-in Variables */
+static void
+cuda_decode_builtin_variable (struct symbol *sym)
+{
+  CORE_ADDR offset;
+
+  if (!strcmp (sym->ginfo.name, "threadIdx"))
+    offset = CUDBG_THREADIDX_OFFSET;
+  else if (!strcmp (sym->ginfo.name, "blockIdx"))
+    offset = CUDBG_BLOCKIDX_OFFSET;
+  else if (!strcmp (sym->ginfo.name, "blockDim"))
+    offset = CUDBG_BLOCKDIM_OFFSET;
+  else if (!strcmp (sym->ginfo.name, "gridDim"))
+    offset = CUDBG_GRIDDIM_OFFSET;
+  /* deprecated: use $cuda_num_lanes instead */
+  else if (!strcmp (sym->ginfo.name, "warpSize"))
+    offset = CUDBG_WARPSIZE_OFFSET;
+  else
+    return;
+
+  /* Set the unique address */
+  sym->ginfo.value.address = offset;
+
+  /* Indicate this is a static in the variable domain */
+  sym->domain = VAR_DOMAIN;
+  sym->aclass = LOC_STATIC;
+}
+
 /* Given a pointer to a DWARF information entry, figure out if we need
    to make a symbol table entry for it, and if so, create a new entry
    and return a pointer to it.
@@ -15785,6 +15987,7 @@ new_symbol_full (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
   struct pending **list_to_add = NULL;
 
   int inlined_func = (die->tag == DW_TAG_inlined_subroutine);
+  struct cleanup *cleanup_chain = make_cleanup (null_cleanup, NULL);
 
   baseaddr = ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
 
@@ -15792,6 +15995,7 @@ new_symbol_full (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
   if (name)
     {
       const char *linkagename;
+      char *cuda_demangled = NULL;
       int suppress_add = 0;
 
       if (space)
@@ -15800,10 +16004,24 @@ new_symbol_full (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 	sym = OBSTACK_ZALLOC (&objfile->objfile_obstack, struct symbol);
       OBJSTAT (objfile, n_syms++);
 
+      /* CUDA - demangle C++ routine/kernel names */
+      if (die->tag == DW_TAG_subprogram &&
+          cuda_is_bfd_cuda(cu->objfile->obfd) &&
+          cu->language == language_cplus)
+        {
+          SYMBOL_SET_CUDA_NAME (sym, name, strlen (name), objfile);
+          /* function parameters are stored in DWARF info */
+          cuda_demangled = cplus_demangle (name, /*DMGL_PARAMS |*/ DMGL_ANSI | DMGL_VERBOSE);
+          if (cuda_demangled)
+            make_cleanup (xfree, cuda_demangled);
+        }
+
       /* Cache this symbol's name and the name's demangled form (if any).  */
       SYMBOL_SET_LANGUAGE (sym, cu->language);
-      linkagename = dwarf2_physname (name, die, cu);
+      linkagename = dwarf2_physname ( cuda_demangled ? cuda_demangled : name, die, cu);
       SYMBOL_SET_NAMES (sym, linkagename, strlen (linkagename), 0, objfile);
+
+      do_cleanups (cleanup_chain);
 
       /* Fortran does not have mangling standard and the mangling does differ
 	 between gfortran, iFort etc.  */
@@ -15903,6 +16121,11 @@ new_symbol_full (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 	    SYMBOL_TYPE (sym)
 	      = objfile_type (objfile)->nodebug_data_symbol;
 
+          /* CUDA - Memory Segments */
+          attr = dwarf2_attr (die, DW_AT_address_class, cu);
+          if (attr)
+            cuda_dwarf2_add_address_class (sym, attr, cu, die->tag == DW_TAG_variable);
+
 	  attr = dwarf2_attr (die, DW_AT_const_value, cu);
 	  /* In the case of DW_TAG_member, we should only be called for
 	     static const members.  */
@@ -15949,6 +16172,9 @@ new_symbol_full (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 		}
 	      else if (attr2 && (DW_UNSND (attr2) != 0))
 		{
+                  /* CUDA - Built-in Variables */
+                  cuda_decode_builtin_variable (sym);
+
 		  /* Workaround gfortran PR debug/40040 - it uses
 		     DW_AT_location for variables in -fPIC libraries which may
 		     get overriden by other libraries/executable and get
@@ -16009,6 +16235,10 @@ new_symbol_full (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 		    list_to_add = cu->list_in_scope;
 		}
 	    }
+
+          /* CUDA - textures */
+          cuda_texture_create_kernel_mapping (sym, objfile);
+
 	  break;
 	case DW_TAG_formal_parameter:
 	  /* If we are inside a function, mark this as an argument.  If
@@ -16029,6 +16259,11 @@ new_symbol_full (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 	    {
 	      dwarf2_const_value (attr, sym, cu);
 	    }
+
+          /* CUDA - Memory Segments */
+          attr = dwarf2_attr (die, DW_AT_address_class, cu);
+          if (attr)
+            cuda_dwarf2_add_address_class (sym, attr, cu, false);
 
 	  list_to_add = cu->list_in_scope;
 	  break;
@@ -16429,6 +16664,8 @@ lookup_die_type (struct die_info *die, struct attribute *attr,
 {
   struct objfile *objfile = cu->objfile;
   struct type *this_type;
+
+  const char *name = dwarf2_name (die, cu);
 
   /* First see if we have it cached.  */
 
@@ -17781,7 +18018,8 @@ decode_locdesc (struct dwarf_block *blk, struct dwarf2_cu *cu)
   gdb_byte *data = blk->data;
   CORE_ADDR stack[64];
   int stacki;
-  unsigned int bytes_read, unsnd;
+  unsigned int bytes_read;
+  unsigned long unsnd;
   gdb_byte op;
 
   i = 0;
@@ -19162,6 +19400,27 @@ dwarf2_per_cu_addr_size (struct dwarf2_per_cu_data *per_cu)
   return cu_headerp->addr_size;
 }
 
+/* CUDA - addr_size */
+/* Return the address size of the first compilation unit of the objfile. */
+int
+cuda_dwarf2_addr_size (struct objfile *objfile)
+{
+  int offset = 0; /* the offset of the first CU */
+  struct dwarf2_per_objfile *per_objfile = NULL;
+  gdb_byte *info_ptr = NULL;
+  struct comp_unit_head cu_header;
+
+  gdb_assert (objfile->cuda_objfile);
+
+  per_objfile = objfile_data (objfile, dwarf2_objfile_data_key);
+  info_ptr = per_objfile->info.buffer + offset;
+
+  memset (&cu_header, 0, sizeof cu_header);
+  read_comp_unit_head (&cu_header, info_ptr, objfile->obfd);
+
+  return cu_header.addr_size;
+}
+
 /* Return the offset size given in the compilation unit header for CU.  */
 
 int
@@ -19687,13 +19946,13 @@ dwarf2_per_objfile_free (struct objfile *objfile, void *d)
   struct dwarf2_per_objfile *data = d;
   int ix;
 
-  for (ix = 0; ix < dwarf2_per_objfile->n_comp_units; ++ix)
+  for (ix = 0; ix < data->n_comp_units; ++ix)
     VEC_free (dwarf2_per_cu_ptr,
-	      dwarf2_per_objfile->all_comp_units[ix]->imported_symtabs);
+	      data->all_comp_units[ix]->imported_symtabs);
 
-  for (ix = 0; ix < dwarf2_per_objfile->n_type_units; ++ix)
+  for (ix = 0; ix < data->n_type_units; ++ix)
     VEC_free (dwarf2_per_cu_ptr,
-	      dwarf2_per_objfile->all_type_units[ix]->per_cu.imported_symtabs);
+	      data->all_type_units[ix]->per_cu.imported_symtabs);
 
   VEC_free (dwarf2_section_info_def, data->types);
 
@@ -20714,4 +20973,589 @@ Save a gdb-index file.\n\
 Usage: save gdb-index DIRECTORY"),
 	       &save_cmdlist);
   set_cmd_completer (c, filename_completer);
+}
+
+
+/******************************************************************************
+ *
+ * CUDA - line table
+ *
+ * Decode the .debug_line section when the .debug_info section is missing. It
+ * is a pretty close copy of the routines of the same name without the cuda
+ * prefix. The main difference is that no 'cu' or 'cu_header' is used.
+ *
+ *****************************************************************************/
+
+#include "dictionary.h"
+
+static struct line_header *
+cuda_decode_line_header (unsigned int offset, struct objfile *objfile)
+{
+  struct cleanup *back_to;
+  struct line_header *lh;
+  gdb_byte *line_ptr;
+  unsigned int bytes_read, offset_size;
+  int i;
+  char *cur_dir, *cur_file;
+  bfd *abfd = objfile->obfd;
+
+  dwarf2_read_section (objfile, &dwarf2_per_objfile->line);
+  if (dwarf2_per_objfile->line.buffer == NULL)
+    return 0;
+
+  /* Make sure that at least there's room for the total_length field.
+     That could be 12 bytes long, but we're just going to fudge that.  */
+  if (offset + 4 >= dwarf2_per_objfile->line.size)
+  {
+    dwarf2_statement_list_fits_in_line_number_section_complaint ();
+    return 0;
+  }
+
+  lh = xmalloc (sizeof (*lh));
+  memset (lh, 0, sizeof (*lh));
+  back_to = make_cleanup ((make_cleanup_ftype *) free_line_header,
+                          (void *) lh);
+
+  line_ptr = dwarf2_per_objfile->line.buffer + offset;
+
+  /* Read in the header.  */
+  lh->total_length = read_initial_length (abfd, line_ptr, &bytes_read);
+  offset_size = (bytes_read == 4) ? 4 : 8;
+  line_ptr += bytes_read;
+  if (line_ptr + lh->total_length > (dwarf2_per_objfile->line.buffer
+                                     + dwarf2_per_objfile->line.size))
+    {
+      dwarf2_statement_list_fits_in_line_number_section_complaint ();
+      return 0;
+    }
+  lh->statement_program_end = line_ptr + lh->total_length;
+  lh->version = read_2_bytes (abfd, line_ptr);
+  line_ptr += 2;
+  lh->header_length = read_offset_1 (abfd, line_ptr, offset_size);
+  line_ptr += offset_size;
+  lh->minimum_instruction_length = read_1_byte (abfd, line_ptr);
+  line_ptr += 1;
+  if (lh->version >= 4)
+  {
+    lh->maximum_ops_per_instruction = read_1_byte (abfd, line_ptr);
+    line_ptr += 1;
+  }
+  else
+    lh->maximum_ops_per_instruction = 1;
+
+  if (lh->maximum_ops_per_instruction == 0)
+  {
+    lh->maximum_ops_per_instruction = 1;
+    complaint (&symfile_complaints,
+               _("invalid maximum_ops_per_instruction in `.debug_line' section"));
+  }
+
+  lh->default_is_stmt = read_1_byte (abfd, line_ptr);
+  line_ptr += 1;
+  lh->line_base = read_1_signed_byte (abfd, line_ptr);
+  line_ptr += 1;
+  lh->line_range = read_1_byte (abfd, line_ptr);
+  line_ptr += 1;
+  lh->opcode_base = read_1_byte (abfd, line_ptr);
+  line_ptr += 1;
+  lh->standard_opcode_lengths
+    = xmalloc (lh->opcode_base * sizeof (lh->standard_opcode_lengths[0]));
+
+  lh->standard_opcode_lengths[0] = 1;  /* This should never be used anyway.  */
+  for (i = 1; i < lh->opcode_base; ++i)
+    {
+      lh->standard_opcode_lengths[i] = read_1_byte (abfd, line_ptr);
+      line_ptr += 1;
+    }
+
+  /* Read directory table.  */
+  while ((cur_dir = read_direct_string (abfd, line_ptr, &bytes_read)) != NULL)
+    {
+      line_ptr += bytes_read;
+      add_include_dir (lh, cur_dir);
+    }
+  line_ptr += bytes_read;
+
+  /* Read file name table.  */
+  while ((cur_file = read_direct_string (abfd, line_ptr, &bytes_read)) != NULL)
+    {
+      unsigned int dir_index, mod_time, length;
+
+      line_ptr += bytes_read;
+      dir_index = read_unsigned_leb128 (abfd, line_ptr, &bytes_read);
+      line_ptr += bytes_read;
+      mod_time = read_unsigned_leb128 (abfd, line_ptr, &bytes_read);
+      line_ptr += bytes_read;
+      length = read_unsigned_leb128 (abfd, line_ptr, &bytes_read);
+      line_ptr += bytes_read;
+
+      add_file_name (lh, cur_file, dir_index, mod_time, length);
+    }
+  line_ptr += bytes_read;
+  lh->statement_program_start = line_ptr;
+
+  if (line_ptr > (dwarf2_per_objfile->line.buffer
+                  + dwarf2_per_objfile->line.size))
+    complaint (&symfile_complaints,
+               _("line number info header doesn't fit in `.debug_line' section"));
+
+  discard_cleanups (back_to);
+  return lh;
+}
+
+static void
+cuda_decode_lines (struct line_header *lh, struct objfile *objfile)
+{
+  gdb_byte *line_ptr, *extended_end;
+  gdb_byte *line_end;
+  unsigned int bytes_read, extended_len;
+  unsigned char op_code, extended_op, adj_opcode;
+  CORE_ADDR baseaddr;
+  struct gdbarch *gdbarch = get_objfile_arch (objfile);
+  struct subfile *last_subfile = NULL, *first_subfile = current_subfile;
+  char *comp_dir = NULL;
+  bfd *abfd = objfile->obfd;
+  int i;
+  struct file_entry *fe;
+  void (*p_record_line) (struct subfile *subfile, int line, CORE_ADDR pc)
+    = record_line;
+
+  baseaddr = ANOFFSET (objfile->section_offsets, SECT_OFF_TEXT (objfile));
+
+  line_ptr = lh->statement_program_start;
+  line_end = lh->statement_program_end;
+
+  /* Read the statement sequences until there's nothing left.  */
+  while (line_ptr < line_end)
+  {
+    /* state machine registers  */
+    CORE_ADDR address = 0;
+    unsigned int file = 1;
+    unsigned int line = 1;
+    unsigned int column = 0;
+    int is_stmt = lh->default_is_stmt;
+    int basic_block = 0;
+    int end_sequence = 0;
+    CORE_ADDR addr;
+    unsigned char op_index = 0;
+
+    if (lh->num_file_names >= file)
+    {
+      /* Start a subfile for the current file of the state machine.  */
+      /* lh->include_dirs and lh->file_names are 0-based, but the
+         directory and file name numbers in the statement program
+         are 1-based.  */
+      struct file_entry *fe = &lh->file_names[file - 1];
+      char *dir = NULL;
+
+      if (fe->dir_index)
+        dir = lh->include_dirs[fe->dir_index - 1];
+
+      dwarf2_start_subfile (fe->name, dir, comp_dir, objfile);
+    }
+
+    /* Decode the table.  */
+    while (!end_sequence)
+    {
+      op_code = read_1_byte (abfd, line_ptr);
+      line_ptr += 1;
+      if (line_ptr > line_end)
+      {
+        dwarf2_debug_line_missing_end_sequence_complaint ();
+        break;
+      }
+
+      if (op_code >= lh->opcode_base)
+      {
+        /* Special operand.  */
+        adj_opcode = op_code - lh->opcode_base;
+        address += (((op_index + (adj_opcode / lh->line_range))
+                     / lh->maximum_ops_per_instruction)
+                    * lh->minimum_instruction_length);
+        op_index = ((op_index + (adj_opcode / lh->line_range))
+                    % lh->maximum_ops_per_instruction);
+        line += lh->line_base + (adj_opcode % lh->line_range);
+        if (lh->num_file_names < file || file == 0)
+          dwarf2_debug_line_missing_file_complaint ();
+        /* For now we ignore lines not starting on an
+           instruction boundary.  */
+        else if (op_index == 0)
+        {
+          lh->file_names[file - 1].included_p = 1;
+          if (is_stmt)
+          {
+            if (last_subfile != current_subfile)
+            {
+              addr = gdbarch_addr_bits_remove (gdbarch, address);
+              if (last_subfile)
+                record_line (last_subfile, 0, addr);
+              last_subfile = current_subfile;
+            }
+            /* Append row to matrix using current values.  */
+            addr = gdbarch_addr_bits_remove (gdbarch, address);
+            (*p_record_line) (current_subfile, line, addr);
+          }
+        }
+        basic_block = 0;
+      }
+      else switch (op_code)
+      {
+        case DW_LNS_extended_op:
+          extended_len = read_unsigned_leb128 (abfd, line_ptr, &bytes_read);
+          line_ptr += bytes_read;
+          extended_end = line_ptr + extended_len;
+          extended_op = read_1_byte (abfd, line_ptr);
+          line_ptr += 1;
+          switch (extended_op)
+          {
+            case DW_LNE_end_sequence:
+              p_record_line = record_line;
+              end_sequence = 1;
+              break;
+            case DW_LNE_set_address:
+              if (bfd_get_arch_size (abfd) == 32)
+                {
+                  address = bfd_get_32 (abfd, line_ptr);
+                  bytes_read = 4;
+                }
+              else
+                {
+                  address = bfd_get_64 (abfd, line_ptr);
+                  bytes_read = 8;
+                }
+              if (address == 0)
+                {
+                  /* This line table is for a function which has been
+		     dead-coded by the linker.  Ignore it.
+                      CUDA duplicate of PR gdb/12528 */
+
+		   long line_offset
+                     = line_ptr - dwarf2_per_objfile->line.buffer;
+
+		    complaint (&symfile_complaints,
+                               _("CUDA: .debug_line address at offset 0x%lx"
+                                 "is 0"),
+                               line_offset);
+		    p_record_line = noop_record_line;
+		}
+              op_index = 0;
+              line_ptr += bytes_read;
+              address += baseaddr;
+              break;
+            case DW_LNE_define_file:
+              {
+                char *cur_file;
+                unsigned int dir_index, mod_time, length;
+
+                cur_file = read_direct_string (abfd, line_ptr, &bytes_read);
+                line_ptr += bytes_read;
+                dir_index =
+                  read_unsigned_leb128 (abfd, line_ptr, &bytes_read);
+                line_ptr += bytes_read;
+                mod_time =
+                  read_unsigned_leb128 (abfd, line_ptr, &bytes_read);
+                line_ptr += bytes_read;
+                length =
+                  read_unsigned_leb128 (abfd, line_ptr, &bytes_read);
+                line_ptr += bytes_read;
+                add_file_name (lh, cur_file, dir_index, mod_time, length);
+              }
+              break;
+            case DW_LNE_set_discriminator:
+              /* The discriminator is not interesting to the debugger;
+                 just ignore it.  */
+              line_ptr = extended_end;
+              break;
+            default:
+              complaint (&symfile_complaints,
+                         _("mangled .debug_line section"));
+              return;
+          }
+          /* Make sure that we parsed the extended op correctly.  If e.g.
+             we expected a different address size than the producer used,
+             we may have read the wrong number of bytes.  */
+          if (line_ptr != extended_end)
+          {
+            complaint (&symfile_complaints,
+                       _("mangled .debug_line section"));
+            return;
+          }
+          break;
+        case DW_LNS_copy:
+          if (lh->num_file_names < file || file == 0)
+            dwarf2_debug_line_missing_file_complaint ();
+          else
+          {
+            lh->file_names[file - 1].included_p = 1;
+            if (is_stmt)
+            {
+              if (last_subfile != current_subfile)
+              {
+                addr = gdbarch_addr_bits_remove (gdbarch, address);
+                if (last_subfile)
+                  (*p_record_line) (last_subfile, 0, addr);
+                last_subfile = current_subfile;
+              }
+              addr = gdbarch_addr_bits_remove (gdbarch, address);
+              (*p_record_line) (current_subfile, line, addr);
+            }
+          }
+          basic_block = 0;
+          break;
+        case DW_LNS_advance_pc:
+          {
+            CORE_ADDR adjust
+              = read_unsigned_leb128 (abfd, line_ptr, &bytes_read);
+
+            address += (((op_index + adjust)
+                         / lh->maximum_ops_per_instruction)
+                        * lh->minimum_instruction_length);
+            op_index = ((op_index + adjust)
+                        % lh->maximum_ops_per_instruction);
+            line_ptr += bytes_read;
+          }
+          break;
+        case DW_LNS_advance_line:
+          line += read_signed_leb128 (abfd, line_ptr, &bytes_read);
+          line_ptr += bytes_read;
+          break;
+        case DW_LNS_set_file:
+          {
+            /* The arrays lh->include_dirs and lh->file_names are
+               0-based, but the directory and file name numbers in
+               the statement program are 1-based.  */
+            struct file_entry *fe;
+            char *dir = NULL;
+
+            file = read_unsigned_leb128 (abfd, line_ptr, &bytes_read);
+            line_ptr += bytes_read;
+            if (lh->num_file_names < file || file == 0)
+              dwarf2_debug_line_missing_file_complaint ();
+            else
+            {
+              fe = &lh->file_names[file - 1];
+              if (fe->dir_index)
+                dir = lh->include_dirs[fe->dir_index - 1];
+              last_subfile = current_subfile;
+              dwarf2_start_subfile (fe->name, dir, comp_dir, objfile);
+            }
+          }
+          break;
+        case DW_LNS_set_column:
+          column = read_unsigned_leb128 (abfd, line_ptr, &bytes_read);
+          line_ptr += bytes_read;
+          break;
+        case DW_LNS_negate_stmt:
+          is_stmt = (!is_stmt);
+          break;
+        case DW_LNS_set_basic_block:
+          basic_block = 1;
+          break;
+          /* Add to the address register of the state machine the
+             address increment value corresponding to special opcode
+             255.  I.e., this value is scaled by the minimum
+             instruction length since special opcode 255 would have
+             scaled the the increment.  */
+        case DW_LNS_const_add_pc:
+          {
+            CORE_ADDR adjust = (255 - lh->opcode_base) / lh->line_range;
+
+            address += (((op_index + adjust)
+                         / lh->maximum_ops_per_instruction)
+                        * lh->minimum_instruction_length);
+            op_index = ((op_index + adjust)
+                        % lh->maximum_ops_per_instruction);
+          }
+          break;
+        case DW_LNS_fixed_advance_pc:
+          address += read_2_bytes (abfd, line_ptr);
+          op_index = 0;
+          line_ptr += 2;
+          break;
+        default:
+          {
+            /* Unknown standard opcode, ignore it.  */
+            int i;
+
+            for (i = 0; i < lh->standard_opcode_lengths[op_code]; i++)
+            {
+              (void) read_unsigned_leb128 (abfd, line_ptr, &bytes_read);
+              line_ptr += bytes_read;
+            }
+          }
+      }
+    }
+    if (lh->num_file_names < file || file == 0)
+      dwarf2_debug_line_missing_file_complaint ();
+    else
+    {
+      lh->file_names[file - 1].included_p = 1;
+      addr = gdbarch_addr_bits_remove (gdbarch, address);
+      (*p_record_line) (current_subfile, 0, addr);
+    }
+  }
+
+  /* Make sure a symtab is created for every file, even files
+     which contain only variables (i.e. no code with associated
+     line numbers).  */
+
+  for (i = 0; i < lh->num_file_names; i++)
+  {
+    char *dir = NULL;
+
+    fe = &lh->file_names[i];
+    if (fe->dir_index)
+      dir = lh->include_dirs[fe->dir_index - 1];
+    dwarf2_start_subfile (fe->name, dir, comp_dir, objfile);
+
+    /* Skip the main file; we don't need it, and it must be
+       allocated last, so that it will show up before the
+       non-primary symtabs in the objfile's symtab list.  */
+    if (current_subfile == first_subfile)
+      continue;
+
+    if (current_subfile->symtab == NULL)
+      current_subfile->symtab = allocate_symtab (current_subfile->name,
+                                                 objfile);
+
+    fe->symtab = current_subfile->symtab;
+  }
+}
+
+static void
+cuda_populate_blockvectors (struct line_header *lh,
+                            struct objfile *objfile)
+{
+  char *dir = NULL;
+  int i = 0, j = 0, nblocks = 0;
+  struct file_entry *fe = NULL;
+  struct block *block, *global_block = NULL;
+  struct blockvector *blockvector = NULL;
+  struct minimal_symbol *msym = NULL;
+  struct symbol *sym = NULL;
+  struct symtab *first_symtab = NULL;
+  struct obstack *obstack = &objfile->objfile_obstack;
+  struct pending *pending_symbols = NULL;
+
+  nblocks = objfile->minimal_symbol_count + 1;
+
+  blockvector = (struct blockvector *)
+    obstack_alloc (&objfile->objfile_obstack,
+                   (sizeof (struct blockvector)
+                    + nblocks * sizeof (struct block *)));
+
+  BLOCKVECTOR_NBLOCKS (blockvector) = nblocks;
+  BLOCKVECTOR_MAP (blockvector) = 0;
+
+  global_block  = allocate_global_block (obstack);
+
+  BLOCKVECTOR_BLOCK (blockvector, 0) = global_block;
+
+  for (i = 0; i < lh->num_file_names; i++)
+  {
+    fe = &lh->file_names[i];
+    if (fe->dir_index)
+      dir = lh->include_dirs[fe->dir_index - 1];
+    dwarf2_start_subfile (fe->name, dir, NULL, objfile);
+
+    gdb_assert (!current_subfile->symtab->blockvector);
+    current_subfile->symtab->blockvector = blockvector;
+
+    current_subfile->symtab->primary = 1;
+
+    if (i == 0)
+      {
+        first_symtab = current_subfile->symtab;
+      }
+  }
+  set_block_symtab (global_block, first_symtab); /* dummy */
+
+  for (j = 1; j < nblocks; ++j)
+    {
+      msym = &objfile->msymbols[j-1];
+      sym = (struct symbol *) obstack_alloc (obstack, sizeof (*sym));
+      block  = allocate_block (obstack);
+
+      memset (sym, 0, sizeof (*sym));
+      SYMBOL_DOMAIN (sym) = VAR_DOMAIN;
+      SYMBOL_CLASS (sym) = LOC_BLOCK;
+      SYMBOL_TYPE (sym) = objfile_type (objfile)->nodebug_data_symbol;
+      SYMBOL_LANGUAGE (sym) = SYMBOL_LANGUAGE (msym);
+      SYMBOL_BLOCK_VALUE (sym) = block;
+      SYMBOL_SYMTAB (sym) = first_symtab; /* dummy */
+      SYMBOL_SET_NAMES (sym, msym->ginfo.name,
+                        strlen (msym->ginfo.name), 1, objfile);
+      add_symbol_to_list (sym, &pending_symbols);
+
+      BLOCK_START (block) = SYMBOL_VALUE_ADDRESS (msym);
+      BLOCK_END (block) = SYMBOL_VALUE_ADDRESS (msym) + msym->size;
+      BLOCK_FUNCTION (block) = sym;
+      BLOCK_SUPERBLOCK (block) = global_block;
+      BLOCK_DICT (block) = dict_create_hashed (obstack, NULL);
+
+      BLOCKVECTOR_BLOCK (blockvector, j) = block;
+    }
+
+  BLOCK_DICT (global_block) =
+    dict_create_hashed (obstack, pending_symbols);
+}
+
+static void
+cuda_populate_line_table (struct line_header *lh, struct objfile *objfile)
+{
+  int linetable_size = sizeof (struct linetable);
+  int linetable_entry_size = sizeof (struct linetable_entry);
+  int total_size = 0;
+  struct obstack *obstack = &objfile->objfile_obstack;
+  struct symtab *symtab = NULL;
+  int nitems = 0;
+  int i = 0;
+  struct file_entry *fe = NULL;
+  char *dir = NULL;
+
+  for (i = 0; i < lh->num_file_names; i++)
+  {
+    fe = &lh->file_names[i];
+    if (fe->dir_index)
+      dir = lh->include_dirs[fe->dir_index - 1];
+    dwarf2_start_subfile (fe->name, dir, NULL, objfile);
+
+    if (!current_subfile->line_vector)
+      continue;
+
+    symtab = current_subfile->symtab;
+    nitems = current_subfile->line_vector->nitems;
+    total_size = linetable_size + nitems * linetable_entry_size;
+
+    symtab->linetable =
+      (struct linetable *) obstack_alloc (obstack, total_size);
+    memcpy (symtab->linetable, current_subfile->line_vector, total_size);
+  }
+}
+
+
+void
+cuda_decode_line_table (struct objfile *objfile)
+{
+  struct line_header *lh = NULL;
+  unsigned int line_offset = 0; /* assumption */
+
+  /* Only force the decoding of the line table this way when there is no
+     .debug_info section. This function also has the side-effect (yuck!) to
+     initialize dwarf2_per_objfile. */
+  if (dwarf2_has_info (objfile, NULL))
+    return;
+
+  start_symtab (objfile->name, NULL, 0);
+
+  lh = cuda_decode_line_header (line_offset, objfile);
+  if (lh == NULL)
+    return;
+
+  cuda_decode_lines (lh, objfile);
+
+  cuda_populate_blockvectors (lh, objfile);
+  cuda_populate_line_table (lh, objfile);
+
+  free_line_header (lh);
 }

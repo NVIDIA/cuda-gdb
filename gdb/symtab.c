@@ -17,6 +17,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -231,12 +249,27 @@ iterate_over_some_symtabs (const char *name,
 
     if (real_path != NULL)
       {
+        const int realpath_len = strlen (real_path);
+        const int dirname_len = s->dirname ? strlen(s->dirname) : 0;
+        const int filename_len = s->filename ? strlen(s->filename) : 0;
         const char *fullname = symtab_to_fullname (s);
 
 	gdb_assert (IS_ABSOLUTE_PATH (real_path));
 	gdb_assert (IS_ABSOLUTE_PATH (name));
 	if (FILENAME_CMP (real_path, fullname) == 0)
 	  {
+	    if (callback (s, data))
+	      return 1;
+	  }
+
+        /* And finally check if real_path equals to s->dirname concatenated
+           with s->filename */
+        if ( s->dirname != NULL && s->filename != NULL &&
+            realpath_len == dirname_len + filename_len + 1 && 
+            filename_ncmp (real_path, s->dirname, dirname_len) == 0 && 
+            real_path [dirname_len] == '/' &&
+            filename_ncmp (real_path + dirname_len + 1, s->filename, filename_len) == 0)
+          {
 	    if (callback (s, data))
 	      return 1;
 	  }
@@ -791,6 +824,16 @@ symbol_set_names (struct general_symbol_info *gsymbol,
     symbol_set_demangled_name (gsymbol, (*slot)->demangled, objfile);
   else
     symbol_set_demangled_name (gsymbol, NULL, objfile);
+}
+
+/* CUDA - set CUDA symbol name */
+void
+symbol_set_cuda_name (struct general_symbol_info *gsymbol,
+                      const char *name, int len, struct objfile *objfile)
+{
+  gsymbol->cuda_name = obstack_alloc (&objfile->objfile_obstack, len + 1);
+  memcpy (gsymbol->cuda_name, name, len);
+  gsymbol->cuda_name[len] = '\0';
 }
 
 /* Return the source code name of a symbol.  In languages where
@@ -1551,6 +1594,43 @@ lookup_symbol_aux_objfile (struct objfile *objfile, int block_index,
   return NULL;
 }
 
+/* CUDA - duplicate extern symbols */
+/* When the CUDA application is compiled in separate compilation mode, the
+   same device extern global appears in both the host and device code. The
+   device variable symbol should have priority.
+
+   It is safe to do so because if there was an actual host global variable
+   with the same name, the host linker would have complained about it. */
+static struct symbol *
+cuda_lookup_global_symbols (int block_index, const char *name,
+                            const domain_enum domain)
+{
+  struct symbol *sym;
+  struct objfile *objfile;
+  struct block *block;
+  struct blockvector *bv;
+  struct symtab *s;
+
+  if (domain != VAR_DOMAIN)
+    return NULL;
+
+  ALL_PRIMARY_SYMTABS (objfile, s)
+    {
+      if (!objfile->cuda_objfile)
+        continue;
+      bv = BLOCKVECTOR (s);
+      block = BLOCKVECTOR_BLOCK (bv, block_index);
+      sym = lookup_block_symbol (block, name, domain);
+      if (sym)
+        {
+          block_found = block;
+          return fixup_symbol_section (sym, objfile);
+        }
+    }
+
+  return NULL;
+}
+
 /* Same as lookup_symbol_aux_objfile, except that it searches all
    objfiles.  Return the first match found.  */
 
@@ -1560,6 +1640,11 @@ lookup_symbol_aux_symtabs (int block_index, const char *name,
 {
   struct symbol *sym;
   struct objfile *objfile;
+
+  /* CUDA - symbols */
+  sym = cuda_lookup_global_symbols (block_index, name, domain);
+  if (sym)
+    return sym;
 
   ALL_OBJFILES (objfile)
   {
@@ -1783,6 +1868,11 @@ lookup_symbol_global (const char *name,
   if (sym != NULL)
     return sym;
 
+  /* CUDA - symbols */
+  sym = cuda_lookup_global_symbols (GLOBAL_BLOCK, name, domain);
+  if (sym != NULL)
+    return sym;
+
   memset (&lookup_data, 0, sizeof (lookup_data));
   lookup_data.name = name;
   lookup_data.domain = domain;
@@ -2003,6 +2093,14 @@ lookup_block_symbol (const struct block *block, const char *name,
 	 parameter symbols first; it only uses parameter symbols as a
 	 last resort.  Note that this only takes up extra computation
 	 time on a match.  */
+      /* CUDA - missing DW_AT_abstract_origin */
+      /* When a CUDA device function is inlined, its variables, parameters,...
+         have no DW_AT_abstract_origin tags. Therefore the same attributes from
+         the origin routine are inherited. It is not the issue most of the time
+         because those inherited attributes, and therefore symbols, appear
+         later in the list and are never seen. But, for parameters, that's
+         different, per the comment above. A quick workaround is return the
+         first parameter instead of the last. */
 
       struct symbol *sym_found = NULL;
 
@@ -2013,11 +2111,13 @@ lookup_block_symbol (const struct block *block, const char *name,
 	  if (symbol_matches_domain (SYMBOL_LANGUAGE (sym),
 				     SYMBOL_DOMAIN (sym), domain))
 	    {
-	      sym_found = sym;
 	      if (!SYMBOL_IS_ARGUMENT (sym))
 		{
+                  sym_found = sym;
 		  break;
 		}
+              else if (!sym_found)
+                sym_found = sym;
 	    }
 	}
       return (sym_found);	/* Will be NULL if not found.  */
@@ -2067,6 +2167,8 @@ find_pc_sect_symtab (CORE_ADDR pc, struct obj_section *section)
   struct objfile *objfile;
   CORE_ADDR distance = 0;
   struct minimal_symbol *msymbol;
+  bool is_device_code_address = false;
+  bool is_device_code_address_p = false;
 
   /* If we know that this is not a text address, return failure.  This is
      necessary because we loop based on the block's high and low code
@@ -2102,6 +2204,34 @@ find_pc_sect_symtab (CORE_ADDR pc, struct obj_section *section)
     bv = BLOCKVECTOR (s);
     b = BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK);
 
+    /* CUDA - interleaving */
+    /* CUDA objfiles are not allocated as a single block of memory. Instead of
+       erroneously getting the GLOBAL_BLOCK for those objfiles, we find the
+       innermost block containing the PC for that symtab. */
+    if (objfile->cuda_objfile)
+      {
+        struct blockvector *found = blockvector_for_pc_sect (pc, section, &b, s);
+        if (!found)
+          continue;
+      }
+
+    /* CUDA - overlapping objfiles */
+    /* For reasons yet not fully understood, it sometimes happens that the PC
+       passed as argument appears to belong to the wrong objfile. In other
+       words, two objfiles overlap in memory. Obviously that should not happen.
+       In my case, a CUDA objfile and a host objfile appear as overlapping, and
+       the device PC is seen as belonging to a non-cuda objfile.
+       Until I can dig deeper, here is an easy workaround. When dealing with a
+       CUDA device PC, consider CUDA objfiles. And vice-versa. */
+    if (!is_device_code_address_p)
+      {
+        is_device_code_address = cuda_is_device_code_address (pc);
+        is_device_code_address_p = true;
+      }
+    if ((!objfile->cuda_objfile && is_device_code_address) ||
+        (objfile->cuda_objfile && !is_device_code_address))
+      continue;
+
     if (BLOCK_START (b) <= pc
 	&& BLOCK_END (b) > pc
 	&& (distance == 0
@@ -2113,7 +2243,14 @@ find_pc_sect_symtab (CORE_ADDR pc, struct obj_section *section)
 	/* In order to better support objfiles that contain both
 	   stabs and coff debugging info, we continue on if a psymtab
 	   can't be found.  */
-	if ((objfile->flags & OBJF_REORDERED) && objfile->sf)
+        /* CUDA - no psymtab-based optimization */
+        /* In CUDA objfiles, the device kernels are not allocated contiguously.
+           Therefore the memory block from BLOCK_START to BLOCK_END contains
+           holes that the objfile does not cover. Because of it, the
+           optimization below returns the wrong symtab. We simply disable it
+           for CUDA objfiles.
+         */
+	if ((objfile->flags & OBJF_REORDERED) && objfile->sf && !objfile->cuda_objfile)
 	  {
 	    struct symtab *result;
 
@@ -2156,10 +2293,16 @@ find_pc_sect_symtab (CORE_ADDR pc, struct obj_section *section)
 
     if (!objfile->sf)
       continue;
+
+    /* CUDA - no psymtab-based optimization */
+    /* Because the optimization above has been turned off for CUDA objfiles,
+       it is now possible to call this function when the partial symbol table
+       has already been read in. We must take it into account when deciding to
+       emit a warning about it. */
     result = objfile->sf->qf->find_pc_sect_symtab (objfile,
 						   msymbol,
 						   pc, section,
-						   1);
+						   !objfile->cuda_objfile);
     if (result)
       return result;
   }

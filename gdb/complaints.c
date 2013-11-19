@@ -185,20 +185,19 @@ vcomplaint (struct complaints **c, const char *file,
     series = complaints->series;
 
   if (complaint->file != NULL)
-    internal_vwarning (complaint->file, complaint->line, 
-		       complaint->fmt, args);
+    internal_vwarning (complaint->file, complaint->line, fmt, args);
   else if (deprecated_warning_hook)
     (*deprecated_warning_hook) (complaint->fmt, args);
   else
     {
       if (complaints->explanation == NULL)
 	/* A [v]warning() call always appends a newline.  */
-	vwarning (complaint->fmt, args);
+	vwarning (fmt, args);
       else
 	{
 	  char *msg;
 	  struct cleanup *cleanups;
-	  msg = xstrvprintf (complaint->fmt, args);
+	  msg = xstrvprintf (fmt, args);
 	  cleanups = make_cleanup (xfree, msg);
 	  wrap_here ("");
 	  if (series != SUBSEQUENT_MESSAGE)

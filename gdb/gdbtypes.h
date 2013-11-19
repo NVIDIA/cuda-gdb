@@ -19,6 +19,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #if !defined (GDBTYPES_H)
 #define GDBTYPES_H 1
 
@@ -198,7 +216,18 @@ enum type_instance_flag_value
   TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 = (1 << 4),
   TYPE_INSTANCE_FLAG_ADDRESS_CLASS_2 = (1 << 5),
   TYPE_INSTANCE_FLAG_NOTTEXT = (1 << 6),
-  TYPE_INSTANCE_FLAG_RESTRICT = (1 << 7)
+  TYPE_INSTANCE_FLAG_RESTRICT = (1 << 7),
+  /* CUDA - Memory Segments */
+  TYPE_INSTANCE_FLAG_CUDA_CODE = (1 << 6),
+  TYPE_INSTANCE_FLAG_CUDA_CONST = (1 << 7),
+  TYPE_INSTANCE_FLAG_CUDA_GENERIC = (1 << 8),
+  TYPE_INSTANCE_FLAG_CUDA_GLOBAL = (1 << 9),
+  TYPE_INSTANCE_FLAG_CUDA_PARAM = (1 << 10),
+  TYPE_INSTANCE_FLAG_CUDA_SHARED = (1 << 11),
+  TYPE_INSTANCE_FLAG_CUDA_TEX = (1 << 12),
+  TYPE_INSTANCE_FLAG_CUDA_LOCAL = (1 << 13),
+  TYPE_INSTANCE_FLAG_CUDA_REG = (1 << 14),
+  TYPE_INSTANCE_FLAG_CUDA_MANAGED = (1<<15),
 };
 
 /* Unsigned integer type.  If this is not set for a TYPE_CODE_INT, the
@@ -351,6 +380,39 @@ enum type_instance_flag_value
 #define TYPE_DATA_SPACE(t) \
   (TYPE_INSTANCE_FLAGS (t) & TYPE_INSTANCE_FLAG_DATA_SPACE)
 
+/* CUDA - Memory Segments */
+#define TYPE_CUDA_CODE(t) (TYPE_INSTANCE_FLAGS(t) & \
+                           TYPE_INSTANCE_FLAG_CUDA_CODE)
+#define TYPE_CUDA_CONST(t) (TYPE_INSTANCE_FLAGS(t) & \
+                           TYPE_INSTANCE_FLAG_CUDA_CONST)
+#define TYPE_CUDA_GENERIC(t) (TYPE_INSTANCE_FLAGS(t) & \
+                           (TYPE_INSTANCE_FLAG_CUDA_GENERIC|TYPE_INSTANCE_FLAG_CUDA_MANAGED))
+#define TYPE_CUDA_GLOBAL(t) (TYPE_INSTANCE_FLAGS(t) & \
+                           TYPE_INSTANCE_FLAG_CUDA_GLOBAL)
+#define TYPE_CUDA_PARAM(t) (TYPE_INSTANCE_FLAGS(t) & \
+                           TYPE_INSTANCE_FLAG_CUDA_PARAM)
+#define TYPE_CUDA_SHARED(t) (TYPE_INSTANCE_FLAGS(t) & \
+                           TYPE_INSTANCE_FLAG_CUDA_SHARED)
+#define TYPE_CUDA_TEX(t) (TYPE_INSTANCE_FLAGS(t) & \
+                           TYPE_INSTANCE_FLAG_CUDA_TEX)
+#define TYPE_CUDA_LOCAL(t) (TYPE_INSTANCE_FLAGS(t) & \
+                           TYPE_INSTANCE_FLAG_CUDA_LOCAL)
+#define TYPE_CUDA_REG(t) (TYPE_INSTANCE_FLAGS(t) & \
+                         TYPE_INSTANCE_FLAG_CUDA_REG)
+#define TYPE_INSTANCE_FLAG_CUDA_ALL  \
+  (TYPE_INSTANCE_FLAG_CUDA_CODE    | \
+   TYPE_INSTANCE_FLAG_CUDA_CONST   | \
+   TYPE_INSTANCE_FLAG_CUDA_GENERIC | \
+   TYPE_INSTANCE_FLAG_CUDA_GLOBAL  | \
+   TYPE_INSTANCE_FLAG_CUDA_PARAM   | \
+   TYPE_INSTANCE_FLAG_CUDA_SHARED  | \
+   TYPE_INSTANCE_FLAG_CUDA_TEX     | \
+   TYPE_INSTANCE_FLAG_CUDA_LOCAL   | \
+   TYPE_INSTANCE_FLAG_CUDA_MANAGED | \
+   TYPE_INSTANCE_FLAG_CUDA_REG)
+#define TYPE_CUDA_ALL(t) (TYPE_INSTANCE_FLAGS(t) & \
+                          TYPE_INSTANCE_FLAG_CUDA_ALL)
+
 /* Address class flags.  Some environments provide for pointers whose
    size is different from that of a normal pointer or address types
    where the bits are interpreted differently than normal addresses.  The
@@ -361,7 +423,8 @@ enum type_instance_flag_value
 #define TYPE_ADDRESS_CLASS_2(t) (TYPE_INSTANCE_FLAGS(t) \
 				 & TYPE_INSTANCE_FLAG_ADDRESS_CLASS_2)
 #define TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL \
-  (TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 | TYPE_INSTANCE_FLAG_ADDRESS_CLASS_2)
+  (TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 | TYPE_INSTANCE_FLAG_ADDRESS_CLASS_2 \
+   | TYPE_INSTANCE_FLAG_CUDA_ALL)
 #define TYPE_ADDRESS_CLASS_ALL(t) (TYPE_INSTANCE_FLAGS(t) \
 				   & TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL)
 
@@ -1049,6 +1112,8 @@ extern void allocate_gnat_aux_type (struct type *);
 #define TYPE_MAIN_TYPE(thistype) (thistype)->main_type
 #define TYPE_NAME(thistype) TYPE_MAIN_TYPE(thistype)->name
 #define TYPE_TAG_NAME(type) TYPE_MAIN_TYPE(type)->tag_name
+/* CUDA - find the target type with the same instance flags */
+#define FIND_TARGET_TYPE(thistype) (find_target_type_with_instance_flags(thistype))
 #define TYPE_TARGET_TYPE(thistype) TYPE_MAIN_TYPE(thistype)->target_type
 #define TYPE_POINTER_TYPE(thistype) (thistype)->pointer_type
 #define TYPE_REFERENCE_TYPE(thistype) (thistype)->reference_type
@@ -1659,5 +1724,8 @@ extern struct type *copy_type_recursive (struct objfile *objfile,
 extern struct type *copy_type (const struct type *type);
 
 extern int types_equal (struct type *, struct type *);
+
+/* CUDA - find the target type with the same instance flags */
+struct type *find_target_type_with_instance_flags (struct type *type);
 
 #endif /* GDBTYPES_H */

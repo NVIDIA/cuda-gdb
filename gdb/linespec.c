@@ -328,9 +328,12 @@ static void initialize_defaults (struct symtab **default_symtab,
 
 static CORE_ADDR linespec_expression_to_pc (const char **exp_ptr);
 
+/* CUDA - Disable Objective-C selectors lookup*/
+#if 0
 static struct symtabs_and_lines decode_objc (struct linespec_state *self,
 					     linespec_p ls,
 					     char **argptr);
+#endif
 
 static VEC (symtab_p) *symtabs_from_filename (const char *);
 
@@ -2169,9 +2172,12 @@ parse_linespec (linespec_parser *parser, char **argptr)
 		       &PARSER_STATE (parser)->default_line);
 
   /* Objective-C shortcut.  */
+/* CUDA - Disable Objective-C selectors lookup*/
+#if 0
   values = decode_objc (PARSER_STATE (parser), PARSER_RESULT (parser), argptr);
   if (values.sals != NULL)
     return values;
+#endif
 
   /* Start parsing.  */
 
@@ -2580,6 +2586,8 @@ linespec_expression_to_pc (const char **exp_ptr)
 
 
 
+/* CUDA - Disable Objective-C selectors lookup*/
+#if 0
 /* Here's where we recognise an Objective-C Selector.  An Objective C
    selector may be implemented by more than one class, therefore it
    may represent more than one method/function.  This gives us a
@@ -2646,6 +2654,7 @@ decode_objc (struct linespec_state *self, linespec_p ls, char **argptr)
 
   return values;
 }
+#endif
 
 /* An instance of this type is used when collecting prefix symbols for
    decode_compound.  */

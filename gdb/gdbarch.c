@@ -20,6 +20,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 /* This file was created with the aid of ``gdbarch.sh''.
 
    The Bourne shell script ``gdbarch.sh'' creates the files
@@ -2056,7 +2074,7 @@ set_gdbarch_fp0_regnum (struct gdbarch *gdbarch,
 }
 
 int
-gdbarch_stab_reg_to_regnum (struct gdbarch *gdbarch, int stab_regnr)
+gdbarch_stab_reg_to_regnum (struct gdbarch *gdbarch, reg_t stab_regnr)
 {
   gdb_assert (gdbarch != NULL);
   gdb_assert (gdbarch->stab_reg_to_regnum != NULL);
@@ -2073,7 +2091,7 @@ set_gdbarch_stab_reg_to_regnum (struct gdbarch *gdbarch,
 }
 
 int
-gdbarch_ecoff_reg_to_regnum (struct gdbarch *gdbarch, int ecoff_regnr)
+gdbarch_ecoff_reg_to_regnum (struct gdbarch *gdbarch, reg_t ecoff_regnr)
 {
   gdb_assert (gdbarch != NULL);
   gdb_assert (gdbarch->ecoff_reg_to_regnum != NULL);
@@ -2090,7 +2108,7 @@ set_gdbarch_ecoff_reg_to_regnum (struct gdbarch *gdbarch,
 }
 
 int
-gdbarch_sdb_reg_to_regnum (struct gdbarch *gdbarch, int sdb_regnr)
+gdbarch_sdb_reg_to_regnum (struct gdbarch *gdbarch, reg_t sdb_regnr)
 {
   gdb_assert (gdbarch != NULL);
   gdb_assert (gdbarch->sdb_reg_to_regnum != NULL);
@@ -2107,7 +2125,7 @@ set_gdbarch_sdb_reg_to_regnum (struct gdbarch *gdbarch,
 }
 
 int
-gdbarch_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int dwarf2_regnr)
+gdbarch_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, reg_t dwarf2_regnr)
 {
   gdb_assert (gdbarch != NULL);
   gdb_assert (gdbarch->dwarf2_reg_to_regnum != NULL);
@@ -4554,11 +4572,14 @@ gdbarch_register (enum bfd_architecture bfd_architecture,
        (*curr) != NULL;
        curr = &(*curr)->next)
     {
+      /* CUDA - BFD architecture */
+#if 0
       if (bfd_architecture == (*curr)->bfd_architecture)
 	internal_error (__FILE__, __LINE__,
                         _("gdbarch: Duplicate registration "
 			  "of architecture (%s)"),
 	                bfd_arch_info->printable_name);
+#endif
     }
   /* log it */
   if (gdbarch_debug)

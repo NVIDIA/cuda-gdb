@@ -17,6 +17,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "frame.h"
 #include "target.h"
@@ -43,6 +61,8 @@
 #include "block.h"
 #include "inline-frame.h"
 #include "tracepoint.h"
+#include "cuda-tdep.h"
+#include "cuda-frame.h"
 
 static struct frame_info *get_prev_frame_1 (struct frame_info *this_frame);
 static struct frame_info *get_prev_frame_raw (struct frame_info *this_frame);
@@ -1647,6 +1667,22 @@ get_prev_frame_1 (struct frame_info *this_frame)
   if (this_frame->stop_reason != UNWIND_NO_REASON)
     return NULL;
 
+  /* CUDA - frames */
+  /* Stop unwinding if the current frame is the outermost CUDA device frame */
+  if (this_frame->level >= 0
+      && cuda_focus_is_device ()
+      && cuda_frame_outermost_p (this_frame->next))
+    {
+      if (frame_debug)
+	{
+	  fprintf_unfiltered (gdb_stdlog, "-> ");
+	  fprint_frame (gdb_stdlog, NULL);
+	  fprintf_unfiltered (gdb_stdlog, " // Outermost CUDA frame }\n");
+	}
+      this_frame->stop_reason = UNWIND_NULL_ID;
+      return NULL;
+    }
+
   /* Check that this frame's ID was valid.  If it wasn't, don't try to
      unwind to the prev frame.  Be careful to not apply this test to
      the sentinel frame.  */
@@ -1699,6 +1735,10 @@ get_prev_frame_1 (struct frame_info *this_frame)
      are, there is most likely a stack cycle.  As with the inner-than
      test above, avoid comparing the inner-most and sentinel frames.  */
   if (this_frame->level > 0
+      /* CUDA - frames */
+      /* A CUDA frame may have a size of 0. Therefore two different frames may
+         correctly share the same frame id. */
+      && !cuda_focus_is_device ()
       && frame_id_eq (this_id, get_frame_id (this_frame->next)))
     {
       if (frame_debug)
@@ -1913,6 +1953,16 @@ get_prev_frame (struct frame_info *this_frame)
        automatically happen.  */
     {
       frame_debug_got_null_frame (this_frame, "inside main func");
+      return NULL;
+    }
+
+  /* CUDA - frames */
+  /* Stop unwinding if the current frame is the outermost CUDA device frame */
+  if (this_frame->level >= 0
+      && cuda_focus_is_device ()
+      && cuda_frame_outermost_p (this_frame->next))
+    {
+      frame_debug_got_null_frame (this_frame, "outermost CUDA device frame");
       return NULL;
     }
 

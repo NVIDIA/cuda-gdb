@@ -31,7 +31,10 @@
 struct osdata *
 osdata_parse (const char *xml)
 {
-  static int have_warned;
+  /* CUDA - XML warning */
+  /* No need to warn since an error will be raised next if this function
+     returns NULL. Avoids unnecessary warning messages in the MI clients. */
+  static int have_warned = 1;
 
   if (!have_warned)
     {

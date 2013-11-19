@@ -192,6 +192,11 @@ extern void quit (void);
   if (deprecated_interactive_hook) deprecated_interactive_hook (); \
 }
 
+#define QUIT2 { \
+  if (check_quit_flag () > 1) quit (); \
+  if (deprecated_interactive_hook) deprecated_interactive_hook (); \
+}
+
 /* Languages represented in the symbol table and elsewhere.
    This should probably be in language.h, but since enum's can't
    be forward declared to satisfy opaque references before their

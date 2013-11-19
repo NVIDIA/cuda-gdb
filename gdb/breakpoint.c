@@ -17,6 +17,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "arch-utils.h"
 #include <ctype.h>
@@ -82,6 +100,17 @@
 #include "mi/mi-common.h"
 #include "python/python.h"
 
+#include "cuda-iterator.h"
+#include "cuda-tdep.h"
+#include "cuda-state.h"
+#include "cuda-modules.h"
+#include "cuda-context.h"
+#include "cuda-autostep.h"
+#include "cuda-elf-image.h"
+#include "cuda-options.h"
+#include "cuda-convvars.h"
+#include "cuda-utils.h"
+
 /* Enums for exception-handling support.  */
 enum exception_event_kind
 {
@@ -131,6 +160,14 @@ static void decode_linespec_default (struct breakpoint *, char **,
 static void clear_command (char *, int);
 
 static void catch_command (char *, int);
+
+/* CUDA - autostep */
+static void cuda_trace_breakpoint (const char *fmt, ...);
+static void autostep_command (char *, int);
+
+static int is_autostep (const struct breakpoint *bpt);
+
+static void autosteps_info (char *, int);
 
 static int can_use_hardware_watchpoint (struct value *);
 
@@ -411,6 +448,21 @@ show_pending_break_support (struct ui_file *file, int from_tty,
 		    value);
 }
 
+/* If AUTO_BOOLEAN_FALSE, gdb will not attempt to create pending breakpoints conditionals.
+   If AUTO_BOOLEAN_TRUE, gdb will automatically create pending breakpoints
+   for unrecognized breakpoint conditionals.
+   If AUTO_BOOLEAN_AUTO, gdb will query when breakpoints are unrecognized.  */
+static enum auto_boolean conditional_pending_break_support;
+static void
+show_conditional_pending_break_support (struct ui_file *file, int from_tty,
+			    struct cmd_list_element *c,
+			    const char *value)
+{
+  fprintf_filtered (file, _("\
+Conditional breakpoints will always be pending if the condition cannot be evaluated is %s.\n"),
+		    value);
+}
+
 /* If 1, gdb will automatically use hardware breakpoints for breakpoints
    set with "break" but falling in read-only memory.
    If 0, gdb will warn about such breakpoints, but won't automatically
@@ -615,6 +667,10 @@ static int tracepoint_count;
 static struct cmd_list_element *breakpoint_set_cmdlist;
 static struct cmd_list_element *breakpoint_show_cmdlist;
 struct cmd_list_element *save_cmdlist;
+
+/* CUDA - auto breakpoints */
+static struct breakpoint *cuda_auto_breakpoints_bp_system = NULL;
+static struct breakpoint *cuda_auto_breakpoints_bp_application = NULL;
 
 /* Return whether a breakpoint is an active enabled breakpoint.  */
 static int
@@ -2052,6 +2108,22 @@ unduplicated_should_be_inserted (struct bp_location *bl)
   return result;
 }
 
+/* CUDA - autostep */
+/* Finds the autostep at a given address. Returns NULL if not found. */
+struct breakpoint *
+cuda_find_autostep_by_addr (CORE_ADDR address)
+{
+  struct bp_location *loc, **loc_temp;
+
+  ALL_BP_LOCATIONS(loc, loc_temp)
+    {
+      if (loc->owner->type == bp_cuda_autostep && loc->address == address)
+        return loc->owner;
+    }
+
+  return NULL;
+}
+
 /* Parses a conditional described by an expression COND into an
    agent expression bytecode suitable for evaluation
    by the bytecode interpreter.  Return NULL if there was
@@ -2410,6 +2482,7 @@ insert_bp_location (struct bp_location *bl,
      we have a breakpoint inserted at that address and thus
      read the breakpoint instead of returning the data saved in
      the breakpoint location's shadow contents.  */
+  bl->target_info.owner = bl;
   bl->target_info.placed_address = bl->address;
   bl->target_info.placed_address_space = bl->pspace->aspace;
   bl->target_info.length = bl->length;
@@ -2635,6 +2708,7 @@ insert_bp_location (struct bp_location *bl,
 		bl->duplicate = 1;
 		bl->inserted = 1;
 		bl->target_info = loc->target_info;
+		bl->target_info.owner = bl;
 		bl->watchpoint_type = hw_access;
 		val = 0;
 		break;
@@ -2752,6 +2826,20 @@ insert_breakpoints (void)
     insert_breakpoint_locations ();
 }
 
+void
+cuda_insert_breakpoints (void)
+{
+  struct breakpoint *bpt;
+
+  update_global_location_list (1);
+
+  /* update_global_location_list does not insert breakpoints when
+     always_inserted_mode is not enabled.  Explicitly insert them
+     now.  */
+  if (!breakpoints_always_inserted_mode ())
+    insert_breakpoint_locations ();
+}
+
 /* Invoke CALLBACK for each of bp_location.  */
 
 void
@@ -2841,7 +2929,7 @@ insert_breakpoint_locations (void)
 
   struct ui_file *tmp_error_stream = mem_fileopen ();
   struct cleanup *cleanups = make_cleanup_ui_file_delete (tmp_error_stream);
-  
+
   /* Explicitly mark the warning -- this will only be printed if
      there was an error.  */
   fprintf_unfiltered (tmp_error_stream, "Warning:\n");
@@ -2891,7 +2979,7 @@ insert_breakpoint_locations (void)
 
       if (bpt->disposition == disp_del_at_next_stop)
 	continue;
-      
+
       for (loc = bpt->loc; loc; loc = loc->next)
 	if (!loc->inserted && should_be_inserted (loc))
 	  {
@@ -2918,7 +3006,7 @@ insert_breakpoint_locations (void)
          message about possibly exhausted resources.  */
       if (hw_breakpoint_error && !hw_bp_error_explained_already)
 	{
-	  fprintf_unfiltered (tmp_error_stream, 
+	  fprintf_unfiltered (tmp_error_stream,
 			      "Could not insert hardware breakpoints:\n\
 You may have requested too many hardware breakpoints/watchpoints.\n");
 	}
@@ -2945,6 +3033,32 @@ remove_breakpoints (void)
       val |= remove_breakpoint (bl, mark_uninserted);
   }
   return val;
+}
+
+int
+cuda_remove_breakpoints (void)
+{
+  struct bp_location *b, **bp_tmp;
+  int val = 0;
+
+  ALL_BP_LOCATIONS (b, bp_tmp)
+  {
+    if (b->loc_type == bp_loc_hardware_watchpoint)
+      continue;
+    if (b->inserted)
+      val |= remove_breakpoint (b, mark_uninserted);
+  }
+  return val;
+}
+
+static void
+cuda_trace_breakpoint (const char *fmt, ...)
+{
+  va_list ap;
+
+  va_start (ap, fmt);
+  cuda_vtrace_domain (CUDA_TRACE_BREAKPOINT, fmt, ap);
+  va_end (ap);
 }
 
 /* Remove breakpoints of process PID.  */
@@ -3435,6 +3549,9 @@ update_breakpoints_after_exec (void)
     if (bploc->pspace == current_program_space)
       gdb_assert (!bploc->inserted);
 
+  /* CUDA - auto breakpoints */
+  cuda_auto_breakpoints_cleanup_breakpoints ();
+
   ALL_BREAKPOINTS_SAFE (b, b_tmp)
   {
     if (b->pspace != current_program_space)
@@ -3462,6 +3579,18 @@ update_breakpoints_after_exec (void)
       {
 	delete_breakpoint (b);
 	continue;
+      }
+
+    /* CUDA - breakpoint for error reporting */
+    if (b->type == bp_cuda_driver_api_error)
+      {
+        delete_breakpoint (b);
+        continue;
+      }
+    if (b->type == bp_cuda_driver_internal_error)
+      {
+        delete_breakpoint (b);
+        continue;
       }
 
     /* Step-resume breakpoints are meaningless after an exec().  */
@@ -3776,6 +3905,14 @@ breakpoint_init_inferior (enum inf_context context)
 
 	/* Also get rid of scope breakpoints.  */
 
+    /* CUDA - breakpoint for error reporting */
+      case bp_cuda_driver_api_error:
+      case bp_cuda_driver_internal_error:
+
+	/* Also remove cuda error report breakpoints since their
+	   addresses might change from last run.
+	*/
+
       case bp_shlib_event:
 
 	/* Also remove solib event breakpoints.  Their addresses may
@@ -3861,7 +3998,13 @@ breakpoint_here_p (struct address_space *aspace, CORE_ADDR pc)
       /* ALL_BP_LOCATIONS bp_location has BL->OWNER always non-NULL.  */
       if ((breakpoint_enabled (bl->owner)
 	   || bl->owner->enable_state == bp_permanent)
-	  && breakpoint_location_address_match (bl, aspace, pc))
+/*        NS - Aren't cuda_breakpoint_address_match is redundant 
+               and should be replaced with breakpoint[_location]_address_match?
+           && breakpoint_location_address_match (bl, aspace, pc))
+*/
+          /* CUDA - breakpoints */
+          && cuda_breakpoint_address_match (bl->owner->gdbarch, bl->pspace->aspace,
+                                            bl->address, aspace, pc))
 	{
 	  if (overlay_debugging 
 	      && section_is_overlay (bl->section)
@@ -4593,6 +4736,97 @@ breakpoint_cond_eval (void *exp)
   return i;
 }
 
+/* CUDA - conditional breakpoints */
+/* Same as breakpoint_cond_eval, but iterate over all the lanes that have hit
+   a breakpoint in hardware as the frame is different every time. */
+
+static int
+cuda_breakpoint_cond_eval (void *data)
+{
+  cuda_iterator iter;
+  struct expression *exp = (struct expression *) data;
+  struct value *mark = value_mark ();
+  cuda_coords_t coords = CUDA_INVALID_COORDS, current = CUDA_INVALID_COORDS;
+  cuda_coords_t filter = CUDA_WILDCARD_COORDS;
+  cuda_focus_t focus;
+
+  cuda_focus_init (&focus);
+  cuda_focus_save (&focus);
+  iter = cuda_iterator_create (CUDA_ITERATOR_TYPE_THREADS, &filter,
+                               CUDA_SELECT_VALID | CUDA_SELECT_BKPT);
+
+  for (cuda_iterator_start (iter);
+       !cuda_iterator_end (iter);
+       cuda_iterator_next (iter))
+    {
+      current = cuda_iterator_get_current (iter);
+      switch_to_cuda_thread (&current);
+
+      if (!value_true (evaluate_expression (exp)))
+        continue;
+
+      coords = cuda_iterator_get_current (iter);
+      break;
+    }
+
+  cuda_iterator_destroy (iter);
+  cuda_focus_restore (&focus);
+
+  if (coords.valid)
+    {
+      cuda_trace_breakpoint ("conditional breakpoint expression evaluated to true for "
+                  "dev %u sm %u wp %u ln %u.",
+                  coords.dev, coords.sm, coords.wp, coords.ln);
+      cuda_update_convenience_variables ();
+      cuda_update_cudart_symbols ();
+      switch_to_cuda_thread (&coords);
+    }
+
+  value_free_to_mark (mark);
+  return !coords.valid;
+}
+
+/* CUDA - breakpoints */
+/* For a valid thread, check if it hits a cuda breakpoint B_NUMBER.
+   It checks all cuda breakpoints when B_NUMBER == 0  */
+bool
+cuda_eval_thread_at_breakpoint (uint64_t pc, cuda_coords_t *c, int b_number)
+{
+  struct bp_location *bl, **bl_tmp;
+  struct address_space *aspace = target_thread_address_space (inferior_ptid);
+  cuda_coords_t prev_coords;
+  bool cond_eval_result = false;
+
+  gdb_assert (lane_is_valid (c->dev, c->sm, c->wp, c->ln));
+
+  ALL_BP_LOCATIONS (bl, bl_tmp)
+    {
+      if (!breakpoint_enabled (bl->owner) ||
+          !bl->cuda_breakpoint ||
+          bl->owner->number < 0 ||
+          !cuda_breakpoint_address_match (bl->owner->gdbarch, bl->pspace->aspace,
+                                          bl->address, aspace, pc))
+        continue;
+
+      if (b_number > 0 && b_number != bl->owner->number)
+        continue;
+
+      /* Hit a non-conditional breakpoint. */
+      if (!bl->cond)
+        return true;
+
+      /* Hit a conditional breakpoint. Evaluate the condition for this thread. */
+      cuda_coords_get_current (&prev_coords);
+      switch_to_cuda_thread (c);
+      cond_eval_result = value_true (evaluate_expression (bl->cond));
+      switch_to_cuda_thread (&prev_coords);
+      if (cond_eval_result)
+        return true;
+    }
+
+  return false;
+}
+
 /* Allocate a new bpstat.  Link it to the FIFO list by BS_LINK_POINTER.  */
 
 static bpstat
@@ -5122,10 +5356,24 @@ bpstat_check_breakpoint_conditions (bpstat bs, ptid_t ptid)
 		within_current_scope = 0;
 	    }
 	  if (within_current_scope)
-	    value_is_zero
-	      = catch_errors (breakpoint_cond_eval, cond,
-			      "Error in testing breakpoint condition:\n",
-			      RETURN_MASK_ALL);
+            {
+              /* CUDA - conditional breakpoints */
+              if (bl->cuda.type == cuda_bp_runtime_api ||
+                  bl->cuda.type == cuda_bp_driver_api)
+                {
+                  value_is_zero
+                    = catch_errors (cuda_breakpoint_cond_eval, (cond),
+                                    "Error in testing CUDA breakpoint condition:\n",
+                                    RETURN_MASK_ALL);
+                }
+              else
+                {
+                  value_is_zero
+                    = catch_errors (breakpoint_cond_eval, cond,
+                                    "Error in testing breakpoint condition:\n",
+                                    RETURN_MASK_ALL);
+                }
+            }
 	  else
 	    {
 	      warning (_("Watchpoint condition cannot be tested "
@@ -5154,6 +5402,11 @@ bpstat_check_breakpoint_conditions (bpstat bs, ptid_t ptid)
 	  ++(b->hit_count);
 	  observer_notify_breakpoint_modified (b);
 	}	
+
+  /* CUDA - autostep */
+  /* If it's an autostep and we're supposed to stop then mark pending. */
+  if (b->type == bp_cuda_autostep && bs->stop == 1)
+    cuda_set_autostep_pending (true);
     }
 }
 
@@ -5219,6 +5472,19 @@ bpstat_stop_status (struct address_space *aspace,
 
 	  if (!bpstat_check_location (bl, aspace, bp_addr, ws))
 	    continue;
+
+          /* CUDA - breakpoint on a divergent thread */
+          /* The PC of a divergent thread may be the PC of a breakpoint.
+             Because the divergent thread is not active, that breakpoint cannot
+             have been hit. */
+          if (cuda_focus_is_device ())
+            {
+              cuda_coords_t c;
+              cuda_coords_get_current (&c);
+              if (!lane_is_valid (c.dev, c.sm, c.wp, c.ln) ||
+                  !lane_is_active (c.dev, c.sm, c.wp, c.ln))
+                continue;
+            }
 
 	  /* Come here if it's a watchpoint, or if the break address
 	     matches.  */
@@ -5380,6 +5646,9 @@ handle_solib_event (void)
   target_terminal_inferior ();
 }
 
+/* CUDA - uvm detection */
+static struct breakpoint *cuda_uvm_breakpoint = NULL;
+
 /* Prepare WHAT final decision for infrun.  */
 
 /* Decide what infrun needs to do with this bpstat.  */
@@ -5430,6 +5699,64 @@ bpstat_what (bpstat bs_head)
 	  else
 	    this_action = BPSTAT_WHAT_SINGLE;
 	  break;
+        case bp_cuda_auto: /* CUDA - auto breakpoints */
+          if (bs->stop && bs->print)
+            this_action = BPSTAT_WHAT_STOP_NOISY;
+          else
+            this_action = BPSTAT_WHAT_SINGLE;
+          break;
+	case bp_cuda_autostep: /* CUDA - autostep */
+          /* Quietly go into single step mode */
+          this_action = BPSTAT_WHAT_STOP_SILENT;
+          break;
+        /* CUDA - breakpoint for error reporting */
+        case bp_cuda_driver_api_error:
+          {
+            char* func_name = NULL;
+            uint64_t error_code = 0ULL;
+            bool runtime_api_error = false;
+
+            error_code = cuda_get_last_driver_api_error_code ();
+            cuda_get_last_driver_api_error_func_name (&func_name);
+            runtime_api_error = func_name && strlen (func_name) > 4 && !strncmp (func_name, "cuda", 4);
+
+            if ((runtime_api_error && error_code == 34  /* cudaErrorNotReady */) ||
+                (!runtime_api_error && error_code == 600 /* CUDA_ERROR_NOT_READY */))
+              {
+                /* Ignore non errors */
+                this_action = BPSTAT_WHAT_SINGLE;
+              }
+            else if (cuda_options_api_failures_stop ())
+              {
+                /* Stop and show info about the error. */
+                this_action = BPSTAT_WHAT_STOP_NOISY;
+              }
+            else
+              {
+                if (cuda_options_api_failures_ignore ())
+                  /* Don't stop, just show a warning */
+                  warning (_("Cuda API error detected: %s returned (0x%"PRIx64")\n"),
+                           func_name, error_code);
+                this_action = BPSTAT_WHAT_SINGLE;
+              }
+
+            xfree(func_name);
+            break;
+          }
+        case bp_cuda_driver_internal_error:
+          /* Stop and show info about the error. */
+          this_action = BPSTAT_WHAT_STOP_NOISY;
+          break;
+        /* CUDA - uvm detection */
+        case bp_cuda_uvm:
+          /* Note that UVM is in use and continue. */
+          cuda_set_uvm_used (true);
+          this_action = BPSTAT_WHAT_SINGLE;
+          /* Delete UVM detection breakpoint once it was hit */
+          gdb_assert (cuda_uvm_breakpoint != NULL);
+          delete_breakpoint (cuda_uvm_breakpoint);
+          cuda_uvm_breakpoint = NULL;
+          break;
 	case bp_watchpoint:
 	case bp_hardware_watchpoint:
 	case bp_read_watchpoint:
@@ -5714,17 +6041,27 @@ print_breakpoint_location (struct breakpoint *b,
     ui_out_field_string (uiout, "what", b->addr_string);
   else if (loc && loc->symtab)
     {
-      struct symbol *sym 
-	= find_pc_sect_function (loc->address, loc->section);
-      if (sym)
-	{
-	  ui_out_text (uiout, "in ");
-	  ui_out_field_string (uiout, "func",
-			       SYMBOL_PRINT_NAME (sym));
-	  ui_out_text (uiout, " ");
-	  ui_out_wrap_hint (uiout, wrap_indent_at_field (uiout, "what"));
-	  ui_out_text (uiout, "at ");
-	}
+      /* CUDA - breakpoints */
+      if (loc && loc->cuda.function_name[0])
+        {
+          ui_out_text (uiout, "in ");
+          ui_out_field_string (uiout, "func", loc->cuda.function_name);
+          ui_out_wrap_hint (uiout, wrap_indent_at_field (uiout, "what"));
+          ui_out_text (uiout, " at ");
+        }
+      else
+        {
+          struct symbol *sym
+             = find_pc_sect_function (loc->address, loc->section);
+          if (sym)
+            {
+              ui_out_text (uiout, "in ");
+              ui_out_field_string (uiout, "func", SYMBOL_PRINT_NAME (sym));
+              ui_out_text (uiout, " ");
+              ui_out_wrap_hint (uiout, wrap_indent_at_field (uiout, "what"));
+              ui_out_text (uiout, "at ");
+            }
+        }
       ui_out_field_string (uiout, "file",
 			   symtab_to_filename_for_display (loc->symtab));
       ui_out_text (uiout, ":");
@@ -5757,6 +6094,16 @@ print_breakpoint_location (struct breakpoint *b,
       ui_out_field_string (uiout, "evaluated-by",
 			   bp_location_condition_evaluator (loc));
       ui_out_text (uiout, ")");
+    }
+
+  /* CUDA - autostep */
+  if (b->type==bp_cuda_autostep)
+    {
+      ui_out_text (uiout, " for ");
+      ui_out_field_int (uiout, "length", b->cuda_autostep_length);
+      ui_out_text (uiout, " ");
+      ui_out_field_string (uiout, "ltype", (b->cuda_autostep_length_type==cuda_autostep_insts)
+        ? "instructions" : "lines");
     }
 
   do_cleanups (old_chain);
@@ -5793,6 +6140,13 @@ bptype_string (enum bptype type)
     {bp_std_terminate, "std::terminate"},
     {bp_shlib_event, "shlib events"},
     {bp_thread_event, "thread events"},
+    {bp_cuda_auto, "cuda kernel launch"}, /* CUDA - auto breakpoints */
+    {bp_cuda_autostep, "autostep"}, /* CUDA - autosteps */
+    /* CUDA - breakpoint for error reporting */
+    {bp_cuda_driver_api_error, "driver API error"},
+    {bp_cuda_driver_internal_error, "driver internal error"},
+    /* CUDA - uvm detection */
+    {bp_cuda_uvm,  "cuda uvm detection"},
     {bp_overlay_event, "overlay events"},
     {bp_longjmp_master, "longjmp master"},
     {bp_std_terminate_master, "std::terminate master"},
@@ -5992,6 +6346,11 @@ print_one_breakpoint_location (struct breakpoint *b,
       case bp_jit_event:
       case bp_gnu_ifunc_resolver:
       case bp_gnu_ifunc_resolver_return:
+      case bp_cuda_auto: /* CUDA - auto breakpoints */
+      case bp_cuda_autostep: /* CUDA - autosteps */
+      /* CUDA - breakpoint for error reporting */
+      case bp_cuda_driver_api_error:
+      case bp_cuda_driver_internal_error:
 	if (opts.addressprint)
 	  {
 	    annotate_field (4);
@@ -6275,7 +6634,7 @@ breakpoint_address_bits (struct breakpoint *b)
 
       /* Software watchpoints that aren't watching memory don't have
 	 an address to print.  */
-      if (b->type == bp_watchpoint && loc->watchpoint_type == -1)
+      if (b->type == bp_watchpoint && (int)loc->watchpoint_type == -1)
 	continue;
 
       addr_bit = gdbarch_addr_bit (loc->gdbarch);
@@ -6823,7 +7182,8 @@ adjust_breakpoint_address (struct gdbarch *gdbarch,
       /* An adjusted breakpoint address can significantly alter
          a user's expectations.  Print a warning if an adjustment
 	 is required.  */
-      if (adjusted_bpaddr != bpaddr)
+      /* CUDA - auto breakpoints; do not print warnings for adjustments */
+      if (adjusted_bpaddr != bpaddr && bptype != bp_cuda_auto)
 	breakpoint_adjustment_warning (bpaddr, adjusted_bpaddr, 0, 0);
 
       return adjusted_bpaddr;
@@ -6844,6 +7204,8 @@ init_bp_location (struct bp_location *loc, const struct bp_location_ops *ops,
   loc->cond_bytecode = NULL;
   loc->shlib_disabled = 0;
   loc->enabled = 1;
+  loc->target_info.owner = loc;
+  loc->overlay_target_info.owner = loc;
 
   switch (owner->type)
     {
@@ -6870,6 +7232,13 @@ init_bp_location (struct bp_location *loc, const struct bp_location_ops *ops,
     case bp_gnu_ifunc_resolver:
     case bp_gnu_ifunc_resolver_return:
     case bp_dprintf:
+    case bp_cuda_auto: /* CUDA - auto breakpoints */
+    case bp_cuda_autostep: /* CUDA - autostep */
+    /* CUDA - breakpoint for error reporting */
+    case bp_cuda_driver_api_error:
+    case bp_cuda_driver_internal_error:
+    /* CUDA - uvm detection */
+    case bp_cuda_uvm:
       loc->loc_type = bp_loc_software_breakpoint;
       mark_breakpoint_location_modified (loc);
       break;
@@ -7008,6 +7377,7 @@ set_breakpoint_location_function (struct bp_location *loc, int explicit_loc)
 
   if (loc->owner->type == bp_breakpoint
       || loc->owner->type == bp_hardware_breakpoint
+      || loc->owner->type == bp_cuda_autostep /* CUDA - autostep */
       || is_tracepoint (loc->owner))
     {
       int is_gnu_ifunc;
@@ -7344,6 +7714,509 @@ remove_thread_event_breakpoints (void)
       delete_breakpoint (b);
 }
 
+/* CUDA - breakpoint for error reporting */
+
+/* Inform the user that the a driver API call has returned an error. */
+static enum print_stop_action
+print_cuda_driver_api_error (bpstat bs)
+{
+  uint64_t res;
+  char *func_name;
+  struct ui_out *uiout = current_uiout;
+
+  res = cuda_get_last_driver_api_error_code ();
+  cuda_get_last_driver_api_error_func_name (&func_name);
+
+  if (ui_out_is_mi_like_p (uiout))
+  {
+     ui_out_field_string (uiout, "reason", async_reason_lookup (EXEC_ASYNC_SIGNAL_RECEIVED));
+     ui_out_field_string (uiout, "signal-name", "CUDA API ERROR");
+  }
+
+  ui_out_field_fmt (uiout, "signal-meaning",
+                           "Cuda API error detected: %s returned (0x%llx)",
+                           func_name, (unsigned long long) res);
+  ui_out_text (uiout, "\n");
+  xfree(func_name);
+  return PRINT_NOTHING;
+}
+
+static struct breakpoint_ops cuda_driver_api_error_ops;
+
+void
+create_cuda_driver_api_error_breakpoint (struct gdbarch *gdbarch, CORE_ADDR address)
+{
+  struct breakpoint *b, *temp;
+
+  /* avoid duplicates */
+  ALL_BREAKPOINTS_SAFE (b, temp)
+    if (b->type == bp_cuda_driver_api_error && b->loc->address == address)
+      return;
+
+  cuda_driver_api_error_ops = momentary_breakpoint_ops;
+  cuda_driver_api_error_ops.print_it = print_cuda_driver_api_error;
+  b = create_internal_breakpoint (gdbarch, address, bp_cuda_driver_api_error, &cuda_driver_api_error_ops);
+
+  b->enable_state = bp_enabled;
+  b->addr_string  = xstrprintf ("*0x%s", paddress (gdbarch, b->loc->address));
+
+  cuda_trace_breakpoint ("add driver API error handling breakpoint %u at 0x%"PRIx64, b->number, address);
+}
+
+/* Inform the user that the driver has hit an internal error. */
+static enum print_stop_action
+print_cuda_driver_internal_error (bpstat bs)
+{
+  uint64_t res;
+
+  res = cuda_get_last_driver_internal_error_code ();
+
+  if (cuda_api_get_attach_state () == CUDA_ATTACH_STATE_DETACHING ||
+      cuda_api_get_attach_state () == CUDA_ATTACH_STATE_IN_PROGRESS)
+    {
+      if ((unsigned int)res == CUDBG_ERROR_INVALID_DEVICE)
+        error (_("The CUDA driver does not support attaching to a "
+                 "running CUDA application on this GPU.\n"));
+      else if ((unsigned int)res == CUDBG_ERROR_FORK_FAILED)
+        error (_("The CUDA driver hit an error while forking off "
+                 "the debugger process.\n"));
+      else if ((unsigned int)res == CUDBG_ERROR_OS_RESOURCES)
+        error (_("The CUDA driver could not allocate operating system "
+                 "resources for attaching to the application.\n"));
+      else
+        error (_("The CUDA driver hit an internal error while attaching "
+                 "to the application.\n"));
+    }
+  else
+    error (_("The CUDA driver has hit an internal error.\n"
+             "Error code: 0x%llx\n"
+             "Further execution or debugging is unreliable.\n"
+             "Please ensure that your temporary directory is mounted with write and exec permissions.\n"), (unsigned long long) res);
+
+  return PRINT_NOTHING;
+}
+
+static struct breakpoint_ops cuda_driver_internal_error_ops;
+
+void
+create_cuda_driver_internal_error_breakpoint (struct gdbarch *gdbarch, CORE_ADDR address)
+{
+  struct breakpoint *b, *temp;
+
+  /* avoid duplicates */
+  ALL_BREAKPOINTS_SAFE (b, temp)
+    if (b->type == bp_cuda_driver_internal_error && b->loc->address == address)
+      return;
+
+  cuda_driver_internal_error_ops = momentary_breakpoint_ops;
+  cuda_driver_internal_error_ops.print_it = print_cuda_driver_internal_error;
+  b = create_internal_breakpoint (gdbarch, address, bp_cuda_driver_internal_error, &cuda_driver_internal_error_ops);
+
+  b->enable_state = bp_enabled;
+  b->addr_string  = xstrprintf ("*0x%s", paddress (gdbarch, b->loc->address));
+
+  cuda_trace_breakpoint ("add driver internal error handling breakpoint %u at 0x%"PRIx64, b->number, address);
+}
+
+/* CUDA - uvm detection */
+void
+create_cuda_uvm_breakpoint (struct gdbarch *gdbarch, CORE_ADDR address)
+{
+  struct breakpoint *b;
+
+  /* avoid duplicates */
+  if (cuda_uvm_breakpoint)
+    return;
+
+  b = create_internal_breakpoint (gdbarch, address, bp_cuda_uvm, &internal_breakpoint_ops);
+
+  b->enable_state = bp_enabled;
+  b->addr_string  = xstrprintf ("*0x%s", paddress (gdbarch, b->loc->address));
+
+  cuda_trace_breakpoint ("add uvm breakpoint %u at 0x%"PRIx64, b->number, address);
+  cuda_uvm_breakpoint = b;
+}
+
+/* CUDA - cuda breakpoints */
+/*
+ * Mark device breakpoints as such.
+ *
+ * Given an CUDA ELF image, we try to resolve the breakpoint. The first step
+ * is to make sure there is breakpoint location. If the application is using
+ * the driver API and the breakpoint was set before the ELF image was loaded,
+ * that is not the case.
+ *
+ * The second step is to obtain a device address. If the location of the
+ * breakpoint is already pointing to a device address, there is nothing to do,
+ * otherwise we must find the device address. The latter happens with
+ * applications using the runtime API as device functions have stubs on the
+ * host side and breakpoints may have been resolved to those locations.
+ *
+ * To find the device address:
+ *   - no addr_string: we're dealing with a breakpoint set on the current PC.
+ *   If the address is a host address, it should stay that way and we bail
+ *   out.
+ *   - if the addr_string is the name of a symbol in the ELF image, then the
+ *   breakpoint was set on a device function name and we have the device addr.
+ *   - if the addr_string is a file:lineno, then forcing a breakpoint re-set
+ *   will give us the correct device address
+ *   - if the addr_string is an address, then we do not do anything unless the
+ *   address is not a device address. Then it's a breakpoint set to a specific
+ *   host address and we bail out.
+ *
+ * The third step is just to mark the breakpoint as a CUDA breakpoint and to
+ * attach all the required information to it. The address of the breakpoint
+ * location is updated with the device address.
+ */
+
+static struct bp_location*
+cuda_add_location (struct breakpoint *b, elf_image_t elf_image)
+{
+  struct gdbarch *arch = NULL;
+  struct objfile *objfile = NULL;
+  module_t module = NULL;
+  context_t context = NULL;
+  uint64_t context_id = 0;
+  CORE_ADDR addr = 0;
+  bool found = false;
+  struct bp_location *loc = NULL;
+  struct symbol *symbol = NULL;
+  struct symtab_and_line sal;
+
+  gdb_assert (b);
+  gdb_assert (elf_image);
+  gdb_assert (cuda_elf_image_is_loaded (elf_image));
+
+  arch       = cuda_get_gdbarch ();
+  objfile    = cuda_elf_image_get_objfile (elf_image);
+  module     = cuda_elf_image_get_module (elf_image);
+  context    = module_get_context (module);
+  context_id = context_get_id (context);
+
+  /* skip bps that were set on the current pc when focus on host */
+  if (!b->addr_string)
+    return NULL;
+
+  /* see if we can map the string to an actual address */
+  found = cuda_find_pc_from_address_string (objfile, b->addr_string, &addr);
+  if (!found)
+    return NULL;
+
+  /* skip if addr ends up not being a device address */
+  if (!cuda_is_device_code_address (addr))
+    return NULL;
+
+  /* slide the address past the function prolog */
+  addr = gdbarch_skip_prologue (arch, addr);
+
+  /* find symbol and sal for that addr */
+  symbol = find_pc_function (addr);
+  sal = find_pc_line (addr, 0);
+
+  /* create the new location and populate it */
+  loc = add_location_to_breakpoint (b, &sal);
+  loc->cuda.elf_image   = elf_image;
+  loc->cuda.type        = cuda_bp_driver_api;
+  loc->cuda.line_number = sal.line;
+  loc->cuda_breakpoint  = true;
+  b->cuda_breakpoint    = true;
+  b->gdbarch            = arch;
+  if (symbol)
+    strncpy (loc->cuda.function_name, SYMBOL_PRINT_NAME (symbol),
+             sizeof loc->cuda.function_name);
+
+  loc->address = adjust_breakpoint_address (b->gdbarch, loc->address,
+                                            (enum bptype)loc->cuda.type);
+
+  /* the location has been created. No need to to do more. */
+  cuda_trace_breakpoint ("added CUDA breakpoint location: breakpoint %d address %p context 0x%llx",
+              b->number, loc->address, (long long)context_id);
+  return loc;
+}
+
+static struct bp_location*
+cuda_promote_location (struct bp_location* loc, elf_image_t elf_image)
+{
+  struct gdbarch *arch = NULL;
+  struct objfile *objfile = NULL;
+  module_t module = NULL;
+  context_t context = NULL;
+  uint64_t context_id = 0;
+  CORE_ADDR addr = 0;
+  bool found = false;
+  cuda_bptype_t bp_type = cuda_bp_none;
+  struct symbol *symbol = NULL;
+  struct breakpoint *b = NULL;
+
+  gdb_assert (loc);
+  gdb_assert (elf_image);
+  gdb_assert (cuda_elf_image_is_loaded (elf_image));
+
+  b          = loc->owner;
+  arch       = cuda_get_gdbarch ();
+  objfile    = cuda_elf_image_get_objfile (elf_image);
+  module     = cuda_elf_image_get_module (elf_image);
+  context    = module_get_context (module);
+  context_id = context_get_id (context);
+
+  /* skip already resolved cuda breakpoints */
+  if (loc->cuda.type != cuda_bp_none)
+    return NULL;
+
+  /* skip if not breakpoint location address */
+  if (!loc->address)
+    return NULL;
+
+  /* driver API breakpoint by default unless specified otherwise */
+  bp_type = cuda_bp_driver_api;
+
+  /* find the device addr if not it yet */
+  if (!cuda_is_device_code_address (loc->address))
+    {
+      /* skip bps that were set on the current pc when focus on host */
+      if (!b->addr_string)
+        return NULL;
+
+      /* definitely a runtime api breakpoint at this point */
+      bp_type = cuda_bp_runtime_api;
+
+      /* check if breakpoint was set on a symbol */
+      found = cuda_find_pc_from_address_string (objfile, b->addr_string, &addr);
+
+      /* If no symbol found, then the breakpoint was set on a file:lineno
+       * and the address is a host address. Nothing to do. */
+      if (!found)
+        return NULL;
+    }
+  else
+    addr = loc->address;
+
+  /* skip if found address is still not a device address */
+  if (!cuda_is_device_code_address (addr))
+    return NULL;
+
+  /* uninsert the existing breakpoint */
+  remove_breakpoint (loc, mark_uninserted);
+
+  /* override the location address with the device address */
+  gdb_assert (cuda_is_device_code_address (addr));
+  addr = gdbarch_skip_prologue (arch, addr);
+  loc->address = addr;
+
+  /* get the function name */
+  symbol = find_pc_function (loc->address);
+
+  /* attach all the information required for CUDA breakpoints */
+  loc->cuda.elf_image   = elf_image;
+  loc->cuda.type        = bp_type;
+  loc->cuda.line_number = find_pc_line (addr, 0).line;
+  loc->cuda_breakpoint  = true;
+  b->cuda_breakpoint    = true;
+  b->gdbarch            = arch;
+  if (symbol)
+    strncpy (loc->cuda.function_name, SYMBOL_PRINT_NAME (symbol),
+             sizeof loc->cuda.function_name);
+
+  loc->address = adjust_breakpoint_address (b->gdbarch, loc->address,
+                                            (enum bptype)loc->cuda.type);
+
+  cuda_trace_breakpoint ("promoted CUDA breakpoint location: breakpoint %d addr %p",
+              b->number, loc->address);
+  return loc;
+}
+
+/* Clean up breakpoints set on host shadow code by line number that also have
+   locations on host and device. Happens when setting a breakpoint on the
+   closing bracket of a device function. */
+static void
+cuda_clean_shadow_host_breakpoints (struct breakpoint *b, elf_image_t elf_image)
+{
+  struct objfile *objfile = cuda_elf_image_get_objfile (elf_image);
+  CORE_ADDR addr = 0;
+  int num_device_locations = 0;
+  int num_host_locations = 0;
+  struct bp_location *loc = NULL;
+  struct bp_location *prev_loc = NULL;
+
+  /* check if we have a mixed bag of host and device locations */
+  for (loc = b->loc; loc; loc = loc->next)
+  {
+    if (cuda_is_device_code_address (loc->address))
+      ++num_device_locations;
+    else
+      ++num_host_locations;
+  }
+  if (num_device_locations == 0 || num_host_locations == 0)
+    return;
+
+  /* check that the breakpoint is explicitly set on a line number */
+  if (cuda_find_pc_from_address_string (objfile, b->addr_string, &addr))
+    return;
+
+  /* uninsert the existing breakpoint on the host locations */
+  for (loc = b->loc; loc; loc = loc->next)
+    if (!cuda_is_device_code_address (loc->address))
+      remove_breakpoint (loc, mark_uninserted);
+
+  /* remove the host locations from the location list */
+  for (loc = b->loc, prev_loc = NULL; loc; loc = loc->next)
+    {
+      if (!cuda_is_device_code_address (loc->address))
+        {
+          if (prev_loc == NULL)
+            b->loc = loc->next;
+          else
+            prev_loc->next = loc->next;
+        }
+
+      prev_loc = loc;
+    }
+}
+
+/* When a CUDA ELF image gets unloaded, any pointer to its objfile or any of
+   its section becomes invalid. cuda_update_breakpoint_locations updates those
+   pointers in all the breakpoint locations pointing to objfile. */
+void
+cuda_reset_invalid_breakpoint_location_section (struct objfile *objfile)
+{
+  struct bp_location *loc, **locp_tmp;
+
+  ALL_BP_LOCATIONS (loc, locp_tmp)
+    if (loc->section && loc->section->objfile == objfile)
+      loc->section = NULL;
+}
+
+void
+cuda_resolve_breakpoints (int bp_number_from, elf_image_t elf_image)
+{
+  struct breakpoint *b = NULL;
+  struct breakpoint *tmp = NULL;
+  struct bp_location *loc = NULL;
+  struct bp_location *promoted_loc = NULL;
+  struct bp_location *created_loc = NULL;
+  struct cleanup *cleanups = NULL;
+  char *message = NULL;
+
+  cuda_trace_breakpoint ("resolve cuda breakpoints for ELF image 0x%"PRIx64, elf_image);
+
+  gdb_assert (cuda_elf_image_is_loaded (elf_image));
+
+  /* conditional breakpoints might rely on cudart symbols */
+  cuda_update_cudart_symbols();
+
+  ALL_BREAKPOINTS_SAFE (b, tmp)
+    {
+      /* skip internal breakpoints */
+      if (b->number < 0)
+        continue;
+
+      /* skip old breakpoints */
+      if (bp_number_from != 0 && b->number <= bp_number_from)
+        continue;
+
+      /* skip watchpoints */
+      if (b->type == bp_watchpoint || 
+          b->type == bp_hardware_watchpoint || 
+          b->type == bp_read_watchpoint ||
+          b->type == bp_access_watchpoint)
+        continue;
+
+      /* make sure we already have the locations with the addresses if available */
+      message = xstrprintf ("Error while resolving breakpoint %d: ", b->number);
+      cleanups = make_cleanup (xfree, message);
+      catch_errors (breakpoint_re_set_one, b, message, RETURN_MASK_ALL);
+      do_cleanups (cleanups);
+
+      /* avoid duplicate breakpoints on shadow code */
+      cuda_clean_shadow_host_breakpoints (b, elf_image);
+
+      /* Promote existing host breakpoints to device breakpoints if possible */
+      for (loc = b->loc, promoted_loc = NULL; loc && !promoted_loc; loc = loc->next)
+        promoted_loc = cuda_promote_location (loc, elf_image);
+      if (promoted_loc)
+        continue;
+
+      /* Create a device location from scratch:
+          - if the breakpoint is still pending (happens when __forceinline__ is
+            used on a device function), OR
+          - when there are more than one device location (the first is
+            promoted, the others are created from scratch). */
+      created_loc = cuda_add_location (b, elf_image);
+      if (created_loc)
+        continue;
+
+      /* restore the section (and objfile) if it has been removed after
+         unloading the ELF image for one reason or another. */
+      for (loc = b->loc; loc; loc = loc->next)
+        if (!loc->section)
+          b->loc->section = find_pc_section (loc->address);
+    }
+}
+
+/* CUDA - cuda breakpoints */
+/* Unresolve the breakpoints in CUDA device code.
+
+ For driver API breakpoints, set them back to pending.
+ For runtime API symbolic breakpoints, set them back to the stub.
+ For address or file/line breakpoints, nothing to do.
+
+ Default breakpoint: Since device addresses are determined at runtime,
+ they are not necessarily persistent across runs, which means that if
+ the default breakpoint points to CUDA device code, an error may be
+ encountered upon installing the default breakpoint.  The default
+ breakpoint will become active the next time a valid stack comes into
+ focus.
+
+*/
+void
+cuda_unresolve_breakpoints (elf_image_t elf_image)
+{
+  struct breakpoint *b = NULL;
+  struct bp_location *loc = NULL;
+  struct bp_location **ploc = NULL;
+
+  cuda_trace_breakpoint ("unresolve cuda breakpoints for ELF image 0x%"PRIx64, elf_image);
+
+  ALL_BREAKPOINTS (b)
+    {
+      if (b->type != bp_breakpoint
+       && b->type != bp_hardware_breakpoint
+       && b->type != bp_cuda_autostep) /* CUDA - autostep */
+        continue;
+
+      /* CUDA - breakpoints */
+      /* Disable breakpoint with explicit device address. */
+      if (b->cuda_explicit_device_address && b->enable_state == bp_enabled)
+        {
+          warning(_("Breakpoint %d is disabled because device address may change on the next run."), b->number);
+          disable_breakpoint (b);
+        }
+
+      for (loc = *(ploc = &b->loc); loc; loc = *(ploc = &loc->next))
+        {
+          if (loc->cuda.elf_image != elf_image)
+            continue;
+
+          if (loc->cuda.type == cuda_bp_none)
+            continue;
+
+          /* Remove location form the list of breakpoint locations chain */
+          /* Dangling locations are freed in update_global_location_list */
+          *ploc = loc->next;
+
+          memset (&loc->cuda, 0, sizeof loc->cuda);
+
+          /* the objfile and the section do not exist anymore */
+          loc->section = NULL;
+
+          cuda_trace_breakpoint ("  -> unresolved CUDA breakpoint %d\n", b->number);
+        }
+    }
+
+  update_global_location_list (0);
+  set_last_displayed_sal (0, NULL, 0, NULL, 0);
+}
+
 struct lang_and_radix
   {
     enum language lang;
@@ -7419,6 +8292,7 @@ disable_breakpoints_in_shlibs (void)
     if (((b->type == bp_breakpoint)
 	 || (b->type == bp_jit_event)
 	 || (b->type == bp_hardware_breakpoint)
+	 || (b->type == bp_cuda_autostep) /* CUDA - autostep */
 	 || (is_tracepoint (b)))
 	&& loc->pspace == current_program_space
 	&& !loc->shlib_disabled
@@ -7461,6 +8335,7 @@ disable_breakpoints_in_unloaded_shlib (struct so_list *solib)
 	&& !loc->shlib_disabled
 	&& (((b->type == bp_breakpoint
 	      || b->type == bp_jit_event
+      || b->type == bp_cuda_autostep /* CUDA - autostep */
 	      || b->type == bp_hardware_breakpoint)
 	     && (loc->loc_type == bp_loc_hardware_breakpoint
 		 || loc->loc_type == bp_loc_software_breakpoint))
@@ -8739,6 +9614,13 @@ set_momentary_breakpoint (struct gdbarch *gdbarch, struct symtab_and_line sal,
   b->disposition = disp_donttouch;
   b->frame_id = frame_id;
 
+  /* CUDA - breakpoints */
+  if (cuda_focus_is_device ())
+    {
+      b->loc->cuda_breakpoint = true;
+      b->cuda_breakpoint      = true;
+    }
+
   /* If we're debugging a multi-threaded program, then we want
      momentary breakpoints to be active in only a single thread of
      control.  */
@@ -8862,6 +9744,13 @@ add_location_to_breakpoint (struct breakpoint *b,
   loc->gdbarch = loc_gdbarch;
   loc->line_number = sal->line;
   loc->symtab = sal->symtab;
+
+  /* CUDA - breakpoints */
+  if (loc->gdbarch == cuda_get_gdbarch ())
+    {
+      loc->cuda_breakpoint = true;
+      b->cuda_breakpoint =   true;
+    }
 
   set_breakpoint_location_function (loc,
 				    sal->explicit_pc || sal->explicit_line);
@@ -9108,6 +9997,12 @@ init_breakpoint_sal (struct breakpoint *b, struct gdbarch *gdbarch,
 	    }
 
 	  loc = b->loc;
+          /* CUDA - breakpoints */
+          if (loc->gdbarch == cuda_get_gdbarch ())
+            {
+              loc->cuda_breakpoint = true;
+              b->cuda_breakpoint = true;
+            }
 	}
       else
 	{
@@ -9118,6 +10013,13 @@ init_breakpoint_sal (struct breakpoint *b, struct gdbarch *gdbarch,
 
       if (bp_loc_is_permanent (loc))
 	make_breakpoint_permanent (b);
+
+      /* CUDA - breakpoints */
+      /* Mark breakpoint that is set with explicit device address */
+      if (sal.explicit_pc && cuda_is_device_code_address(loc->address))
+        b->cuda_explicit_device_address = 1;
+      else
+        b->cuda_explicit_device_address = 0;
 
       if (b->cond_string)
 	{
@@ -9544,6 +10446,8 @@ create_breakpoint (struct gdbarch *gdbarch,
   int pending = 0;
   int task = 0;
   int prev_bkpt_count = breakpoint_count;
+  struct linespec_sals *lsal;
+
 
   gdb_assert (ops != NULL);
 
@@ -9641,8 +10545,6 @@ create_breakpoint (struct gdbarch *gdbarch,
      breakpoint.  */
   if (!pending)
     {
-      struct linespec_sals *lsal;
-
       lsal = VEC_index (linespec_sals, canonical.sals, 0);
 
       if (parse_condition_and_thread)
@@ -9653,14 +10555,44 @@ create_breakpoint (struct gdbarch *gdbarch,
                sal is OK.  When setting the breakpoint we'll 
                re-parse it in context of each sal.  */
 
-            find_condition_and_thread (arg, lsal->sals.sals[0].pc, &cond_string,
+            /* CUDA - Conditional breakpoints set inside device code
+               can not be evaluated until it is loaded to GPU*/
+            TRY_CATCH (e, RETURN_MASK_ALL)
+            {
+              find_condition_and_thread (arg, lsal->sals.sals[0].pc, &cond_string,
                                        &thread, &task, &rest);
+            }
+
             if (cond_string)
                 make_cleanup (xfree, cond_string);
 	    if (rest)
 	      make_cleanup (xfree, rest);
 	    if (rest)
 	      extra_string = rest;
+
+            if (e.reason < 0)
+              {
+                if (pending_break_support == AUTO_BOOLEAN_FALSE ||
+                    conditional_pending_break_support == AUTO_BOOLEAN_FALSE)
+                  throw_exception (e);
+
+                if (conditional_pending_break_support != AUTO_BOOLEAN_TRUE)
+                  exception_print (gdb_stderr, e);
+
+                /* If pending breakpoint support is auto query and the user
+                   selects no, then simply return the error code.  */
+                if (conditional_pending_break_support == AUTO_BOOLEAN_AUTO
+                    && !nquery ("Make conditional breakpoint pending on "
+                                "future shared library load? "))
+                  {
+                    do_cleanups (old_chain);
+                    return 0;
+                  }
+
+                /* Mark breakpoint pending */
+                copy_arg = xstrdup (addr_start);
+                pending = 1;
+              }
         }
       else
         {
@@ -9677,7 +10609,10 @@ create_breakpoint (struct gdbarch *gdbarch,
                 make_cleanup (xfree, extra_string);
 	      }
         }
+    }
 
+  if (!pending)
+    {
       ops->create_breakpoints_sal (gdbarch, &canonical, lsal,
 				   cond_string, extra_string, type_wanted,
 				   tempflag ? disp_del : disp_donttouch,
@@ -9756,6 +10691,7 @@ create_breakpoint (struct gdbarch *gdbarch,
 static void
 break_command_1 (char *arg, int flag, int from_tty)
 {
+  int old_bp_count = breakpoint_count;
   int tempflag = flag & BP_TEMPFLAG;
   enum bptype type_wanted = (flag & BP_HARDWAREFLAG
 			     ? bp_hardware_breakpoint
@@ -9780,6 +10716,10 @@ break_command_1 (char *arg, int flag, int from_tty)
 		     1 /* enabled */,
 		     0 /* internal */,
 		     0);
+
+  /* All breakpoints with number greater than old_bp_count must have been
+     created by create_breakpoint */
+  cuda_system_resolve_breakpoints (old_bp_count);
 }
 
 /* Helper function for break_command_1 and disassemble_command.  */
@@ -11018,6 +11958,16 @@ watch_command_1 (const char *arg, int accessflag, int from_tty,
   else if (val != NULL)
     release_value (val);
 
+  /* CUDA - no device watchpoints */
+  /* Check if the watchpoint is set on a device variable. If yes, then
+     intercept this command.*/
+  if (val != NULL)
+    {
+      CORE_ADDR addr = value_raw_address(val);
+      if (addr == 0 || cuda_is_device_code_address(addr))
+        error (_("Device watchpoints are not supported"));
+    }
+
   tok = skip_spaces_const (arg);
   end_tok = skip_to_space_const (tok);
 
@@ -11312,7 +12262,136 @@ awatch_command (char *arg, int from_tty)
 {
   watch_maybe_just_location (arg, hw_access, from_tty);
 }
-
+
+/* CUDA - autostep */
+static void
+autostep_command (char *arg, int from_tty)
+{
+  char *break_arg = arg;
+  struct breakpoint *b;
+  int old_bp_count = breakpoint_count;
+  char *for_position, *length_position, *if_position;
+  char *break_arg_end;
+  char *typestr_start, *typestr_end;
+  int typestr_len;
+
+  /* Default length is 1 line */
+  enum cuda_autostep_length_type_t ltype = cuda_autostep_lines;
+  unsigned int length = 1;
+
+  /* Sanity check 'arg' */
+  if (!arg)
+    error (_("Argument required (type \"help autostep\" for more info)"));
+
+  /* Disable conditional autosteps */
+  if_position = strstr (arg, " if ");
+  if (if_position != NULL)
+    error (_("Conditional autosteps are not supported."));
+
+  /* Look for the "for" word */
+  for_position = strstr (arg, " for ");
+  if (for_position != NULL)
+    {
+      for_position++; /* Go to the "f" */
+    }
+  else if (strncmp (arg, "for ", 4) == 0)
+    {
+      for_position = arg;
+      break_arg = NULL; /* No break args */
+    }
+
+  /* Delimit args for use with breakpoint */
+  length_position = NULL;
+  if (for_position != NULL)
+    {
+      break_arg_end = for_position-1;
+      while (*break_arg_end == ' ' || *break_arg_end == '\t')
+        *(break_arg_end--) = '\0';
+      length_position = for_position+4;
+    }
+
+  /* Parse length */
+  if (length_position != NULL && *length_position != '\0')
+    {
+      /* Find the end of the last substring of letters */
+      typestr_end = length_position + strlen(length_position);
+      while ((*(typestr_end-1) == ' ' || *(typestr_end-1) == '\t')
+          && typestr_end>length_position)
+        typestr_end--;
+
+      /* Find the beginning of the last substring of letters */
+      typestr_start = typestr_end;
+      while (isalpha (*(typestr_start-1)) && typestr_start > length_position)
+        typestr_start--;
+
+      /* Determine if this last group is a substring of "lines" or
+         "instructions", or ignore if neither */
+      typestr_len = (int)(typestr_end - typestr_start);
+      if (typestr_len > 0)
+        {
+          if (strncmp ("lines", typestr_start, typestr_len) == 0
+              && typestr_len <= 5)
+            ltype = cuda_autostep_lines;
+          else if (strncmp ("instructions", typestr_start, typestr_len) == 0
+              && typestr_len<=12)
+            ltype = cuda_autostep_insts;
+          else
+            /* Use default ltype, typestr is just empty string */
+            typestr_start = typestr_end;
+        }
+
+      /* The last portion without lines/instruction specifier (if any) is the
+         length */
+      *typestr_start = '\0';
+      length = parse_and_eval_long (length_position);
+    }
+
+  if (length <= 0)
+    error (_("Invalid length. Must be a positive integer."));
+
+  /* First create breakpoint(s) */
+  break_command_1 (break_arg, 0, from_tty);
+
+  /* Then convert the breakpoints into autosteps.
+     All breakpoints with number greater than old_bp_count must have been
+     created by break_command_1 */
+  ALL_BREAKPOINTS (b)
+    {
+      if (b->number > old_bp_count)
+        {
+          b->type = bp_cuda_autostep;
+          b->cuda_autostep_length = length;
+          b->cuda_autostep_length_type = ltype;
+        }
+    }
+
+  printf_filtered ("Created autostep of length %d %s\n", length,
+    ltype==cuda_autostep_insts ? "instructions" : "lines");
+}
+
+/* Return true if BPT is an autostep */
+
+static int
+is_autostep (const struct breakpoint *bpt)
+{
+  return (bpt->type == bp_cuda_autostep);
+}
+
+static void
+autosteps_info (char *astnum_exp, int from_tty)
+{
+  int num_printed;
+
+  num_printed = breakpoint_1 (astnum_exp, 0, is_autostep);
+
+  if (num_printed == 0)
+    {
+      if (!astnum_exp)
+	ui_out_message (current_uiout, 0, "No autosteps.\n");
+      else
+	ui_out_message (current_uiout, 0, "No autostep number %s.\n", astnum_exp);
+    }
+}
 
 /* Helper routines for the until_command routine in infcmd.c.  Here
    because it uses the mechanisms of breakpoints.  */
@@ -12252,6 +13331,8 @@ swap_insertion (struct bp_location *left, struct bp_location *right)
   right->duplicate = left_duplicate;
   right->needs_update = left_needs_update;
   right->target_info = left_target_info;
+
+  right->target_info.owner = right;
 }
 
 /* Force the re-insertion of the locations at ADDRESS.  This is called
@@ -12354,6 +13435,13 @@ update_global_location_list (int should_insert)
   bp_location = NULL;
   bp_location_count = 0;
   cleanups = make_cleanup (xfree, old_location);
+
+  /* CUDA - breakpoints */
+  /* Runtime breakpoints manually change the loc->address, messing the order
+     of the list. We must sort the list again before doing anything else with
+     it. */
+  qsort (old_location, old_location_count, sizeof (*bp_location),
+         bp_location_compare);
 
   ALL_BREAKPOINTS (b)
     for (loc = b->loc; loc; loc = loc->next)
@@ -13166,6 +14254,8 @@ internal_bkpt_re_set (struct breakpoint *b)
     case bp_longjmp_master:
     case bp_std_terminate_master:
     case bp_exception_master:
+    /* CUDA - uvm detection */
+    case bp_cuda_uvm:
       delete_breakpoint (b);
       break;
 
@@ -13752,6 +14842,12 @@ delete_breakpoint (struct breakpoint *bpt)
   /* On the chance that someone will soon try again to delete this
      same bp, we mark it as deleted before freeing its storage.  */
   bpt->type = bp_none;
+  /* CUDA - auto breakpoints */
+  if (bpt == cuda_auto_breakpoints_bp_system)
+    cuda_auto_breakpoints_bp_system = NULL;
+  if (bpt == cuda_auto_breakpoints_bp_application)
+    cuda_auto_breakpoints_bp_application = NULL;
+
   xfree (bpt);
 }
 
@@ -14091,6 +15187,12 @@ update_breakpoint_locations (struct breakpoint *b,
   if (all_locations_are_pending (existing_locations) && sals.nelts == 0)
     return;
 
+  /* CUDA - breakpoints */
+  /* Do not update the breakpoint location of CUDA breakpoints */
+  /* XXX handle mix of device and host breakpoints */
+  if (b->loc && b->loc->cuda.type != cuda_bp_none)
+    return;
+
   b->loc = NULL;
 
   for (i = 0; i < sals.nelts; ++i)
@@ -14215,6 +15317,15 @@ addr_string_to_sals (struct breakpoint *b, char *addr_string, int *found)
 	      || b->enable_state == bp_disabled))
 	not_found_and_ok = 1;
 
+      /* CUDA - device breakpoints */
+      /* A breakpoint that used to have a CUDA device location cannot be
+         resolved on a rerun until the ELF image is loaded again. We do not
+         want to emit any warning/error message or disable those
+         breakpoints. Instead, we optimistically ignore the issue, keeping
+         the breakpoint pending until the right ELF image is loaded again. */
+      if (e.error == NOT_FOUND_ERROR && b->cuda_breakpoint)
+          not_found_and_ok = 1;
+
       if (!not_found_and_ok)
 	{
 	  /* We surely don't want to warn about the same breakpoint
@@ -14239,9 +15350,19 @@ addr_string_to_sals (struct breakpoint *b, char *addr_string, int *found)
 	  char *cond_string, *extra_string;
 	  int thread, task;
 
-	  find_condition_and_thread (s, sals.sals[0].pc,
-				     &cond_string, &thread, &task,
-				     &extra_string);
+              TRY_CATCH (e, RETURN_MASK_ALL)
+              {
+                find_condition_and_thread (s, sals.sals[0].pc,
+                                           &cond_string, &thread, &task,
+                                           &extra_string);
+              }
+
+              if (e.reason < 0 )
+              {
+                if (conditional_pending_break_support != AUTO_BOOLEAN_TRUE)
+                  throw_exception (e);
+                return sals;
+              }
 	  if (cond_string)
 	    b->cond_string = cond_string;
 	  b->thread = thread;
@@ -14275,6 +15396,7 @@ breakpoint_re_set_default (struct breakpoint *b)
   struct symtabs_and_lines expanded_end = {0};
 
   sals = addr_string_to_sals (b, b->addr_string, &found);
+
   if (found)
     {
       make_cleanup (xfree, sals.sals);
@@ -15722,6 +16844,145 @@ all_tracepoints (void)
   return tp_vec;
 }
 
+static void
+cuda_auto_breakpoints_add_location (elf_image_t elf_image, CORE_ADDR addr, bool is_system)
+{
+  struct bp_location *loc;
+  struct breakpoint **bp = is_system
+                         ? &cuda_auto_breakpoints_bp_system
+                         : &cuda_auto_breakpoints_bp_application;
+  struct gdbarch *cuda_gdbarch;
+
+  cuda_gdbarch = cuda_get_gdbarch ();
+  if (!cuda_gdbarch)
+    {
+      warning (_("Could not set CUDA auto breakpoint at 0x%llx\n"), (unsigned long long)addr);
+      return;
+    }
+
+  /* skip if addr ends up not being a device address */
+  if (!cuda_is_device_code_address (addr))
+    return;
+
+  addr = gdbarch_skip_prologue (cuda_gdbarch, addr);
+
+  if (!*bp)
+    {
+      *bp = create_internal_breakpoint (cuda_gdbarch, addr, bp_cuda_auto,
+                                        &momentary_breakpoint_ops);
+
+      (*bp)->enable_state = bp_disabled;
+      (*bp)->addr_string  = xstrprintf ("*0x%s", paddress (cuda_gdbarch, (*bp)->loc->address));
+      (*bp)->cuda_breakpoint = true;
+      (*bp)->loc->cuda_breakpoint = true;
+      (*bp)->loc->cuda.elf_image = elf_image;
+
+      cuda_trace_breakpoint ("add auto breakpoint bp %u at 0x%"PRIx64, (*bp)->number, addr);
+    }
+  else
+    {
+      struct symtab_and_line sal;
+
+      init_sal (&sal);
+      sal.pc = addr;
+      sal.section = find_pc_overlay (sal.pc);
+      sal.pspace = current_program_space;
+
+      loc = add_location_to_breakpoint (*bp, &sal);
+      loc->cuda.elf_image = elf_image;
+      loc->cuda_breakpoint = true;
+
+      cuda_trace_breakpoint ("add auto breakpoint bp %u location at 0x%"PRIx64, (*bp)->number, addr);
+    }
+
+  cuda_auto_breakpoints_update_breakpoints ();
+}
+
+static void
+cuda_auto_breakpoints_remove_locations_from_bp (struct breakpoint *bp, elf_image_t elf_image)
+{
+  struct bp_location *loc;
+  struct bp_location **ploc;
+
+  if (!bp || !bp->loc)
+    return;
+
+  cuda_trace ("remove auto breakpoint bp %u locations for ELF image 0x%"PRIx64, bp->number, elf_image);
+
+  for (loc = *(ploc = &bp->loc); loc; loc = *(ploc = &loc->next))
+    if (loc->cuda.elf_image == elf_image)
+      {
+        /* Remove location form the list of breakpoint locations chain */
+        /* Dangling locations are freed in update_global_location_list */
+        *ploc = loc->next;
+      }
+
+  update_global_location_list (0);
+}
+
+void
+cuda_auto_breakpoints_add_locations (elf_image_t elf_image, bool is_system)
+{
+  CORE_ADDR kern_addr;
+  unsigned int ix;
+
+  /* auto breakpoints */
+  for (ix = 0; VEC_iterate (CORE_ADDR, cuda_kernel_entry_addresses, ix, kern_addr); ix++)
+    cuda_auto_breakpoints_add_location (elf_image, kern_addr, is_system);
+  VEC_truncate (CORE_ADDR, cuda_kernel_entry_addresses, 0);
+}
+
+void
+cuda_auto_breakpoints_remove_locations (elf_image_t elf_image)
+{
+  cuda_auto_breakpoints_remove_locations_from_bp (cuda_auto_breakpoints_bp_system, elf_image);
+  cuda_auto_breakpoints_remove_locations_from_bp (cuda_auto_breakpoints_bp_application, elf_image);
+}
+
+static void
+cuda_auto_breakpoints_update_one_breakpoint (struct breakpoint *bp,
+                                             bool (*enabled)(void),
+                                             bool (*silent)(void))
+{
+  if (bp)
+    {
+      if (enabled ())
+        {
+          breakpoint_set_silent (bp, 0);
+          enable_breakpoint (bp);
+    }
+      else if (silent ())
+    {
+          breakpoint_set_silent (bp, 1);
+          enable_breakpoint (bp);
+        }
+      else
+        disable_breakpoint (bp);
+    }
+}
+
+void
+cuda_auto_breakpoints_update_breakpoints (void)
+{
+  cuda_auto_breakpoints_update_one_breakpoint (cuda_auto_breakpoints_bp_system,
+                                              cuda_options_break_on_launch_system,
+                                              cuda_options_show_kernel_events_system);
+
+  cuda_auto_breakpoints_update_one_breakpoint (cuda_auto_breakpoints_bp_application,
+                                              cuda_options_break_on_launch_application,
+                                              cuda_options_show_kernel_events_application);
+}
+
+void
+cuda_auto_breakpoints_cleanup_breakpoints (void)
+{
+  if (cuda_auto_breakpoints_bp_system)
+    delete_breakpoint (cuda_auto_breakpoints_bp_system);
+
+  if (cuda_auto_breakpoints_bp_application)
+    delete_breakpoint (cuda_auto_breakpoints_bp_application);
+}
+
 
 /* This help string is used for the break, hbreak, tbreak and thbreak
    commands.  It is defined as a macro to prevent duplication.
@@ -16703,6 +17964,77 @@ agent-printf \"printf format string\", arg1, arg2, arg3, ..., argn\n\
 (target agent only) This is useful for formatted output in user-defined commands."));
 
   automatic_hardware_breakpoints = 1;
+
+  /* CUDA - autostep */
+
+  c = add_com ("autostep", class_breakpoint, autostep_command, _("\
+Set an autostep for a given window.\n\
+\n\
+Usage:\n\
+autostep [LOCATION]\n\
+autostep [LOCATION] for LENGTH [lines|instructions]\n\
+\n\
+See documentation for ``break'' for valid LOCATION values.\n\
+LENGTH specifies the size of an autostep window in terms of lines or\n\
+instructions. The length type may be abbreviated, e.g. l or i.\n\
+If no length type is specified, the default is lines.\n\
+If no LENGTH is specified, the default is 1 line.\n\
+\n\
+Autostep is a tool to increase the precision of CUDA exceptions to the exact\n\
+lane and instruction, when they would not have been otherwise. Whenever the\n\
+application is executing code within the window specified by the autostep,\n\
+the code is single-stepped. Single-stepping device code allows the debugger to\n\
+discover CUDA exceptions as they happen and to report the exact lane where they\n\
+happen. Because single-stepping is slow, only the window specified by the user\n\
+is actually single-stepped. The rest of the code is executed normally. The\n\
+single-stepping is done without notifying the user, unless an exception or\n\
+breakpoint is hit. Autostep alleviates the user from manually single-stepping\n\
+parts of the code when searching for the precise origin of a CUDA exception.\n\
+\n\
+The location of an autostep is marked by a breakpoint, so an autostep can\n\
+be manipulated like a breakpoint, using commands like disable, enable, delete,\n\
+and ignore.\n\
+\n\
+autostep can be abbreviated as astep."));
+  set_cmd_completer (c, location_completer);
+
+  add_com_alias ("astep", "autostep", class_run, 1);
+
+  add_info ("autosteps", autosteps_info, _("\
+Status of autosteps, or autostep number NUMBER."));
+
+  c = add_cmd ("autosteps", class_alias, disable_command, _("\
+Disable specified autosteps.\n\
+Arguments are autostep numbers, separated by spaces.\n\
+No argument means disable all autosteps."),
+	   &disablelist);
+  deprecate_cmd (c, "disable");
+
+  c = add_cmd ("autosteps", class_alias, enable_command, _("\
+Enable specified autosteps.\n\
+Arguments are autostep numbers, separated by spaces.\n\
+No argument means enable all autosteps."),
+	   &enablelist);
+  deprecate_cmd (c, "enable");
+
+  add_cmd ("autosteps", class_alias, delete_command, _("\
+Equivalent to ``delete breakpoints''."),
+	   &deletelist);
+
+  add_setshow_auto_boolean_cmd ("conditional-pending", no_class,
+				&conditional_pending_break_support, _("\
+Set debugger's behavior regarding pending breakpoints conditionals."), _("\
+Show debugger's behavior regarding pending breakpoints conditionals."), _("\
+If on, an unresolved breakpoint conditional will cause gdb to create a\n\
+pending breakpoint.  If off, an unresolved breakpoint conditionals results in\n\
+an error.  If auto, an unrecognized breakpoint conditional results in a\n\
+user-query to see if a pending breakpoint should be created."),
+				NULL,
+				show_conditional_pending_break_support,
+				&breakpoint_set_cmdlist,
+				&breakpoint_show_cmdlist);
+
+  conditional_pending_break_support = AUTO_BOOLEAN_AUTO;
 
   observer_attach_about_to_proceed (breakpoint_about_to_proceed);
 }

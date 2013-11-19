@@ -590,7 +590,7 @@ remote_escape_output (const gdb_byte *buffer, int len,
    '*' must be escaped to avoid the run-length encoding processing
    in reading packets.  */
 
-static int
+int
 remote_unescape_input (const gdb_byte *buffer, int len,
 		       gdb_byte *out_buf, int out_maxlen)
 {
@@ -1420,6 +1420,9 @@ prepare_resume_reply (char *buf, ptid_t ptid,
 		 status->value.integer, ptid_get_pid (ptid));
       else
 	sprintf (buf, "W%02x", status->value.integer);
+
+      /* CUDA - Append the return value of api_finalize. */
+      cuda_append_api_finalize_res (buf + strlen (buf));
       break;
     case TARGET_WAITKIND_SIGNALLED:
       if (multi_process)
@@ -1427,6 +1430,9 @@ prepare_resume_reply (char *buf, ptid_t ptid,
 		 status->value.sig, ptid_get_pid (ptid));
       else
 	sprintf (buf, "X%02x", status->value.sig);
+
+      /* CUDA - Append the return value of api_finalize. */
+      cuda_append_api_finalize_res (buf + strlen (buf));
       break;
     default:
       error ("unhandled waitkind");

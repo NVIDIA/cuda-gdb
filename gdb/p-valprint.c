@@ -558,10 +558,12 @@ pascal_object_print_value_fields (struct type *type, const gdb_byte *valaddr,
 
       if (dont_print_statmem == 0)
 	{
+	  /* To suppress clang's "Unused return value" warning */
+	  void *unused;
 	  /* If we're at top level, carve out a completely fresh
 	     chunk of the obstack and use that until this particular
 	     invocation returns.  */
-	  obstack_finish (&dont_print_statmem_obstack);
+	  unused = obstack_finish (&dont_print_statmem_obstack);
 	}
 
       for (i = n_baseclasses; i < len; i++)
@@ -715,11 +717,13 @@ pascal_object_print_value (struct type *type, const gdb_byte *valaddr,
 
   if (dont_print_vb == 0)
     {
+      /* To suppress clang's "Unused return value" warning */
+      void *unused;
       /* If we're at top level, carve out a completely fresh
          chunk of the obstack and use that until this particular
          invocation returns.  */
       /* Bump up the high-water mark.  Now alpha is omega.  */
-      obstack_finish (&dont_print_vb_obstack);
+      unused = obstack_finish (&dont_print_vb_obstack);
     }
 
   for (i = 0; i < n_baseclasses; i++)

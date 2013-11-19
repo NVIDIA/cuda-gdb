@@ -10,4 +10,4 @@ NAT_CDEPS = $(srcdir)/proc-service.list
 
 # The dynamically loaded libthread_db needs access to symbols in the
 # gdb executable.
-LOADLIBES = -ldl $(RDYNAMIC)
+LOADLIBES = -ldl $(RDYNAMIC) -lpthread

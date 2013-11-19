@@ -20,6 +20,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 /* This file was created with the aid of ``gdbarch.sh''.
 
    The Bourne shell script ``gdbarch.sh'' creates the files
@@ -73,6 +91,9 @@ struct elf_internal_linux_prpsinfo;
 
 /* This is a convenience wrapper for 'current_inferior ()->gdbarch'.  */
 extern struct gdbarch *target_gdbarch (void);
+
+/* CUDA - 64-bit register index */
+typedef ULONGEST reg_t;
 
 /* The initial, default architecture.  It uses host values (for want of a better
    choice).  */
@@ -306,26 +327,26 @@ extern void set_gdbarch_fp0_regnum (struct gdbarch *gdbarch, int fp0_regnum);
 
 /* Convert stab register number (from `r' declaration) to a gdb REGNUM. */
 
-typedef int (gdbarch_stab_reg_to_regnum_ftype) (struct gdbarch *gdbarch, int stab_regnr);
-extern int gdbarch_stab_reg_to_regnum (struct gdbarch *gdbarch, int stab_regnr);
+typedef int (gdbarch_stab_reg_to_regnum_ftype) (struct gdbarch *gdbarch, reg_t stab_regnr);
+extern int gdbarch_stab_reg_to_regnum (struct gdbarch *gdbarch, reg_t stab_regnr);
 extern void set_gdbarch_stab_reg_to_regnum (struct gdbarch *gdbarch, gdbarch_stab_reg_to_regnum_ftype *stab_reg_to_regnum);
 
 /* Provide a default mapping from a ecoff register number to a gdb REGNUM. */
 
-typedef int (gdbarch_ecoff_reg_to_regnum_ftype) (struct gdbarch *gdbarch, int ecoff_regnr);
-extern int gdbarch_ecoff_reg_to_regnum (struct gdbarch *gdbarch, int ecoff_regnr);
+typedef int (gdbarch_ecoff_reg_to_regnum_ftype) (struct gdbarch *gdbarch, reg_t ecoff_regnr);
+extern int gdbarch_ecoff_reg_to_regnum (struct gdbarch *gdbarch, reg_t ecoff_regnr);
 extern void set_gdbarch_ecoff_reg_to_regnum (struct gdbarch *gdbarch, gdbarch_ecoff_reg_to_regnum_ftype *ecoff_reg_to_regnum);
 
 /* Convert from an sdb register number to an internal gdb register number. */
 
-typedef int (gdbarch_sdb_reg_to_regnum_ftype) (struct gdbarch *gdbarch, int sdb_regnr);
-extern int gdbarch_sdb_reg_to_regnum (struct gdbarch *gdbarch, int sdb_regnr);
+typedef int (gdbarch_sdb_reg_to_regnum_ftype) (struct gdbarch *gdbarch, reg_t sdb_regnr);
+extern int gdbarch_sdb_reg_to_regnum (struct gdbarch *gdbarch, reg_t sdb_regnr);
 extern void set_gdbarch_sdb_reg_to_regnum (struct gdbarch *gdbarch, gdbarch_sdb_reg_to_regnum_ftype *sdb_reg_to_regnum);
 
 /* Provide a default mapping from a DWARF2 register number to a gdb REGNUM. */
 
-typedef int (gdbarch_dwarf2_reg_to_regnum_ftype) (struct gdbarch *gdbarch, int dwarf2_regnr);
-extern int gdbarch_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int dwarf2_regnr);
+typedef int (gdbarch_dwarf2_reg_to_regnum_ftype) (struct gdbarch *gdbarch, reg_t dwarf2_regnr);
+extern int gdbarch_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, reg_t dwarf2_regnr);
 extern void set_gdbarch_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, gdbarch_dwarf2_reg_to_regnum_ftype *dwarf2_reg_to_regnum);
 
 typedef const char * (gdbarch_register_name_ftype) (struct gdbarch *gdbarch, int regnr);

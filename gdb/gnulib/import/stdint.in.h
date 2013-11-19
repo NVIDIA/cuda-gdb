@@ -16,6 +16,24 @@
    along with this program; if not, see <http://www.gnu.org/licenses/>.  */
 
 /*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
+/*
  * ISO C 99 <stdint.h> for platforms that lack it.
  * <http://www.opengroup.org/susv3xbd/stdint.h.html>
  */
@@ -170,7 +188,15 @@ typedef unsigned int gl_uint32_t;
    types, since otherwise it breaks platforms like Tandem/NSK.  */
 # if LONG_MAX >> 31 >> 31 == 1
 #  undef int64_t
+/* CUDA - uint64_t */
+#ifdef __APPLE__
+/* On Mac, long ints are 8 bytes long. They (correctly) end up being used for
+   uint64_t. However PRIx64 are defined as llx, and we end up with a bunch of
+   warnings. Avoid the issue here until a cleaner solution is implemented. */
+typedef long long int gl_int64_t;
+#else
 typedef long int gl_int64_t;
+#endif
 #  define int64_t gl_int64_t
 #  define GL_INT64_T
 # elif defined _MSC_VER
@@ -191,7 +217,15 @@ typedef long long int gl_int64_t;
 #else
 # if ULONG_MAX >> 31 >> 31 >> 1 == 1
 #  undef uint64_t
+/* CUDA - uint64_t */
+#ifdef __APPLE__
+/* On Mac, long ints are 8 bytes long. They (correctly) end up being used for
+   uint64_t. However PRIx64 are defined as llx, and we end up with a bunch of
+   warnings. Avoid the issue here until a cleaner solution is implemented. */
+typedef unsigned long long int gl_uint64_t;
+#else
 typedef unsigned long int gl_uint64_t;
+#endif
 #  define uint64_t gl_uint64_t
 #  define GL_UINT64_T
 # elif defined _MSC_VER

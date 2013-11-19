@@ -37,6 +37,12 @@ void iterate_over_block_local_vars (struct block *block,
 				    iterate_over_block_arg_local_vars_cb cb,
 				    void *cb_data);
 
+void set_last_displayed_sal (int valid,
+				    struct program_space *pspace,
+				    CORE_ADDR addr,
+				    struct symtab *symtab,
+				    int line);
+
 /* Get or set the last displayed symtab and line, which is, e.g. where we set a
  * breakpoint when `break' is supplied with no arguments.  */
 void clear_last_displayed_sal (void);

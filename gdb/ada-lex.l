@@ -258,7 +258,7 @@ false		{ return FALSEKEYWORD; }
                   else if (all_posn >= 0)
 		    yyless (all_posn);
                   yylval.sval = processId (yytext, yyleng);
-                  return NAME;
+                  return ADA_NAME;
                }
 
 
@@ -267,7 +267,7 @@ false		{ return FALSEKEYWORD; }
 "'"[^']+"'"{WHITE}*:: {
                   yyless (yyleng - 2);
 		  yylval.sval = processId (yytext, yyleng);
-		  return NAME;
+		  return ADA_NAME;
 		}
 
 "::"            { return COLONCOLON; }

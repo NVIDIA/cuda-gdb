@@ -70,6 +70,8 @@
 #include "agent.h"
 #include "btrace.h"
 
+#include "remote-cuda.h"
+
 /* Temp hacks for tracepoint encoding migration.  */
 static char *target_buf;
 static long target_buf_size;
@@ -89,7 +91,6 @@ enum { REMOTE_ALIGN_WRITES = 16 };
 /* Prototypes for local functions.  */
 static void cleanup_sigint_signal_handler (void *dummy);
 static void initialize_sigint_signal_handler (void);
-static int getpkt_sane (char **buf, long *sizeof_buf, int forever);
 static int getpkt_or_notif_sane (char **buf, long *sizeof_buf,
 				 int forever, int *is_notif);
 
@@ -185,8 +186,6 @@ static void remote_find_new_threads (void);
 static void record_currthread (ptid_t currthread);
 
 static int fromhex (int a);
-
-static int putpkt_binary (char *buf, int cnt);
 
 static void check_binary_download (CORE_ADDR addr);
 
@@ -672,7 +671,7 @@ init_remote_state (struct gdbarch *gdbarch)
 /* Return the current allowed size of a remote packet.  This is
    inferred from the current architecture, and should be used to
    limit the length of outgoing packets.  */
-static long
+long
 get_remote_packet_size (void)
 {
   struct remote_state *rs = get_remote_state ();
@@ -810,7 +809,7 @@ show_remotebreak (struct ui_file *file, int from_tty,
 /* Descriptor for I/O to remote machine.  Initialize it to NULL so that
    remote_open knows that we don't have a file open when the program
    starts.  */
-static struct serial *remote_desc = NULL;
+struct serial *remote_desc = NULL;
 
 /* This variable sets the number of bits in an address that are to be
    sent in a memory ("M" or "m") packet.  Normally, after stripping
@@ -1025,13 +1024,6 @@ get_memory_read_packet_size (void)
 /* Generic configuration support for packets the stub optionally
    supports.  Allows the user to specify the use of the packet as well
    as allowing GDB to auto-detect support in the remote stub.  */
-
-enum packet_support
-  {
-    PACKET_SUPPORT_UNKNOWN = 0,
-    PACKET_ENABLE,
-    PACKET_DISABLE
-  };
 
 struct packet_config
   {
@@ -1285,6 +1277,8 @@ enum {
   PACKET_Qbtrace_off,
   PACKET_Qbtrace_bts,
   PACKET_qXfer_btrace,
+  /* CUDA - version handshake */
+  PACKET_CUDAVersion,
   PACKET_MAX
 };
 
@@ -1414,7 +1408,7 @@ static int remote_traceframe_number = -1;
 /* Find out if the stub attached to PID (and hence GDB should offer to
    detach instead of killing it when bailing out).  */
 
-static int
+int
 remote_query_attached (int pid)
 {
   struct remote_state *rs = get_remote_state ();
@@ -3013,6 +3007,10 @@ remote_close (int quitting)
   serial_close (remote_desc);
   remote_desc = NULL;
 
+  /* CUDA - set cuda_remote flag to be false */
+  set_cuda_remote_flag (false);
+
+
   /* We don't have a connection to the remote stub anymore.  Get rid
      of all the inferiors and their threads we were controlling.
      Reset inferior_ptid to null_ptid first, as otherwise has_stack_frame
@@ -3738,33 +3736,6 @@ remote_set_permissions (void)
     warning (_("Remote refused setting permissions with: %s"), rs->buf);
 }
 
-/* This type describes each known response to the qSupported
-   packet.  */
-struct protocol_feature
-{
-  /* The name of this protocol feature.  */
-  const char *name;
-
-  /* The default for this protocol feature.  */
-  enum packet_support default_support;
-
-  /* The function to call when this feature is reported, or after
-     qSupported processing if the feature is not supported.
-     The first argument points to this structure.  The second
-     argument indicates whether the packet requested support be
-     enabled, disabled, or probed (or the default, if this function
-     is being called at the end of processing and this feature was
-     not reported).  The third argument may be NULL; if not NULL, it
-     is a NUL-terminated string taken from the packet following
-     this feature's name and an equals sign.  */
-  void (*func) (const struct protocol_feature *, enum packet_support,
-		const char *);
-
-  /* The corresponding packet for this feature.  Only used if
-     FUNC is remote_supported_packet.  */
-  int packet;
-};
-
 static void
 remote_supported_packet (const struct protocol_feature *feature,
 			 enum packet_support support,
@@ -4001,7 +3972,10 @@ static struct protocol_feature remote_protocol_features[] = {
   { "Qbtrace:off", PACKET_DISABLE, remote_supported_packet, PACKET_Qbtrace_off },
   { "Qbtrace:bts", PACKET_DISABLE, remote_supported_packet, PACKET_Qbtrace_bts },
   { "qXfer:btrace:read", PACKET_DISABLE, remote_supported_packet,
-    PACKET_qXfer_btrace }
+    PACKET_qXfer_btrace },
+  /* CUDA - version handshake */
+  { "CUDAVersion", PACKET_DISABLE, cuda_remote_version_handshake,
+    PACKET_CUDAVersion },
 };
 
 static char *remote_support_xml;
@@ -4268,6 +4242,8 @@ remote_open_1 (char *name, int from_tty,
       puts_filtered (name);
       puts_filtered ("\n");
     }
+  /* CUDA - set cuda_remote flag to be true */
+  set_cuda_remote_flag (true);
   push_target (target);		/* Switch to using remote target now.  */
 
   /* Register extra event sources in the event loop.  */
@@ -5631,9 +5607,25 @@ Packet: '%s'\n"),
 		ULONGEST upid;
 
 		p += sizeof ("process:") - 1;
-		unpack_varlen_hex (p, &upid);
+		p = unpack_varlen_hex (p, &upid);
 		pid = upid;
+                if (*p == ';')
+                  p++;
 	      }
+
+            /* CUDA - Process the return value of cuda_finalize. */
+            if (strncmp (p,
+                         "cuda_finalize:", sizeof ("cuda_finalize") - 1) == 0)
+              {
+                ULONGEST ures;
+                CUDBGResult res;
+                p += sizeof ("cuda_finalize:") - 1;
+
+                unpack_varlen_hex (p, &ures);
+                res = ures;
+                cuda_api_clear_state ();
+                cuda_api_handle_finalize_api_error (res);
+              }
 	    else
 	      error (_("unknown stop reply packet: %s"), buf);
 	  }
@@ -6491,7 +6483,7 @@ remote_address_masked (CORE_ADDR addr)
    total number of bytes in the output buffer will be at most
    OUT_MAXLEN.  */
 
-static int
+int
 remote_escape_output (const gdb_byte *buffer, int len,
 		      gdb_byte *out_buf, int *out_len,
 		      int out_maxlen)
@@ -6532,7 +6524,7 @@ remote_escape_output (const gdb_byte *buffer, int len,
    '*' must be escaped to avoid the run-length encoding processing
    in reading packets.  */
 
-static int
+int
 remote_unescape_input (const gdb_byte *buffer, int len,
 		       gdb_byte *out_buf, int out_maxlen)
 {
@@ -6920,7 +6912,7 @@ remote_xfer_memory (CORE_ADDR mem_addr, gdb_byte *buffer, int mem_len,
    FORMAT and the remaining arguments, then gets the reply.  Returns
    whether the packet was a success, a failure, or unknown.  */
 
-static enum packet_result
+static ATTRIBUTE_PRINTF(1, 2) enum packet_result
 remote_send_printf (const char *format, ...)
 {
   struct remote_state *rs = get_remote_state ();
@@ -7137,7 +7129,7 @@ putpkt (char *buf)
    and for a possible /0 if we are debugging (remote_debug) and want
    to print the sent packet as a string.  */
 
-static int
+int
 putpkt_binary (char *buf, int cnt)
 {
   struct remote_state *rs = get_remote_state ();
@@ -7675,7 +7667,7 @@ getpkt_or_notif_sane_1 (char **buf, long *sizeof_buf, int forever,
     }
 }
 
-static int
+int
 getpkt_sane (char **buf, long *sizeof_buf, int forever)
 {
   return getpkt_or_notif_sane_1 (buf, sizeof_buf, forever, 0, NULL);
@@ -8968,6 +8960,15 @@ remote_rcmd (char *command,
 
   if (!remote_desc)
     error (_("remote rcmd is only available after target open"));
+
+  /* CUDA - cleanup on "monitor exit" command. */ 
+  if (strcmp (command, "exit") == 0)
+    {
+      cuda_api_finalize ();
+      cuda_cleanup ();
+      cuda_gdb_session_destroy ();
+      set_cuda_remote_flag (false);
+    }
 
   /* Send a NULL command across as an empty command.  */
   if (command == NULL)
@@ -11647,9 +11648,15 @@ _initialize_remote (void)
   rs->buf = xmalloc (rs->buf_size);
 
   init_remote_ops ();
+  init_extended_remote_ops ();
+
+  /* CUDA - initialize remote target */
+  cuda_remote_add_target (&remote_ops);
+  /* CUDA - initialize remote target */
+  cuda_remote_add_target (&extended_remote_ops);
+
   add_target (&remote_ops);
 
-  init_extended_remote_ops ();
   add_target (&extended_remote_ops);
 
   /* Hook into new objfile notification.  */

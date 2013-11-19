@@ -217,6 +217,13 @@ bfd_simple_get_relocated_section_contents (bfd *abfd,
      output offset and output section to restore later.  */
   saved_offsets = malloc (sizeof (struct saved_output_info)
 			  * abfd->section_count);
+  /* CUDA - fix memory leak detected by Valgrind */
+  /* If symbol_table is not allocated yet, reserve space in saved_offsets
+     for "COMMON" section */
+  if (!symbol_table)
+    saved_offsets = realloc (saved_offsets, sizeof (struct saved_output_info)
+                             * (abfd->section_count + 1));
+
   if (saved_offsets == NULL)
     {
       if (data)

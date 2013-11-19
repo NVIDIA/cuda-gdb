@@ -43,6 +43,10 @@ setproctitle (const char *name ATTRIBUTE_UNUSED, ...)
 #ifdef PR_SET_NAME
   /* On GNU/Linux this sets the top visible "comm", but not
      necessarily the name visible in ps. */
+#ifndef __ANDROID__
   prctl (PR_SET_NAME, name);
+#else
+  prctl (PR_SET_NAME, (unsigned long)name, 0, 0, 0);
+#endif
 #endif
 }

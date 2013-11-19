@@ -627,8 +627,9 @@ ARMul_Emulate26 (ARMul_State * state)
 	    }
 	  if (state->Debug)
 	    {
-	      fprintf (stderr, "sim: At %08lx Instr %08lx Mode %02lx\n", pc, instr,
-		       state->Mode);
+	      fprintf (stderr, "sim: At %08lx Instr %08lx Mode %02lx\n",
+                       (unsigned long) pc, (unsigned long) instr,
+		       (unsigned long) state->Mode);
 	      (void) fgetc (stdin);
 	    }
 	}

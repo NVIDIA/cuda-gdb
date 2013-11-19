@@ -17,6 +17,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -45,6 +63,7 @@
 #include "objfiles.h"
 #include "symtab.h"
 #include "exceptions.h"
+#include "cuda-textures.h"
 
 extern unsigned int overload_debug;
 /* Local functions.  */
@@ -469,6 +488,7 @@ value_cast (struct type *type, struct value *arg2)
     return value_from_double (type, value_as_double (arg2));
   else if (code1 == TYPE_CODE_DECFLOAT && scalar)
     {
+      struct value *v;
       enum bfd_endian byte_order = gdbarch_byte_order (get_type_arch (type));
       int dec_len = TYPE_LENGTH (type);
       gdb_byte dec[16];
@@ -482,13 +502,17 @@ value_cast (struct type *type, struct value *arg2)
 	/* The only option left is an integral type.  */
 	decimal_from_integral (arg2, dec, dec_len, byte_order);
 
-      return value_from_decfloat (type, dec);
+      /* CUDA - register cache */
+      v = value_from_decfloat (type, dec);
+      if (value_cached (arg2)) set_value_cached (v, 1);
+      return v;
     }
   else if ((code1 == TYPE_CODE_INT || code1 == TYPE_CODE_ENUM
 	    || code1 == TYPE_CODE_RANGE)
 	   && (scalar || code2 == TYPE_CODE_PTR
 	       || code2 == TYPE_CODE_MEMBERPTR))
     {
+      struct value *v;
       LONGEST longest;
 
       /* When we cast pointers to integers, we mustn't use
@@ -503,8 +527,11 @@ value_cast (struct type *type, struct value *arg2)
 		     gdbarch_byte_order (get_type_arch (type2)));
       else
         longest = value_as_long (arg2);
-      return value_from_longest (type, convert_to_boolean ?
+      /* CUDA - register cache */
+      v = value_from_longest (type, convert_to_boolean ?
 				 (LONGEST) (longest ? 1 : 0) : longest);
+      if (value_cached(arg2)) set_value_cached (v, 1);
+      return v;
     }
   else if (code1 == TYPE_CODE_PTR && (code2 == TYPE_CODE_INT  
 				      || code2 == TYPE_CODE_ENUM 
@@ -1119,12 +1146,11 @@ read_value_memory (struct value *val, int embedded_offset,
 
       if (get_traceframe_number () < 0
 	  || !traceframe_available_memory (&available_memory, memaddr, length))
-	{
-	  if (stack)
-	    read_stack (memaddr, buffer, length);
-	  else
-	    read_memory (memaddr, buffer, length);
-	}
+        {
+          /* CUDA - memory segments */
+          struct type *type = value_type (val);
+          cuda_read_memory (memaddr, val, type, length);
+        }
       else
 	{
 	  struct target_section_table *table;
@@ -1299,7 +1325,10 @@ value_assign (struct value *toval, struct value *fromval)
 	    dest_buffer = value_contents (fromval);
 	  }
 
-	write_memory_with_notification (changed_addr, dest_buffer, changed_len);
+        /* CUDA - memory segments */
+        cuda_write_memory (changed_addr, dest_buffer, type);
+        observer_notify_memory_changed (current_inferior (),
+                           changed_addr, changed_len, dest_buffer);
       }
       break;
 
@@ -1482,6 +1511,10 @@ value_repeat (struct value *arg1, int count)
   VALUE_LVAL (val) = lval_memory;
   set_value_address (val, value_address (arg1));
 
+  /* CUDA - memory segments */
+  deprecated_set_value_type (val,
+		             TYPE_TARGET_TYPE (value_enclosing_type (val)));
+
   read_value_memory (val, 0, value_stack (val), value_address (val),
 		     value_contents_all_raw (val),
 		     TYPE_LENGTH (value_enclosing_type (val)));
@@ -1492,6 +1525,7 @@ value_repeat (struct value *arg1, int count)
 struct value *
 value_of_variable (struct symbol *var, const struct block *b)
 {
+  struct value *val;
   struct frame_info *frame;
 
   if (!symbol_read_needs_frame (var))
@@ -1512,7 +1546,16 @@ value_of_variable (struct symbol *var, const struct block *b)
 	}
     }
 
-  return read_var_value (var, frame);
+  val = read_var_value (var, frame);
+
+  /* CUDA - Managed variables */
+  /* If __managed__ variable was declared as type_t var in .cu file,
+   * its host shadow would look like type_t *var,
+   * that is debugger must dereference it before returning value to user */
+  if ( SYMBOL_OBJ_SECTION(var) != NULL && strcmp(SYMBOL_OBJ_SECTION(var)->the_bfd_section->name, "__nv_managed_data__")==0)
+    return value_ind (val);
+
+  return val;
 }
 
 struct value *
@@ -1599,13 +1642,16 @@ value_coerce_to_target (struct value *val)
 {
   LONGEST length;
   CORE_ADDR addr;
+  struct type *type;
 
   if (!value_must_coerce_to_target (val))
     return val;
 
   length = TYPE_LENGTH (check_typedef (value_type (val)));
   addr = allocate_space_in_inferior (length);
-  write_memory (addr, value_contents (val), length);
+  /* CUDA - memory segments */
+  type = check_typedef (value_type (val));
+  cuda_write_memory (addr, value_contents (val), type);
   return value_at_lazy (value_type (val), addr);
 }
 
@@ -1761,8 +1807,11 @@ value_ind (struct value *arg1)
       enc_type = check_typedef (value_enclosing_type (arg1));
       enc_type = TYPE_TARGET_TYPE (enc_type);
 
-      if (TYPE_CODE (check_typedef (enc_type)) == TYPE_CODE_FUNC
-	  || TYPE_CODE (check_typedef (enc_type)) == TYPE_CODE_METHOD)
+      /* CUDA - textures */
+      if (cuda_texture_is_tex_ptr (base_type))
+        arg2 = cuda_texture_value_ind (enc_type, arg1);
+      else if (TYPE_CODE (check_typedef (enc_type)) == TYPE_CODE_FUNC ||
+               TYPE_CODE (check_typedef (enc_type)) == TYPE_CODE_METHOD)
 	/* For functions, go through find_function_addr, which knows
 	   how to handle function descriptors.  */
 	arg2 = value_at_lazy (enc_type, 

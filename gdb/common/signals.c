@@ -17,6 +17,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #ifdef GDBSERVER
 #include "server.h"
 #else
@@ -590,6 +608,11 @@ do_gdb_signal_to_host (enum gdb_signal oursig,
     case GDB_SIGNAL_INFO:
       return SIGINFO;
 #endif
+
+    /* This should be generic to all recoverable signals from the
+       inferior. For now, behave the same as TARGET_SIGNAL_0 */
+    case GDB_SIGNAL_CUDA_WARP_ASSERT:
+      return 0;
 
     default:
 #if defined (REALTIME_LO)

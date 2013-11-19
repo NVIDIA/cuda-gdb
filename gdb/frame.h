@@ -17,6 +17,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #if !defined (FRAME_H)
 #define FRAME_H 1
 
@@ -667,6 +685,9 @@ extern void print_stack_frame (struct frame_info *, int print_level,
 
 extern void print_frame_info (struct frame_info *, int print_level,
 			      enum print_what print_what, int args);
+
+/* CUDA - print_args_frame */
+extern void print_args_frame (struct frame_info *frame);
 
 extern struct frame_info *block_innermost_frame (const struct block *);
 

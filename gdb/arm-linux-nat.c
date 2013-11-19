@@ -32,11 +32,18 @@
 #include "arm-linux-tdep.h"
 
 #include <elf/common.h>
+#include <sys/utsname.h>
+#ifndef __ANDROID__
 #include <sys/user.h>
 #include <sys/ptrace.h>
-#include <sys/utsname.h>
 #include <sys/procfs.h>
-
+#else
+#include <asm/user.h>
+#include <asm/elf.h>
+#include <thread_db.h> /* for lwpid_t */
+#include <sys/ptrace.h>
+#define PT_GETFPREGS PTRACE_GETFPREGS
+#endif
 /* Prototypes for supply_gregset etc.  */
 #include "gregset.h"
 
@@ -980,11 +987,11 @@ arm_linux_insert_hw_breakpoint1 (const struct arm_linux_hw_breakpoint* bpt,
     if (!arm_hwbp_control_is_enabled (bpts[i].control))
       {
 	errno = 0;
-	if (ptrace (PTRACE_SETHBPREGS, tid, dir * ((i << 1) + 1), 
-		    &bpt->address) < 0)
+	if (ptrace (PTRACE_SETHBPREGS, tid, (PTRACE_TYPE_ARG3)(dir * ((i << 1) + 1)),
+		    (PTRACE_TYPE_ARG4)&bpt->address) < 0)
 	  perror_with_name (_("Unexpected error setting breakpoint address"));
-	if (ptrace (PTRACE_SETHBPREGS, tid, dir * ((i << 1) + 2), 
-		    &bpt->control) < 0)
+	if (ptrace (PTRACE_SETHBPREGS, tid, (PTRACE_TYPE_ARG3)(dir * ((i << 1) + 2)),
+		    (PTRACE_TYPE_ARG4)&bpt->control) < 0)
 	  perror_with_name (_("Unexpected error setting breakpoint"));
 
 	memcpy (bpts + i, bpt, sizeof (struct arm_linux_hw_breakpoint));
@@ -1025,7 +1032,7 @@ arm_linux_remove_hw_breakpoint1 (const struct arm_linux_hw_breakpoint *bpt,
       {
 	errno = 0;
 	bpts[i].control = arm_hwbp_control_disable (bpts[i].control);
-	if (ptrace (PTRACE_SETHBPREGS, tid, dir * ((i << 1) + 2), 
+	if (ptrace (PTRACE_SETHBPREGS, tid, (PTRACE_TYPE_ARG3)(dir * ((i << 1) + 2)),
 		    &bpts[i].control) < 0)
 	  perror_with_name (_("Unexpected error clearing breakpoint"));
 	break;

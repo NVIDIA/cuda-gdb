@@ -16,6 +16,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 /* Used some places (e.g. stop_signal) to record the concept that
    there is no signal.  */
 SET (GDB_SIGNAL_0, 0, "0", "Signal 0")
@@ -194,7 +212,28 @@ SET (TARGET_EXC_EMULATION, 148, "EXC_EMULATION", "Emulation instruction")
 SET (TARGET_EXC_SOFTWARE, 149, "EXC_SOFTWARE", "Software generated exception")
 SET (TARGET_EXC_BREAKPOINT, 150, "EXC_BREAKPOINT", "Breakpoint")
 
+/* CUDA - extra signals */
+SET (GDB_SIGNAL_CUDA_UNKNOWN_EXCEPTION,              151, "CUDA_EXCEPTION_0", "Device Unknown Exception")
+/* cuda memcheck */
+SET (GDB_SIGNAL_CUDA_LANE_ILLEGAL_ADDRESS,           152, "CUDA_EXCEPTION_1", "Lane Illegal Address")
+SET (GDB_SIGNAL_CUDA_LANE_USER_STACK_OVERFLOW,       153, "CUDA_EXCEPTION_2", "Lane User Stack Overflow")
+SET (GDB_SIGNAL_CUDA_DEVICE_HARDWARE_STACK_OVERFLOW, 154, "CUDA_EXCEPTION_3", "Device Hardware Stack Overflow")
+SET (GDB_SIGNAL_CUDA_WARP_ILLEGAL_INSTRUCTION,       155, "CUDA_EXCEPTION_4", "Warp Illegal Instruction")
+SET (GDB_SIGNAL_CUDA_WARP_OUT_OF_RANGE_ADDRESS,      156, "CUDA_EXCEPTION_5", "Warp Out-of-range Address")
+SET (GDB_SIGNAL_CUDA_WARP_MISALIGNED_ADDRESS,        157, "CUDA_EXCEPTION_6", "Warp Misaligned Address")
+SET (GDB_SIGNAL_CUDA_WARP_INVALID_ADDRESS_SPACE,     158, "CUDA_EXCEPTION_7", "Warp Invalid Address Space")
+SET (GDB_SIGNAL_CUDA_WARP_INVALID_PC,                159, "CUDA_EXCEPTION_8", "Warp Invalid PC")
+SET (GDB_SIGNAL_CUDA_WARP_HARDWARE_STACK_OVERFLOW,   160, "CUDA_EXCEPTION_9", "Warp Hardware Stack Overflow")
+SET (GDB_SIGNAL_CUDA_DEVICE_ILLEGAL_ADDRESS,         161, "CUDA_EXCEPTION_10", "Device Illegal Address")
+/* cuda memcheck (future) */
+SET (GDB_SIGNAL_CUDA_LANE_MISALIGNED_ADDRESS,        162, "CUDA_EXCEPTION_11", "Lane Misaligned Address")
+/* device side assert */
+SET (GDB_SIGNAL_CUDA_WARP_ASSERT,                    163, "CUDA_EXCEPTION_12", "Warp Assert")
+SET (GDB_SIGNAL_CUDA_LANE_SYSCALL_ERROR,             164, "CUDA_EXCEPTION_13", "Lane Syscall Error")
+SET (GDB_SIGNAL_CUDA_WARP_ILLEGAL_ADDRESS,           165, "CUDA_EXCEPTION_14", "Warp Illegal Address")
+SET (GDB_SIGNAL_CUDA_INVALID_MANAGED_MEMORY_ACCESS,  166, "CUDA_EXCEPTION_15", "Invalid Managed Memory Access")
+
 /* If you are adding a new signal, add it just above this comment.  */
 
 /* Last and unused enum value, for sizing arrays, etc.  */
-SET (GDB_SIGNAL_LAST, 151, NULL, "GDB_SIGNAL_MAGIC")
+SET (GDB_SIGNAL_LAST, 167, NULL, "GDB_SIGNAL_MAGIC")

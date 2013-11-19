@@ -17,6 +17,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "inferior.h"
 #include "target.h"
@@ -40,7 +58,14 @@
 #include "inf-ptrace.h"
 #include "auxv.h"
 #include <sys/param.h>		/* for MAXPATHLEN */
-#include <sys/procfs.h>		/* for elf_gregset etc.  */
+#ifndef __ANDROID__
+#include <sys/procfs.h>		/* for elf_gregset etc. */
+#else
+#include <asm/elf.h>
+#define PT_KILL 8
+#define __SIGRTMIN SIGRTMIN
+#define W_STOPCODE(sig) ((sig) << 8 | 0x7f)
+#endif
 #include "elf-bfd.h"		/* for elfcore_write_* */
 #include "gregset.h"		/* for gregset */
 #include "gdbcore.h"		/* for get_exec_file */
@@ -67,6 +92,9 @@
 #include "linux-ptrace.h"
 #include "buffer.h"
 #include "target-descriptions.h"
+#include "cuda-exceptions.h"
+#include "cuda-notifications.h"
+#include "cuda-tdep.h"
 
 #ifndef SPUFS_MAGIC
 #define SPUFS_MAGIC 0x23c9b64e
@@ -403,7 +431,7 @@ linux_test_for_tracefork (int original_pid)
   linux_supports_tracefork_flag = 0;
   linux_supports_tracevforkdone_flag = 0;
 
-  ret = ptrace (PTRACE_SETOPTIONS, original_pid, 0, PTRACE_O_TRACEFORK);
+  ret = ptrace (PTRACE_SETOPTIONS, original_pid, 0, (PTRACE_TYPE_ARG4)PTRACE_O_TRACEFORK);
   if (ret != 0)
     {
       restore_child_signals_mask (&prev_mask);
@@ -426,7 +454,7 @@ linux_test_for_tracefork (int original_pid)
     error (_("linux_test_for_tracefork: waitpid: unexpected status %d."),
 	   status);
 
-  ret = ptrace (PTRACE_SETOPTIONS, child_pid, 0, PTRACE_O_TRACEFORK);
+  ret = ptrace (PTRACE_SETOPTIONS, child_pid, 0, (PTRACE_TYPE_ARG4)PTRACE_O_TRACEFORK);
   if (ret != 0)
     {
       ret = ptrace (PTRACE_KILL, child_pid, 0, 0);
@@ -451,7 +479,7 @@ linux_test_for_tracefork (int original_pid)
 
   /* Check whether PTRACE_O_TRACEVFORKDONE is available.  */
   ret = ptrace (PTRACE_SETOPTIONS, child_pid, 0,
-		PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORKDONE);
+		(PTRACE_TYPE_ARG4)(PTRACE_O_TRACEFORK | PTRACE_O_TRACEVFORKDONE));
   linux_supports_tracevforkdone_flag = (ret == 0);
 
   ret = ptrace (PTRACE_CONT, child_pid, 0, 0);
@@ -507,7 +535,7 @@ linux_test_for_tracesysgood (int original_pid)
 
   linux_supports_tracesysgood_flag = 0;
 
-  ret = ptrace (PTRACE_SETOPTIONS, original_pid, 0, PTRACE_O_TRACESYSGOOD);
+  ret = ptrace (PTRACE_SETOPTIONS, original_pid, 0, (PTRACE_TYPE_ARG4)PTRACE_O_TRACESYSGOOD);
   if (ret != 0)
     goto out;
 
@@ -559,7 +587,7 @@ linux_enable_tracesysgood (ptid_t ptid)
 
   current_ptrace_options |= PTRACE_O_TRACESYSGOOD;
 
-  ptrace (PTRACE_SETOPTIONS, pid, 0, current_ptrace_options);
+  ptrace (PTRACE_SETOPTIONS, pid, 0, (PTRACE_TYPE_ARG4)current_ptrace_options);
 }
 
 
@@ -583,7 +611,7 @@ linux_enable_event_reporting (ptid_t ptid)
   /* Do not enable PTRACE_O_TRACEEXIT until GDB is more prepared to support
      read-only process state.  */
 
-  ptrace (PTRACE_SETOPTIONS, pid, 0, current_ptrace_options);
+  ptrace (PTRACE_SETOPTIONS, pid, 0, (PTRACE_TYPE_ARG4)current_ptrace_options);
 }
 
 static void
@@ -1806,7 +1834,7 @@ detach_callback (struct lwp_info *lp, void *data)
 	linux_nat_prepare_to_resume (lp);
       errno = 0;
       if (ptrace (PTRACE_DETACH, GET_LWP (lp->ptid), 0,
-		  WSTOPSIG (status)) < 0)
+		  (PTRACE_TYPE_ARG4)WSTOPSIG (status)) < 0)
 	error (_("Can't detach %s: %s"), target_pid_to_str (lp->ptid),
 	       safe_strerror (errno));
 
@@ -3553,7 +3581,12 @@ retry:
 	   the TGID pid.  */
 
       errno = 0;
+
+      /* CUDA - notifications */
+      cuda_notification_accept ();
       lwpid = my_waitpid (-1, &status,  __WCLONE | WNOHANG);
+      cuda_notification_block ();
+
       if (lwpid == 0 || (lwpid == -1 && errno == ECHILD))
 	lwpid = my_waitpid (-1, &status, WNOHANG);
 
@@ -3711,7 +3744,10 @@ retry:
       gdb_assert (lp == NULL);
 
       /* Block until we get an event reported with SIGCHLD.  */
+      /* CUDA - notifications */
+      cuda_notification_accept ();
       sigsuspend (&suspend_mask);
+      cuda_notification_block ();
     }
 
   if (!target_can_async_p ())
@@ -4051,6 +4087,7 @@ linux_nat_kill (struct target_ops *ops)
   struct target_waitstatus last;
   ptid_t last_ptid;
   int status;
+  long ptrace_rc;
 
   /* If we're stopped while forking and we haven't followed yet,
      kill the other task.  We need to do this first because the
@@ -4061,8 +4098,15 @@ linux_nat_kill (struct target_ops *ops)
   if (last.kind == TARGET_WAITKIND_FORKED
       || last.kind == TARGET_WAITKIND_VFORKED)
     {
-      ptrace (PT_KILL, PIDGET (last.value.related_pid), 0, 0);
-      wait (&status);
+      ptrace_rc = ptrace (PT_KILL, PIDGET (last.value.related_pid), 0, 0);
+      /* CUDA - linux cleanup */
+      /* If the ptrace kill above fails, then wait (&status)
+         will hang.  The ptrace kill could fail if the forked
+         process hasn't yet been attached to, or if it has
+         exited already, which is common in the event of errors
+         received prior to any level of attaching. */
+      if (ptrace_rc == 0)
+        wait (&status);
 
       /* Let the arch-specific native code know this process is
 	 gone.  */
@@ -5077,6 +5121,9 @@ linux_nat_core_of_thread (struct target_ops *ops, ptid_t ptid)
   return -1;
 }
 
+/* CUDA target */
+void cuda_nat_add_target (struct target_ops *t);
+
 void
 linux_nat_add_target (struct target_ops *t)
 {
@@ -5122,6 +5169,9 @@ linux_nat_add_target (struct target_ops *t)
     = linux_nat_supports_disable_randomization;
 
   t->to_core_of_thread = linux_nat_core_of_thread;
+
+  /* CUDA target */
+  cuda_nat_add_target (t);
 
   /* We don't change the stratum; this target will sit at
      process_stratum and thread_db will set at thread_stratum.  This

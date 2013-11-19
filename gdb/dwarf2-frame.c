@@ -19,6 +19,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "dwarf2expr.h"
 #include "dwarf2.h"
@@ -286,7 +304,7 @@ dwarf2_frame_state_free (void *p)
 /* Helper functions for execute_stack_op.  */
 
 static CORE_ADDR
-read_reg (void *baton, int reg)
+read_reg (void *baton, reg_t reg)
 {
   struct frame_info *this_frame = (struct frame_info *) baton;
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
@@ -348,6 +366,7 @@ static const struct dwarf_expr_context_funcs dwarf2_frame_ctx_funcs =
 {
   read_reg,
   read_mem,
+  ctx_no_read_mem_space,
   ctx_no_get_frame_base,
   ctx_no_get_frame_cfa,
   ctx_no_get_frame_pc,
@@ -1416,7 +1435,8 @@ dwarf2_frame_sniffer (const struct frame_unwind *self,
   return 1;
 }
 
-static const struct frame_unwind dwarf2_frame_unwind =
+/* CUDA - frames */
+/*static*/ const struct frame_unwind dwarf2_frame_unwind =
 {
   NORMAL_FRAME,
   dwarf2_frame_unwind_stop_reason,
@@ -1497,12 +1517,19 @@ dwarf2_frame_cfa (struct frame_info *this_frame)
 {
   while (get_frame_type (this_frame) == INLINE_FRAME)
     this_frame = get_prev_frame (this_frame);
+
+  /* CUDA - DW_OP_call_frame_cfa */
+  /* If we want the CUDA unwinder to be used in conjunction with the DWARF
+     unwinder (to process the DW_OP_call_frame_cfa operation used with the
+     DW_AT_frame_base)))))))), this restriction must be lifted. */
+#if 0
   /* This restriction could be lifted if other unwinders are known to
      compute the frame base in a way compatible with the DWARF
      unwinder.  */
   if (!frame_unwinder_is (this_frame, &dwarf2_frame_unwind)
       && !frame_unwinder_is (this_frame, &dwarf2_tailcall_frame_unwind))
     error (_("can't compute CFA for this frame"));
+#endif
   if (get_frame_unwind_stop_reason (this_frame) == UNWIND_UNAVAILABLE)
     throw_error (NOT_AVAILABLE_ERROR,
 		 _("can't compute CFA for this frame: "
@@ -1820,7 +1847,10 @@ static const gdb_byte *decode_frame_entry (struct comp_unit *unit,
 					   int eh_frame_p,
 					   struct dwarf2_cie_table *cie_table,
 					   struct dwarf2_fde_table *fde_table,
-					   enum eh_frame_type entry_type);
+					   enum eh_frame_type entry_type, int cie_expected);
+
+/* CUDA - addr_size */
+int cuda_dwarf2_addr_size (struct objfile *objfile);
 
 /* Decode the next CIE or FDE, entry_type specifies the expected type.
    Return NULL if invalid input, otherwise the next byte to be processed.  */
@@ -1830,7 +1860,8 @@ decode_frame_entry_1 (struct comp_unit *unit, const gdb_byte *start,
 		      int eh_frame_p,
                       struct dwarf2_cie_table *cie_table,
                       struct dwarf2_fde_table *fde_table,
-                      enum eh_frame_type entry_type)
+                      enum eh_frame_type entry_type,
+                      int cie_expected /* CUDA - bug fix */)
 {
   struct gdbarch *gdbarch = get_objfile_arch (unit->objfile);
   const gdb_byte *buf, *end;
@@ -1875,6 +1906,12 @@ decode_frame_entry_1 (struct comp_unit *unit, const gdb_byte *start,
       cie_pointer = read_4_bytes (unit->abfd, buf);
       buf += 4;
     }
+
+  /* CUDA - bug fix */
+  /* return NULL instead entering an infinite loop when the CIE id cannot be
+     found. Did not rootcause the issue. */
+  if (cie_expected && cie_pointer != cie_id)
+    return NULL;
 
   if (cie_pointer == cie_id)
     {
@@ -1965,6 +2002,10 @@ decode_frame_entry_1 (struct comp_unit *unit, const gdb_byte *start,
       if (buf == NULL)
 	return NULL;
       cie->data_alignment_factor = sleb128;
+
+      /* CUDA - addr_size */
+      if (cie->version < 4 && unit->objfile->cuda_objfile)
+        cie->ptr_size = cie->addr_size = cuda_dwarf2_addr_size (unit->objfile);
 
       if (cie_version == 1)
 	{
@@ -2082,16 +2123,20 @@ decode_frame_entry_1 (struct comp_unit *unit, const gdb_byte *start,
 	{
 	  decode_frame_entry (unit, unit->dwarf_frame_buffer + cie_pointer,
 			      eh_frame_p, cie_table, fde_table,
-			      EH_CIE_TYPE_ID);
+			      EH_CIE_TYPE_ID, 1);
 	  fde->cie = find_cie (cie_table, cie_pointer);
 	}
 
-      gdb_assert (fde->cie != NULL);
+      /* CUDA - bug fix */
+      /* return NULL instead of asserting. Did not rootcause the issue. */
+      if (fde->cie == NULL)
+        return NULL;
 
       fde->initial_location =
 	read_encoded_value (unit, fde->cie->encoding, fde->cie->ptr_size,
 			    buf, &bytes_read, 0);
       buf += bytes_read;
+
 
       fde->address_range =
 	read_encoded_value (unit, fde->cie->encoding & 0x0f,
@@ -2133,7 +2178,8 @@ decode_frame_entry (struct comp_unit *unit, const gdb_byte *start,
 		    int eh_frame_p,
                     struct dwarf2_cie_table *cie_table,
                     struct dwarf2_fde_table *fde_table,
-                    enum eh_frame_type entry_type)
+                    enum eh_frame_type entry_type,
+                    int cie_expected /* CUDA - bug fix */)
 {
   enum { NONE, ALIGN4, ALIGN8, FAIL } workaround = NONE;
   const gdb_byte *ret;
@@ -2142,7 +2188,7 @@ decode_frame_entry (struct comp_unit *unit, const gdb_byte *start,
   while (1)
     {
       ret = decode_frame_entry_1 (unit, start, eh_frame_p,
-				  cie_table, fde_table, entry_type);
+				  cie_table, fde_table, entry_type, cie_expected);
       if (ret != NULL)
 	break;
 
@@ -2300,7 +2346,7 @@ dwarf2_build_frame_info (struct objfile *objfile)
 	      while (frame_ptr < unit->dwarf_frame_buffer + unit->dwarf_frame_size)
 		frame_ptr = decode_frame_entry (unit, frame_ptr, 1,
 						&cie_table, &fde_table,
-						EH_CIE_OR_FDE_TYPE_ID);
+						EH_CIE_OR_FDE_TYPE_ID, 0);
 	    }
 
 	  if (e.reason < 0)
@@ -2341,7 +2387,7 @@ dwarf2_build_frame_info (struct objfile *objfile)
 	  while (frame_ptr < unit->dwarf_frame_buffer + unit->dwarf_frame_size)
 	    frame_ptr = decode_frame_entry (unit, frame_ptr, 0,
 					    &cie_table, &fde_table,
-					    EH_CIE_OR_FDE_TYPE_ID);
+					    EH_CIE_OR_FDE_TYPE_ID, 0);
 	}
       if (e.reason < 0)
 	{

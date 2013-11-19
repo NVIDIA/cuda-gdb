@@ -649,9 +649,13 @@ static const char *
 dladdr_to_soname (const void *addr)
 {
   Dl_info info;
-
+#ifdef __ANDROID__
+  if (dladdr ((void *)addr, &info) != 0)
+    return info.dli_fname;
+#else
   if (dladdr (addr, &info) != 0)
     return info.dli_fname;
+#endif
   return NULL;
 }
 

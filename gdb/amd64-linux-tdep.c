@@ -1214,7 +1214,7 @@ amd64_linux_syscall_record (struct regcache *regcache)
 
   syscall_gdb = amd64_canonicalize_syscall (syscall_native);
 
-  if (syscall_gdb < 0)
+  if ((int)syscall_gdb < 0)
     {
       printf_unfiltered (_("Process record and replay target doesn't "
                            "support syscall number %s\n"), 

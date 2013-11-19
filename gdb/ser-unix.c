@@ -306,8 +306,12 @@ hardwire_print_tty_state (struct serial *scb,
 static int
 hardwire_drain_output (struct serial *scb)
 {
+#ifndef __ANDROID__
 #ifdef HAVE_TERMIOS
   return tcdrain (scb->fd);
+#endif
+#else
+  return ioctl (scb->fd, TCSBRK, 1);
 #endif
 
 #ifdef HAVE_TERMIO

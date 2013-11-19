@@ -19,6 +19,30 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+/*
+ *  darwin_get_task_for_pid_rights() is a port of macos_get_task_for_pid_rights()
+ *  routine from /gdb-1822/src/gdb/macosx/macosx-nat-inferior.c, 
+ *  contributed by Apple Computer, Inc.
+ */
+
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "top.h"
 #include "inferior.h"
@@ -175,7 +199,7 @@ __attribute__ ((section ("__TEXT,__info_plist"),used)) =
   "</dict>\n"
   "</plist>\n";
 
-static void
+ATTRIBUTE_PRINTF(2, 3) static void
 inferior_debug (int level, const char *fmt, ...)
 {
   va_list ap;
@@ -255,8 +279,8 @@ darwin_ptrace (const char *name,
   if (ret == -1 && errno == 0)
     ret = 0;
 
-  inferior_debug (4, _("ptrace (%s, %d, 0x%x, %d): %d (%s)\n"),
-                  name, pid, arg3, arg4, ret,
+  inferior_debug (4, _("ptrace (%s, %d, 0x%lx, %d): %d (%s)\n"),
+                  name, pid, (unsigned long)arg3, arg4, ret,
                   (ret != 0) ? safe_strerror (errno) : _("no error"));
   return ret;
 }
@@ -798,8 +822,8 @@ darwin_resume (ptid_t ptid, int step, enum gdb_signal signal)
   struct inferior *inf;
 
   inferior_debug
-    (2, _("darwin_resume: pid=%d, tid=0x%x, step=%d, signal=%d\n"),
-     ptid_get_pid (ptid), ptid_get_tid (ptid), step, signal);
+    (2, _("darwin_resume: pid=%d, tid=0x%lx, step=%d, signal=%d\n"),
+     ptid_get_pid (ptid), (unsigned long)ptid_get_tid (ptid), step, signal);
 
   if (signal == GDB_SIGNAL_0)
     nsignal = 0;
@@ -1015,8 +1039,8 @@ cancel_breakpoint (ptid_t ptid)
   pc = regcache_read_pc (regcache) - gdbarch_decr_pc_after_break (gdbarch);
   if (breakpoint_inserted_here_p (get_regcache_aspace (regcache), pc))
     {
-      inferior_debug (4, "cancel_breakpoint for thread %x\n",
-		      ptid_get_tid (ptid));
+      inferior_debug (4, "cancel_breakpoint for thread %lx\n",
+		      (unsigned long)ptid_get_tid (ptid));
 
       /* Back up the PC if necessary.  */
       if (gdbarch_decr_pc_after_break (gdbarch))
@@ -1265,6 +1289,12 @@ darwin_stop_inferior (struct inferior *inf)
       if (wstatus.kind == TARGET_WAITKIND_STOPPED
 	  && wstatus.value.sig == GDB_SIGNAL_STOP)
 	break;
+      /* Do not wait for zombies*/
+      if (wstatus.kind == TARGET_WAITKIND_SIGNALLED
+          && wstatus.value.sig == GDB_SIGNAL_KILL)
+        {
+          break;
+        }
     }
 }
 
@@ -1336,6 +1366,124 @@ darwin_kill_inferior (struct target_ops *ops)
   target_mourn_inferior ();
 }
 
+#ifdef __APPLE__
+#include <Security/Security.h>
+
+static int
+darwin_get_task_for_pid_rights (void)
+{
+
+  OSStatus stat;
+  AuthorizationItem taskport_item[] = {{"system.privilege.taskport"}};
+  AuthorizationRights rights = {1, taskport_item}, *out_rights = NULL;
+  AuthorizationItem auth_items[] = {
+        { kAuthorizationEnvironmentUsername },
+        { kAuthorizationEnvironmentPassword },
+        { kAuthorizationEnvironmentShared }
+      };
+  AuthorizationEnvironment env = { 3, auth_items };
+  AuthorizationRef author;
+  char *pass = NULL;
+  char *login_name = NULL;
+  char entered_login[256];
+  int retval = 0;
+
+  AuthorizationFlags auth_flags = kAuthorizationFlagExtendRights
+    | kAuthorizationFlagPreAuthorize
+    | kAuthorizationFlagInteractionAllowed
+    | ( 1 << 5) /* kAuthorizationFlagLeastPrivileged */;
+
+  stat = AuthorizationCreate (NULL, kAuthorizationEmptyEnvironment,
+			      auth_flags,
+			      &author);
+  if (stat != errAuthorizationSuccess)
+    return 0;
+
+  /* If you have a window server connection, then this call will put
+     up a dialog box if it can.  However, if the current user doesn't
+     have a connection to the window server (for instance if they are
+     in an ssh session) then this call will return
+     errAuthorizationInteractionNotAllowed.
+     I want to do this way first, however, since I'd prefer the dialog
+     box - for instance if I'm running under Xcode - to trying to prompt.  */
+
+  stat = AuthorizationCopyRights (author, &rights, kAuthorizationEmptyEnvironment,
+				  auth_flags,
+				  &out_rights);
+  if (stat == errAuthorizationSuccess)
+    {
+      retval = 1;
+      goto cleanup;
+    }
+  else if (stat == errAuthorizationInteractionNotAllowed)
+    {
+      /* Okay, so the straight call couldn't query, so we're going to
+         have to get the username & password and send them by hand to
+         AuthorizationCopyRights.  */
+      /* However, if we're running under the mi, I can't do hidden password 
+	 input, so I return failure instead.  */
+
+      if (ui_out_is_mi_like_p (current_uiout))
+	{
+	  struct cleanup *notify_cleanup;
+	  notify_cleanup
+	    = make_cleanup_ui_out_tuple_begin_end (current_uiout,
+						    "task_for_pid-failure");
+	  do_cleanups (notify_cleanup);
+	  return 0;
+	}
+
+      login_name = getlogin ();
+      if (! login_name )
+	return 0;
+
+      fprintf_unfiltered (gdb_stdout, "We need authorization from an admin user to run the debugger.\n");
+      fprintf_unfiltered (gdb_stdout, "This will only happen once per login session.\n");
+      fprintf_unfiltered (gdb_stdout, "Admin username (%s): ", login_name);
+      fgets (entered_login, 255, stdin);
+      if (entered_login[0] != '\n')
+	{
+	  entered_login[strlen (entered_login) - 1] = '\0';
+	  login_name = entered_login;
+	}
+      pass = getpass ("Password:");
+      if (!pass)
+	return 0;
+
+      auth_items[0].valueLength = strlen (login_name);
+      auth_items[0].value = login_name;
+      auth_items[1].valueLength = strlen (pass);
+      auth_items[1].value = pass;
+
+      /* If we got rights in the AuthorizationCopyRights call above,
+	 free it before we reuse the pointer. */
+      if (out_rights != NULL)
+	AuthorizationFreeItemSet (out_rights);
+	
+      stat = AuthorizationCopyRights (author, &rights, &env, auth_flags, &out_rights);
+
+      bzero (pass, strlen (pass));
+      if (stat == errAuthorizationSuccess)
+	retval = 1;
+      else
+	retval = 0;
+    }
+
+ cleanup:
+  if (out_rights != NULL)
+    AuthorizationFreeItemSet (out_rights);
+  AuthorizationFree (author, kAuthorizationFlagDefaults);
+
+  return retval;
+}
+#else
+static int
+darwin_get_task_for_pid_rights (void)
+{
+  return 0;
+}
+#endif
+
 static void
 darwin_attach_pid (struct inferior *inf)
 {
@@ -1348,6 +1496,12 @@ darwin_attach_pid (struct inferior *inf)
   inf->private = XZALLOC (darwin_inferior);
 
   kret = task_for_pid (gdb_task, inf->pid, &inf->private->task);
+  if (kret != KERN_SUCCESS)
+    {
+        if (darwin_get_task_for_pid_rights ())
+          kret = task_for_pid (gdb_task, inf->pid, &inf->private->task);
+    }
+
   if (kret != KERN_SUCCESS)
     {
       int status;
@@ -1865,6 +2019,35 @@ darwin_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len, int write,
     return darwin_read_write_inferior (task, memaddr, myaddr, NULL, len);
 }
 
+/* CUDA - siginfo */
+/* Uber-simplied xfer_siginfo. If we are on the host side, we assumed that's
+   because a breakpoint was hit. All the other fields are left untouched.
+   Obviously, more work needs to be done there to get the full siginfo. */
+static LONGEST
+darwin_xfer_siginfo (struct target_ops *ops, enum target_object object,
+		     const char *annex, gdb_byte *readbuf,
+		     const gdb_byte *writebuf, ULONGEST offset, LONGEST len)
+{
+  gdb_byte buf[sizeof (siginfo_t) + 24];
+  siginfo_t *siginfo = (siginfo_t *) buf;
+
+  gdb_assert (object == TARGET_OBJECT_SIGNAL_INFO);
+  gdb_assert (readbuf || writebuf);
+
+  memset (buf, 0 , sizeof buf);
+
+  if (readbuf)
+    {
+      siginfo->si_signo = SIGTRAP;
+      memcpy (readbuf, siginfo + offset, len);
+    }
+  else
+    error (_("Setting siginfo not supported."));
+
+  /* always succeeds */
+  return len;
+}
+
 static LONGEST
 darwin_xfer_partial (struct target_ops *ops,
 		     enum target_object object, const char *annex,
@@ -1884,6 +2067,10 @@ darwin_xfer_partial (struct target_ops *ops,
     case TARGET_OBJECT_MEMORY:
       return darwin_read_write_inferior (inf->private->task, offset,
                                          readbuf, writebuf, len);
+    /* CUDA - siginfo */
+    case TARGET_OBJECT_SIGNAL_INFO:
+      return darwin_xfer_siginfo (ops, object, annex, readbuf, writebuf, offset, len);
+
 #ifdef TASK_DYLD_INFO_COUNT
     case TARGET_OBJECT_DARWIN_DYLD_INFO:
       if (writebuf != NULL || readbuf == NULL)
@@ -2014,6 +2201,9 @@ darwin_supports_multi_process (void)
 /* -Wmissing-prototypes */
 extern initialize_file_ftype _initialize_darwin_inferior;
 
+/* CUDA target */
+void cuda_nat_add_target (struct target_ops *t);
+
 void
 _initialize_darwin_inferior (void)
 {
@@ -2057,9 +2247,12 @@ _initialize_darwin_inferior (void)
 
   darwin_complete_target (darwin_ops);
 
+  /* CUDA - target */
+  cuda_nat_add_target (darwin_ops);
+
   add_target (darwin_ops);
 
-  inferior_debug (2, _("GDB task: 0x%lx, pid: %d\n"), mach_task_self (),
+  inferior_debug (2, _("GDB task: 0x%lx, pid: %d\n"), (unsigned long) mach_task_self (),
                   getpid ());
 
   add_setshow_zuinteger_cmd ("darwin", class_obscure,

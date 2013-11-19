@@ -12075,14 +12075,14 @@ dofloat (int sizeflag)
 static void
 OP_ST (int bytemode ATTRIBUTE_UNUSED, int sizeflag ATTRIBUTE_UNUSED)
 {
-  oappend ("%st" + intel_syntax);
+  oappend ( intel_syntax ? "st" : "%st" );
 }
 
 static void
 OP_STi (int bytemode ATTRIBUTE_UNUSED, int sizeflag ATTRIBUTE_UNUSED)
 {
   sprintf (scratchbuf, "%%st(%d)", modrm.rm);
-  oappend (scratchbuf + intel_syntax);
+  oappend (&(scratchbuf[intel_syntax&1]));
 }
 
 /* Capital letters in template are macros.  */
@@ -12606,32 +12606,32 @@ append_seg (void)
   if (prefixes & PREFIX_CS)
     {
       used_prefixes |= PREFIX_CS;
-      oappend ("%cs:" + intel_syntax);
+      oappend (intel_syntax ? "cs:" : "%cs:");
     }
   if (prefixes & PREFIX_DS)
     {
       used_prefixes |= PREFIX_DS;
-      oappend ("%ds:" + intel_syntax);
+      oappend (intel_syntax ? "ds:" : "%ds:");
     }
   if (prefixes & PREFIX_SS)
     {
       used_prefixes |= PREFIX_SS;
-      oappend ("%ss:" + intel_syntax);
+      oappend (intel_syntax ? "ss:" : "%ss:");
     }
   if (prefixes & PREFIX_ES)
     {
       used_prefixes |= PREFIX_ES;
-      oappend ("%es:" + intel_syntax);
+      oappend (intel_syntax ? "es:" : "%es:");
     }
   if (prefixes & PREFIX_FS)
     {
       used_prefixes |= PREFIX_FS;
-      oappend ("%fs:" + intel_syntax);
+      oappend (intel_syntax ? "fs:" : "%fs:");
     }
   if (prefixes & PREFIX_GS)
     {
       used_prefixes |= PREFIX_GS;
-      oappend ("%gs:" + intel_syntax);
+      oappend (intel_syntax ? "gs:" : "%gs:");
     }
 }
 
@@ -13970,7 +13970,7 @@ OP_ESreg (int code, int sizeflag)
 	  intel_operand_size (b_mode, sizeflag);
 	}
     }
-  oappend ("%es:" + intel_syntax);
+  oappend ( intel_syntax ? "es:" : "%es:");
   ptr_reg (code, sizeflag);
 }
 

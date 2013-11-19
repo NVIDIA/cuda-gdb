@@ -18,6 +18,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "gdb_string.h"
 #include <ctype.h>
@@ -60,6 +78,10 @@
 #include "objfiles.h"
 #include "completer.h"
 #include "target-descriptions.h"
+#include "cuda-state.h"
+#include "cuda-iterator.h"
+#include "cuda-autostep.h"
+#include "cuda-options.h"
 
 /* Prototypes for local functions */
 
@@ -131,6 +153,13 @@ int sync_execution = 0;
    running in.  */
 
 static ptid_t previous_inferior_ptid;
+
+/* CUDA - focus */
+/* Same as previous_inferior_ptid with CUDA coordinates */
+static cuda_coords_t previous_cuda_coords;
+
+/* CUDA - host singlestep*/
+int cuda_host_want_singlestep = 0;
 
 /* Default behavior is to detach newly forked processes (legacy).  */
 int detach_fork = 1;
@@ -1738,7 +1767,10 @@ resume (int step, enum gdb_signal sig)
   CORE_ADDR pc = regcache_read_pc (regcache);
   struct address_space *aspace = get_regcache_aspace (regcache);
 
-  QUIT;
+  /* CUDA - since host resume is faked during single-stepping thru
+     device code it's safe to ignore quit flag */
+  if (! (step && cuda_focus_is_device()))
+    QUIT;
 
   if (current_inferior ()->waiting_for_vfork_done)
     {
@@ -1781,6 +1813,9 @@ The program is stopped at a permanent breakpoint, but GDB does not know\n\
 how to step past a permanent breakpoint on this architecture.  Try using\n\
 a command like `return' or `jump' to continue execution."));
     }
+
+  /* CUDA - host singlestep*/
+  cuda_host_want_singlestep = step;
 
   /* If enabled, step over breakpoints by executing a copy of the
      instruction at a different address.
@@ -2064,6 +2099,12 @@ prepare_to_proceed (int step)
   /* Get the last target status returned by target_wait().  */
   get_last_target_status (&wait_ptid, &wait_status);
 
+  /* CUDA - stepping */
+  /* When steppping the device, a step-over of the waiting PID is not
+     required. */
+  if (cuda_focus_is_device ())
+    return 0;
+
   /* Make sure we were stopped at a breakpoint.  */
   if (wait_status.kind != TARGET_WAITKIND_STOPPED
       || (wait_status.value.sig != GDB_SIGNAL_TRAP
@@ -2132,8 +2173,8 @@ prepare_to_proceed (int step)
 
    You should call clear_proceed_status before calling proceed.  */
 
-void
-proceed (CORE_ADDR addr, enum gdb_signal siggnal, int step)
+static void
+raw_proceed (CORE_ADDR addr, enum gdb_signal siggnal, int step)
 {
   struct regcache *regcache;
   struct gdbarch *gdbarch;
@@ -2168,26 +2209,33 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal, int step)
   if (step < 0)
     stop_after_trap = 1;
 
+  /* CUDA - sstep */
+  cuda_sstep_initialize (step);
+
   if (addr == (CORE_ADDR) -1)
     {
-      if (pc == stop_pc && breakpoint_here_p (aspace, pc)
-	  && execution_direction != EXEC_REVERSE)
-	/* There is a breakpoint at the address we will resume at,
-	   step one instruction before inserting breakpoints so that
-	   we do not stop right away (and report a second hit at this
-	   breakpoint).
+      /* CUDA - focus */
+      if (!cuda_focus_is_device ())
+      {
+        if (pc == stop_pc && breakpoint_here_p (aspace, pc)
+            && execution_direction != EXEC_REVERSE)
+          /* There is a breakpoint at the address we will resume at,
+             step one instruction before inserting breakpoints so that
+             w edo not stop right away (and report a second hit at this
+             breakpoint).
 
-	   Note, we don't do this in reverse, because we won't
-	   actually be executing the breakpoint insn anyway.
-	   We'll be (un-)executing the previous instruction.  */
+             Note, we don't do this in reverse, because we won't
+             actually be executing the breakpoint insn anyway.
+             We'll be (un-)executing the previous instruction.  */
 
-	force_step = 1;
-      else if (gdbarch_single_step_through_delay_p (gdbarch)
-	       && gdbarch_single_step_through_delay (gdbarch,
-						     get_current_frame ()))
-	/* We stepped onto an instruction that needs to be stepped
-	   again before re-inserting the breakpoint, do so.  */
-	force_step = 1;
+          force_step = 1;
+        else if (gdbarch_single_step_through_delay_p (gdbarch)
+                 && gdbarch_single_step_through_delay (gdbarch,
+                                                       get_current_frame ()))
+          /* We stepped onto an instruction that needs to be stepped
+             again before re-inserting the breakpoint, do so.  */
+          force_step = 1;
+      }
     }
   else
     {
@@ -2324,8 +2372,50 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal, int step)
       wait_for_inferior ();
       normal_stop ();
     }
+
+  /* CUDA - Collect as much info about the kernels as we can every time the
+     debugger stops. */
+  kernels_update_args ();
 }
 
+void
+proceed (CORE_ADDR addr, enum gdb_signal siggnal, int step)
+{
+  struct infcall_control_state *inf_status;
+  struct thread_info *tp = inferior_thread ();
+
+  /* Before we do the real proceed, finish any warps that were at an
+     autostep bp */
+  if (cuda_get_autostep_pending ())
+    {
+      inf_status = save_infcall_control_state ();
+
+      cuda_handle_autostep ();
+      if (cuda_autostep_stop ())
+        return;
+
+      restore_infcall_control_state (inf_status);
+    }
+
+  /* Do the real proceed with the signal that the caller specified */
+  raw_proceed (addr, siggnal, step);
+
+  if (!step)
+    {
+      /* Keep continuing the program while there are autosteps pending, but stop
+         if it is interrupted by some reason, like a breakpoint or exception */
+      while (cuda_get_autostep_pending () && !cuda_autostep_stop ())
+        {
+          cuda_handle_autostep ();
+          if (cuda_autostep_stop ())
+            return;
+
+          /* Resume the program without a signal */
+          clear_proceed_status ();
+          raw_proceed ((CORE_ADDR) -1, GDB_SIGNAL_DEFAULT, 0);
+        }
+    }
+}
 
 /* Start remote-debugging of a machine over a serial link.  */
 
@@ -2378,6 +2468,8 @@ init_wait_for_inferior (void)
   target_last_wait_ptid = minus_one_ptid;
 
   previous_inferior_ptid = inferior_ptid;
+  /* CUDA - focus */
+  previous_cuda_coords = CUDA_INVALID_COORDS;
   init_infwait_state ();
 
   /* Discard any skipped inlined frames.  */
@@ -2716,6 +2808,9 @@ wait_for_inferior (void)
   old_cleanups =
     make_cleanup (delete_step_thread_step_resume_breakpoint_cleanup, NULL);
 
+  /* CUDA - focus */
+  cuda_coords_get_current (&previous_cuda_coords);
+
   while (1)
     {
       struct execution_control_state ecss;
@@ -2772,6 +2867,9 @@ fetch_inferior_event (void *client_data)
   int cmd_done = 0;
 
   memset (ecs, 0, sizeof (*ecs));
+
+  /* CUDA - focus */
+  cuda_coords_get_current (&previous_cuda_coords);
 
   /* We're handling a live event, so make sure we're doing live
      debugging.  If we're looking at traceframes while the target is
@@ -2916,7 +3014,18 @@ context_switch (ptid_t ptid)
 			  target_pid_to_str (ptid));
     }
 
-  switch_to_thread (ptid);
+  /* CUDA - focus */
+  if (cuda_focus_is_device ())
+    {
+      /* Let the host thread context switch happen, but restore the focus to
+         the CUDA thread afterwards. */
+      cuda_coords_t cuda_coords = CUDA_INVALID_COORDS;
+      cuda_coords_get_current (&cuda_coords);
+      switch_to_thread (ptid);
+      switch_to_cuda_thread (&cuda_coords);
+    }
+  else
+    switch_to_thread (ptid);
 }
 
 static void
@@ -4568,6 +4677,11 @@ process_event_stop_test:
 	    fprintf_unfiltered (gdb_stdlog, "infrun: BPSTAT_WHAT_STOP_SILENT\n");
 	  stop_print_frame = 0;
 
+          /* CUDA - autostep */
+          /* We shouldn't stop if it's an autostep */
+          if (ecs->event_thread->control.stop_bpstat->breakpoint_at->type == bp_cuda_autostep)
+            ecs->event_thread->control.stop_step = 1;
+
 	  /* We are about to nuke the step_resume_breakpoin via the
 	     cleanup chain, so no need to worry about it here.  */
 
@@ -4691,6 +4805,22 @@ process_event_stop_test:
 	 fprintf_unfiltered (gdb_stdlog, "infrun: no stepping, continue\n");
       /* Likewise if we aren't even stepping.  */
       keep_going (ecs);
+      return;
+    }
+
+  /* CUDA - next */
+  /* Stop stepping during a 'next' command if the cuda coordinates have
+     changed focus to ensure that control properly moves to the next warp
+     when the previous one runs to completion. */
+  if (cuda_focus_is_device ()
+      && (cuda_options_software_preemption ()
+          ? !cuda_coords_is_current_logical (&previous_cuda_coords)
+          : !cuda_coords_is_current (&previous_cuda_coords))
+      && ecs->event_thread->control.step_over_calls == STEP_OVER_ALL)
+    {
+      ecs->event_thread->control.stop_step = 1;
+      print_end_stepping_range_reason ();
+      stop_stepping(ecs);
       return;
     }
 
@@ -5071,6 +5201,9 @@ process_event_stop_test:
 
   stop_pc_sal = find_pc_line (stop_pc, 0);
 
+  /* CUDA : The PC that the line belongs to may need to be adjusted */
+  cuda_adjust_device_code_address (stop_pc_sal.pc, &stop_pc_sal.pc);
+
   /* NOTE: tausq/2004-05-24: This if block used to be done before all
      the trampoline processing logic, however, there are some trampolines 
      that have no names, so we should do trampoline handling first.  */
@@ -5110,6 +5243,22 @@ process_event_stop_test:
 	  return;
 	}
     }
+
+  /* CUDA - stepping */
+  /* we want to continue stepping if this thread is still not active. */
+  if (ecs->event_thread->control.step_range_end == 1 &&
+      cuda_focus_is_device ())
+  {
+    cuda_coords_t c;
+    cuda_coords_get_current (&c);
+    if (!lane_is_active (c.dev, c.sm, c.wp, c.ln))
+    {
+      if (debug_infrun)
+        fprintf_unfiltered (gdb_stdlog, "infrun: cuda thread still not active\n");
+      keep_going (ecs);
+      return;
+    }
+  }
 
   if (ecs->event_thread->control.step_range_end == 1)
     {
@@ -5950,17 +6099,29 @@ normal_stop (void)
      Note that SIGNALLED here means "exited with a signal", not
      "received a signal".  */
   if (!non_stop
-      && !ptid_equal (previous_inferior_ptid, inferior_ptid)
       && target_has_execution
       && last.kind != TARGET_WAITKIND_SIGNALLED
       && last.kind != TARGET_WAITKIND_EXITED
       && last.kind != TARGET_WAITKIND_NO_RESUMED)
     {
       target_terminal_ours_for_output ();
+
+      /* CUDA - focus */
+      if (cuda_focus_is_device () && (ui_out_is_mi_like_p (current_uiout) ||
+          (!previous_cuda_coords.valid ||
+           !cuda_coords_is_current (&previous_cuda_coords))))
+        cuda_print_message_focus (true);
+
+      /* CUDA - focus */
+      if (!cuda_focus_is_device () &&
+          (!ptid_equal (previous_inferior_ptid, inferior_ptid)))
       printf_filtered (_("[Switching to %s]\n"),
 		       target_pid_to_str (inferior_ptid));
+
       annotate_thread_changed ();
       previous_inferior_ptid = inferior_ptid;
+      /* CUDA - focus */
+      cuda_coords_get_current (&previous_cuda_coords);
     }
 
   if (last.kind == TARGET_WAITKIND_NO_RESUMED)
@@ -6040,7 +6201,8 @@ normal_stop (void)
       /* If --batch-silent is enabled then there's no need to print the current
 	 source location, and to try risks causing an error message about
 	 missing source files.  */
-      if (stop_print_frame && !batch_silent)
+      /* CUDA - autostep */
+      if (stop_print_frame && !batch_silent && !cuda_get_autostep_stepping ())
 	{
 	  int bpstat_ret;
 	  int source_flag;

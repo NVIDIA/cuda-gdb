@@ -17,6 +17,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "dyn-string.h"
 #include "gdb_assert.h"
@@ -153,7 +171,7 @@ clear_quit_flag (void)
 void
 set_quit_flag (void)
 {
-  quit_flag = 1;
+  quit_flag++;
 }
 
 /* Return true if the quit flag has been set, false otherwise.  */
@@ -165,7 +183,7 @@ check_quit_flag (void)
   if (quit_flag)
     {
       quit_flag = 0;
-      return 1;
+      return quit_flag;
     }
 
   return 0;
@@ -616,7 +634,14 @@ report_command_stats (void *arg)
   if (display_space)
     {
 #ifdef HAVE_SBRK
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
       char *lim = (char *) sbrk (0);
+#pragma clang diagnostic pop
+#else
+      char *lim = (char *) sbrk (0);
+#endif /* __clang__ */
 
       long space_now = lim - lim_at_start;
       long space_diff = space_now - start_stats->start_space;
@@ -642,7 +667,14 @@ make_command_stats_cleanup (int msg_type)
   struct cmd_stats *new_stat = XMALLOC (struct cmd_stats);
   
 #ifdef HAVE_SBRK
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
   char *lim = (char *) sbrk (0);
+#pragma clang diagnostic pop
+#else
+  char *lim = (char *) sbrk (0);
+#endif /* __clang__ */
   new_stat->start_space = lim - lim_at_start;
 #endif
 
@@ -2541,7 +2573,9 @@ fprintf_symbol_filtered (struct ui_file *stream, const char *name,
    As an extra hack, string1=="FOO(ARGS)" matches string2=="FOO".
    This "feature" is useful when searching for matching C++ function names
    (such as if the user types 'break FOO', where FOO is a mangled C++
-   function).  */
+   function). */
+/* CUDA - strcmp_iw should ignore address segment markers as well, that is
+   string1=="FOO(BAR @QWE *)" matches string2=="FOO(BAR *)" */
 
 int
 strcmp_iw (const char *string1, const char *string2)
@@ -2552,10 +2586,14 @@ strcmp_iw (const char *string1, const char *string2)
 	{
 	  string1++;
 	}
+      if (*string1 == '@')
+        do ++string1; while (isalpha(*string1));
       while (isspace (*string2))
 	{
 	  string2++;
 	}
+      if (*string2 == '@')
+        do ++string2; while (isalpha(*string2));
       if (case_sensitivity == case_sensitive_on && *string1 != *string2)
 	break;
       if (case_sensitivity == case_sensitive_off

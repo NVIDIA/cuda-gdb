@@ -17,6 +17,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #if !defined (OBJFILES_H)
 #define OBJFILES_H
 
@@ -29,6 +47,7 @@ struct bcache;
 struct htab;
 struct symtab;
 struct objfile_data;
+struct cuda_regmap_table;
 
 /* This structure maintains information on a per-objfile basis about the
    "entry point" of the objfile, and the scope within which the entry point
@@ -387,6 +406,15 @@ struct objfile
        table, so we have to keep them here to relocate them
        properly.  */
     struct symbol *template_symbols;
+
+    /* CUDA - cuda_objfile */
+    int cuda_objfile;
+
+    /* CUDA - regmap */
+    struct cuda_regmap_table *cuda_regmap;
+
+    /* CUDA - skip prologue */
+    int cuda_producer_is_open64;
   };
 
 /* Defines for the objfile flag word.  */

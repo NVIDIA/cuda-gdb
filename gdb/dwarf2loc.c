@@ -19,6 +19,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "ui-out.h"
 #include "value.h"
@@ -41,6 +59,11 @@
 
 #include "gdb_string.h"
 #include "gdb_assert.h"
+
+#include "cuda-frame.h"
+#include "cuda-utils.h"
+#include "cuda-regmap.h"
+#include "cuda-tdep.h"
 
 DEF_VEC_I(int);
 
@@ -305,16 +328,26 @@ struct dwarf_expr_baton
 /* Using the frame specified in BATON, return the value of register
    REGNUM, treated as a pointer.  */
 static CORE_ADDR
-dwarf_expr_read_reg (void *baton, int dwarf_regnum)
+dwarf_expr_read_reg (void *baton, reg_t dwarf_regnum)
 {
   struct dwarf_expr_baton *debaton = (struct dwarf_expr_baton *) baton;
   struct gdbarch *gdbarch = get_frame_arch (debaton->frame);
   CORE_ADDR result;
   int regnum;
+  struct type *data_ptr_type;
 
   regnum = gdbarch_dwarf2_reg_to_regnum (gdbarch, dwarf_regnum);
-  result = address_from_register (builtin_type (gdbarch)->builtin_data_ptr,
-				  regnum, debaton->frame);
+  data_ptr_type = builtin_type (gdbarch)->builtin_data_ptr;
+
+  /* CUDA - Read correct pointer size from header */
+  /* When debugging 32-bit apps on 64-bit cuda-gdb, the pointer size
+   * is not set correctly. Here we need to reset the size of the builtin
+   * type to make sure cuda-gdb reads the correct size.
+   */
+  if (cuda_is_cuda_gdbarch (gdbarch))
+    data_ptr_type->length = dwarf2_per_cu_addr_size (debaton->per_cu);
+
+  result = address_from_register (data_ptr_type, regnum, debaton->frame);
   return result;
 }
 
@@ -323,6 +356,52 @@ dwarf_expr_read_reg (void *baton, int dwarf_regnum)
 static void
 dwarf_expr_read_mem (void *baton, gdb_byte *buf, CORE_ADDR addr, size_t len)
 {
+  read_memory (addr, buf, len);
+}
+
+/* 3-7-12 andrewg@cray.com: Contributed by Cray Inc. */
+/* Read memory at ADDR (length LEN) for address class addr_space into BUF.  */
+static void
+dwarf_expr_read_mem_space (void *baton, gdb_byte *buf, ULONGEST addr_space,
+			 CORE_ADDR addr, size_t len)
+{
+  /* FIXME: andrewg@cray.com: Note that so far we only know about CUDA 
+     architectures that implement the concept of seperate address spaces. This 
+     is probably a flawed way of doing things...  */
+  struct dwarf_expr_baton *debaton = (struct dwarf_expr_baton *) baton;
+  struct gdbarch *gdbarch = get_frame_arch (debaton->frame);
+
+  if (gdbarch_address_class_type_flags_p (gdbarch))
+    {
+      struct type *data_ptr_type;
+      int instance_flags = 0;
+
+      data_ptr_type = builtin_type (gdbarch)->builtin_data_ptr;
+      data_ptr_type->length = len;
+      /* We need to set the TYPE_INSTANCE_FLAGS for the requested address
+         class so that the cuda_read_memory_partial function can call the
+         correct cuda_api_read_* function.  */
+      instance_flags = TYPE_INSTANCE_FLAGS (data_ptr_type);
+      instance_flags &= ~TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL;
+      /* Assume that the addr_space identifier cooresponds to either byte_size
+         or the addr_class depending on the arch. 
+         FIXME: andrewg@cray.com: This assumes that the target architecture 
+         doesn't use both byte_size and addr_class to define a address class. */
+      instance_flags |= gdbarch_address_class_type_flags (gdbarch, addr_space, 
+      											addr_space);
+      TYPE_INSTANCE_FLAGS (data_ptr_type) = instance_flags;
+
+      /* FIXME: andrewg@cray.com: At this point things are borked. We should be
+         calling the gdbarch_integer_to_address function to convert the addr to
+         its proper address based on the instance_flags of the type, and then we
+         should be calling the read_memory function for the target after that.
+         Since we do not handle reading memory in the target layer for cuda, we
+         need to call cuda_read_memory_partial here. This breaks other 
+         architectures that might be using this function.  */
+      cuda_read_memory_partial (addr, buf, len, data_ptr_type);
+      return;
+    }
+
   read_memory (addr, buf, len);
 }
 
@@ -2114,6 +2193,7 @@ static const struct dwarf_expr_context_funcs dwarf_expr_ctx_funcs =
 {
   dwarf_expr_read_reg,
   dwarf_expr_read_mem,
+  dwarf_expr_read_mem_space,
   dwarf_expr_frame_base,
   dwarf_expr_frame_cfa,
   dwarf_expr_frame_pc,
@@ -2215,16 +2295,36 @@ dwarf2_evaluate_loc_desc_full (struct type *type, struct frame_info *frame,
 	  {
 	    struct gdbarch *arch = get_frame_arch (frame);
 	    ULONGEST dwarf_regnum = value_as_long (dwarf_expr_fetch (ctx, 0));
-	    int gdb_regnum = gdbarch_dwarf2_reg_to_regnum (arch, dwarf_regnum);
+	    int gdb_regnum;
+	    bool extrapolated = false;
+
+        /* CUDA - extrapolated regmap */
+        if (gdbarch_bfd_arch_info (arch)->arch == bfd_arch_m68k)
+          gdb_regnum = cuda_reg_to_regnum_ex (arch, dwarf_regnum, &extrapolated);
+        else
+          gdb_regnum = gdbarch_dwarf2_reg_to_regnum (arch, dwarf_regnum);
 
 	    if (byte_offset != 0)
 	      error (_("cannot use offset on synthetic pointer to register"));
 	    do_cleanups (value_chain);
-	    if (gdb_regnum != -1)
-	      retval = value_from_register (type, gdb_regnum, frame);
-	    else
+        /* CUDA - DW_OP_regx */
+        /* Locations may be hard-coded with DW_OP_regx as PTX registers. The
+           liveness informations is done at a lower level (see cuda-regmap.h).
+           Therefore, it is possible and legal that gdb_regnum == -1. */
+        if (cuda_frame_p (get_next_frame (frame)) && gdb_regnum == -1)
+          {
+            retval = cuda_ptx_cache_get_register (frame, dwarf_regnum, type);
+            break;
+          }
+	if (gdb_regnum == -1)
 	      error (_("Unable to access DWARF register number %s"),
 		     paddress (arch, dwarf_regnum));
+	retval = value_from_register (type, gdb_regnum, frame);
+        /* CUDA - extrapolated regmap */
+        if (gdbarch_bfd_arch_info (arch)->arch == bfd_arch_m68k && extrapolated)
+          set_value_extrapolated (retval, 1);
+
+        cuda_ptx_cache_store_register (frame, dwarf_regnum, retval);
 	  }
 	  break;
 
@@ -2349,7 +2449,7 @@ struct needs_frame_baton
 
 /* Reads from registers do require a frame.  */
 static CORE_ADDR
-needs_frame_read_reg (void *baton, int regnum)
+needs_frame_read_reg (void *baton, reg_t regnum)
 {
   struct needs_frame_baton *nf_baton = baton;
 
@@ -2360,6 +2460,15 @@ needs_frame_read_reg (void *baton, int regnum)
 /* Reads from memory do not require a frame.  */
 static void
 needs_frame_read_mem (void *baton, gdb_byte *buf, CORE_ADDR addr, size_t len)
+{
+  memset (buf, 0, len);
+}
+
+/* 3-7-12 andrewg@cray.com: Contributed by Cray Inc. */
+/* Reads from memory segments do not require a frame.  */
+static void
+needs_frame_read_mem_space (void *baton, gdb_byte *buf, ULONGEST addr_space,
+			     CORE_ADDR addr, size_t len)
 {
   memset (buf, 0, len);
 }
@@ -2439,6 +2548,7 @@ static const struct dwarf_expr_context_funcs needs_frame_ctx_funcs =
 {
   needs_frame_read_reg,
   needs_frame_read_mem,
+  needs_frame_read_mem_space,
   needs_frame_frame_base,
   needs_frame_frame_cfa,
   needs_frame_frame_cfa,	/* get_frame_pc */
@@ -4162,4 +4272,60 @@ _initialize_dwarf2loc (void)
 			     NULL,
 			     show_entry_values_debug,
 			     &setdebuglist, &showdebuglist);
+}
+
+/**
+ * CUDA PTX cache local variable iterator
+ * If local variable is mapped to a PTX register, its value would be cached.
+ */
+void
+cuda_ptx_cache_local_vars_iterator (const char *name, struct symbol *symbol, void *cb)
+{
+  struct frame_info *frame =  cb;
+  struct dwarf2_loclist_baton *dlbaton = SYMBOL_LOCATION_BATON (symbol);
+  const gdb_byte *data;
+  size_t size;
+  struct dwarf_expr_baton baton;
+  struct dwarf_expr_context *ctx;
+  struct objfile *objfile;
+  struct cleanup *old_chain;
+  ULONGEST dwarf_regnum;
+  int gdb_regnum;
+  struct value *value;
+
+  if (SYMBOL_CLASS (symbol) != LOC_COMPUTED) return;
+  if (SYMBOL_COMPUTED_OPS (symbol) != &dwarf2_loclist_funcs) return;
+
+  data = dwarf2_find_location_expression (dlbaton, &size,
+                frame? get_frame_address_in_block (frame): 0);
+  if (!data || size == 0 ) return;
+
+  objfile = dwarf2_per_cu_objfile (dlbaton->per_cu);
+  baton.frame = frame;
+  baton.per_cu = dlbaton->per_cu;
+
+  ctx = new_dwarf_expr_context ();
+  old_chain = make_cleanup_free_dwarf_expr_context (ctx);
+
+  ctx->gdbarch = get_objfile_arch (objfile);
+  ctx->addr_size = dwarf2_per_cu_addr_size (dlbaton->per_cu);
+  ctx->offset = dwarf2_per_cu_text_offset (dlbaton->per_cu);
+  ctx->baton = &baton;
+  ctx->funcs = &dwarf_expr_ctx_funcs;
+
+  dwarf_expr_eval (ctx, data, size);
+  if (ctx->num_pieces == 0 && ctx->location == DWARF_VALUE_REGISTER)
+    {
+      dwarf_regnum = value_as_long (dwarf_expr_fetch (ctx, 0));
+      gdb_regnum = gdbarch_dwarf2_reg_to_regnum (get_frame_arch (frame), dwarf_regnum);
+
+      /* If PTX register to memory and/or GPU register can be established: cache it! */
+      if (gdb_regnum != -1)
+        {
+          value = value_from_register (SYMBOL_TYPE(symbol), gdb_regnum, frame);
+          cuda_ptx_cache_store_register (frame, dwarf_regnum, value);
+        }
+    }
+
+  do_cleanups (old_chain);
 }

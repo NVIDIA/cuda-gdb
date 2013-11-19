@@ -66,7 +66,7 @@ extern gdbarch_convert_from_func_ptr_addr_ftype convert_from_func_ptr_addr_ident
 
 /* No-op conversion of reg to regnum.  */
 
-extern int no_op_reg_to_regnum (struct gdbarch *gdbarch, int reg);
+extern int no_op_reg_to_regnum (struct gdbarch *gdbarch, reg_t reg);
 
 /* Do nothing version of elf_make_msymbol_special.  */
 

@@ -19,6 +19,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -27,6 +45,7 @@
 #include "dwarf2.h"
 #include "dwarf2expr.h"
 #include "gdb_assert.h"
+#include "cuda-tdep.h"
 
 /* Local prototypes.  */
 
@@ -838,7 +857,10 @@ execute_stack_op (struct dwarf_expr_context *ctx,
 	  dwarf_expr_require_composition (op_ptr, op_end, "DW_OP_regx");
 
 	  result = reg;
-	  result_val = value_from_ulongest (address_type, result);
+	  if (ctx->addr_size == 4 && ctx->gdbarch == cuda_get_gdbarch ())
+	    result_val = value_from_ulongest (builtin_type (ctx->gdbarch)->builtin_int64, result);
+	  else
+	    result_val = value_from_ulongest (address_type, result);
 	  ctx->location = DWARF_VALUE_REGISTER;
 	  break;
 
@@ -1057,6 +1079,28 @@ execute_stack_op (struct dwarf_expr_context *ctx,
 	      }
 
 	    result_val = value_from_contents_and_address (type, buf, addr);
+	    break;
+	  }
+
+	/* 3-7-12 andrewg@cray.com: Contributed by Cray Inc. */
+	case DW_OP_xderef:
+	case DW_OP_xderef_size:
+	  {
+	    int addr_size = (op == DW_OP_xderef ? ctx->addr_size : *op_ptr++);
+	    gdb_byte *buf = alloca (addr_size);
+	    CORE_ADDR addr;
+	    ULONGEST addr_ident;
+
+	    /* Get the address from the stack */
+	    addr = dwarf_expr_fetch_address (ctx, 0);
+	    dwarf_expr_pop (ctx);
+	
+	    /* Get the address space identifier from the stack */
+	    addr_ident = value_as_long (dwarf_expr_fetch (ctx, 0));
+	    dwarf_expr_pop (ctx);
+
+	    (ctx->funcs->read_mem_space) (ctx->baton, buf, addr_ident, addr, addr_size);
+	    result = extract_unsigned_integer (buf, addr_size, byte_order);
 	    break;
 	  }
 
@@ -1499,6 +1543,20 @@ execute_stack_op (struct dwarf_expr_context *ctx,
 abort_expression:
   ctx->recursion_depth--;
   gdb_assert (ctx->recursion_depth >= 0);
+}
+
+/* Stub dwarf_expr_context_funcs.read_mem_space implementation.  */
+/* 3-7-12 andrewg@cray.com: Contributed by Cray Inc. */
+/* Read memory at ADDR (length LEN) for address class addr_space into BUF.  */
+void
+ctx_no_read_mem_space (void *baton, gdb_byte *buf, ULONGEST addr_space,
+			 CORE_ADDR addr, size_t len)
+{
+  /* FIXME: andrewg@cray.com: This should be possible to implement, however
+     including cuda-tdep.h here redefines some things. If/when the read_memory
+     functionality for cuda is pushed down into the target, implement this.  */
+  internal_error (__FILE__, __LINE__,
+		  _("Support for DW_OP_xderef is unimplemented"));
 }
 
 /* Stub dwarf_expr_context_funcs.get_frame_base implementation.  */

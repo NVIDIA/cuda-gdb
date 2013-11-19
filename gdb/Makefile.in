@@ -15,6 +15,24 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+#
+# NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+# Modified from the original GDB file referenced above by the CUDA-GDB 
+# team at NVIDIA <cudatools@nvidia.com>.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License version 3 as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, see <http://www.gnu.org/licenses/>.
+#
+
 prefix = @prefix@
 exec_prefix = @exec_prefix@
 
@@ -206,14 +224,14 @@ SUBDIR_MI_OBS = \
 	mi-cmds.o mi-cmd-catch.o mi-cmd-env.o \
 	mi-cmd-var.o mi-cmd-break.o mi-cmd-stack.o \
 	mi-cmd-file.o mi-cmd-disas.o mi-symbol-cmds.o mi-cmd-target.o \
-	mi-cmd-info.o mi-interp.o \
+	mi-cmd-info.o mi-cuda.o mi-interp.o \
 	mi-main.o mi-parse.o mi-getopt.o
 SUBDIR_MI_SRCS = \
 	mi/mi-out.c mi/mi-console.c \
 	mi/mi-cmds.c mi/mi-cmd-catch.c mi/mi-cmd-env.c \
 	mi/mi-cmd-var.c mi/mi-cmd-break.c mi/mi-cmd-stack.c \
 	mi/mi-cmd-file.c mi/mi-cmd-disas.c mi/mi-symbol-cmds.c \
-	mi/mi-cmd-target.c mi/mi-cmd-info.c mi/mi-interp.c \
+	mi/mi-cmd-target.c mi/mi-cmd-info.c mi/mi-cuda.c mi/mi-interp.c \
 	mi/mi-main.c mi/mi-parse.c mi/mi-getopt.c
 SUBDIR_MI_DEPS =
 SUBDIR_MI_LDFLAGS=
@@ -541,6 +559,13 @@ ALL_TARGET_OBS = \
 	avr-tdep.o \
 	bfin-linux-tdep.o bfin-tdep.o \
 	cris-tdep.o \
+	cuda-api.o cuda-autostep.o cuda-asm.o cuda-commands.o cuda-context.o \
+	cuda-coords.o cuda-elf-image.o cuda-events.o cuda-exceptions.o \
+	cuda-frame.o cuda-gdb.o cuda-darwin-nat.o \
+	cuda-iterator.o cuda-kernel.o  cuda-linux-nat.o cuda-modules.o \
+	cuda-notifications.o cuda-options.o cuda-packet-manager.o cuda-regmap.o \
+	cuda-special-register.o cuda-state.o cuda-tdep.o cuda-textures.o \
+	cuda-utils.o cuda-convvars.o libcudbg.o libcudbgipc.o remote-cuda.o \
 	dicos-tdep.o \
 	frv-linux-tdep.o frv-tdep.o \
 	h8300-tdep.o \
@@ -837,7 +862,14 @@ gnulib/import/stddef.in.h gnulib/import/inttypes.in.h inline-frame.h skip.h \
 common/common-utils.h common/xml-utils.h common/buffer.h common/ptid.h \
 common/format.h common/host-defs.h utils.h common/queue.h common/gdb_string.h \
 common/linux-osdata.h gdb-dlfcn.h auto-load.h probe.h stap-probe.h \
-gdb_bfd.h sparc-ravenscar-thread.h ppc-ravenscar-thread.h common/linux-btrace.h
+gdb_bfd.h sparc-ravenscar-thread.h ppc-ravenscar-thread.h common/linux-btrace.h \
+cuda-api.h  cuda-autostep.h cuda-builtins.h cuda-context.h cuda-defs.h \
+cuda-events.h cuda-exceptions.h cuda-frame.h cuda-gdb.h cuda-kernel.h \
+cuda-notifications.h \
+cuda-parser.h cuda-tdep.h cuda-asm.h cuda-commands.h cuda-coords.h \
+cuda-elf-image.h cuda-iterator.h cuda-modules.h cuda-options.h cuda-convvars.h \
+cuda-packet-manager.h cuda-regmap.h cuda-special-register.h cuda-state.h \
+cuda-textures.h cuda-utils.h libcudbg.h libcudbgipc.h remote-cuda.h
 
 # Header files that already have srcdir in them, or which are in objdir.
 
@@ -930,7 +962,8 @@ COMMON_OBS = $(DEPFILES) $(CONFIG_OBS) $(YYOBJ) \
 	inferior.o osdata.o gdb_usleep.o record.o record-full.o gcore.o \
 	gdb_vecs.o jit.o progspace.o skip.o probe.o \
 	common-utils.o buffer.o ptid.o gdb-dlfcn.o common-agent.o \
-	format.o registry.o btrace.o record-btrace.o
+	format.o registry.o btrace.o record-btrace.o \
+	cuda-parser.lex.o cuda-parser.tab.o
 
 TSOBS = inflow.o
 
@@ -1049,6 +1082,14 @@ install-only: $(CONFIG_INSTALL)
 		$(SHELL) $(srcdir)/../mkinstalldirs $(DESTDIR)$(includedir)/gdb ; \
 		$(INSTALL_DATA) jit-reader.h $(DESTDIR)$(includedir)/gdb/jit-reader.h
 	@$(MAKE) DO=install "DODIRS=$(SUBDIRS)" $(FLAGS_TO_PASS) subdir_do
+
+# CUDA - cuda-gdb wrapper 
+# cuda-gdb is used with procmod. As a result the environment variables are lost
+# when cuda-gdb is launched. To work around it, we create a wrapper around
+# cuda-gdb that we install here.
+install-cuda-gdb-darwin-wrapper:
+	echo $(INSTALL_PROGRAM) $(srcdir)/cuda-gdb.sh $(DESTDIR)$(bindir)/cuda-gdb
+	$(INSTALL_PROGRAM) $(srcdir)/cuda-gdb.sh $(DESTDIR)$(bindir)/cuda-gdb
 
 install-python:
 	$(SHELL) $(srcdir)/../mkinstalldirs $(DESTDIR)$(GDB_DATADIR)/python/gdb
@@ -1444,6 +1485,13 @@ ALLDEPFILES = \
 	bfin-linux-tdep.c bfin-tdep.c \
 	bsd-uthread.c bsd-kvm.c \
 	core-regset.c \
+	cuda-api.c cuda-autostep.c cuda-asm.c cuda-commands.c cuda-context.c \
+	cuda-coords.c cuda-elf-image.c cuda-events.c cuda-exceptions.c \
+	cuda-frame.c cuda-gdb.c cuda-darwin-nat.c \
+	cuda-iterator.c cuda-kernel.c cuda-linux-nat.c cuda-modules.c \
+	cuda-notifications.c cuda-options.c cuda-packet-manager.c cuda-regmap.c \
+	cuda-special-register.c cuda-state.c cuda-tdep.c  cuda-textures.c \
+	cuda-utils.c cuda-convvars.c libcudbg.c libcudbgipc.c remote-cuda.c \
 	dcache.c dicos-tdep.c darwin-nat.c \
 	exec.c \
 	fbsd-nat.c \
@@ -1620,6 +1668,13 @@ po/$(PACKAGE).pot: force
 	-test -d po || mkdir po
 	sh -e $(srcdir)/po/gdbtext $(XGETTEXT) $(PACKAGE) . $(srcdir)
 
+#
+# YACC/LEX helper files for the CUDA commands
+#
+cuda-parser.tab.c: $(srcdir)/cuda-parser.exp.y
+	$(YACC) -d -p cuda_parser_ -b cuda-parser $<
+cuda-parser.lex.c: $(srcdir)/cuda-parser.lex.l cuda-parser.tab.c
+	$(FLEX) -ocuda-parser.lex.c -Pcuda_parser_ $<
 
 #
 # YACC/LEX dependencies
@@ -1912,6 +1967,10 @@ mi-symbol-cmds.o: $(srcdir)/mi/mi-symbol-cmds.c
 
 mi-common.o: $(srcdir)/mi/mi-common.c
 	$(COMPILE) $(srcdir)/mi/mi-common.c
+	$(POSTCOMPILE)
+
+mi-cuda.o: $(srcdir)/mi/mi-cuda.c
+	$(COMPILE) $(srcdir)/mi/mi-cuda.c
 	$(POSTCOMPILE)
 
 # gdb/common/ dependencies

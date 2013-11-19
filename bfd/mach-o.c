@@ -20,6 +20,24 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "sysdep.h"
 #include "mach-o.h"
 #include "bfd.h"
@@ -48,6 +66,18 @@ bfd_mach_o_version (bfd *abfd)
   mdata = bfd_mach_o_get_data (abfd);
 
   return mdata->header.version;
+}
+
+/* CUDA - word size */
+unsigned long
+bfd_mach_o_cputype (bfd *abfd)
+{
+  bfd_mach_o_data_struct *mdata = NULL;
+
+  BFD_ASSERT (bfd_mach_o_valid (abfd));
+  mdata = bfd_mach_o_get_data (abfd);
+
+  return mdata->header.cputype;
 }
 
 bfd_boolean
@@ -2002,6 +2032,7 @@ bfd_mach_o_write_contents (bfd *abfd)
 	case BFD_MACH_O_LC_FVMFILE:
 	case BFD_MACH_O_LC_PREPAGE:
 	case BFD_MACH_O_LC_LOAD_DYLIB:
+	case BFD_MACH_O_LC_LAZY_LOAD_DYLIB:
 	case BFD_MACH_O_LC_LOAD_WEAK_DYLIB:
 	case BFD_MACH_O_LC_ID_DYLIB:
 	case BFD_MACH_O_LC_REEXPORT_DYLIB:
@@ -2693,7 +2724,9 @@ bfd_mach_o_new_section_hook (bfd *abfd, asection *sec)
 	  s->flags = xlat->macho_sectype | xlat->macho_secattr;
 	  s->align = xlat->sectalign > bfdalign ? xlat->sectalign
 						: bfdalign;
-	  bfd_set_section_alignment (abfd, sec, s->align);
+	  /* bfd_set_section_alignment() couldn't fail. */
+	  if (!bfd_set_section_alignment (abfd, sec, s->align))
+	    return FALSE;
 	  bfd_flags = bfd_get_section_flags (abfd, sec);
 	  if (bfd_flags == SEC_NO_FLAGS)
 	    bfd_set_section_flags (abfd, sec, xlat->bfd_flags);
@@ -2993,14 +3026,18 @@ bfd_mach_o_read_symtab_symbol (bfd *abfd,
 	      /* Mach-O uses 0 to mean "no section"; not an error.  */
 	      if (section != 0)
 		{
+                  /* CUDA - Missing BFD Support */
+#if 0
 		  (*_bfd_error_handler) (_("bfd_mach_o_read_symtab_symbol: "
 					   "symbol \"%s\" specified invalid section %d (max %lu): setting to undefined"),
 					 s->symbol.name, section, mdata->nsects);
+#endif
 		}
 	      s->symbol.section = bfd_und_section_ptr;
 	    }
 	  break;
 	case BFD_MACH_O_N_INDR:
+          /* CUDA - Missing BFD Support ?!? */
 	  /* FIXME: we don't follow the BFD convention as this indirect symbol
 	     won't be followed by the referenced one.  This looks harmless
 	     unless we start using the linker.	*/
@@ -3009,9 +3046,16 @@ bfd_mach_o_read_symtab_symbol (bfd *abfd,
 	  s->symbol.value = 0;
 	  break;
 	default:
+      /* CUDA - missing Mach-o load commands */
+      /* Those commands can be safely ignored. They are included by the static
+         linker, Starting with 10.7, the linker has some options to force not
+         to use those load commands (-no_functions_starts and 
+         -no_version_load_command). */
+#if 0
 	  (*_bfd_error_handler) (_("bfd_mach_o_read_symtab_symbol: "
 				   "symbol \"%s\" specified invalid type field 0x%x: setting to undefined"),
 				 s->symbol.name, symtype);
+#endif
 	  s->symbol.section = bfd_und_section_ptr;
 	  break;
 	}
@@ -3171,6 +3215,7 @@ bfd_mach_o_read_dylib (bfd *abfd, bfd_mach_o_load_command *command)
   switch (command->type)
     {
     case BFD_MACH_O_LC_LOAD_DYLIB:
+    case BFD_MACH_O_LC_LAZY_LOAD_DYLIB:
     case BFD_MACH_O_LC_LOAD_WEAK_DYLIB:
     case BFD_MACH_O_LC_ID_DYLIB:
     case BFD_MACH_O_LC_REEXPORT_DYLIB:
@@ -3840,6 +3885,7 @@ bfd_mach_o_read_command (bfd *abfd, bfd_mach_o_load_command *command)
 	return -1;
       break;
     case BFD_MACH_O_LC_LOAD_DYLIB:
+    case BFD_MACH_O_LC_LAZY_LOAD_DYLIB:
     case BFD_MACH_O_LC_ID_DYLIB:
     case BFD_MACH_O_LC_LOAD_WEAK_DYLIB:
     case BFD_MACH_O_LC_REEXPORT_DYLIB:

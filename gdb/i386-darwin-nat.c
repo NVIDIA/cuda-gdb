@@ -47,6 +47,11 @@
 /* Read register values from the inferior process.
    If REGNO is -1, do this for all registers.
    Otherwise, REGNO specifies which register (so we can save time).  */
+/* CUDA - remove verbose warnings */
+/* The first time the application stops thread_get_state will return
+   KERN_INVALID_ARGUMENT. To avoid displaing a worrying warning message about a
+   harmless issue, filter out the warning messages for that error type. The
+   arguments should always be valid, except at the first stop. */
 static void
 i386_darwin_fetch_inferior_registers (struct target_ops *ops,
 				      struct regcache *regcache, int regno)
@@ -67,7 +72,7 @@ i386_darwin_fetch_inferior_registers (struct target_ops *ops,
 	  ret = thread_get_state
             (current_thread, x86_THREAD_STATE, (thread_state_t) & gp_regs,
              &gp_count);
-	  if (ret != KERN_SUCCESS)
+	  if (ret != KERN_SUCCESS && ret != KERN_INVALID_ARGUMENT)
 	    {
 	      printf_unfiltered (_("Error calling thread_get_state for "
 				   "GP registers for thread 0x%lx\n"),
@@ -87,7 +92,7 @@ i386_darwin_fetch_inferior_registers (struct target_ops *ops,
 	  ret = thread_get_state
             (current_thread, x86_FLOAT_STATE, (thread_state_t) & fp_regs,
              &fp_count);
-	  if (ret != KERN_SUCCESS)
+	  if (ret != KERN_SUCCESS && ret != KERN_INVALID_ARGUMENT)
 	    {
 	      printf_unfiltered (_("Error calling thread_get_state for "
 				   "float registers for thread 0x%lx\n"),
@@ -111,7 +116,7 @@ i386_darwin_fetch_inferior_registers (struct target_ops *ops,
 	  ret = thread_get_state
             (current_thread, x86_THREAD_STATE32, (thread_state_t) &gp_regs,
              &gp_count);
-	  if (ret != KERN_SUCCESS)
+	  if (ret != KERN_SUCCESS && ret != KERN_INVALID_ARGUMENT)
 	    {
 	      printf_unfiltered (_("Error calling thread_get_state for "
 				   "GP registers for thread 0x%lx\n"),
@@ -136,7 +141,7 @@ i386_darwin_fetch_inferior_registers (struct target_ops *ops,
 	  ret = thread_get_state
             (current_thread, x86_FLOAT_STATE32, (thread_state_t) &fp_regs,
              &fp_count);
-	  if (ret != KERN_SUCCESS)
+	  if (ret != KERN_SUCCESS && ret != KERN_INVALID_ARGUMENT)
 	    {
 	      printf_unfiltered (_("Error calling thread_get_state for "
 				   "float registers for thread 0x%lx\n"),
@@ -260,27 +265,71 @@ i386_darwin_store_inferior_registers (struct target_ops *ops,
     }
 }
 
-#ifdef HW_WATCHPOINT_NOT_YET_ENABLED
 /* Support for debug registers, boosted mostly from i386-linux-nat.c.  */
 
+/*
+ * CUDA - add host hardware breakpoint support 
+ *
+ * i386_darwin_dr_get/i386_darwin_dr_set 64-bit support forward ported form
+ * http://opensource.apple.com/source/gdb/gdb-1822/gdb-1822/src/gdb/macosx/i386-macosx-nat-exec.c
+ *
+ * In dr_[set|get] routines follow pattern describe below:
+ * - Determine whether thread in question runs in 32- or 64-bit mode
+ *   by issuing thread_get_state *current_thread, X86_THREAD_STATE,..)
+ *   (TODO: cache the results)
+ * - Featch threads (32-bit or 64-bit wide) debug registers
+ * - x86_debug_state_t.uds is a union that keeps 
+ *   both 32-bit and 64-bit wide debug registers
+ * - (i386_darwin_dr_get only) return requested debug register by its index
+ * - (i386_darwin_dr_set only) upate requested debug register by its index
+ * - (i386_darwin_dr-set only) issue thread_set_state to update 
+ *   debug register values of current thread
+ */
+
 static void
-i386_darwin_dr_set (int regnum, uint32_t value)
+i386_darwin_dr_set (int regnum, unsigned long value)
 {
-  int current_pid;
   thread_t current_thread;
   x86_debug_state_t dr_regs;
+  x86_thread_state_t regs;
+  unsigned int count = x86_THREAD_STATE_COUNT;
   kern_return_t ret;
-  unsigned int dr_count = x86_DEBUG_STATE_COUNT;
 
   gdb_assert (regnum >= 0 && regnum <= DR_CONTROL);
 
   current_thread = ptid_get_tid (inferior_ptid);
 
-  dr_regs.dsh.flavor = x86_DEBUG_STATE32;
-  dr_regs.dsh.count = x86_DEBUG_STATE32_COUNT;
-  dr_count = x86_DEBUG_STATE_COUNT;
+  ret = thread_get_state (current_thread, x86_THREAD_STATE,
+                          (thread_state_t) &regs, &count);
+  if (ret != KERN_SUCCESS)
+    {
+      printf_unfiltered (_("i386_darwin_dr_set: error %x, thread=%x\n"),
+                        ret, current_thread);
+      return;
+    }
+
+  if (regs.tsh.flavor != x86_THREAD_STATE32 && 
+      regs.tsh.flavor != x86_THREAD_STATE64 )
+    {
+      printf_unfiltered (
+          _("i386_darwin_dr_set: invalid thread 0x%x flavor %d\n"),
+          current_thread, regs.tsh.flavor);
+      return;
+    }
+
+  if (regs.tsh.flavor == x86_THREAD_STATE32)
+    {
+      dr_regs.dsh.flavor = x86_DEBUG_STATE32;
+      dr_regs.dsh.count = x86_DEBUG_STATE32_COUNT;
+    }
+  else
+    {
+      dr_regs.dsh.flavor = x86_DEBUG_STATE64;
+      dr_regs.dsh.count = x86_DEBUG_STATE64_COUNT;
+    }
+  count = x86_DEBUG_STATE_COUNT;
   ret = thread_get_state (current_thread, x86_DEBUG_STATE, 
-                          (thread_state_t) &dr_regs, &dr_count);
+                          (thread_state_t) &dr_regs, &count);
 
   if (ret != KERN_SUCCESS)
     {
@@ -290,36 +339,65 @@ i386_darwin_dr_set (int regnum, uint32_t value)
       MACH_CHECK_ERROR (ret);
     }
 
-  switch (regnum) 
-    {
-      case 0:
-        dr_regs.uds.ds32.__dr0 = value;
-        break;
-      case 1:
-        dr_regs.uds.ds32.__dr1 = value;
-        break;
-      case 2:
-        dr_regs.uds.ds32.__dr2 = value;
-        break;
-      case 3:
-        dr_regs.uds.ds32.__dr3 = value;
-        break;
-      case 4:
-        dr_regs.uds.ds32.__dr4 = value;
-        break;
-      case 5:
-        dr_regs.uds.ds32.__dr5 = value;
-        break;
-      case 6:
-        dr_regs.uds.ds32.__dr6 = value;
-        break;
-      case 7:
-        dr_regs.uds.ds32.__dr7 = value;
-        break;
-    }
+  if (regs.tsh.flavor==x86_THREAD_STATE32)
+    switch (regnum)
+      {
+        case 0:
+          dr_regs.uds.ds32.__dr0 = value;
+          break;
+        case 1:
+          dr_regs.uds.ds32.__dr1 = value;
+          break;
+        case 2:
+          dr_regs.uds.ds32.__dr2 = value;
+          break;
+        case 3:
+          dr_regs.uds.ds32.__dr3 = value;
+          break;
+        case 4:
+          dr_regs.uds.ds32.__dr4 = value;
+          break;
+        case 5:
+          dr_regs.uds.ds32.__dr5 = value;
+          break;
+        case 6:
+          dr_regs.uds.ds32.__dr6 = value;
+          break;
+        case 7:
+          dr_regs.uds.ds32.__dr7 = value;
+          break;
+      }
+  else
+    switch (regnum)
+      {
+        case 0:
+          dr_regs.uds.ds64.__dr0 = value;
+          break;
+        case 1:
+          dr_regs.uds.ds64.__dr1 = value;
+          break;
+        case 2:
+          dr_regs.uds.ds64.__dr2 = value;
+          break;
+        case 3:
+          dr_regs.uds.ds64.__dr3 = value;
+          break;
+        case 4:
+          dr_regs.uds.ds64.__dr4 = value;
+          break;
+        case 5:
+          dr_regs.uds.ds64.__dr5 = value;
+          break;
+        case 6:
+          dr_regs.uds.ds64.__dr6 = value;
+          break;
+        case 7:
+          dr_regs.uds.ds64.__dr7 = value;
+          break;
+      }
 
   ret = thread_set_state (current_thread, x86_DEBUG_STATE, 
-                          (thread_state_t) &dr_regs, dr_count);
+                          (thread_state_t) &dr_regs, count);
 
   if (ret != KERN_SUCCESS)
     {
@@ -330,23 +408,51 @@ i386_darwin_dr_set (int regnum, uint32_t value)
     }
 }
 
-static uint32_t
+static unsigned long
 i386_darwin_dr_get (int regnum)
 {
   thread_t current_thread;
   x86_debug_state_t dr_regs;
+  x86_thread_state_t regs;
+  unsigned int count = x86_THREAD_STATE_COUNT;
   kern_return_t ret;
-  unsigned int dr_count = x86_DEBUG_STATE_COUNT;
 
   gdb_assert (regnum >= 0 && regnum <= DR_CONTROL);
 
   current_thread = ptid_get_tid (inferior_ptid);
 
-  dr_regs.dsh.flavor = x86_DEBUG_STATE32;
-  dr_regs.dsh.count = x86_DEBUG_STATE32_COUNT;
-  dr_count = x86_DEBUG_STATE_COUNT;
+  ret = thread_get_state (current_thread, x86_THREAD_STATE,
+			   (thread_state_t) &regs, &count);
+  if (ret != KERN_SUCCESS)
+    {
+      printf_unfiltered (_("i386_darwin_dr_get: error %x, thread=%x\n"),
+			 ret, current_thread);
+      return -1;
+    }
+
+  if (regs.tsh.flavor != x86_THREAD_STATE32 &&
+      regs.tsh.flavor != x86_THREAD_STATE64 )
+    {
+      printf_unfiltered (
+          _("i386_darwin_dr_get: invalid thread 0x%x flavor %d\n"),
+          current_thread, regs.tsh.flavor);
+      return -1;
+    }
+
+  if (regs.tsh.flavor == x86_THREAD_STATE32)
+    {
+      dr_regs.dsh.flavor = x86_DEBUG_STATE32;
+      dr_regs.dsh.count = x86_DEBUG_STATE32_COUNT;
+    }
+  else
+    {
+      dr_regs.dsh.flavor = x86_DEBUG_STATE64;
+      dr_regs.dsh.count = x86_DEBUG_STATE64_COUNT;
+    }
+
+  count = x86_DEBUG_STATE_COUNT;
   ret = thread_get_state (current_thread, x86_DEBUG_STATE, 
-                          (thread_state_t) &dr_regs, &dr_count);
+                          (thread_state_t) &dr_regs, &count);
 
   if (ret != KERN_SUCCESS)
     {
@@ -356,36 +462,56 @@ i386_darwin_dr_get (int regnum)
       MACH_CHECK_ERROR (ret);
     }
 
-  switch (regnum) 
-    {
-      case 0:
-        return dr_regs.uds.ds32.__dr0;
-      case 1:
-        return dr_regs.uds.ds32.__dr1;
-      case 2:
-        return dr_regs.uds.ds32.__dr2;
-      case 3:
-        return dr_regs.uds.ds32.__dr3;
-      case 4:
-        return dr_regs.uds.ds32.__dr4;
-      case 5:
-        return dr_regs.uds.ds32.__dr5;
-      case 6:
-        return dr_regs.uds.ds32.__dr6;
-      case 7:
-        return dr_regs.uds.ds32.__dr7;
-      default:
-        return -1;
-    }
+  if (regs.tsh.flavor==x86_THREAD_STATE32)
+    switch (regnum)
+      {
+        case 0:
+          return dr_regs.uds.ds32.__dr0;
+        case 1:
+          return dr_regs.uds.ds32.__dr1;
+        case 2:
+          return dr_regs.uds.ds32.__dr2;
+        case 3:
+          return dr_regs.uds.ds32.__dr3;
+        case 4:
+          return dr_regs.uds.ds32.__dr4;
+        case 5:
+          return dr_regs.uds.ds32.__dr5;
+        case 6:
+          return dr_regs.uds.ds32.__dr6;
+        case 7:
+          return dr_regs.uds.ds32.__dr7;
+      }
+  else
+    switch (regnum)
+      {
+        case 0:
+          return dr_regs.uds.ds64.__dr0;
+        case 1:
+          return dr_regs.uds.ds64.__dr1;
+        case 2:
+          return dr_regs.uds.ds64.__dr2;
+        case 3:
+          return dr_regs.uds.ds64.__dr3;
+        case 4:
+          return dr_regs.uds.ds64.__dr4;
+        case 5:
+          return dr_regs.uds.ds64.__dr5;
+        case 6:
+          return dr_regs.uds.ds64.__dr6;
+        case 7:
+          return dr_regs.uds.ds64.__dr7;
+      }
+  return -1;
 }
 
-void
+static void
 i386_darwin_dr_set_control (unsigned long control)
 {
   i386_darwin_dr_set (DR_CONTROL, control);
 }
 
-void
+static void
 i386_darwin_dr_set_addr (int regnum, CORE_ADDR addr)
 {
   gdb_assert (regnum >= 0 && regnum <= DR_LASTADDR - DR_FIRSTADDR);
@@ -393,24 +519,23 @@ i386_darwin_dr_set_addr (int regnum, CORE_ADDR addr)
   i386_darwin_dr_set (DR_FIRSTADDR + regnum, addr);
 }
 
-CORE_ADDR
+static CORE_ADDR
 i386_darwin_dr_get_addr (int regnum)
 {
   return i386_darwin_dr_get (regnum);
 }
 
-unsigned long
+static unsigned long
 i386_darwin_dr_get_status (void)
 {
   return i386_darwin_dr_get (DR_STATUS);
 }
 
-unsigned long
+static unsigned long
 i386_darwin_dr_get_control (void)
 {
   return i386_darwin_dr_get (DR_CONTROL);
 }
-#endif
 
 void
 darwin_check_osabi (darwin_inferior *inf, thread_t thread)
@@ -585,4 +710,29 @@ darwin_complete_target (struct target_ops *target)
 
   target->to_fetch_registers = i386_darwin_fetch_inferior_registers;
   target->to_store_registers = i386_darwin_store_inferior_registers;
+
+/*
+ * CUDA - add host hardware breakpoint support 
+ *
+ * Enable HW breakpoint/watchpoint support
+ * i386_use-watchpints updates target ops with x86-specific implementation
+ * which uses i386_dr_low interface to read/update debug registers 
+ * in OS thread structure.
+ *
+ * Darwin i386 NAT implementation should implement all i386_dr_low
+ * methods which are also implemented in _initialize_i386_linux_nat
+ * defined in i386-linux-nat.c
+ */
+
+  i386_use_watchpoints (target);
+  i386_dr_low.set_control = i386_darwin_dr_set_control;
+  i386_dr_low.set_addr = i386_darwin_dr_set_addr;
+  i386_dr_low.get_addr = i386_darwin_dr_get_addr;
+  i386_dr_low.get_status = i386_darwin_dr_get_status;
+  i386_dr_low.get_control = i386_darwin_dr_get_control;
+#ifdef BFD64
+  i386_set_debug_register_length (8);
+#else
+  i386_set_debug_register_length (4);
+#endif
 }

@@ -205,8 +205,11 @@ alloc_section_addr_info (size_t num_sections)
   struct section_addr_info *sap;
   size_t size;
 
-  size = (sizeof (struct section_addr_info)
-	  +  sizeof (struct other_sections) * (num_sections - 1));
+  /* CUDA - Memory leak if num_sections equals to 0. */
+  size = sizeof (struct section_addr_info);
+  if (num_sections > 0)
+    size += sizeof (struct other_sections) * (num_sections - 1);
+
   sap = (struct section_addr_info *) xmalloc (size);
   memset (sap, 0, size);
   sap->num_sections = num_sections;

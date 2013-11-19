@@ -197,7 +197,9 @@ dump_bfd_file (const char *filename, const char *mode,
   osection = bfd_make_section_anyway (obfd, ".newsec");
   bfd_set_section_size (obfd, osection, len);
   bfd_set_section_vma (obfd, osection, vaddr);
-  bfd_set_section_alignment (obfd, osection, 0);
+  /* bfs_set_section_alignment() could not fail. */
+  if (!bfd_set_section_alignment (obfd, osection, 0))
+    return;
   bfd_set_section_flags (obfd, osection, (SEC_HAS_CONTENTS
 					  | SEC_ALLOC
 					  | SEC_LOAD));

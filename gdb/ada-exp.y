@@ -43,7 +43,7 @@
 #include "parser-defs.h"
 #include "language.h"
 #include "ada-lang.h"
-#include "bfd.h" /* Required by objfiles.h.  */
+//#include "bfd.h" /* Required by objfiles.h.  */
 #include "symfile.h" /* Required by objfiles.h.  */
 #include "objfiles.h" /* For have_full_symbols and have_partial_symbols */
 #include "frame.h"
@@ -189,7 +189,7 @@ static struct type *type_system_address (void);
 %token <typed_val_float> FLOAT
 %token TRUEKEYWORD FALSEKEYWORD
 %token COLONCOLON
-%token <sval> STRING NAME DOT_ID 
+%token <sval> STRING ADA_NAME DOT_ID 
 %type <bval> block
 %type <lval> arglist tick_arglist
 
@@ -210,8 +210,8 @@ static struct type *type_system_address (void);
 %left '*' '/' MOD REM
 %right STARSTAR ABS NOT
 
-/* Artificial token to give NAME => ... and NAME | priority over reducing 
-   NAME to <primary> and to give <primary>' priority over reducing <primary>
+/* Artificial token to give ADA_NAME => ... and ADA_NAME | priority over reducing 
+   ADA_NAME to <primary> and to give <primary>' priority over reducing <primary>
    to <simple_exp>. */
 %nonassoc VAR
 
@@ -353,11 +353,11 @@ arglist	:		{ $$ = 0; }
 
 arglist	:	exp
 			{ $$ = 1; }
-	|	NAME ARROW exp
+	|	ADA_NAME ARROW exp
 			{ $$ = 1; }
 	|	arglist ',' exp
 			{ $$ = $1 + 1; }
-	|	arglist ',' NAME ARROW exp
+	|	arglist ',' ADA_NAME ARROW exp
 			{ $$ = $1 + 1; }
 	;
 
@@ -519,7 +519,7 @@ xor_exp :       relation XOR relation
    primary TICK_ADDRESS, where a type would be invalid, it will be
    caught when evaluate_subexp in ada-lang.c tries to evaluate the
    primary, expecting a value.  Precedence rules resolve the ambiguity
-   in NAME TICK_ACCESS in favor of shifting to form a var_or_type.  A
+   in ADA_NAME TICK_ACCESS in favor of shifting to form a var_or_type.  A
    construct such as aType'access'access will again cause an error when
    aType'access evaluates to a type that evaluate_subexp attempts to 
    evaluate. */
@@ -616,15 +616,15 @@ primary :	TRUEKEYWORD
 			{ write_int (0, type_boolean ()); }
 	;
 
-primary	: 	NEW NAME
+primary	: 	NEW ADA_NAME
 			{ error (_("NEW not implemented.")); }
 	;
 
-var_or_type:	NAME   	    %prec VAR
+var_or_type:	ADA_NAME   	    %prec VAR
 				{ $$ = write_var_or_type (NULL, $1); } 
-	|	block NAME  %prec VAR
+	|	block ADA_NAME  %prec VAR
                                 { $$ = write_var_or_type ($1, $2); }
-	|       NAME TICK_ACCESS 
+	|       ADA_NAME TICK_ACCESS 
 			{ 
 			  $$ = write_var_or_type (NULL, $1);
 			  if ($$ == NULL)
@@ -632,7 +632,7 @@ var_or_type:	NAME   	    %prec VAR
 			  else
 			    $$ = lookup_pointer_type ($$);
 			}
-	|	block NAME TICK_ACCESS
+	|	block ADA_NAME TICK_ACCESS
 			{ 
 			  $$ = write_var_or_type ($1, $2);
 			  if ($$ == NULL)
@@ -643,9 +643,9 @@ var_or_type:	NAME   	    %prec VAR
 	;
 
 /* GDB extension */
-block   :       NAME COLONCOLON
+block   :       ADA_NAME COLONCOLON
 			{ $$ = block_lookup (NULL, $1.ptr); }
-	|	block NAME COLONCOLON
+	|	block ADA_NAME COLONCOLON
 			{ $$ = block_lookup ($1, $2.ptr); }
 	;
 
@@ -705,13 +705,13 @@ component_group :
 		        }
 	;
 
-/* We use this somewhat obscure definition in order to handle NAME => and
-   NAME | differently from exp => and exp |.  ARROW and '|' have a precedence
-   above that of the reduction of NAME to var_or_type.  By delaying 
+/* We use this somewhat obscure definition in order to handle ADA_NAME => and
+   ADA_NAME | differently from exp => and exp |.  ARROW and '|' have a precedence
+   above that of the reduction of ADA_NAME to var_or_type.  By delaying 
    decisions until after the => or '|', we convert the ambiguity to a 
    resolved shift/reduce conflict. */
 component_associations :
-		NAME ARROW 
+		ADA_NAME ARROW 
 			{ write_name_assoc ($1); }
 		    exp	{ $$ = 1; }
 	|	simple_exp ARROW exp
@@ -721,7 +721,7 @@ component_associations :
 			  write_exp_op_with_string (OP_NAME, empty_stoken);
 			}
 		    exp { $$ = 1; }
-	|	NAME '|' 
+	|	ADA_NAME '|' 
 		        { write_name_assoc ($1); }
 		    component_associations  { $$ = $4 + 1; }
 	|	simple_exp '|'  
@@ -1119,9 +1119,9 @@ chop_selector (char *name, int end)
   return -1;
 }
 
-/* If NAME is a string beginning with a separator (either '__', or
+/* If ADA_NAME is a string beginning with a separator (either '__', or
    '.'), chop this separator and return the result; else, return
-   NAME.  */
+   ADA_NAME.  */
 
 static char *
 chop_separator (char *name)
@@ -1156,7 +1156,7 @@ write_selectors (char *sels)
 }
 
 /* Write a variable access (OP_VAR_VALUE) to ambiguous encoded name
-   NAME[0..LEN-1], in block context BLOCK, to be resolved later.  Writes
+   ADA_NAME[0..LEN-1], in block context BLOCK, to be resolved later.  Writes
    a temporary symbol that is valid until the next call to ada_parse.
    */
 static void
@@ -1408,14 +1408,14 @@ write_var_or_type (const struct block *block, struct stoken name0)
 
 }
 
-/* Write a left side of a component association (e.g., NAME in NAME =>
-   exp).  If NAME has the form of a selected component, write it as an
+/* Write a left side of a component association (e.g., ADA_NAME in ADA_NAME =>
+   exp).  If ADA_NAME has the form of a selected component, write it as an
    ordinary expression.  If it is a simple variable that unambiguously
    corresponds to exactly one symbol that does not denote a type or an
    object renaming, also write it normally as an OP_VAR_VALUE.
    Otherwise, write it as an OP_NAME.
 
-   Unfortunately, we don't know at this point whether NAME is supposed
+   Unfortunately, we don't know at this point whether ADA_NAME is supposed
    to denote a record component name or the value of an array index.
    Therefore, it is not appropriate to disambiguate an ambiguous name
    as we normally would, nor to replace a renaming with its referent.

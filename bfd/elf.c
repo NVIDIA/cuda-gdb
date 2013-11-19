@@ -9190,7 +9190,6 @@ elfcore_write_prpsinfo (bfd  *abfd,
   free (buf);
   return NULL;
 }
-
 char *
 elfcore_write_linux_prpsinfo32
   (bfd *abfd, char *buf, int *bufsiz,

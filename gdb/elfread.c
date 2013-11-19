@@ -19,6 +19,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "bfd.h"
 #include "gdb_string.h"
@@ -147,10 +165,13 @@ elf_symfile_segments (bfd *abfd)
 	 RealView) use SHT_NOBITS for uninitialized data.  Since it is
 	 uninitialized, it doesn't need a program header.  Such
 	 binaries are not relocatable.  */
+/* CUDA - Sections and Segments do not match */
+#if 0
       if (bfd_get_section_size (sect) > 0 && j == num_segments
 	  && (bfd_get_section_flags (abfd, sect) & SEC_LOAD) != 0)
 	warning (_("Loadable section \"%s\" outside of ELF segments"),
 		 bfd_section_name (abfd, sect));
+#endif
     }
 
   return data;

@@ -99,6 +99,7 @@ mi_cmd_break_insert (char *command, char **argv, int argc)
   int pending = 0;
   int enabled = 1;
   int tracepoint = 0;
+  bool parse_addr = false;
   struct cleanup *back_to;
   enum bptype type_wanted;
   struct breakpoint_ops *ops;
@@ -183,9 +184,25 @@ mi_cmd_break_insert (char *command, char **argv, int argc)
 		 : (hardware ? bp_hardware_breakpoint : bp_breakpoint));
   ops = tracepoint ? &tracepoint_breakpoint_ops : &bkpt_breakpoint_ops;
 
+  /* CUDA - pending conditional breakpoints*/
+  if (condition != NULL)
+   {
+     char *new_address = xmalloc (1024);
+     make_cleanup (xfree, new_address);
+
+     if (thread > -1)
+       snprintf (new_address, 1024, "%s if %s thread %d", address, condition, thread);
+     else
+       snprintf (new_address, 1024, "%s if %s", address, condition);
+     parse_addr = true;
+     address = new_address;
+     condition = NULL;
+     thread = -1;
+   }
+
   create_breakpoint (get_current_arch (), address, condition, thread,
 		     NULL,
-		     0 /* condition and thread are valid.  */,
+		     parse_addr,
 		     temp_p, type_wanted,
 		     ignore_count,
 		     pending ? AUTO_BOOLEAN_TRUE : AUTO_BOOLEAN_FALSE,

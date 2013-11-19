@@ -17,6 +17,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "value.h"
 #include "symtab.h"
@@ -54,6 +72,12 @@
 
 #include "psymtab.h"
 #include "symfile.h"
+
+/* CUDA - print_args_frame */
+#include "cuda-state.h"
+#include "cuda-tdep.h"
+#include "cuda-options.h"
+#include "cuda-frame.h"
 
 void (*deprecated_selected_frame_level_changed_hook) (int);
 
@@ -96,7 +120,7 @@ static void print_frame (struct frame_info *frame, int print_level,
 			 enum print_what print_what,  int print_args,
 			 struct symtab_and_line sal);
 
-static void set_last_displayed_sal (int valid,
+void set_last_displayed_sal (int valid,
 				    struct program_space *pspace,
 				    CORE_ADDR addr,
 				    struct symtab *symtab,
@@ -682,6 +706,28 @@ print_frame_args (struct symbol *func, struct frame_info *frame,
   do_cleanups (old_chain);
 }
 
+/* CUDA - print_args_frame */
+void
+print_args_frame (struct frame_info *frame)
+{
+  struct cleanup *args_list_chain;
+  struct symbol *func;
+  volatile struct gdb_exception e;
+
+  func   = find_pc_function (get_frame_address_in_block (frame));
+
+  args_list_chain = make_cleanup_ui_out_list_begin_end (current_uiout, "args");
+  TRY_CATCH (e, RETURN_MASK_ERROR)
+  {
+    print_frame_args (func, frame, 0 /*numargs*/, gdb_stdout);
+  }
+  /* FIXME: ARGS must be a list. If one argument is a string it
+     will have " that will not be properly escaped.  */
+  /* Invoke ui_out_tuple_end.  */
+  do_cleanups (args_list_chain);
+  QUIT;
+}
+
 /* Set the current source and line to the location given by frame
    FRAME, if possible.  When CENTER is true, adjust so the relevant
    line is in the center of the next 'list'.  */
@@ -899,7 +945,7 @@ print_frame_info (struct frame_info *frame, int print_level,
  * as the place to put a breakpoint when the `break' command is
  * invoked with no arguments.  */
 
-static void
+void
 set_last_displayed_sal (int valid, struct program_space *pspace,
 			CORE_ADDR addr, struct symtab *symtab,
 			int line)
@@ -1109,6 +1155,7 @@ print_frame (struct frame_info *frame, int print_level,
   struct symbol *func;
   CORE_ADDR pc = 0;
   int pc_p;
+  const char *cuda_assert_function = "__assert_fail";
 
   pc_p = get_frame_pc_if_available (frame, &pc);
 
@@ -1142,6 +1189,15 @@ print_frame (struct frame_info *frame, int print_level,
 	annotate_frame_address_end ();
 	ui_out_text (uiout, " in ");
       }
+  /* CUDA - special handling for assert */
+  if (funname &&
+      !strncmp(funname, cuda_assert_function, strlen (cuda_assert_function)) &&
+      cuda_frame_p (get_next_frame (frame)))
+    {
+      print_args = 0;
+      funname = (char*)cuda_assert_function;
+    }
+
   annotate_frame_function_name ();
   fprintf_symbol_filtered (stb, funname ? funname : "??",
 			   funlang, DMGL_ANSI);
@@ -1149,6 +1205,13 @@ print_frame (struct frame_info *frame, int print_level,
   ui_out_wrap_hint (uiout, "   ");
   annotate_frame_args ();
       
+  /* CUDA - kernel dimensions */
+  if (cuda_frame_outermost_p (get_next_frame (frame)))
+    {
+      kernel_t kernel = cuda_current_kernel ();
+      ui_out_text (uiout, kernel_get_dimensions (kernel));
+    }
+
   ui_out_text (uiout, " (");
   if (print_args)
     {

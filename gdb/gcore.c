@@ -93,7 +93,9 @@ write_gcore_file (bfd *obfd)
 	   bfd_errmsg (bfd_get_error ()));
 
   bfd_set_section_vma (obfd, note_sec, 0);
-  bfd_set_section_alignment (obfd, note_sec, 0);
+  /* bfd_set_section_alignemnt() could not fail. */
+  if (!bfd_set_section_alignment (obfd, note_sec, 0))
+    error (_("bfd_set_section_alignment() failed."));
   bfd_set_section_size (obfd, note_sec, note_size);
 
   /* Now create the memory/load sections.  */

@@ -2437,6 +2437,14 @@ elf_lookup_lib_symbol (const struct objfile *objfile,
   return lookup_global_symbol_from_objfile (objfile, name, domain);
 }
 
+#ifdef __ANDROID__
+static int
+svr4_android_find_and_open_solib (char *soname, unsigned flags, char **temp_name)
+{
+  return openp ("/system/lib", 0, soname, flags, temp_name);
+}
+#endif
+
 extern initialize_file_ftype _initialize_svr4_solib; /* -Wmissing-prototypes */
 
 void
@@ -2458,4 +2466,7 @@ _initialize_svr4_solib (void)
   svr4_so_ops.lookup_lib_global_symbol = elf_lookup_lib_symbol;
   svr4_so_ops.same = svr4_same;
   svr4_so_ops.keep_data_in_core = svr4_keep_data_in_core;
+#ifdef __ANDROID__
+  svr4_so_ops.find_and_open_solib = svr4_android_find_and_open_solib;
+#endif
 }

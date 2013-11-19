@@ -20,6 +20,7 @@
 #include "gdbthread.h"
 #include "agent.h"
 #include "notif.h"
+#include "../cuda-utils.h"
 
 #if HAVE_UNISTD_H
 #include <unistd.h>
@@ -132,6 +133,9 @@ struct vstop_notif
 };
 
 DEFINE_QUEUE_P (notif_event_p);
+
+/* Whether cuda-gdb should create a global lock file */
+extern int cuda_use_lockfile;
 
 /* Put a stop reply to the stop reply queue.  */
 
@@ -1587,6 +1591,13 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 {
   static struct inferior_list_entry *thread_ptr;
 
+  /* Handle all CUDA RSP packet */
+  if (strncmp ("qnv.", own_buf, 4) == 0)
+    {
+      handle_cuda_packet (own_buf);
+      return;
+    }
+
   /* Reply the current thread id.  */
   if (strcmp ("qC", own_buf) == 0 && !disable_packet_qC)
     {
@@ -1817,6 +1828,11 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 	  strcat (own_buf, ";qXfer:btrace:read+");
 	}
 
+      /* CUDA - version handshake */
+      sprintf (own_buf + strlen (own_buf), ";CUDAVersion=%d.%d.%d",
+               CUDBG_API_VERSION_MAJOR,
+               CUDBG_API_VERSION_MINOR,
+               CUDBG_API_VERSION_REVISION);
       return;
     }
 
@@ -2319,6 +2335,10 @@ handle_v_requests (char *own_buf, int packet_len, int *new_packet_len)
       && handle_vFile (own_buf, packet_len, new_packet_len))
     return;
 
+  if (strncmp (own_buf, "vCUDA", 5) == 0
+      && handle_vCuda (own_buf, packet_len, new_packet_len))
+    return;
+
   if (strncmp (own_buf, "vAttach;", 8) == 0)
     {
       if ((!extended_protocol || !multi_process) && target_running ())
@@ -2543,14 +2563,22 @@ handle_status (char *own_buf)
 				all_threads.head->id, &status);
 	}
       else
-	strcpy (own_buf, "W00");
+        {
+	  strcpy (own_buf, "W00");
+
+          /* CUDA - Append the return value of api_finalize. */
+          cuda_append_api_finalize_res (own_buf + strlen (own_buf));
+        }
     }
 }
 
 static void
 gdbserver_version (void)
 {
-  printf ("GNU gdbserver %s%s\n"
+  printf ("NVIDIA (R) CUDA gdbserver\n"
+          "6.5 release\n"
+          "Portions Copyright (C) 2013 NVIDIA Corporation\n"
+          "GNU gdbserver %s%s\n"
 	  "Copyright (C) 2013 Free Software Foundation, Inc.\n"
 	  "gdbserver is free software, covered by the "
 	  "GNU General Public License.\n"
@@ -2574,7 +2602,12 @@ gdbserver_usage (FILE *stream)
 	   "  --version             Display version information and exit.\n"
 	   "  --wrapper WRAPPER --  Run WRAPPER to start new programs.\n"
 	   "  --once                Exit after the first connection has "
-								  "closed.\n");
+								  "closed.\n"
+	   "CUDA-specific options:\n"
+	   "\n"
+	   "  --cuda-use-lockfile=VALUE\n"
+	   "                     If VALUE == 0, don't create a lock file for cuda-gdb.\n"
+	   "                     Default behavior is to create a lock file.\n");
   if (REPORT_BUGS_TO[0] && stream == stdout)
     fprintf (stream, "Report bugs to \"%s\".\n", REPORT_BUGS_TO);
 }
@@ -2800,6 +2833,13 @@ main (int argc, char *argv[])
 	disable_randomization = 0;
       else if (strcmp (*next_arg, "--once") == 0)
 	run_once = 1;
+      else if (strncmp (*next_arg,
+			"--cuda-use-lockfile=",
+			sizeof ("--cuda-use-lockfile=") - 1) == 0)
+	{
+	  *next_arg += sizeof ("--cuda-use-lockfile=") - 1;
+	  cuda_use_lockfile = (atoi (*next_arg) != 0);
+	}
       else
 	{
 	  fprintf (stderr, "Unknown argument: %s\n", *next_arg);
@@ -2856,6 +2896,7 @@ main (int argc, char *argv[])
     }
 
   initialize_async_io ();
+  initialize_cuda_remote ();
   initialize_low ();
   initialize_event_loop ();
   if (target_supports_tracepoints ())
@@ -2964,6 +3005,11 @@ main (int argc, char *argv[])
 	  if (setjmp (toplevel) == 0)
 	    {
 	      detach_or_kill_for_exit ();
+              /* CUDA - final cleanup before gdbserver quits. */
+              cuda_gdb_tmpdir_cleanup_self (NULL);
+              cuda_gdb_record_remove_all (NULL);
+              cuda_cleanup_trace_messages ();
+
 	      exit (0);
 	    }
 	  else
@@ -3515,6 +3561,12 @@ process_serial_event (void)
       if (QUEUE_is_empty (notif_event_p, notif_stop.queue))
 	{
 	  fprintf (stderr, "GDBserver exiting\n");
+
+          /* CUDA - final cleanup before gdbserver quits. */
+          cuda_gdb_tmpdir_cleanup_self (NULL);
+          cuda_gdb_record_remove_all (NULL);
+          cuda_cleanup_trace_messages ();
+
 	  remote_close ();
 	  exit (0);
 	}

@@ -179,17 +179,17 @@ static const int amd64_dwarf_regmap_len =
    number used by GDB.  */
 
 static int
-amd64_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
+amd64_dwarf_reg_to_regnum (struct gdbarch *gdbarch, reg_t reg)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   int ymm0_regnum = tdep->ymm0_regnum;
   int regnum = -1;
 
-  if (reg >= 0 && reg < amd64_dwarf_regmap_len)
+  if (reg < amd64_dwarf_regmap_len)
     regnum = amd64_dwarf_regmap[reg];
 
   if (regnum == -1)
-    warning (_("Unmapped DWARF Register #%d encountered."), reg);
+    warning (_("Unmapped DWARF Register #%ld encountered."), (long)reg);
   else if (ymm0_regnum >= 0
 	   && i386_xmm_regnum_p (gdbarch, regnum))
     regnum += ymm0_regnum - I387_XMM0_REGNUM (tdep);

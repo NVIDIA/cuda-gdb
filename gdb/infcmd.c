@@ -17,6 +17,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include "defs.h"
 #include "arch-utils.h"
 #include <signal.h>
@@ -57,6 +75,8 @@
 #include "continuations.h"
 #include "linespec.h"
 #include "cli/cli-utils.h"
+#include "cuda-exceptions.h"
+#include "cuda-utils.h"
 
 /* Local functions: */
 
@@ -93,7 +113,7 @@ static void signal_command (char *, int);
 
 static void jump_command (char *, int);
 
-static void step_1 (int, int, char *);
+void step_1 (int, int, char *);
 static void step_once (int skip_subroutines, int single_inst,
 		       int count, int thread);
 
@@ -495,6 +515,11 @@ kill_if_already_running (int from_tty)
 	  && !query (_("The program being debugged has been started already.\n\
 Start it from the beginning? ")))
 	error (_("Program not restarted."));
+
+      /* CUDA - cleanup CUDA exception state */
+      if (cuda_exception_is_valid (cuda_exception))
+        cuda_exception_reset (cuda_exception);
+
       target_kill ();
     }
 }
@@ -589,6 +614,9 @@ run_command_1 (char *args, int from_tty, int tbreak_at_main)
       ui_out_text (uiout, "\n");
       ui_out_flush (uiout);
     }
+
+  /* CUDA - environment variables */
+  cuda_set_environment (current_inferior ()->environment);
 
   /* We call get_inferior_args() because we might need to compute
      the value now.  */
@@ -876,7 +904,7 @@ delete_longjmp_breakpoint_cleanup (void *arg)
   delete_longjmp_breakpoint (thread);
 }
 
-static void
+void
 step_1 (int skip_subroutines, int single_inst, char *count_string)
 {
   int count = 1;
@@ -1006,12 +1034,12 @@ step_1_continuation (void *args, int err)
    to set up a continuation to be done after the target stops (after
    this one step).  For synch targets, the caller handles further
    stepping.  */
-
 static void
 step_once (int skip_subroutines, int single_inst, int count, int thread)
 {
   struct frame_info *frame = get_current_frame ();
 
+  cuda_ptx_cache_refresh ();
   if (count > 0)
     {
       /* Don't assume THREAD is a valid thread id.  It is set to -1 if
@@ -1677,6 +1705,11 @@ finish_forward (struct symbol *function, struct frame_info *frame)
   breakpoint = set_momentary_breakpoint (gdbarch, sal,
 					 get_stack_frame_id (frame),
                                          bp_finish);
+
+  /* Don't break on specific thread when device has focus as the
+     thread focus may be incorrect. */
+  if (cuda_focus_is_device() && breakpoint != 0)
+    breakpoint->thread = -1;
 
   /* set_momentary_breakpoint invalidates FRAME.  */
   frame = NULL;
@@ -2633,6 +2666,10 @@ attach_command (char *args, int from_tty)
     }
 
   attach_command_post_wait (args, from_tty, async_exec);
+
+  /* CUDA - attach */
+  cuda_nat_attach ();
+
   discard_cleanups (back_to);
 }
 

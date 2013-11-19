@@ -38,6 +38,8 @@
 #include "objfiles.h"
 #include "tracepoint.h"
 
+#include "cuda-api.h"
+
 /* These are the interpreter setup, etc. functions for the MI
    interpreter.  */
 
@@ -318,7 +320,7 @@ mi_execute_command_input_handler (char *cmd)
 {
   mi_execute_command_wrapper (cmd);
 
-  fputs_unfiltered ("(gdb) \n", raw_stdout);
+  fputs_unfiltered ("(cuda-gdb) \n", raw_stdout);
   gdb_flush (raw_stdout);
 }
 
@@ -348,7 +350,7 @@ mi_command_loop (int mi_version)
   sevenbit_strings = 1;
 
   /* Tell the world that we're alive.  */
-  fputs_unfiltered ("(gdb) \n", raw_stdout);
+  fputs_unfiltered ("(cuda-gdb) \n", raw_stdout);
   gdb_flush (raw_stdout);
 
   start_event_loop ();
@@ -746,6 +748,14 @@ mi_on_resume (ptid_t ptid)
   if (tp->control.in_infcall)
     return;
 
+  /* CUDA - Attach/Detach support
+     If cuda-gdb is attaching or detaching, the inferior might
+     have been resumed to collect more information, and it does
+     not mean that attach/detach has completed. So we need to
+     return early and not send the "running" message to the client. */
+  if (cuda_api_attach_or_detach_in_progress ())
+    return;
+
   /* To cater for older frontends, emit ^running, but do it only once
      per each command.  We do it here, since at this point we know
      that the target was successfully resumed, and in non-async mode,
@@ -793,7 +803,7 @@ mi_on_resume (ptid_t ptid)
       /* FIXME: review the use of target_is_async_p here -- is that
 	 what we want? */
       if (!target_is_async_p ())
-	fputs_unfiltered ("(gdb) \n", raw_stdout);
+	fputs_unfiltered ("(cuda-gdb) \n", raw_stdout);
     }
   gdb_flush (raw_stdout);
 }
@@ -892,7 +902,11 @@ mi_memory_changed (struct inferior *inferior, CORE_ADDR memaddr,
 
   ui_out_field_fmt (mi_uiout, "thread-group", "i%d", inferior->num);
   ui_out_field_core_addr (mi_uiout, "addr", target_gdbarch (), memaddr);
+#ifndef __ANDROID__
   ui_out_field_fmt (mi_uiout, "len", "0x%zx", len);
+#else
+  ui_out_field_fmt (mi_uiout, "len", "0x%zx", (size_t)len);
+#endif
 
   /* Append 'type=code' into notification if MEMADDR falls in the range of
      sections contain code.  */

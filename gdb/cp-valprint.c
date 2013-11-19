@@ -480,11 +480,13 @@ cp_print_value (struct type *type, struct type *real_type,
 
   if (dont_print_vb == 0)
     {
+      /* Suppress clang's prejudice against unused return values with an unused variable */
+      void *unused;
       /* If we're at top level, carve out a completely fresh chunk of
          the obstack and use that until this particular invocation
          returns.  */
       /* Bump up the high-water mark.  Now alpha is omega.  */
-      obstack_finish (&dont_print_vb_obstack);
+      unused = obstack_finish (&dont_print_vb_obstack);
     }
 
   for (i = 0; i < n_baseclasses; i++)

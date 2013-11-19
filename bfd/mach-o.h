@@ -20,6 +20,24 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #ifndef _BFD_MACH_O_H_
 #define _BFD_MACH_O_H_
 
@@ -641,6 +659,8 @@ bfd_boolean bfd_mach_o_build_commands (bfd *);
 bfd_boolean bfd_mach_o_set_section_contents (bfd *, asection *, const void *,
                                              file_ptr, bfd_size_type);
 unsigned int bfd_mach_o_version (bfd *);
+/* CUDA - word size */
+unsigned long bfd_mach_o_cputype (bfd *);
 
 unsigned int bfd_mach_o_get_section_type_from_name (bfd *, const char *);
 unsigned int bfd_mach_o_get_section_attribute_from_name (const char *);

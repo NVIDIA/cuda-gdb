@@ -31,6 +31,7 @@
 #include "cli/cli-decode.h"
 #include "cli/cli-script.h"
 #include "gdb_assert.h"
+#include "arch-utils.h"
 
 #include "python/python.h"
 #include "interps.h"
@@ -464,6 +465,12 @@ execute_control_command (struct command_line *cmd)
 	    int cond_result;
 
 	    QUIT;
+
+            /* CUDA - while loop */
+            /* expr->gdbarch is set before entering the loop. But that may
+               change during the execution of the loop. We must reset it every
+               time. */
+            expr->gdbarch = get_current_arch ();
 
 	    /* Evaluate the expression.  */
 	    val_mark = value_mark ();

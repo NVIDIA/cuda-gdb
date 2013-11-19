@@ -882,7 +882,7 @@ evaluate_subexp_standard (struct type *expect_type,
 	  && TYPE_CODE (type) == TYPE_CODE_ARRAY)
 	{
 	  struct type *range_type = TYPE_INDEX_TYPE (type);
-	  struct type *element_type = TYPE_TARGET_TYPE (type);
+	  struct type *element_type = FIND_TARGET_TYPE (type);
 	  struct value *array = allocate_value (expect_type);
 	  int element_size = TYPE_LENGTH (check_typedef (element_type));
 	  LONGEST low_bound, high_bound, index;
@@ -943,7 +943,7 @@ evaluate_subexp_standard (struct type *expect_type,
 	  /* Get targettype of elementtype.  */
 	  while (TYPE_CODE (check_type) == TYPE_CODE_RANGE
 		 || TYPE_CODE (check_type) == TYPE_CODE_TYPEDEF)
-	    check_type = TYPE_TARGET_TYPE (check_type);
+	    check_type = FIND_TARGET_TYPE (check_type);
 
 	  if (get_discrete_bounds (element_type, &low_bound, &high_bound) < 0)
 	    error (_("(power)set type with unknown size"));
@@ -974,9 +974,9 @@ evaluate_subexp_standard (struct type *expect_type,
 	         different types. Also check if type of element is "compatible"
 	         with element type of powerset.  */
 	      if (TYPE_CODE (range_low_type) == TYPE_CODE_RANGE)
-		range_low_type = TYPE_TARGET_TYPE (range_low_type);
+		range_low_type = FIND_TARGET_TYPE (range_low_type);
 	      if (TYPE_CODE (range_high_type) == TYPE_CODE_RANGE)
-		range_high_type = TYPE_TARGET_TYPE (range_high_type);
+		range_high_type = FIND_TARGET_TYPE (range_high_type);
 	      if ((TYPE_CODE (range_low_type) != TYPE_CODE (range_high_type))
 		  || (TYPE_CODE (range_low_type) == TYPE_CODE_ENUM
 		      && (range_low_type != range_high_type)))
@@ -1313,8 +1313,8 @@ evaluate_subexp_standard (struct type *expect_type,
 	    struct type *type = value_type (called_method);
 
 	    if (type && TYPE_CODE (type) == TYPE_CODE_PTR)
-	      type = TYPE_TARGET_TYPE (type);
-	    type = TYPE_TARGET_TYPE (type);
+	      type = FIND_TARGET_TYPE (type);
+	    type = FIND_TARGET_TYPE (type);
 
 	    if (type)
 	    {
@@ -1553,7 +1553,7 @@ evaluate_subexp_standard (struct type *expect_type,
 	      argvec[0] = evaluate_subexp_with_coercion (exp, pos, noside);
 	      type = value_type (argvec[0]);
 	      if (type && TYPE_CODE (type) == TYPE_CODE_PTR)
-		type = TYPE_TARGET_TYPE (type);
+		type = FIND_TARGET_TYPE (type);
 	      if (type && TYPE_CODE (type) == TYPE_CODE_FUNC)
 		{
 		  for (; tem <= nargs && tem <= TYPE_NFIELDS (type); tem++)
@@ -1953,7 +1953,7 @@ evaluate_subexp_standard (struct type *expect_type,
 
 	  mem_offset = value_as_long (arg2);
 
-	  arg3 = value_from_pointer (lookup_pointer_type (TYPE_TARGET_TYPE (type)),
+	  arg3 = value_from_pointer (lookup_pointer_type (FIND_TARGET_TYPE (type)),
 				     value_as_long (arg1) + mem_offset);
 	  return value_ind (arg3);
 
@@ -2158,7 +2158,7 @@ evaluate_subexp_standard (struct type *expect_type,
 	    }
 
 	  if (noside == EVAL_AVOID_SIDE_EFFECTS)
-	    return value_zero (TYPE_TARGET_TYPE (type), VALUE_LVAL (arg1));
+	    return value_zero (FIND_TARGET_TYPE (type), VALUE_LVAL (arg1));
 	  else
 	    return value_subscript (arg1, value_as_long (arg2));
 	}
@@ -2197,7 +2197,7 @@ evaluate_subexp_standard (struct type *expect_type,
 	         type (like a plain int variable for example), then report this
 	         as an error.  */
 
-	      type = TYPE_TARGET_TYPE (check_typedef (value_type (arg1)));
+	      type = FIND_TARGET_TYPE (check_typedef (value_type (arg1)));
 	      if (type != NULL)
 		{
 		  arg1 = value_zero (type, VALUE_LVAL (arg1));
@@ -2511,7 +2511,7 @@ evaluate_subexp_standard (struct type *expect_type,
 
     case UNOP_IND:
       if (expect_type && TYPE_CODE (expect_type) == TYPE_CODE_PTR)
-	expect_type = TYPE_TARGET_TYPE (check_typedef (expect_type));
+	expect_type = FIND_TARGET_TYPE (check_typedef (expect_type));
       arg1 = evaluate_subexp (expect_type, exp, pos, noside);
       type = check_typedef (value_type (arg1));
       if (TYPE_CODE (type) == TYPE_CODE_METHODPTR
@@ -2530,7 +2530,7 @@ evaluate_subexp_standard (struct type *expect_type,
 	  /* In C you can dereference an array to get the 1st elt.  */
 	      || TYPE_CODE (type) == TYPE_CODE_ARRAY
 	    )
-	    return value_zero (TYPE_TARGET_TYPE (type),
+	    return value_zero (FIND_TARGET_TYPE (type),
 			       lval_memory);
 	  else if (TYPE_CODE (type) == TYPE_CODE_INT)
 	    /* GDB allows dereferencing an int.  */

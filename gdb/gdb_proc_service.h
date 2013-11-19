@@ -53,6 +53,10 @@
 #include <sys/procfs.h>
 #endif
 
+#ifdef __ANDROID__
+#include <asm/elf.h>
+#endif
+
 #include "gregset.h"
 
 /* Functions in this interface return one of these status codes.  */
@@ -68,7 +72,11 @@ typedef enum
 } ps_err_e;
 
 #ifndef HAVE_LWPID_T
+#ifndef __ANDROID__
 typedef unsigned int lwpid_t;
+#else
+#include <thread_db.h> /* for lwpid */
+#endif
 #endif
 
 #ifndef HAVE_PSADDR_T

@@ -2216,6 +2216,10 @@ trace_status_mi (int on_stop)
 void
 disconnect_tracing (int from_tty)
 {
+  /* If tracing is not running - return immediately */
+  if (!current_trace_status ()->running)
+    return;
+
   /* It can happen that the target that was tracing went away on its
      own, and we didn't notice.  Get a status update, and if the
      current target doesn't even do tracing, then assume it's not

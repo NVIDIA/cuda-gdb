@@ -165,6 +165,9 @@ struct general_symbol_info
   /* The section associated with this symbol.  It can be NULL.  */
 
   struct obj_section *obj_section;
+
+  /* CUDA - mangled symbol name */
+  char *cuda_name;
 };
 
 extern void symbol_set_demangled_name (struct general_symbol_info *,
@@ -217,6 +220,12 @@ extern void symbol_set_names (struct general_symbol_info *symbol,
 			      const char *linkage_name, int len, int copy_name,
 			      struct objfile *objfile);
 
+/* CUDA - set CUDA symbol name */
+#define SYMBOL_SET_CUDA_NAME(symbol,name,len,objfile)	\
+  symbol_set_cuda_name (&(symbol)->ginfo, name, len, objfile)
+extern void symbol_set_cuda_name (struct general_symbol_info *symbol,
+                 const char *name, int len, struct objfile *objfile);
+
 /* Now come lots of name accessor macros.  Short version as to when to
    use which: Use SYMBOL_NATURAL_NAME to refer to the name of the
    symbol in the original source code.  Use SYMBOL_LINKAGE_NAME if you
@@ -242,6 +251,10 @@ extern const char *symbol_natural_name
 
 #define SYMBOL_LINKAGE_NAME(symbol)	(symbol)->ginfo.name
 
+/* Return CUDA symbol name */
+#define SYMBOL_CUDA_NAME(symbol) ((symbol)->ginfo.cuda_name ? \
+                (symbol)->ginfo.cuda_name : (symbol)->ginfo.name)
+
 /* Return the demangled name for a symbol based on the language for
    that symbol.  If no demangled name exists, return NULL.  */
 #define SYMBOL_DEMANGLED_NAME(symbol) \
@@ -262,6 +275,14 @@ extern const char *symbol_demangled_name
 #define SYMBOL_PRINT_NAME(symbol)					\
   (demangle ? SYMBOL_NATURAL_NAME (symbol) : SYMBOL_LINKAGE_NAME (symbol))
 extern int demangle;
+
+/* Macro that tests a symbol for a match against a specified name
+   string.  It tests against SYMBOL_NATURAL_NAME, and it ignores
+   whitespace and trailing parentheses.  (See strcmp_iw for details
+   about its behavior.)  */
+
+#define SYMBOL_MATCHES_NATURAL_NAME(symbol, name)			\
+  (strcmp_iw (SYMBOL_NATURAL_NAME (symbol), (name)) == 0)
 
 /* Macro that returns the name to be used when sorting and searching symbols.
    In  C++, Chill, and Java, we search for the demangled form of a name,

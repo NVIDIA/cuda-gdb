@@ -16,6 +16,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * Modified from the original GDB file referenced above by the CUDA-GDB 
+ * team at NVIDIA <cudatools@nvidia.com>.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
 #if !defined (BREAKPOINT_H)
 #define BREAKPOINT_H 1
 
@@ -24,6 +42,7 @@
 #include "vec.h"
 #include "ax.h"
 #include "command.h"
+#include "cuda-tdep.h"
 
 struct value;
 struct block;
@@ -127,6 +146,28 @@ enum bptype
        lists etc.  */
 
     bp_thread_event,
+
+    /* CUDA - auto breakpoints */
+    /* With 'set cuda break_on_launch on', internal breakpoints are set
+       on the entry address of all the CUDA kernels. Those breakpoints
+       are marked bp_cuda_auto.  */
+    bp_cuda_auto,
+
+    /* CUDA - autostep */
+    /* This is for single-step points (autostep). */
+    bp_cuda_autostep,
+
+    /* CUDA - breakpoint for error reporting */
+    /* This is an internal breakpoint that is hit when a driver API
+     * returns an error. */
+    bp_cuda_driver_api_error,
+
+    /* This is an internal breakpoint that is hit when there's a driver
+     * internal error. */
+    bp_cuda_driver_internal_error,
+
+    /* CUDA - UVM */
+    bp_cuda_uvm,
 
     /* On the same principal, an overlay manager can arrange to call a
        magic location in the inferior whenever there is an interesting
@@ -280,6 +321,9 @@ struct bp_target_info
   /* Flag that is true if the breakpoint should be left in place even
      when GDB is not connected.  */
   int persist;
+
+  /* Owner of this target info */
+  struct bp_location *owner;
 };
 
 /* GDB maintains two types of information about each breakpoint (or
@@ -380,7 +424,7 @@ struct bp_location
 
   /* Is this particular location enabled.  */
   char enabled;
-  
+
   /* Nonzero if this breakpoint is now inserted.  */
   char inserted;
 
@@ -448,6 +492,10 @@ struct bp_location
 
   char *function_name;
 
+  // NS: Don't really need it, do we?
+  /* Source file name of this address.  */
+  // char *source_file;
+
   /* Details of the placed breakpoint, when inserted.  */
   struct bp_target_info target_info;
 
@@ -476,6 +524,21 @@ struct bp_location
      to find the corresponding source file name.  */
 
   struct symtab *symtab;
+
+  /* CUDA - breakpoints */
+  struct {
+    cuda_bptype_t  type;               /* driver vs. runtime API bpt */
+    elf_image_t    elf_image;          /* ELF image of the address */
+    char           function_name[100]; /* kernel/fct name */
+    int            line_number;        /* line number */
+  } cuda;
+
+  /* CUDA - device breakpoints */
+  /* Once the location has been resolved to a CUDA address, remember that.
+     Used to avoid disabling the breakpoint when the ELF image
+     of the device kernel/function is not available upon re-setting the
+     breakpoint. */
+  bool cuda_breakpoint;
 };
 
 /* Return values for bpstat_explains_signal.  Note that the order of
@@ -625,6 +688,13 @@ struct breakpoint_ops
    specific extra command necessary for B's recreation.  */
 extern void print_recreate_thread (struct breakpoint *b, struct ui_file *fp);
 
+/* CUDA - autostep */
+enum cuda_autostep_length_type_t
+{
+  cuda_autostep_insts,
+  cuda_autostep_lines
+};
+
 enum watchpoint_triggered
 {
   /* This watchpoint definitely did not trigger.  */
@@ -744,6 +814,24 @@ struct breakpoint
        or 0 if don't care.  */
     int task;
 
+    /* CUDA - breakpoints */
+    /* Nonzero if the break command is set with an explicit device address */
+    /* Such breakpoint will be disabled on the next run */
+    char cuda_explicit_device_address;
+
+    /* CUDA - breakpoints */
+    /* Indicates that a breakpoint has or had a device location and should
+       not be disabled when all locations are removed (eg. when ELF image
+       gets unloaded).  */
+    bool cuda_breakpoint;
+
+    /* CUDA - autostep */
+    /* The length of the autostep */
+    unsigned int cuda_autostep_length;
+
+    /* The type of length for the autostep, such as lines or instructions */
+    enum cuda_autostep_length_type_t cuda_autostep_length_type;
+
     /* Count of the number of times this breakpoint was taken, dumped
        with the info, but not used for anything else.  Useful for
        seeing how many times you hit a break prior to the program
@@ -761,6 +849,7 @@ struct breakpoint
        can sometimes be NULL for enabled GDBs as not all breakpoint
        types are tracked by the Python scripting API.  */
     struct breakpoint_object *py_bp_object;
+
   };
 
 /* An instance of this type is used to represent a watchpoint.  It
@@ -1281,6 +1370,13 @@ extern void insert_breakpoints (void);
 
 extern int remove_breakpoints (void);
 
+/* CUDA - breakpoints */
+/* These functions behave the same as the ones above, except that
+   the host watchpoints are skipped. */
+extern void cuda_insert_breakpoints (void);
+
+extern int cuda_remove_breakpoints (void);
+
 extern int remove_breakpoints_pid (int pid);
 
 /* This function can be used to physically insert eventpoints from the
@@ -1425,6 +1521,13 @@ extern struct breakpoint *create_solib_event_breakpoint (struct gdbarch *,
 extern struct breakpoint *create_thread_event_breakpoint (struct gdbarch *,
 							  CORE_ADDR);
 
+/* CUDA - breakpoint for error reporting */
+extern void create_cuda_driver_api_error_breakpoint (struct gdbarch *,
+                                                     CORE_ADDR);
+extern void create_cuda_driver_internal_error_breakpoint (struct gdbarch *,
+                                                          CORE_ADDR);
+extern void create_cuda_uvm_breakpoint (struct gdbarch *, CORE_ADDR);
+
 extern void remove_jit_event_breakpoints (void);
 
 extern void remove_solib_event_breakpoints (void);
@@ -1523,6 +1626,18 @@ extern VEC(breakpoint_p) *static_tracepoints_here (CORE_ADDR addr);
 /* Function that can be passed to read_command_line to validate
    that each command is suitable for tracepoint command list.  */
 extern void check_tracepoint_command (char *line, void *closure);
+
+/* CUDA - autostep */
+struct breakpoint *cuda_find_autostep_by_addr (CORE_ADDR address);
+
+/* CUDA - breakpoint */
+bool cuda_eval_thread_at_breakpoint (uint64_t pc, cuda_coords_t *c, int b_number);
+
+/* CUDA - auto breakpoints */
+void cuda_auto_breakpoints_add_locations (elf_image_t elf_image, bool is_system);
+void cuda_auto_breakpoints_remove_locations (elf_image_t elf_image);
+void cuda_auto_breakpoints_update_breakpoints (void);
+void cuda_auto_breakpoints_cleanup_breakpoints (void);
 
 /* Call at the start and end of an "rbreak" command to register
    breakpoint numbers for a later "commands" command.  */
