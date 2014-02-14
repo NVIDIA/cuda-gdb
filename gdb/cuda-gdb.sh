@@ -1,6 +1,6 @@
 #! /bin/sh
 
-# NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+# NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
 # Modified from the original GDB file referenced above by the CUDA-GDB 
 # team at NVIDIA <cudatools@nvidia.com>.
 #

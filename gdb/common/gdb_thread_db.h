@@ -2,7 +2,11 @@
 #include <thread_db.h>
 
 #ifndef LIBTHREAD_DB_SO
+#ifdef __ANDROID__
+#define LIBTHREAD_DB_SO "libthread_db.so"
+#else
 #define LIBTHREAD_DB_SO "libthread_db.so.1"
+#endif
 #endif
 
 #ifndef LIBTHREAD_DB_SEARCH_PATH

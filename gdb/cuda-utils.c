@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -30,10 +30,15 @@
 #include "objfiles.h"
 #include "exceptions.h"
 #endif
+#ifdef __APPLE__
+#include <stddef.h>
+#include <sys/sysctl.h>
+#endif
 
 #include <ctype.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/param.h>
 #include <string.h>
 #include <dirent.h>
 #include <unistd.h>
@@ -92,7 +97,7 @@ cuda_gdb_tmpdir_create_basedir ()
   bool override_umask = true;
 
   if (getenv ("TMPDIR"))
-    snprintf (cuda_gdb_tmp_basedir, sizeof (cuda_gdb_tmp_basedir), 
+    snprintf (cuda_gdb_tmp_basedir, sizeof (cuda_gdb_tmp_basedir),
               "%s/cuda-dbg", getenv ("TMPDIR"));
   else
     snprintf (cuda_gdb_tmp_basedir, sizeof (cuda_gdb_tmp_basedir),
@@ -332,8 +337,8 @@ cuda_gdb_tmpdir_setup (void)
   snprintf (dirpath, sizeof (dirpath), "%s/%u", cuda_gdb_tmp_basedir,
             getpid ());
 
-  ret = cuda_gdb_dir_create (dirpath, S_IRWXU | S_IRWXG, override_umask,
-                             &dir_exists); 
+  ret = cuda_gdb_dir_create (dirpath, S_IRWXU | S_IRWXG | S_IXOTH, override_umask,
+                             &dir_exists);
   if (ret)
     error (_("Error creating temporary directory %s\n"), dirpath);
 
@@ -422,6 +427,7 @@ cuda_gdb_bypass_signals (void)
       if ( i == GDB_SIGNAL_TRAP ||
            i == GDB_SIGNAL_KILL ||
            i == GDB_SIGNAL_STOP ||
+           i == GDB_SIGNAL_CHLD ||
            i >= GDB_SIGNAL_CUDA_UNKNOWN_EXCEPTION ) continue;
       signal_stop_update (i, 0);
       signal_pass_update (i, 1);
@@ -687,6 +693,70 @@ cuda_is_value_managed_pointer (struct value *value)
   return e.reason != 0 ? false : result;
 }
 #endif /* GDBSERVER */
+
+#ifndef __APPLE__
+static int
+cuda_gdb_uid_from_pid (int pid)
+{
+  int uid = -1;
+  FILE *procfile;
+  char buffer[MAXPATHLEN], fname[MAXPATHLEN];
+
+  /* Determine the uid by reading /proc/$pid/status */
+  sprintf (fname, "/proc/%d/status", pid);
+  procfile = fopen (fname, "r");
+  if (procfile == NULL)
+    return uid;
+
+  while (fgets (buffer, MAXPATHLEN, procfile) != NULL)
+    {
+      if (strncmp (buffer, "Uid:\t", 5) != 0)
+        continue;
+      if (sscanf (buffer+5, "%d", &uid) != 1)
+          uid = -1;
+      break;
+    }
+  fclose (procfile);
+
+  return uid;
+}
+
+#else
+
+static int
+cuda_gdb_uid_from_pid (int pid)
+{
+  int mib[4];
+  struct kinfo_proc proc;
+  size_t proc_size = sizeof (proc);
+
+  mib[0] = CTL_KERN;
+  mib[1] = KERN_PROC;
+  mib[2] = KERN_PROC_PID;
+  mib[3] = pid;
+
+  if (sysctl (mib, 4, &proc, &proc_size, NULL, 0) == 0 &&
+      proc_size > offsetof(struct kinfo_proc, kp_eproc.e_ucred.cr_uid) )
+    return proc.kp_eproc.e_ucred.cr_uid;
+
+  return -1;
+}
+#endif
+
+bool
+cuda_gdb_chown_to_pid_uid (int pid, const char *path)
+{
+  int uid;
+
+  if (pid <= 0)
+    return true;
+
+  uid = cuda_gdb_uid_from_pid (pid);
+  if (uid == -1)
+    return true;
+
+  return chown (path, uid, -1) == 0;
+}
 
 void
 cuda_utils_initialize (void)

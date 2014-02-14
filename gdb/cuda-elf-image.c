@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -173,8 +173,10 @@ cuda_elf_image_save (elf_image_t elf_image, void *image)
   context_id = context_get_id (context);
   module_id  = module_get_id (elf_image->module);
   snprintf (elf_image->objfile_path, sizeof (elf_image->objfile_path),
-            "%s/elf.%"PRIx64".%"PRIx64".o.XXXXXX",
-            cuda_gdb_session_get_dir (), context_id, module_id);
+            "%s/elf.%llx.%llx.o.XXXXXX",
+            cuda_gdb_session_get_dir (),
+            (unsigned long long)context_id,
+            (unsigned long long)module_id);
 
   object_file_fd = mkstemp (elf_image->objfile_path);
   if (object_file_fd == -1)
@@ -234,8 +236,9 @@ cuda_elf_image_load (elf_image_t elf_image, bool is_system)
   elf_image->objfile  = objfile;
   elf_image->loaded   = true;
   elf_image->uses_abi = cuda_is_bfd_version_call_abi (objfile->obfd);
-  cuda_trace ("loaded ELF image (name=%s, module=%"PRIx64", abi=%d, objfile=%p)",
-              objfile->name, elf_image->module, elf_image->uses_abi, objfile);
+  cuda_trace ("loaded ELF image (name=%s, module=%p, abi=%d, objfile=%p)",
+              objfile->name, elf_image->module,
+              elf_image->uses_abi, objfile);
 
   cuda_resolve_breakpoints (0, elf_image);
   cuda_auto_breakpoints_add_locations (elf_image, is_system);
@@ -250,7 +253,7 @@ cuda_elf_image_unload (elf_image_t elf_image)
   gdb_assert (objfile);
   gdb_assert (objfile->cuda_objfile);
 
-  cuda_trace ("unloading ELF image (name=%s, module=%"PRIx64")",
+  cuda_trace ("unloading ELF image (name=%s, module=%p)",
               objfile->name, elf_image->module);
 
   /* Make sure that all its users will be cleaned up. */

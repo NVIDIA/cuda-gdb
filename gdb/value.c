@@ -723,13 +723,19 @@ allocate_value (struct type *type)
 struct value *
 allocate_repeat_value (struct type *type, int count)
 {
+  struct value *val;
   int low_bound = current_language->string_lower_bound;		/* ??? */
   /* FIXME-type-allocation: need a way to free this type when we are
      done with it.  */
   struct type *array_type
     = lookup_array_range_type (type, low_bound, count + low_bound - 1);
 
-  return allocate_value (array_type);
+  val = allocate_value (array_type);
+
+  /* CUDA - memory segments */
+  TYPE_INSTANCE_FLAGS (val->type) |= TYPE_INSTANCE_FLAGS (type);
+
+  return val;
 }
 
 struct value *

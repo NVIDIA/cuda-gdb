@@ -229,6 +229,8 @@ extern void follow_inferior_reset_breakpoints (void);
 
 void set_step_info (struct frame_info *frame, struct symtab_and_line sal);
 
+extern void insert_step_resume_breakpoint_at_caller (struct frame_info *);
+
 /* From infcmd.c */
 
 extern void post_create_inferior (struct target_ops *, int);

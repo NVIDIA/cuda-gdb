@@ -323,8 +323,11 @@ cuda_cleanup ()
   int i;
   cuda_trace ("cuda_cleanup");
 
-  cuda_notification_reset ();
   api_finalize_res = cudbgAPI->finalize ();
+  /* Notification reset must be called after notification thread has
+   * been terminated, which is done as part of cudbgAPI->finalize() call.
+   */
+  cuda_notification_reset ();
   inferior_in_debug_mode = false;
   cuda_initialized = false;
   all_cuda_symbols_looked_up = 0;

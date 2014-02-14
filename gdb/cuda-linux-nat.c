@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -397,8 +397,32 @@ cuda_do_resume (struct target_ops *ops, ptid_t ptid,
    // sstep the device
   if (sstep)
     {
-      cuda_sstep_execute (inferior_ptid);
-      return;
+      if (cuda_sstep_execute (inferior_ptid))
+        return;
+      /* If single stepping failed, plant a temporary breakpoint
+         at the previous frame and resume the device */
+      if (cuda_options_software_preemption ())
+        {
+          /* Physical coordinates might change even if API call has failed
+           * if software preemption is enabled */
+          int rc;
+          uint64_t kernel_id, grid_id;
+          CuDim3 block_idx, thread_idx;
+
+          rc = cuda_coords_get_current_logical (&kernel_id, &grid_id, &block_idx, &thread_idx);
+          if (rc)
+            error (_("Failed to get current logical coordinates on GPU!"));
+          /* Invalidate current coordinates as well as device cache */
+          device_invalidate ( cuda_current_device ());
+          cuda_coords_invalidate_current ();
+
+          rc = cuda_coords_set_current_logical (kernel_id, grid_id, block_idx, thread_idx);
+          if (rc)
+            error (_("Failed to find physical coordinates matching logical ones!"));
+        }
+      cuda_sstep_reset (false);
+      insert_step_resume_breakpoint_at_caller (get_current_frame ());
+      cuda_insert_breakpoints ();
     }
 
   // resume the device
@@ -758,7 +782,10 @@ cuda_nat_wait (struct target_ops *ops, ptid_t ptid,
 
       /* Check the results */
       if (read == len && cuda_managed_address_p (addr))
-        ws->value.sig = GDB_SIGNAL_CUDA_INVALID_MANAGED_MEMORY_ACCESS;
+        {
+          ws->value.sig = GDB_SIGNAL_CUDA_INVALID_MANAGED_MEMORY_ACCESS;
+          cuda_set_signo (ws->value.sig);
+        }
     }
   cuda_managed_memory_clean_regions();
 
@@ -1280,6 +1307,10 @@ cuda_nat_attach (void)
      error (_("Attaching not possible. "
               "Please verify that software preemption is disabled "
               "and that nvidia-cuda-mps-server is not running."));
+  if ((unsigned int)internal_error_code == CUDBG_ERROR_SOME_DEVICES_WATCHDOGGED)
+     error (_("Attaching to process running on watchdogged GPU is not possible.\n"
+              "Please repeat the attempt in console mode or "
+              "restart the process with CUDA_VISIBLE_DEVICES environment variable set."));
   if (internal_error_code)
     error (_("Attach failed due to the internal driver error 0x%llx\n"),
             (unsigned long long) internal_error_code);
@@ -1390,7 +1421,7 @@ void cuda_do_detach(bool remote)
 
   /* If this flag is set, the debugger backend needs to be notified to cleanup on detach */
   if (resumeAppOnDetach)
-    cuda_api_request_cleanup_on_detach ();
+    cuda_api_request_cleanup_on_detach (resumeAppOnDetach);
 
   /* Make sure the debugger is reinitialized from scratch on reattaching
      to the inferior */

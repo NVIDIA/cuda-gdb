@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -23,6 +23,7 @@
 #ifdef GDBSERVER
 #include <server.h>
 #include <cuda-tdep-server.h>
+#include <ansidecl.h>
 #else
 #include <defs.h>
 #include <gdb_assert.h>
@@ -35,7 +36,7 @@
 #include <cudadebugger.h>
 
 /*Forward declarations */
-static void cudbg_trace(char *fmt, ...);
+static void cudbg_trace(char *fmt, ...) ATTRIBUTE_PRINTF(1, 2);
 
 /* Globals */
 extern CUDBGNotifyNewEventCallback cudbgDebugClientCallback;
@@ -1451,22 +1452,9 @@ STUB_cudbgGetNextAsyncEvent50 (CUDBGEvent50 *event)
 }
 
 static CUDBGResult
-cudbgRequestCleanupOnDetach (void)
+STUB_cudbgRequestCleanupOnDetach55 (void)
 {
-    char *ipc_buf;
-    CUDBGResult result;
-
-    CUDBG_IPC_PROFILE_START();
-
-    CUDBG_IPC_BEGIN(CUDBGAPIREQ_requestCleanupOnDetach);
-
-    CUDBG_IPC_REQUEST((void *)&ipc_buf);
-    result = *(CUDBGResult *)ipc_buf;
-    ipc_buf +=sizeof(CUDBGResult);
-
-    CUDBG_IPC_PROFILE_END(CUDBGAPIREQ_requestCleanupOnDetach, "requestCleanupOnDetach");
-
-    return result;
+    return CUDBG_ERROR_UNKNOWN;
 }
 
 static CUDBGResult
@@ -1940,6 +1928,26 @@ cudbgIsDeviceCodeAddress (uintptr_t addr, bool *isDeviceAddress)
     return result;
 }
 
+static CUDBGResult
+cudbgRequestCleanupOnDetach (uint32_t appResumeFlag)
+{
+    char *ipc_buf;
+    CUDBGResult result;
+
+    CUDBG_IPC_PROFILE_START();
+
+    CUDBG_IPC_BEGIN(CUDBGAPIREQ_requestCleanupOnDetach);
+    CUDBG_IPC_APPEND(&appResumeFlag,sizeof(appResumeFlag));
+
+    CUDBG_IPC_REQUEST((void *)&ipc_buf);
+    result = *(CUDBGResult *)ipc_buf;
+    ipc_buf +=sizeof(CUDBGResult);
+
+    CUDBG_IPC_PROFILE_END(CUDBGAPIREQ_requestCleanupOnDetach, "requestCleanupOnDetach");
+
+    return result;
+}
+
 static const struct CUDBGAPI_st cudbgCurrentApi={
     /* Initialization */
     cudbgInitialize,
@@ -2053,7 +2061,7 @@ static const struct CUDBGAPI_st cudbgCurrentApi={
     cudbgMemcheckReadErrorAddress,
     cudbgAcknowledgeSyncEvents,
     STUB_cudbgGetNextAsyncEvent50,
-    cudbgRequestCleanupOnDetach,
+    STUB_cudbgRequestCleanupOnDetach55,
     cudbgInitializeAttachStub,
     STUB_cudbgGetGridStatus50,
     
@@ -2081,6 +2089,7 @@ static const struct CUDBGAPI_st cudbgCurrentApi={
     cudbgWriteGlobalMemory,
     cudbgGetManagedMemoryRegionInfo,
     cudbgIsDeviceCodeAddress,
+    cudbgRequestCleanupOnDetach,
 };
 
 CUDBGResult
@@ -2090,7 +2099,8 @@ cudbgGetAPI(uint32_t major, uint32_t minor, uint32_t rev, CUDBGAPI *api)
     return CUDBG_SUCCESS;
 }
 
-static ATTRIBUTE_PRINTF(1, 2) void cudbg_trace(char *fmt, ...)
+ATTRIBUTE_PRINTF(1, 2) static void
+cudbg_trace(char *fmt, ...)
 {
 #ifdef GDBSERVER
   struct cuda_trace_msg *msg;

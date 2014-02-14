@@ -7549,8 +7549,9 @@ getpkt_or_notif_sane_1 (char **buf, long *sizeof_buf, int forever,
 		    not, bail out.  */
   else
     timeout = remote_timeout;
-
-#define MAX_TRIES 3
+/* CUDA: increase max timeout from 6 to 20 seconds to account for potentially
+ * slow codepathes while single-stepping through CUDA code on older GPUs */
+#define MAX_TRIES 10
 
   /* Process any number of notifications, and then return when
      we get a packet.  */

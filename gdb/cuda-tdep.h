@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -153,7 +153,7 @@ uint64_t cuda_sstep_wp_mask (void);
 ptid_t   cuda_sstep_ptid (void);
 void     cuda_sstep_set_ptid (ptid_t ptid);
 void     cuda_sstep_initialize (bool stepping);
-void     cuda_sstep_execute (ptid_t ptid);
+bool     cuda_sstep_execute (ptid_t ptid);
 void     cuda_sstep_reset (bool sstep);
 bool     cuda_sstep_kernel_has_terminated (void);
 

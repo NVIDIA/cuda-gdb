@@ -1210,7 +1210,11 @@ void
 cuda_process_api_request_cleanup_on_detach_packet (char *buf)
 {
   CUDBGResult res;
-  res = cudbgAPI->requestCleanupOnDetach ();
+  uint32_t resumeAppFlag;
+
+  extract_bin (NULL, (unsigned char *) &resumeAppFlag, sizeof (resumeAppFlag));
+
+  res = cudbgAPI->requestCleanupOnDetach (resumeAppFlag);
   append_bin ((unsigned char *) &res, buf, sizeof (res), false);
 }
 

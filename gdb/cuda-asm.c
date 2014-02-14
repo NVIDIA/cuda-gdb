@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -145,6 +145,53 @@ gdb_program_dir_len (void)
   return len;
 }
 
+/**
+ * Search for executable in PATH, cuda-gdb launch folder or current folder
+ */
+static bool exists(const char *fname)
+{
+  struct stat buf;
+  return stat (fname, &buf) == 0;
+}
+
+static const char *find_executable(const char *name)
+{
+  static char return_path[1024];
+  char path[4096];
+  char *dir;
+
+  /* Save PATH to local variable because strtok() alters the string */
+  strncpy (path, getenv("PATH"), sizeof(path));
+  path[sizeof(path)-1] = 0;
+
+  for(dir = strtok (path, ":"); dir; dir = strtok (NULL, ":"))
+    {
+      snprintf (return_path, sizeof (return_path), "%s/%s", dir, name);
+      if (exists (return_path))
+        return return_path;
+    }
+
+  snprintf (return_path, sizeof (return_path), "%.*s%s",
+            gdb_program_dir_len(), gdb_program_name, name);
+  if (exists (return_path))
+    return return_path;
+
+  return name;
+}
+
+static char *find_cuobjdump (void)
+{
+  static char cuobjdump_path[1024];
+  static bool cuobjdump_path_initialized = false;
+
+  if (cuobjdump_path_initialized)
+    return cuobjdump_path;
+
+  strncpy (cuobjdump_path, find_executable ("cuobjdump"), sizeof (cuobjdump_path));
+  cuobjdump_path_initialized = true;
+  return cuobjdump_path;
+}
+
 static void
 disasm_cache_populate_from_elf_image (disasm_cache_t disasm_cache, uint64_t pc)
 {
@@ -181,9 +228,8 @@ disasm_cache_populate_from_elf_image (disasm_cache_t disasm_cache, uint64_t pc)
   function_name = cuda_find_function_name_from_pc (pc, false);
 
   /* generate the dissassembled code using cuobjdump if available */
-  snprintf (command, sizeof (command), "%.*scuobjdump --function %s --dump-sass %s",
-        system ("which cuobjdump >/dev/null") == 0 ? 0: gdb_program_dir_len(),
-        gdb_program_name, function_name, filename);
+  snprintf (command, sizeof (command), "%s --function %s --dump-sass %s",
+            find_cuobjdump(), function_name, filename);
   sass = popen (command, "r");
 
   if (!sass)

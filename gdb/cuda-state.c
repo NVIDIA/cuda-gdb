@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -731,9 +731,6 @@ device_suspend (uint32_t dev_id)
   cuda_trace ("device %u: suspend", dev_id);
   gdb_assert (dev_id < cuda_system_get_num_devices ());
 
-  if (!device_is_any_context_present (dev_id))
-    return;
-
   cuda_api_suspend_device (dev_id);
 
   dev = &cuda_system_info.dev[dev_id];
@@ -934,7 +931,7 @@ warps_resume_until (uint32_t dev_id, uint32_t sm_id, uint64_t mask, uint64_t pc)
   return true;
 }
 
-void
+bool
 warp_single_step (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
                   uint64_t *single_stepped_warp_mask)
 {
@@ -942,6 +939,7 @@ warp_single_step (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
   uint64_t kernel_id;
   CuDim3   block_idx;
   uint32_t i;
+  bool rc;
 
   cuda_trace ("device %u sm %u warp %u: single-step", dev_id, sm_id, wp_id);
 
@@ -950,25 +948,32 @@ warp_single_step (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
   gdb_assert (wp_id < device_get_num_warps (dev_id));
 
   *single_stepped_warp_mask = 0ULL;
-  cuda_api_single_step_warp (dev_id, sm_id, wp_id, single_stepped_warp_mask);
+
+  rc = cuda_api_single_step_warp (dev_id, sm_id, wp_id, single_stepped_warp_mask);
+  if (!rc)
+    return rc;
 
   if (cuda_options_software_preemption ())
-    device_invalidate (dev_id);
-  else
     {
-      if (*single_stepped_warp_mask & ~(1ULL << wp_id))
-        {
-          warning ("Warp(s) other than the current warp had to be single-stepped.");
-          device_invalidate (dev_id);
-        }
-      /* invalidate the cache for the warps that have been single-stepped. */
-      for (i = 0; i < device_get_num_warps (dev_id); ++i)
-        if ((1ULL << i) & *single_stepped_warp_mask)
-          warp_invalidate (dev_id, sm_id, i);
-
-      /* must invalidate the SM since that's where the warp valid mask lives */
-      sm_invalidate (dev_id, sm_id, NON_RECURSIVE);
+      device_invalidate (dev_id);
+      return true;
     }
+
+  if (*single_stepped_warp_mask & ~(1ULL << wp_id))
+    {
+      warning ("Warp(s) other than the current warp had to be single-stepped.");
+      device_invalidate (dev_id);
+    }
+
+  /* invalidate the cache for the warps that have been single-stepped. */
+  for (i = 0; i < device_get_num_warps (dev_id); ++i)
+    if ((1ULL << i) & *single_stepped_warp_mask)
+      warp_invalidate (dev_id, sm_id, i);
+
+  /* must invalidate the SM since that's where the warp valid mask lives */
+  sm_invalidate (dev_id, sm_id, NON_RECURSIVE);
+
+  return true;
 }
 
 bool

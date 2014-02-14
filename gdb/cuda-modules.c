@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -72,7 +72,7 @@ module_print (module_t module)
 {
   gdb_assert (module);
 
-  cuda_trace ("      module_id 0x%"PRIx64, module->module_id);
+  cuda_trace ("      module_id 0x%llx", (unsigned long long) module->module_id);
 }
 
 context_t

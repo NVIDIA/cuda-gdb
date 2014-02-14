@@ -5358,8 +5358,7 @@ bpstat_check_breakpoint_conditions (bpstat bs, ptid_t ptid)
 	  if (within_current_scope)
             {
               /* CUDA - conditional breakpoints */
-              if (bl->cuda.type == cuda_bp_runtime_api ||
-                  bl->cuda.type == cuda_bp_driver_api)
+              if (bl->cuda_breakpoint)
                 {
                   value_is_zero
                     = catch_errors (cuda_breakpoint_cond_eval, (cond),
@@ -5735,8 +5734,8 @@ bpstat_what (bpstat bs_head)
               {
                 if (cuda_options_api_failures_ignore ())
                   /* Don't stop, just show a warning */
-                  warning (_("Cuda API error detected: %s returned (0x%"PRIx64")\n"),
-                           func_name, error_code);
+                  warning (_("Cuda API error detected: %s returned (0x%llx)\n"),
+                           func_name, (unsigned long long)error_code);
                 this_action = BPSTAT_WHAT_SINGLE;
               }
 
@@ -7760,7 +7759,8 @@ create_cuda_driver_api_error_breakpoint (struct gdbarch *gdbarch, CORE_ADDR addr
   b->enable_state = bp_enabled;
   b->addr_string  = xstrprintf ("*0x%s", paddress (gdbarch, b->loc->address));
 
-  cuda_trace_breakpoint ("add driver API error handling breakpoint %u at 0x%"PRIx64, b->number, address);
+  cuda_trace_breakpoint ("add driver API error handling breakpoint %u at 0x%llx",
+                         b->number, (unsigned long long)address);
 }
 
 /* Inform the user that the driver has hit an internal error. */
@@ -7815,7 +7815,8 @@ create_cuda_driver_internal_error_breakpoint (struct gdbarch *gdbarch, CORE_ADDR
   b->enable_state = bp_enabled;
   b->addr_string  = xstrprintf ("*0x%s", paddress (gdbarch, b->loc->address));
 
-  cuda_trace_breakpoint ("add driver internal error handling breakpoint %u at 0x%"PRIx64, b->number, address);
+  cuda_trace_breakpoint ("add driver internal error handling breakpoint %u at 0x%llx",
+                         b->number, (unsigned long long)address);
 }
 
 /* CUDA - uvm detection */
@@ -7833,7 +7834,8 @@ create_cuda_uvm_breakpoint (struct gdbarch *gdbarch, CORE_ADDR address)
   b->enable_state = bp_enabled;
   b->addr_string  = xstrprintf ("*0x%s", paddress (gdbarch, b->loc->address));
 
-  cuda_trace_breakpoint ("add uvm breakpoint %u at 0x%"PRIx64, b->number, address);
+  cuda_trace_breakpoint ("add uvm breakpoint %u at 0x%llx",
+                         b->number, (unsigned long long)address);
   cuda_uvm_breakpoint = b;
 }
 
@@ -7944,7 +7946,7 @@ cuda_promote_location (struct bp_location* loc, elf_image_t elf_image)
   uint64_t context_id = 0;
   CORE_ADDR addr = 0;
   bool found = false;
-  cuda_bptype_t bp_type = cuda_bp_none;
+  cuda_bptype_t bp_type = cuda_bp_driver_api;
   struct symbol *symbol = NULL;
   struct breakpoint *b = NULL;
 
@@ -7953,6 +7955,7 @@ cuda_promote_location (struct bp_location* loc, elf_image_t elf_image)
   gdb_assert (cuda_elf_image_is_loaded (elf_image));
 
   b          = loc->owner;
+  addr       = loc->address;
   arch       = cuda_get_gdbarch ();
   objfile    = cuda_elf_image_get_objfile (elf_image);
   module     = cuda_elf_image_get_module (elf_image);
@@ -7963,15 +7966,12 @@ cuda_promote_location (struct bp_location* loc, elf_image_t elf_image)
   if (loc->cuda.type != cuda_bp_none)
     return NULL;
 
-  /* skip if not breakpoint location address */
-  if (!loc->address)
+  /* skip if breakpoint location address is NULL */
+  if (!addr)
     return NULL;
 
-  /* driver API breakpoint by default unless specified otherwise */
-  bp_type = cuda_bp_driver_api;
-
-  /* find the device addr if not it yet */
-  if (!cuda_is_device_code_address (loc->address))
+  /* find address is not yet on device, try to promote it */
+  if (!cuda_is_device_code_address (addr))
     {
       /* skip bps that were set on the current pc when focus on host */
       if (!b->addr_string)
@@ -7983,30 +7983,26 @@ cuda_promote_location (struct bp_location* loc, elf_image_t elf_image)
       /* check if breakpoint was set on a symbol */
       found = cuda_find_pc_from_address_string (objfile, b->addr_string, &addr);
 
-      /* If no symbol found, then the breakpoint was set on a file:lineno
-       * and the address is a host address. Nothing to do. */
+      /* Nothing to do, if symbol could not be resolved to address */
       if (!found)
         return NULL;
     }
-  else
-    addr = loc->address;
 
-  /* skip if found address is still not a device address */
+  /* skip if address is still on the host */
   if (!cuda_is_device_code_address (addr))
     return NULL;
 
-  /* uninsert the existing breakpoint */
-  remove_breakpoint (loc, mark_uninserted);
-
-  /* override the location address with the device address */
-  gdb_assert (cuda_is_device_code_address (addr));
-  addr = gdbarch_skip_prologue (arch, addr);
-  loc->address = addr;
-
-  /* get the function name */
+  /* Skip prologue, get the function name and adjust breakpoint address */
+  addr   = gdbarch_skip_prologue (arch, addr);
+  addr   = adjust_breakpoint_address (arch, addr, (enum bptype)bp_type);
   symbol = find_pc_function (loc->address);
 
+  /* Remove breakpoint from specified location if address is about to be changed */
+  if (loc->address != addr)
+      remove_breakpoint (loc, mark_uninserted);
+
   /* attach all the information required for CUDA breakpoints */
+  loc->address          = addr;
   loc->cuda.elf_image   = elf_image;
   loc->cuda.type        = bp_type;
   loc->cuda.line_number = find_pc_line (addr, 0).line;
@@ -8017,8 +8013,6 @@ cuda_promote_location (struct bp_location* loc, elf_image_t elf_image)
     strncpy (loc->cuda.function_name, SYMBOL_PRINT_NAME (symbol),
              sizeof loc->cuda.function_name);
 
-  loc->address = adjust_breakpoint_address (b->gdbarch, loc->address,
-                                            (enum bptype)loc->cuda.type);
 
   cuda_trace_breakpoint ("promoted CUDA breakpoint location: breakpoint %d addr %p",
               b->number, loc->address);
@@ -8094,10 +8088,11 @@ cuda_resolve_breakpoints (int bp_number_from, elf_image_t elf_image)
   struct bp_location *loc = NULL;
   struct bp_location *promoted_loc = NULL;
   struct bp_location *created_loc = NULL;
+  struct bp_location **ploc = NULL;
   struct cleanup *cleanups = NULL;
   char *message = NULL;
 
-  cuda_trace_breakpoint ("resolve cuda breakpoints for ELF image 0x%"PRIx64, elf_image);
+  cuda_trace_breakpoint ("resolve cuda breakpoints for ELF image %p", elf_image);
 
   gdb_assert (cuda_elf_image_is_loaded (elf_image));
 
@@ -8115,8 +8110,8 @@ cuda_resolve_breakpoints (int bp_number_from, elf_image_t elf_image)
         continue;
 
       /* skip watchpoints */
-      if (b->type == bp_watchpoint || 
-          b->type == bp_hardware_watchpoint || 
+      if (b->type == bp_watchpoint ||
+          b->type == bp_hardware_watchpoint ||
           b->type == bp_read_watchpoint ||
           b->type == bp_access_watchpoint)
         continue;
@@ -8134,7 +8129,30 @@ cuda_resolve_breakpoints (int bp_number_from, elf_image_t elf_image)
       for (loc = b->loc, promoted_loc = NULL; loc && !promoted_loc; loc = loc->next)
         promoted_loc = cuda_promote_location (loc, elf_image);
       if (promoted_loc)
-        continue;
+        {
+          /* Check if there is another location with the same address */
+          for (loc = b->loc; loc != NULL; loc = loc->next)
+            if (loc != promoted_loc && loc->address == promoted_loc->address)
+              break;
+          if (!loc)
+            continue;
+
+          /* If that is the case, remove promoted location from breakpoint location chain */
+          for (ploc = &b->loc; *ploc ; ploc = &(*ploc)->next)
+            if (*ploc == promoted_loc)
+              break;
+
+          gdb_assert (*ploc == promoted_loc);
+
+          cuda_trace_breakpoint ("Removing promoted breakpoint location to avoid duplication");
+          *ploc = promoted_loc->next;
+          /* If another location type is yet not set, copy it from promoted location */
+          if (loc->cuda.type == cuda_bp_none)
+            memcpy(&loc->cuda, &promoted_loc->cuda, sizeof loc->cuda);
+          memset (&promoted_loc->cuda, 0, sizeof loc->cuda);
+          update_global_location_list (0);
+          continue;
+        }
 
       /* Create a device location from scratch:
           - if the breakpoint is still pending (happens when __forceinline__ is
@@ -8175,7 +8193,7 @@ cuda_unresolve_breakpoints (elf_image_t elf_image)
   struct bp_location *loc = NULL;
   struct bp_location **ploc = NULL;
 
-  cuda_trace_breakpoint ("unresolve cuda breakpoints for ELF image 0x%"PRIx64, elf_image);
+  cuda_trace_breakpoint ("unresolve cuda breakpoints for ELF image %p", elf_image);
 
   ALL_BREAKPOINTS (b)
     {
@@ -16877,7 +16895,8 @@ cuda_auto_breakpoints_add_location (elf_image_t elf_image, CORE_ADDR addr, bool 
       (*bp)->loc->cuda_breakpoint = true;
       (*bp)->loc->cuda.elf_image = elf_image;
 
-      cuda_trace_breakpoint ("add auto breakpoint bp %u at 0x%"PRIx64, (*bp)->number, addr);
+      cuda_trace_breakpoint ("add auto breakpoint bp %d at 0x%llx",
+                             (*bp)->number, (unsigned long long)addr);
     }
   else
     {
@@ -16892,7 +16911,8 @@ cuda_auto_breakpoints_add_location (elf_image_t elf_image, CORE_ADDR addr, bool 
       loc->cuda.elf_image = elf_image;
       loc->cuda_breakpoint = true;
 
-      cuda_trace_breakpoint ("add auto breakpoint bp %u location at 0x%"PRIx64, (*bp)->number, addr);
+      cuda_trace_breakpoint ("add auto breakpoint bp %d location at 0x%llx",
+                             (*bp)->number, (unsigned long long)addr);
     }
 
   cuda_auto_breakpoints_update_breakpoints ();
@@ -16907,7 +16927,7 @@ cuda_auto_breakpoints_remove_locations_from_bp (struct breakpoint *bp, elf_image
   if (!bp || !bp->loc)
     return;
 
-  cuda_trace ("remove auto breakpoint bp %u locations for ELF image 0x%"PRIx64, bp->number, elf_image);
+  cuda_trace ("remove auto breakpoint bp %d locations for ELF image %p", bp->number, elf_image);
 
   for (loc = *(ploc = &bp->loc); loc; loc = *(ploc = &loc->next))
     if (loc->cuda.elf_image == elf_image)

@@ -1511,10 +1511,6 @@ value_repeat (struct value *arg1, int count)
   VALUE_LVAL (val) = lval_memory;
   set_value_address (val, value_address (arg1));
 
-  /* CUDA - memory segments */
-  deprecated_set_value_type (val,
-		             TYPE_TARGET_TYPE (value_enclosing_type (val)));
-
   read_value_memory (val, 0, value_stack (val), value_address (val),
 		     value_contents_all_raw (val),
 		     TYPE_LENGTH (value_enclosing_type (val)));

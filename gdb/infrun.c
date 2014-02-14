@@ -129,8 +129,6 @@ void nullify_last_target_wait_ptid (void);
 
 static void insert_hp_step_resume_breakpoint_at_frame (struct frame_info *);
 
-static void insert_step_resume_breakpoint_at_caller (struct frame_info *);
-
 static void insert_longjmp_resume_breakpoint (struct gdbarch *, CORE_ADDR);
 
 /* When set, stop the 'step' command if we enter a function which has
@@ -5614,7 +5612,7 @@ insert_hp_step_resume_breakpoint_at_frame (struct frame_info *return_frame)
    get_prev_frame, which may stop prematurely (see the implementation
    of frame_unwind_caller_id for an example).  */
 
-static void
+void
 insert_step_resume_breakpoint_at_caller (struct frame_info *next_frame)
 {
   struct symtab_and_line sr_sal;
@@ -6825,6 +6823,23 @@ siginfo_value_read (struct value *v)
 
   if (transferred != TYPE_LENGTH (value_type (v)))
     error (_("Unable to read siginfo"));
+
+  /* CUDA - managed memory access
+   * If CUDA signal number is set to invalid managed memory access
+   * replace signal number read from target's OBJECT_SIGNAL_INFO segment.
+   */
+  if ( cuda_get_signo() == GDB_SIGNAL_CUDA_INVALID_MANAGED_MEMORY_ACCESS &&
+       value_offset(v) == 0)
+    {
+      gdb_byte *contents = value_contents_all_raw(v);
+      int signo;
+
+      memcpy (&signo, contents, sizeof(int));
+      if (signo != GDB_SIGNAL_SEGV && signo != GDB_SIGNAL_BUS)
+        return;
+      signo = cuda_get_signo();
+      memcpy(contents,&signo, sizeof(int));
+    }
 }
 
 /* This function implements the lval_computed support for writing a

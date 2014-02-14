@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -297,7 +297,7 @@ cuda_api_resume_warps_until_pc (uint32_t dev, uint32_t sm, uint64_t warp_mask, u
   return true;
 }
 
-void
+bool
 cuda_api_single_step_warp (uint32_t dev, uint32_t sm, uint32_t wp, uint64_t *warp_mask)
 {
   CUDBGResult res;
@@ -305,15 +305,19 @@ cuda_api_single_step_warp (uint32_t dev, uint32_t sm, uint32_t wp, uint64_t *war
   gdb_assert (warp_mask);
 
   if (!api_initialized)
-    return;
+    return false;
 
   res = cudbgAPI->singleStepWarp (dev, sm, wp, warp_mask);
-
   cuda_api_print_api_call_result (res);
+
+  if (res == CUDBG_ERROR_WARP_RESUME_NOT_POSSIBLE)
+    return false;
+
   if (res != CUDBG_SUCCESS)
     error (_("Error: Failed to single-step the warp "
              "(dev=%u, sm=%u, wp=%u, error=%u).\n"),
            dev, sm, wp, res);
+  return true;
 }
 
 bool
@@ -1202,11 +1206,11 @@ cuda_api_get_attach_state (void)
 }
 
 void
-cuda_api_request_cleanup_on_detach (void)
+cuda_api_request_cleanup_on_detach (uint32_t resumeAppFlag)
 {
   CUDBGResult res = CUDBG_SUCCESS;
 
-  res = cudbgAPI->requestCleanupOnDetach ();
+  res = cudbgAPI->requestCleanupOnDetach (resumeAppFlag);
 
   if (res != CUDBG_SUCCESS)
     warning (_("Failed to clear attach state (error=%u).\n"), res);
@@ -1364,6 +1368,22 @@ cuda_api_read_global_memory (uint64_t addr, void *buf, uint32_t buf_size)
 
   if (res != CUDBG_SUCCESS)
     error (_("Error: Failed to read %u bytes of global memory from 0x%llx error=%u.\n"),
+           buf_size, (unsigned long long)addr, res);
+}
+
+void
+cuda_api_write_global_memory (uint64_t addr, const void *buf, uint32_t buf_size)
+{
+  CUDBGResult res;
+
+  if (!api_initialized)
+    return;
+
+  res = cudbgAPI->writeGlobalMemory (addr, (void *)buf, buf_size);
+  cuda_api_print_api_call_result (res);
+
+  if (res != CUDBG_SUCCESS)
+    error (_("Error: Failed to write %u bytes of global memory to 0x%llx error=%u.\n"),
            buf_size, (unsigned long long)addr, res);
 }
 

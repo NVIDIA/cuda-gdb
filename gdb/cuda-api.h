@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -49,13 +49,13 @@ cuda_api_state_t cuda_api_get_state (void);
 void cuda_api_set_attach_state (cuda_attach_state_t state);
 bool cuda_api_attach_or_detach_in_progress (void);
 cuda_attach_state_t cuda_api_get_attach_state (void);
-void cuda_api_request_cleanup_on_detach (void);
+void cuda_api_request_cleanup_on_detach (uint32_t resumeAppFlag);
 
 /* Device Execution Control */
 void cuda_api_suspend_device (uint32_t dev);
 void cuda_api_resume_device (uint32_t dev);
 bool cuda_api_resume_warps_until_pc (uint32_t dev, uint32_t sm, uint64_t warp_mask, uint64_t virt_pc);
-void cuda_api_single_step_warp (uint32_t dev, uint32_t sm, uint32_t wp, uint64_t *warp_mask);
+bool cuda_api_single_step_warp (uint32_t dev, uint32_t sm, uint32_t wp, uint64_t *warp_mask);
 
 /* Breakpoints */
 bool cuda_api_set_breakpoint (uint32_t dev, uint64_t addr);
@@ -91,6 +91,7 @@ void cuda_api_read_error_pc (uint32_t dev, uint32_t sm, uint32_t wp, uint64_t *p
 void cuda_api_read_warp_state (uint32_t dev, uint32_t sm, uint32_t wp, CUDBGWarpState *state);
 void cuda_api_read_register_range (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint32_t idx, uint32_t count, uint32_t *regs);
 void cuda_api_read_global_memory (uint64_t addr, void *buf, uint32_t buf_size);
+void cuda_api_write_global_memory (uint64_t addr, const void *buf, uint32_t buf_size);
 void cuda_api_get_managed_memory_region_info (uint64_t start_addr, CUDBGMemoryInfo *meminfo, uint32_t entries_count, uint32_t *entries_written);
 
 /* Device State Alteration */

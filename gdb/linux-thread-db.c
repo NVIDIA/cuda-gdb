@@ -733,6 +733,7 @@ try_thread_db_load_1 (struct thread_db_info *info)
   /* Initialize pointers to the dynamic library functions we will use.
      Essential functions first.  */
 
+#ifndef __ANDROID__
   info->td_init_p = verbose_dlsym (info->handle, "td_init");
   if (info->td_init_p == NULL)
     return 0;
@@ -744,6 +745,7 @@ try_thread_db_load_1 (struct thread_db_info *info)
 	       thread_db_err_str (err));
       return 0;
     }
+#endif
 
   info->td_ta_new_p = verbose_dlsym (info->handle, "td_ta_new");
   if (info->td_ta_new_p == NULL)
@@ -776,9 +778,11 @@ try_thread_db_load_1 (struct thread_db_info *info)
       return 0;
     }
 
+#ifndef __ANDROID__
   info->td_ta_map_id2thr_p = verbose_dlsym (info->handle, "td_ta_map_id2thr");
   if (info->td_ta_map_id2thr_p == NULL)
     return 0;
+#endif
 
   info->td_ta_map_lwp2thr_p = verbose_dlsym (info->handle,
 					     "td_ta_map_lwp2thr");
@@ -789,9 +793,11 @@ try_thread_db_load_1 (struct thread_db_info *info)
   if (info->td_ta_thr_iter_p == NULL)
     return 0;
 
+#ifndef __ANDROID__
   info->td_thr_validate_p = verbose_dlsym (info->handle, "td_thr_validate");
   if (info->td_thr_validate_p == NULL)
     return 0;
+#endif
 
   info->td_thr_get_info_p = verbose_dlsym (info->handle, "td_thr_get_info");
   if (info->td_thr_get_info_p == NULL)

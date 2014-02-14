@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -1017,8 +1017,12 @@ cuda_cleanup ()
   /* In remote session, these functions are called on server side by cuda_linux_mourn() */
   if (!cuda_remote)
     {
-      cuda_notification_reset ();
       cuda_api_finalize ();
+      /* Notification reset must be called after notification thread has
+       * been terminated, which is done as part of cuda_api_finalize() call.
+       */
+      cuda_notification_reset ();
+
     }
 
   inferior_in_debug_mode = false;
@@ -1091,7 +1095,7 @@ cuda_initialize_uvm_detection (void)
 /* Initialize the CUDA debugger API and collect the static data about
    the devices. Once per application run. */
 static void
-cuda_initialize ()
+cuda_initialize (void)
 {
   if (cuda_initialized)
     return;
@@ -1124,6 +1128,7 @@ cuda_initialize_target ()
   uint32_t sessionId = cuda_gdb_session_get_id ();
 
   cuda_initialize ();
+
   if (inferior_in_debug_mode)
     return;
 
@@ -1610,6 +1615,7 @@ cuda_write_memory_partial (CORE_ADDR address, const gdb_byte *buf, struct type *
 void
 cuda_write_memory (CORE_ADDR address, const gdb_byte *buf, struct type *type)
 {
+  volatile struct gdb_exception e;
   int len = TYPE_LENGTH (type);
 
   /* No CUDA. Write the host memory */
@@ -1624,7 +1630,15 @@ cuda_write_memory (CORE_ADDR address, const gdb_byte *buf, struct type *type)
     return;
 
   /* Default: write the host memory as usual */
-  write_memory (address, buf, len);
+  TRY_CATCH (e, RETURN_MASK_ALL)
+    {
+      write_memory (address, buf, len);
+    }
+  if (e.reason == 0) return;
+  /* CUDA - managed memory */
+  if (!cuda_managed_address_p (address))
+    throw_exception (e);
+  cuda_api_write_global_memory ((uint64_t)address, buf, len);
 }
 
 /* Single-Stepping
@@ -1658,6 +1672,7 @@ static struct {
   uint32_t sm_id;
   uint32_t wp_id;
   uint64_t grid_id;
+  bool     grid_id_valid;
   uint64_t warp_mask;
 } cuda_sstep_info;
 
@@ -1742,7 +1757,7 @@ cuda_sstep_fast (ptid_t ptid)
   struct address_space *aspace = NULL;
   const char *inst;
   uint32_t inst_size;
-  uint64_t pc, end_pc;
+  uint64_t pc, end_pc, adj_pc;
   bool skip_subroutines, rc;
 
   if (!cuda_options_single_stepping_optimizations_enabled ())
@@ -1778,7 +1793,12 @@ cuda_sstep_fast (ptid_t ptid)
                        __func__, (long long) end_pc, 20, inst);
     if (cuda_control_flow_instruction(inst, skip_subroutines)) break;
     end_pc += inst_size;
-  } while (end_pc < tp->control.step_range_end - inst_size);
+  } while (end_pc < tp->control.step_range_end);
+
+ /* The above loop might increment end_pc beyond step_range_end.
+     In that case, adjust it to the step_range_end. */
+  if (end_pc > tp->control.step_range_end)
+    end_pc = tp->control.step_range_end;
 
   /* Do not attempt to accelerate if stepping over less than 3 instructions */
   if (end_pc <= pc || end_pc - pc < 3*inst_size) {
@@ -1787,6 +1807,19 @@ cuda_sstep_fast (ptid_t ptid)
          __func__, (long long)pc, (long long)end_pc, (unsigned)inst_size);
     return false;
   }
+
+  /* Adjust the address of breakpoint instruction is planted at*/
+  adj_pc = gdbarch_adjust_breakpoint_address (cuda_get_gdbarch(), end_pc);
+  end_pc = adj_pc > tp->control.step_range_end ? tp->control.step_range_end - inst_size : adj_pc ;
+
+  /* Check again, if window is big enough */
+  if (end_pc <= pc || end_pc - pc < 3*inst_size) {
+    cuda_trace_domain  (CUDA_TRACE_BREAKPOINT,
+         "%s: Advantage is not big enough: pc=0x%llx end_pc=0x%llx inst_size = %u",
+         __func__, (long long)pc, (long long)end_pc, (unsigned)inst_size);
+    return false;
+  }
+
 
   cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
        "%s: trying to step from %llx to %llx (inst %.*s)",
@@ -1808,22 +1841,47 @@ cuda_sstep_fast (ptid_t ptid)
   return rc;
 }
 
-void
+/**
+ * cuda_sstep_execute(ptid_t) returns true if single-stepping was successful.
+ * If false is returned, it is callee responsibility to cleanup CUDA sstep state.
+ * (usually done by calling cuda_sstep_reset(). )
+ */
+bool
 cuda_sstep_execute (ptid_t ptid)
 {
   uint32_t dev_id, sm_id, wp_id, wp;
-  kernel_t kernel;
   uint64_t grid_id, warp_mask, stepped_warp_mask;
   bool     sstep_other_warps;
+  bool     grid_id_changed;
+  bool     rc = true;
 
   gdb_assert (!cuda_sstep_info.active);
   gdb_assert (cuda_focus_is_device ());
 
   cuda_coords_get_current_physical (&dev_id, &sm_id, &wp_id, NULL);
-  kernel  = warp_get_kernel (dev_id, sm_id, wp_id);
-  grid_id = kernel_get_grid_id (kernel);
+  grid_id           = warp_get_grid_id (dev_id, sm_id, wp_id);
+  grid_id_changed   = cuda_sstep_info.grid_id_valid &&
+                      cuda_sstep_info.grid_id != grid_id;
   sstep_other_warps = cuda_sstep_info.warp_mask != 0ULL;
   stepped_warp_mask = 0ULL;
+
+  /* Remember the single-step parameters to trick GDB */
+  cuda_sstep_info.active         = true;
+  cuda_sstep_info.ptid           = ptid;
+  cuda_sstep_info.dev_id         = dev_id;
+  cuda_sstep_info.sm_id          = sm_id;
+  cuda_sstep_info.wp_id          = wp_id;
+  cuda_sstep_info.grid_id        = grid_id;
+  cuda_sstep_info.grid_id_valid  = true;
+
+  /* Do not try to single step if grid-id changed */
+  if (grid_id_changed)
+    {
+        cuda_trace("device %u sm %u: switched to new grid %llx while single-stepping!\n",
+                   dev_id, sm_id, (unsigned long long)grid_id);
+        cuda_sstep_info.warp_mask = (1ULL << wp_id);
+        return true;
+    }
 
   if (!sstep_other_warps)
     cuda_sstep_info.warp_mask = (1ULL << wp_id);
@@ -1843,7 +1901,7 @@ cuda_sstep_execute (ptid_t ptid)
          all warps instead of using this mask -- see
          warp_single_step) */
       if (!cuda_sstep_fast (ptid))
-        warp_single_step (dev_id, sm_id, wp_id, &warp_mask);
+        rc = warp_single_step (dev_id, sm_id, wp_id, &warp_mask);
     }
   else if (!cuda_sstep_fast (ptid))
     {
@@ -1852,7 +1910,8 @@ cuda_sstep_execute (ptid_t ptid)
         if (cuda_sstep_info.warp_mask & (1ULL << wp) &&
             warp_is_valid (dev_id, sm_id, wp))
           {
-            warp_single_step (dev_id, sm_id, wp, &warp_mask);
+            rc = warp_single_step (dev_id, sm_id, wp, &warp_mask);
+            if (!rc) break;
             stepped_warp_mask |= warp_mask;
           }
     }
@@ -1868,13 +1927,7 @@ cuda_sstep_execute (ptid_t ptid)
         !warp_is_valid (dev_id, sm_id, wp))
       cuda_sstep_info.warp_mask &= ~(1ULL << wp);
 
-  /* Remember the single-step parameters to trick GDB */
-  cuda_sstep_info.active    = true;
-  cuda_sstep_info.ptid      = ptid;
-  cuda_sstep_info.dev_id    = dev_id;
-  cuda_sstep_info.sm_id     = sm_id;
-  cuda_sstep_info.wp_id     = wp_id;
-  cuda_sstep_info.grid_id   = grid_id;
+  return rc;
 }
 
 void
@@ -1884,6 +1937,7 @@ cuda_sstep_initialize (bool stepping)
     cuda_sstep_info.warp_mask = (1ULL << cuda_current_warp ());
   else
     cuda_sstep_info.warp_mask = 0ULL;
+  cuda_sstep_info.grid_id_valid = false;
 }
 
 void
@@ -1896,7 +1950,10 @@ cuda_sstep_reset (bool sstep)
     reset the warp mask when switching to a resume. This will cause
     single step execute to update the warp mask after performing the step. */
   if (!sstep && cuda_focus_is_device () && cuda_sstep_is_active ())
-    cuda_sstep_info.warp_mask = 0ULL;
+    {
+      cuda_sstep_info.warp_mask = 0ULL;
+      cuda_sstep_info.grid_id_valid = false;
+    }
 
   cuda_sstep_info.active = false;
 }
@@ -2565,6 +2622,9 @@ cuda_gdb_session_create (void)
   else if (ret)
     error (_("Failed to create session directory: %s (ret=%d)."), cuda_gdb_session_dir, ret);
 
+  /* Change session folder ownership if debugging as root */
+  if (getuid() == 0)
+    cuda_gdb_chown_to_pid_uid ( ptid_get_pid (inferior_ptid), cuda_gdb_session_dir);
   return ret;
 }
 

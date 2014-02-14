@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -257,7 +257,7 @@ cuda_abi_frame_id_build (struct frame_info *this_frame, void **this_cache,
          as the API will always return only the PC to the first non syscall
          frame. Thus all frames less the syscall_call_depth will be identical
          to the frame at the syscall call depth */
-      if (this_level <= syscall_call_depth)
+      if (this_level < syscall_call_depth)
         return frame_id_build_special (cache->base, cache->pc,
                                        syscall_call_depth + this_level);
       else

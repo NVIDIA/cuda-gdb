@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -35,6 +35,8 @@
 #include <gdb_assert.h>
 #include <cuda-options.h>
 #include <cuda-tdep.h>
+#include <ptid.h>
+#include <inferior.h>
 #endif
 
 #include <cuda-utils.h>
@@ -93,7 +95,7 @@ cudbgCallbackHandler(void *arg)
 static CUDBGResult
 cudbgipcCreate(CUDBGIPC_t *ipc, int from, int to, int flags)
 {
-    snprintf(ipc->name, sizeof (ipc->name), "%s/pipe.%d.%d", 
+    snprintf(ipc->name, sizeof (ipc->name), "%s/pipe.%d.%d",
              cuda_gdb_session_get_dir (), from, to);
 
     /* If the inferior hasn't been properly set up for cuda
@@ -116,6 +118,18 @@ cudbgipcCreate(CUDBGIPC_t *ipc, int from, int to, int flags)
                        from, to, ipc->name, errno);
         return CUDBG_ERROR_COMMUNICATION_FAILURE;
     }
+
+    /* If cuda-gdb is launched as root, make pipes are writeable by UID of debugged process */
+#ifndef GDBSERVER
+    if (getuid() == 0) {
+         int pid = (int) PIDGET (inferior_ptid);
+         if (pid > 0 && !cuda_gdb_chown_to_pid_uid (pid, ipc->name)) {
+             cudbgipc_trace("Changing ownership to pid %d uid failed for %s, errno=%d",
+                       pid, ipc->name, errno);
+             return CUDBG_ERROR_COMMUNICATION_FAILURE;
+         }
+    }
+#endif
 
     if ((ipc->fd = open(ipc->name, flags)) == -1) {
         cudbgipc_trace("Pipe opening failure (from=%u, to=%u, flags=%x, file=%s, errno=%d)",

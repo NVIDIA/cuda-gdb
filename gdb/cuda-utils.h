@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -34,6 +34,9 @@ extern const char* cuda_gdb_tmpdir_getdir (void);
 /* Create a directory */
 int cuda_gdb_dir_create (const char *dir_name, uint32_t permissions,
                          bool override_umask, bool *dir_exists);
+
+/* Set file ownership to that of debugged process */
+bool cuda_gdb_chown_to_pid_uid (int pid, const char *path);
 
 /* Clean up files in a directory */
 void cuda_gdb_dir_cleanup_files (char* dirpath);

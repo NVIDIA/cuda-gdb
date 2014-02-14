@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -68,8 +68,13 @@ cuda_do_resume (struct target_ops *ops, ptid_t ptid,
    // sstep the device
   if (sstep)
     {
-      cuda_sstep_execute (inferior_ptid);
-      return;
+      if (cuda_sstep_execute (inferior_ptid))
+        return;
+      /* If single stepping failed, plant a temporary breakpoint
+         at the previous frame and resume the device */
+      cuda_sstep_reset (false);
+      insert_step_resume_breakpoint_at_caller (get_current_frame ());
+      cuda_insert_breakpoints ();
     }
 
   // resume the device
@@ -476,6 +481,33 @@ cuda_remote_wait (struct target_ops *ops,
     }
 
   cuda_adjust_host_pc (r);
+
+  /* CUDA - managed memory */
+  if (ws->kind == TARGET_WAITKIND_STOPPED &&
+      (ws->value.sig == GDB_SIGNAL_BUS || ws->value.sig == GDB_SIGNAL_SEGV))
+    {
+      uint64_t addr = 0;
+      struct gdbarch *arch = target_gdbarch();
+      int arch_ptr_size = gdbarch_ptr_bit (arch) / 8;
+      LONGEST len = arch_ptr_size;
+      LONGEST offset = arch_ptr_size == 8 ? 0x10 : 0x0c;
+      LONGEST read = 0;
+      gdb_byte *buf = (gdb_byte *)&addr;
+      int inf_exec = is_executing (inferior_ptid);
+
+      /* Mark inferior_ptid as not executing while reading object signal info*/
+      set_executing (inferior_ptid, 0);
+      read = target_read (host_target_ops, TARGET_OBJECT_SIGNAL_INFO, NULL, buf, offset, len);
+      set_executing (inferior_ptid, inf_exec);
+
+      /* Check the results */
+      if (read == len && cuda_managed_address_p (addr))
+        {
+          ws->value.sig = GDB_SIGNAL_CUDA_INVALID_MANAGED_MEMORY_ACCESS;
+          cuda_set_signo (ws->value.sig);
+        }
+    }
+  cuda_managed_memory_clean_regions();
 
   /* Switch focus and update related data */
   cuda_update_convenience_variables ();

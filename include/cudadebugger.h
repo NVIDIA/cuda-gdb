@@ -1,5 +1,5 @@
 /*
- * Copyright 2007-2013 NVIDIA Corporation.  All rights reserved.
+ * Copyright 2007-2014 NVIDIA Corporation.  All rights reserved.
  *
  * NOTICE TO LICENSEE:
  *
@@ -90,7 +90,7 @@ typedef unsigned char bool;
 
 #define CUDBG_API_VERSION_MAJOR       6 /* Major release version number */
 #define CUDBG_API_VERSION_MINOR       0 /* Minor release version number */
-#define CUDBG_API_VERSION_REVISION  115 /* Revision (build) number */
+#define CUDBG_API_VERSION_REVISION  116 /* Revision (build) number */
 
 /*---------------------------------- Constants -------------------------------*/
 
@@ -848,7 +848,7 @@ struct CUDBGAPI_st {
     CUDBGResult (*memcheckReadErrorAddress)(uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint64_t *address, ptxStorageKind *storage);
     CUDBGResult (*acknowledgeSyncEvents)(void);
     CUDBGResult (*getNextAsyncEvent50)(CUDBGEvent50 *event);
-    CUDBGResult (*requestCleanupOnDetach)(void);
+    CUDBGResult (*requestCleanupOnDetach55)(void);
     CUDBGResult (*initializeAttachStub)(void);
     CUDBGResult (*getGridStatus50)(uint32_t dev, uint32_t gridId, CUDBGGridStatus *status);
 
@@ -876,6 +876,7 @@ struct CUDBGAPI_st {
     CUDBGResult (*writeGlobalMemory)(uint64_t addr, const void *buf, uint32_t sz);
     CUDBGResult (*getManagedMemoryRegionInfo)(uint64_t startAddress, CUDBGMemoryInfo *memoryInfo, uint32_t memoryInfo_size, uint32_t *numEntries);
     CUDBGResult (*isDeviceCodeAddress)(uintptr_t addr, bool *isDeviceAddress);
+    CUDBGResult (*requestCleanupOnDetach)(uint32_t appResumeFlag);
 };
 
 #ifdef __cplusplus

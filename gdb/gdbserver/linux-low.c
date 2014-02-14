@@ -5640,6 +5640,55 @@ read_one_ptr (CORE_ADDR memaddr, CORE_ADDR *ptr, int ptr_size)
   return ret;
 }
 
+#ifdef __ANDROID__
+static char *
+android_find_library_path (char *basename)
+{
+  char *path, *ldpath, *sep;
+  struct stat statbuf;
+  int len;
+
+  /* Return immediately if basename is NULL or contains an  absolute path */
+  if (!basename || basename[0] == '/')
+    return NULL;
+
+  path = malloc (PAGE_SIZE);
+  if (!path)
+    return path;
+
+  /* If LD_LIBRARY_PATH is defined, search there first */
+  ldpath = getenv("LD_LIBRARY_PATH");
+  while (ldpath)
+  {
+    len = strlen (ldpath);
+    sep = strchr (ldpath, ':');
+    if (sep)
+      len -= strlen(sep);
+
+    snprintf (path, PAGE_SIZE-1, "%.*s/%s", len, ldpath, basename);
+    if (stat (path, &statbuf) == 0)
+      return path;
+
+    ldpath = sep ? sep+1: NULL;
+  }
+
+  /* Otherwise search in the system path (/vendor/lib/:/system/lib/) */
+  path[PAGE_SIZE-1] = 0;
+  snprintf (path, PAGE_SIZE-1, "/vendor/lib/%s", basename);
+  if (stat (path, &statbuf) == 0)
+    return path;
+
+  path[PAGE_SIZE-1] = 0;
+  snprintf (path, PAGE_SIZE-1, "/system/lib/%s", basename);
+  if (stat (path, &statbuf) == 0)
+    return path;
+
+
+  free (path);
+  return NULL;
+}
+#endif
+
 struct link_map_offsets
   {
     /* Offset and size of r_debug.r_version.  */
@@ -5731,6 +5780,9 @@ linux_qxfer_libraries_svr4 (const char *annex, unsigned char *readbuf,
       const int ptr_size = is_elf64 ? 8 : 4;
       CORE_ADDR lm_addr, lm_prev, l_name, l_addr, l_ld, l_next, l_prev;
       int r_version, header_done = 0;
+#ifdef __ANDROID__
+      int first_entry_skipped = 0;
+#endif
 
       document = xmalloc (allocated);
       strcpy (document, "<library-list-svr4 version=\"1.0\"");
@@ -5780,11 +5832,22 @@ linux_qxfer_libraries_svr4 (const char *annex, unsigned char *readbuf,
 	  libname[0] = '\0';
 	  linux_read_memory (l_name, libname, sizeof (libname) - 1);
 	  libname[sizeof (libname) - 1] = '\0';
+#ifdef __ANDROID__
+          /* On Android the first entry is always an executable itself,
+             which is skipped by gdb anyway */
+          if (libname[0] != '\0' && !first_entry_skipped)
+            first_entry_skipped = 1;
+          else if (libname[0] != '\0')
+#else
 	  if (libname[0] != '\0')
+#endif
 	    {
 	      /* 6x the size for xml_escape_text below.  */
 	      size_t len = 6 * strlen ((char *) libname);
 	      char *name;
+#ifdef __ANDROID__
+              char *full_path = NULL;
+#endif
 
 	      if (!header_done)
 		{
@@ -5802,12 +5865,23 @@ linux_qxfer_libraries_svr4 (const char *annex, unsigned char *readbuf,
 		  allocated *= 2;
 		  p = document + document_len;
 		}
-
+#ifdef __ANDROID__
+              full_path = android_find_library_path ((char *) libname);
+              if (full_path)
+                name = xml_escape_text (full_path);
+              else
+                name = xml_escape_text ((char *) libname);
+#else
 	      name = xml_escape_text ((char *) libname);
+#endif
 	      p += sprintf (p, "<library name=\"%s\" lm=\"0x%lx\" "
 			       "l_addr=\"0x%lx\" l_ld=\"0x%lx\"/>",
 			    name, (unsigned long) lm_addr,
 			    (unsigned long) l_addr, (unsigned long) l_ld);
+#ifdef __ANDROID__
+              if (full_path)
+                free (full_path);
+#endif
 	      free (name);
 	    }
 	  else if (lm_prev == 0)

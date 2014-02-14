@@ -2441,6 +2441,29 @@ elf_lookup_lib_symbol (const struct objfile *objfile,
 static int
 svr4_android_find_and_open_solib (char *soname, unsigned flags, char **temp_name)
 {
+  char *ldpath, *sep;
+  char prefix[SO_NAME_MAX_PATH_SIZE];
+  int len, rc;
+
+  /* Iterate over colon separated LD_LIBRARY_PATH */
+  for (ldpath = getenv ("LD_LIBRARY_PATH"); ldpath; ldpath = sep ? sep+1 : NULL)
+    {
+      /* Extract one item */
+      len = strlen (ldpath);
+      sep = strchr (ldpath, ':');
+      if (sep) len -= strlen(sep);
+      sprintf (prefix, "%.*s", len, ldpath);
+
+      rc = openp (prefix, 0, soname, flags, temp_name);
+      if (rc >= 0)
+        return rc;
+    }
+
+  /* Search for the library in system folders: /vendor/lib and /system/lib */
+  rc = openp ("/vendor/lib", 0, soname, flags, temp_name);
+  if (rc >= 0)
+    return rc;
+
   return openp ("/system/lib", 0, soname, flags, temp_name);
 }
 #endif

@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -108,7 +108,6 @@ typedef enum {
     CUDBGAPIREQ_clearAttachState,
     CUDBGAPIREQ_memcheckReadErrorAddress,
     CUDBGAPIREQ_acknowledgeSyncEvents,
-    CUDBGAPIREQ_requestCleanupOnDetach,
     CUDBGAPIREQ_initializeAttachStub,
 
     /* 5.5 Extensions */
@@ -133,6 +132,7 @@ typedef enum {
     CUDBGAPIREQ_writeGlobalMemory,
     CUDBGAPIREQ_getManagedMemoryRegionInfo,
     CUDBGAPIREQ_isDeviceCodeAddress,
+    CUDBGAPIREQ_requestCleanupOnDetach,
 } CUDBGAPIREQ_t;
 
 typedef enum {

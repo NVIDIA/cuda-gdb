@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -540,12 +540,12 @@ kernels_add_parent_kernel (uint32_t dev_id, uint64_t grid_id, uint64_t *parent_g
   CUDBGGridStatus grid_status;
 
   cuda_api_get_grid_status (dev_id, grid_id, &grid_status);
-  if (grid_status != CUDBG_GRID_STATUS_ACTIVE && grid_status != CUDBG_GRID_STATUS_SLEEPING) return;
+  if (grid_status == CUDBG_GRID_STATUS_INVALID) return;
 
   cuda_api_get_grid_info (dev_id, grid_id, &grid_info);
 
   cuda_api_get_grid_status (dev_id, grid_info.parentGridId, &grid_status);
-  if (grid_status != CUDBG_GRID_STATUS_ACTIVE && grid_status != CUDBG_GRID_STATUS_SLEEPING) return;
+  if (grid_status == CUDBG_GRID_STATUS_INVALID) return;
 
   cuda_api_get_grid_info (dev_id, grid_info.parentGridId, &parent_grid_info);
   *parent_grid_id = parent_grid_info.gridId64;

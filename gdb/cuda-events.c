@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2013 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2014 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -58,8 +58,8 @@ cuda_event_create_context (uint32_t dev_id, uint64_t context_id, uint32_t tid)
   contexts_t contexts;
   context_t  context;
 
-  cuda_trace_event ("CUDBG_EVENT_CTX_CREATE dev_id=%u context=%"PRIx64" tid=%u",
-                    dev_id, context_id, tid);
+  cuda_trace_event ("CUDBG_EVENT_CTX_CREATE dev_id=%u context=%llx tid=%u",
+                    dev_id, (unsigned long long)context_id, tid);
 
   if (tid == ~0U)
     error (_("A CUDA event reported an invalid thread id."));
@@ -71,8 +71,8 @@ cuda_event_create_context (uint32_t dev_id, uint64_t context_id, uint32_t tid)
   contexts_stack_context (contexts, context, tid);
 
   if (cuda_options_show_context_events ())
-    printf_unfiltered (_("[Context Create of context 0x%"PRIx64" on Device %u]\n"),
-                       context_id, dev_id);
+    printf_unfiltered (_("[Context Create of context 0x%llx on Device %u]\n"),
+                       (unsigned long long)context_id, dev_id);
 
 #ifdef __APPLE__
   if ( cuda_remote ||
@@ -94,8 +94,8 @@ cuda_event_destroy_context (uint32_t dev_id, uint64_t context_id, uint32_t tid)
   contexts_t contexts;
   context_t  context;
 
-  cuda_trace_event ("CUDBG_EVENT_CTX_DESTROY dev_id=%u context=%"PRIx64" tid=%u",
-                    dev_id, context_id);
+  cuda_trace_event ("CUDBG_EVENT_CTX_DESTROY dev_id=%u context=%llx tid=%u",
+                    dev_id, (unsigned long long)context_id, tid);
 
   if (tid == ~0U)
     error (_("A CUDA event reported an invalid thread id."));
@@ -113,8 +113,8 @@ cuda_event_destroy_context (uint32_t dev_id, uint64_t context_id, uint32_t tid)
   context_delete (context);
 
   if (cuda_options_show_context_events ())
-    printf_unfiltered (_("[Context Destroy of context 0x%"PRIx64" on Device %u]\n"),
-                       context_id, dev_id);
+    printf_unfiltered (_("[Context Destroy of context 0x%llx on Device %u]\n"),
+                       (unsigned long long)context_id, dev_id);
 }
 
 static void
@@ -123,8 +123,8 @@ cuda_event_push_context (uint32_t dev_id, uint64_t context_id, uint32_t tid)
   contexts_t contexts;
   context_t  context;
 
-  cuda_trace_event ("CUDBG_EVENT_CTX_PUSH dev_id=%u context=%"PRIx64" tid=%u",
-                    dev_id, context_id);
+  cuda_trace_event ("CUDBG_EVENT_CTX_PUSH dev_id=%u context=%llx tid=%u",
+                    dev_id, (unsigned long long)context_id, tid);
 
   /* context push/pop events are ignored when attaching */
   if (cuda_api_get_attach_state () != CUDA_ATTACH_STATE_NOT_STARTED)
@@ -139,8 +139,8 @@ cuda_event_push_context (uint32_t dev_id, uint64_t context_id, uint32_t tid)
   contexts_stack_context (contexts, context, tid);
 
   if (cuda_options_show_context_events ())
-    printf_unfiltered (_("[Context Push of context 0x%"PRIx64" on Device %u]\n"),
-                       context_id, dev_id);
+    printf_unfiltered (_("[Context Push of context 0x%llx on Device %u]\n"),
+                       (unsigned long long)context_id, dev_id);
 }
 
 static void
@@ -149,8 +149,8 @@ cuda_event_pop_context (uint32_t dev_id, uint64_t context_id, uint32_t tid)
   contexts_t contexts;
   context_t  context;
 
-  cuda_trace_event ("CUDBG_EVENT_CTX_POP dev_id=%u context=%"PRIx64" tid=%u",
-                    dev_id, context_id);
+  cuda_trace_event ("CUDBG_EVENT_CTX_POP dev_id=%u context=%llx tid=%u",
+                    dev_id, (unsigned long long)context_id, tid);
 
   /* context push/pop events are ignored when attaching */
   if (cuda_api_get_attach_state () != CUDA_ATTACH_STATE_NOT_STARTED)
@@ -165,8 +165,8 @@ cuda_event_pop_context (uint32_t dev_id, uint64_t context_id, uint32_t tid)
   gdb_assert (context_get_id (context) == context_id);
 
   if (cuda_options_show_context_events ())
-    printf_unfiltered (_("[Context Pop of context 0x%"PRIx64" on Device %u]\n"),
-                       context_id, dev_id);
+    printf_unfiltered (_("[Context Pop of context 0x%llx on Device %u]\n"),
+                       (unsigned long long)context_id, dev_id);
 }
 
 /* In native debugging, void *elf_image points to memory. In remote debugging, it
@@ -182,8 +182,8 @@ cuda_event_load_elf_image (uint32_t dev_id, uint64_t context_id, uint64_t module
   elf_image_t elf_image;
   bool        is_system;
 
-  cuda_trace_event ("CUDBG_EVENT_ELF_IMAGE_LOADED dev_id=%u context=%"PRIx64
-                    " module=%"PRIx64, dev_id, context_id, module_id);
+  cuda_trace_event ("CUDBG_EVENT_ELF_IMAGE_LOADED dev_id=%u context=%llx module=%llx",
+                    dev_id, (unsigned long long)context_id, (unsigned long long)module_id);
 
   context = device_find_context_by_id (dev_id, context_id);
   modules = context_get_modules (context);
@@ -205,14 +205,16 @@ cuda_event_unload_elf_image (uint32_t dev_id, uint64_t context_id, uint64_t modu
   module_t    module;
   elf_image_t elf_image;
 
-  cuda_trace_event ("CUDBG_EVENT_ELF_IMAGE_UNLOADED dev_id=%u context=%"PRIx64
-                    " module=%"PRIx64" handle=%"PRIx64, dev_id, context_id, module_id, handle);
+  cuda_trace_event ("CUDBG_EVENT_ELF_IMAGE_UNLOADED dev_id=%u context=%llx"
+                    " module=%llx handle=%llx",
+                    dev_id, (unsigned long long)context_id,
+                    (unsigned long long)module_id, (unsigned long long)handle);
 
   context = device_find_context_by_id (dev_id, context_id);
   modules = context_get_modules (context);
   module = modules_find_module_by_id (modules, module_id);
   elf_image = module_get_elf_image (module);
-  cuda_trace_event ("  -> ELF image %"PRIx64, elf_image);
+  cuda_trace_event ("  -> ELF image %p", elf_image);
 
   gdb_assert (cuda_elf_image_is_loaded (elf_image));
   cuda_elf_image_unload (elf_image);
@@ -244,11 +246,12 @@ cuda_event_kernel_ready (uint32_t dev_id, uint64_t context_id, uint64_t module_i
 #endif
   struct gdbarch  *gdbarch       = get_current_arch ();
 
-  cuda_trace_event ("CUDBG_EVENT_KERNEL_READY dev_id=%u context=%"PRIx64
-                    " module=%"PRIx64" grid_id=%"PRIu64" tid=%u type=%u"
-                    " parent_grid_id=%"PRIu64"\n",
-                    dev_id, context_id, module_id, grid_id, tid, type,
-                    parent_grid_id);
+  cuda_trace_event ("CUDBG_EVENT_KERNEL_READY dev_id=%u context=%llx"
+                    " module=%llx grid_id=%llx tid=%u type=%u"
+                    " parent_grid_id=%llx\n",
+                    dev_id, (unsigned long long)context_id,
+                    (unsigned long long)module_id, (unsigned long long)grid_id,
+                    tid, type, (unsigned long long)parent_grid_id);
 
   if (tid == ~0U)
     error (_("A CUDA event reported an invalid thread id."));
