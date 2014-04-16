@@ -320,7 +320,7 @@ mi_execute_command_input_handler (char *cmd)
 {
   mi_execute_command_wrapper (cmd);
 
-  fputs_unfiltered ("(cuda-gdb) \n", raw_stdout);
+  fputs_unfiltered ("(gdb) \n", raw_stdout);
   gdb_flush (raw_stdout);
 }
 
@@ -350,7 +350,7 @@ mi_command_loop (int mi_version)
   sevenbit_strings = 1;
 
   /* Tell the world that we're alive.  */
-  fputs_unfiltered ("(cuda-gdb) \n", raw_stdout);
+  fputs_unfiltered ("(gdb) \n", raw_stdout);
   gdb_flush (raw_stdout);
 
   start_event_loop ();
@@ -803,7 +803,7 @@ mi_on_resume (ptid_t ptid)
       /* FIXME: review the use of target_is_async_p here -- is that
 	 what we want? */
       if (!target_is_async_p ())
-	fputs_unfiltered ("(cuda-gdb) \n", raw_stdout);
+	fputs_unfiltered ("(gdb) \n", raw_stdout);
     }
   gdb_flush (raw_stdout);
 }
