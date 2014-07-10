@@ -77,6 +77,7 @@ struct builtin_f_type
   struct type *builtin_character;
   struct type *builtin_integer;
   struct type *builtin_integer_s2;
+  struct type *builtin_integer_s8;
   struct type *builtin_logical;
   struct type *builtin_logical_s1;
   struct type *builtin_logical_s2;
@@ -93,3 +94,5 @@ struct builtin_f_type
 /* Return the Fortran type table for the specified architecture.  */
 extern const struct builtin_f_type *builtin_f_type (struct gdbarch *gdbarch);
 
+/* Transparently follow pointers and fixup the size and address of dynamic arrays.  */
+extern struct value *f_fixup_value (struct value *, struct frame_info *);

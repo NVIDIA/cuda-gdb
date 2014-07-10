@@ -32,6 +32,7 @@
 #include "frame.h"
 #include "buildsym.h"
 #include "language.h"
+#include "exceptions.h"
 
 static struct symbol *lookup_namespace_scope (const char *name,
 					      const struct block *block,
@@ -780,6 +781,7 @@ cp_lookup_nested_symbol (struct type *parent_type,
     case TYPE_CODE_STRUCT:
     case TYPE_CODE_NAMESPACE:
     case TYPE_CODE_UNION:
+    case TYPE_CODE_MODULE:
       {
 	/* NOTE: carlton/2003-11-10: We don't treat C++ class members
 	   of classes like, say, data or function members.  Instead,
@@ -822,9 +824,10 @@ cp_lookup_nested_symbol (struct type *parent_type,
       return NULL;
 
     default:
-      internal_error (__FILE__, __LINE__,
+      throw_error ( GENERIC_ERROR,
 		      _("cp_lookup_nested_symbol called "
 			"on a non-aggregate type."));
+      return NULL;
     }
 }
 

@@ -89,8 +89,8 @@ typedef unsigned char bool;
 /*--------------------------------- API Version ------------------------------*/
 
 #define CUDBG_API_VERSION_MAJOR       6 /* Major release version number */
-#define CUDBG_API_VERSION_MINOR       0 /* Minor release version number */
-#define CUDBG_API_VERSION_REVISION  116 /* Revision (build) number */
+#define CUDBG_API_VERSION_MINOR       5 /* Minor release version number */
+#define CUDBG_API_VERSION_REVISION  120 /* Revision (build) number */
 
 /*---------------------------------- Constants -------------------------------*/
 
@@ -144,6 +144,7 @@ typedef enum {
 /*---------------- Internal Breakpoint Entries for Error Reporting ------------*/
 
 #define CUDBG_REPORT_DRIVER_API_ERROR                   cudbgReportDriverApiError
+#define CUDBG_REPORT_DRIVER_API_ERROR_FLAGS             cudbgReportDriverApiErrorFlags
 #define CUDBG_REPORTED_DRIVER_API_ERROR_CODE            cudbgReportedDriverApiErrorCode
 #define CUDBG_REPORTED_DRIVER_API_ERROR_FUNC_NAME_SIZE  cudbgReportedDriverApiErrorFuncNameSize
 #define CUDBG_REPORTED_DRIVER_API_ERROR_FUNC_NAME_ADDR  cudbgReportedDriverApiErrorFuncNameAddr
@@ -197,6 +198,13 @@ typedef enum {
     CUDBG_ERROR_INVALID_WARP_MASK           = 0x002a,  /* Specified warp mask is zero, or contains invalid warps */
     CUDBG_ERROR_AMBIGUOUS_MEMORY_ADDRESS    = 0x002b,  /* Address cannot be resolved to a GPU unambiguously */
 } CUDBGResult;
+
+
+/*------------------------- API Error Reporting Flags -------------------------*/
+typedef enum {
+    CUDBG_REPORT_DRIVER_API_ERROR_FLAGS_NONE = 0x0000, /* Default is that there is no flag */
+    CUDBG_REPORT_DRIVER_API_ERROR_FLAGS_SUPPRESS_NOT_READY = ( 1U << 0 ), /* When set, cudaErrorNotReady/cuErrorNotReady will not be reported */
+} CUDBGReportDriverApiErrorFlags;
 
 /*------------------------------ Grid Attributes -----------------------------*/
 
@@ -733,6 +741,7 @@ extern uint32_t CUDBG_ENABLE_LAUNCH_BLOCKING;
 extern uint32_t CUDBG_ENABLE_INTEGRATED_MEMCHECK;
 extern uint32_t CUDBG_ENABLE_PREEMPTION_DEBUGGING;
 extern uint32_t CUDBG_RESUME_FOR_ATTACH_DETACH;
+extern uint32_t CUDBG_REPORT_DRIVER_API_ERROR_FLAGS;
 
 
 struct CUDBGAPI_st {
@@ -877,6 +886,15 @@ struct CUDBGAPI_st {
     CUDBGResult (*getManagedMemoryRegionInfo)(uint64_t startAddress, CUDBGMemoryInfo *memoryInfo, uint32_t memoryInfo_size, uint32_t *numEntries);
     CUDBGResult (*isDeviceCodeAddress)(uintptr_t addr, bool *isDeviceAddress);
     CUDBGResult (*requestCleanupOnDetach)(uint32_t appResumeFlag);
+
+   /* 6.5 Extensions */
+    CUDBGResult (*readPredicates)(uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint32_t predicates_size, uint32_t *predicates);
+    CUDBGResult (*writePredicates)(uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint32_t predicates_size, const uint32_t *predicates);
+    CUDBGResult (*getNumPredicates)(uint32_t dev, uint32_t *numPredicates);
+    CUDBGResult (*readCCRegister)(uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint32_t *val);
+    CUDBGResult (*writeCCRegister)(uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint32_t val);
+
+    CUDBGResult (*getDeviceName)(uint32_t dev, char *buf, uint32_t sz);
 };
 
 #ifdef __cplusplus
@@ -889,4 +907,3 @@ struct CUDBGAPI_st {
 
 
 #endif
-

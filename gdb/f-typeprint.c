@@ -41,6 +41,10 @@ static void f_type_print_args (struct type *, struct ui_file *);
 static void f_type_print_varspec_suffix (struct type *, struct ui_file *, int,
 					 int, int, int);
 
+static int f_has_valid_type_name (struct type *);
+
+static const char *f_munge_type_name (const char *name);
+
 void f_type_print_varspec_prefix (struct type *, struct ui_file *,
 				  int, int);
 
@@ -61,7 +65,7 @@ f_print_type (struct type *type, const char *varstring, struct ui_file *stream,
   if ((varstring != NULL && *varstring != '\0')
   /* Need a space if going to print stars or brackets;
      but not if we will print just a type name.  */
-      || ((show > 0 || TYPE_NAME (type) == 0)
+      || ((show > 0 || !f_has_valid_type_name( type ))
           && (code == TYPE_CODE_PTR || code == TYPE_CODE_FUNC
 	      || code == TYPE_CODE_METHOD
 	      || code == TYPE_CODE_ARRAY
@@ -96,7 +100,7 @@ f_type_print_varspec_prefix (struct type *type, struct ui_file *stream,
   if (type == 0)
     return;
 
-  if (TYPE_NAME (type) && show <= 0)
+  if (f_has_valid_type_name( type ) && show <= 0)
     return;
 
   QUIT;
@@ -149,7 +153,8 @@ f_type_print_varspec_suffix (struct type *type, struct ui_file *stream,
 			     int show, int passed_a_ptr, int demangled_args,
 			     int arrayprint_recurse_level)
 {
-  int upper_bound, lower_bound;
+  int upper_bound, lower_bound, is_co_shape, target_is_co_shape;
+  struct type *target_type;
 
   /* No static variables are permitted as an error call may occur during
      execution of this function.  */
@@ -157,7 +162,7 @@ f_type_print_varspec_suffix (struct type *type, struct ui_file *stream,
   if (type == 0)
     return;
 
-  if (TYPE_NAME (type) && show <= 0)
+  if (f_has_valid_type_name( type ) && show <= 0)
     return;
 
   QUIT;
@@ -167,15 +172,28 @@ f_type_print_varspec_suffix (struct type *type, struct ui_file *stream,
     case TYPE_CODE_ARRAY:
       arrayprint_recurse_level++;
 
-      if (arrayprint_recurse_level == 1)
-	fprintf_filtered (stream, "(");
+      target_type = TYPE_TARGET_TYPE (type);
+      is_co_shape = range_is_co_shape_p (type);
+      target_is_co_shape = range_is_co_shape_p (target_type);
+      
+      if (is_co_shape
+	  && TYPE_CODE (target_type) == TYPE_CODE_ARRAY
+	  && !target_is_co_shape)
+	f_type_print_varspec_suffix (target_type, stream, 0, 0, 0,
+				     0);
 
-      if (TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_ARRAY)
-	f_type_print_varspec_suffix (TYPE_TARGET_TYPE (type), stream, 0, 0, 0,
+      if (arrayprint_recurse_level == 1)
+	fprintf_filtered (stream, is_co_shape ? "[" : "(");
+
+      target_type = TYPE_TARGET_TYPE (type);
+      if (TYPE_CODE (target_type) == TYPE_CODE_ARRAY
+	  && is_co_shape == target_is_co_shape)
+	f_type_print_varspec_suffix (target_type, stream, 0, 0, 0,
 				     arrayprint_recurse_level);
 
       lower_bound = f77_get_lowerbound (type);
-      if (lower_bound != 1)	/* Not the default.  */
+      upper_bound = f77_get_upperbound (type);
+      if (lower_bound != 1 && upper_bound >= lower_bound)	/* Not the default.  */
 	fprintf_filtered (stream, "%d:", lower_bound);
 
       /* Make sure that, if we have an assumed size array, we
@@ -185,21 +203,26 @@ f_type_print_varspec_suffix (struct type *type, struct ui_file *stream,
 	fprintf_filtered (stream, "*");
       else
 	{
-	  upper_bound = f77_get_upperbound (type);
-	  fprintf_filtered (stream, "%d", upper_bound);
+	  if (lower_bound > upper_bound)
+             fprintf_filtered (stream, "*");
+           else
+             fprintf_filtered (stream, "%d", upper_bound);
 	}
 
-      if (TYPE_CODE (TYPE_TARGET_TYPE (type)) != TYPE_CODE_ARRAY)
-	f_type_print_varspec_suffix (TYPE_TARGET_TYPE (type), stream, 0, 0, 0,
+      if (TYPE_CODE (target_type) != TYPE_CODE_ARRAY)
+	f_type_print_varspec_suffix (target_type, stream, 0, 0, 0,
 				     arrayprint_recurse_level);
       if (arrayprint_recurse_level == 1)
-	fprintf_filtered (stream, ")");
+	fprintf_filtered (stream, is_co_shape ? "]" : ")");
       else
 	fprintf_filtered (stream, ",");
       arrayprint_recurse_level--;
       break;
 
     case TYPE_CODE_PTR:
+      f_type_print_varspec_suffix (TYPE_TARGET_TYPE (type), stream, 0, 1, 0, arrayprint_recurse_level);
+      break;
+
     case TYPE_CODE_REF:
       f_type_print_varspec_suffix (TYPE_TARGET_TYPE (type), stream, 0, 1, 0,
 				   arrayprint_recurse_level);
@@ -207,14 +230,37 @@ f_type_print_varspec_suffix (struct type *type, struct ui_file *stream,
       break;
 
     case TYPE_CODE_FUNC:
-      f_type_print_varspec_suffix (TYPE_TARGET_TYPE (type), stream, 0,
-				   passed_a_ptr, 0, arrayprint_recurse_level);
-      if (passed_a_ptr)
-	fprintf_filtered (stream, ")");
+        f_type_print_varspec_suffix (TYPE_TARGET_TYPE (type), stream, 0,
+                                     passed_a_ptr, 0, arrayprint_recurse_level);
+        if (passed_a_ptr)
+            fprintf_filtered (stream, ")");
 
-      fprintf_filtered (stream, "()");
+	{
+            int i, len = TYPE_NFIELDS (type);
+            fprintf_filtered (stream, "(");
+            if (len == 0
+                && TYPE_PROTOTYPED (type))
+                {
+                    fprintf_filtered (stream, "VOID");
+                }
+            else
+                for (i = 0; i < len; i++)
+                    {
+                        if (i > 0)
+                            {
+                                fputs_filtered (", ", stream);
+                                wrap_here ("    ");
+                            }
+                        f_print_type (TYPE_FIELD_TYPE (type, i), "", stream, -1, 0, 0);
+                    }
+            fprintf_filtered (stream, ")");
+            
+        }
+
       break;
-
+    case TYPE_CODE_TYPEDEF:
+	f_type_print_varspec_suffix (TYPE_TARGET_TYPE (type), stream, 0, 0, 0, 0);
+        break;
     case TYPE_CODE_UNDEF:
     case TYPE_CODE_STRUCT:
     case TYPE_CODE_UNION:
@@ -230,7 +276,6 @@ f_type_print_varspec_suffix (struct type *type, struct ui_file *stream,
     case TYPE_CODE_STRING:
     case TYPE_CODE_METHOD:
     case TYPE_CODE_COMPLEX:
-    case TYPE_CODE_TYPEDEF:
       /* These types do not need a suffix.  They are listed so that
          gcc -Wall will report types that may not have been considered.  */
       break;
@@ -256,6 +301,13 @@ f_type_print_base (struct type *type, struct ui_file *stream, int show,
 {
   int upper_bound;
   int index;
+  int i, j;
+  int len, len2;
+  int real_len;
+  int need_access_label;
+
+  char *mangled_name;
+  char *demangled_name;  
 
   QUIT;
 
@@ -269,9 +321,20 @@ f_type_print_base (struct type *type, struct ui_file *stream, int show,
   /* When SHOW is zero or less, and there is a valid type name, then always
      just print the type name directly from the type.  */
 
-  if ((show <= 0) && (TYPE_NAME (type) != NULL))
+  if ((show <= 0) && f_has_valid_type_name( type ))
     {
-      fputs_filtered (TYPE_NAME (type), stream);
+      int need_type = (TYPE_CODE (type) == TYPE_CODE_STRUCT
+		       || TYPE_CODE (type) == TYPE_CODE_UNION) &&
+		      (strlen (TYPE_NAME (type)) < 5
+		       || strncasecmp (TYPE_NAME (type), "type(", 5) != 0);
+      if (need_type)
+	fputs_filtered ("TYPE(", stream);
+      demangled_name = (char *) f_munge_type_name (TYPE_NAME (type));
+      fputs_filtered (demangled_name, stream);
+      if (demangled_name != TYPE_NAME (type))
+        xfree (demangled_name);
+      if (need_type)
+	fputs_filtered (")", stream);
       return;
     }
 
@@ -290,8 +353,8 @@ f_type_print_base (struct type *type, struct ui_file *stream, int show,
       break;
 
     case TYPE_CODE_PTR:
-      fprintf_filtered (stream, "PTR TO -> ( ");
       f_type_print_base (TYPE_TARGET_TYPE (type), stream, 0, level);
+      fprintf_filtered (stream, ", POINTER");
       break;
 
     case TYPE_CODE_REF:
@@ -323,7 +386,7 @@ f_type_print_base (struct type *type, struct ui_file *stream, int show,
          C-oriented, we must change these to "character" from "char".  */
 
       if (strcmp (TYPE_NAME (type), "char") == 0)
-	fprintfi_filtered (level, stream, "character");
+	fprintfi_filtered (level, stream, "CHARACTER");
       else
 	goto default_case;
       break;
@@ -332,7 +395,7 @@ f_type_print_base (struct type *type, struct ui_file *stream, int show,
       /* Strings may have dynamic upperbounds (lengths) like arrays.  */
 
       if (TYPE_ARRAY_UPPER_BOUND_IS_UNDEFINED (type))
-	fprintfi_filtered (level, stream, "character*(*)");
+	fprintfi_filtered (level, stream, "CHARACTER(LEN=*)(*)");
       else
 	{
 	  upper_bound = f77_get_upperbound (type);
@@ -342,30 +405,59 @@ f_type_print_base (struct type *type, struct ui_file *stream, int show,
 
     case TYPE_CODE_STRUCT:
     case TYPE_CODE_UNION:
+      if (show < 0 || (show == 0 && TYPE_TAG_NAME (type)))
+	{
+	  fprintf_filtered (stream, "TYPE(%s)", TYPE_TAG_NAME (type));
+	  break;
+	}
       if (TYPE_CODE (type) == TYPE_CODE_UNION)
-	fprintfi_filtered (level, stream, "Type, C_Union :: ");
+	fprintfi_filtered (level, stream, "UNION ");
       else
-	fprintfi_filtered (level, stream, "Type ");
-      fputs_filtered (TYPE_TAG_NAME (type), stream);
+	fprintfi_filtered (level, stream, "TYPE ");
+      if (!TYPE_TAG_NAME (type))
+	fputs_filtered ("<unnamed>", stream);
+      else
+	fputs_filtered (TYPE_TAG_NAME (type), stream);
       fputs_filtered ("\n", stream);
       for (index = 0; index < TYPE_NFIELDS (type); index++)
 	{
-	  f_type_print_base (TYPE_FIELD_TYPE (type, index), stream, show,
+	  print_spaces_filtered (level + 4, stream);
+	  f_type_print_base (TYPE_FIELD_TYPE (type, index), stream, show - 1,
 			     level + 4);
 	  fputs_filtered (" :: ", stream);
 	  fputs_filtered (TYPE_FIELD_NAME (type, index), stream);
 	  f_type_print_varspec_suffix (TYPE_FIELD_TYPE (type, index),
 				       stream, 0, 0, 0, 0);
 	  fputs_filtered ("\n", stream);
-	} 
-      fprintfi_filtered (level, stream, "End Type ");
-      fputs_filtered (TYPE_TAG_NAME (type), stream);
+	}
+      if (TYPE_CODE (type) == TYPE_CODE_UNION)
+	fprintfi_filtered (level, stream, "END UNION ");
+      else
+	fprintfi_filtered (level, stream, "END TYPE ");
+      if (!TYPE_TAG_NAME (type))
+	fputs_filtered ("<unnamed>", stream);
+      else      
+	fputs_filtered (TYPE_TAG_NAME (type), stream);
       break;
 
     case TYPE_CODE_MODULE:
       fprintfi_filtered (level, stream, "module %s", TYPE_TAG_NAME (type));
       break;
-
+    case TYPE_CODE_FLT:
+        /* don't do default as name is often null */
+      if (TYPE_NAME (type) != NULL)
+          fprintfi_filtered (level, stream, "%s", TYPE_NAME (type));
+      else {
+          switch (TYPE_LENGTH (type)) {
+          case 4:
+              fprintfi_filtered (level, stream, "REAL*4");
+              break;
+          case 8:
+              fprintfi_filtered (level, stream, "REAL*8");
+              break;
+          }
+      }
+      break;
     default_case:
     default:
       /* Handle types not explicitly handled by the other cases,
@@ -378,4 +470,33 @@ f_type_print_base (struct type *type, struct ui_file *stream, int show,
 	error (_("Invalid type code (%d) in symbol table."), TYPE_CODE (type));
       break;
     }
+}
+
+static int
+f_has_valid_type_name (struct type *type)
+{
+  return (TYPE_NAME (type) != NULL) &&
+	 ((TYPE_CODE (type) != TYPE_CODE_ARRAY && TYPE_CODE (type) != TYPE_CODE_STRING) ||
+	 strchr( TYPE_NAME (type), '(') != NULL);
+}
+
+static const char *
+f_munge_type_name (const char *name)
+{
+  char *newname;
+  int len = strlen (name);
+  if (((len > 4 && name[len - 4] == '(') ||
+       (len > 3 && name[len - 3] == '(')) &&
+      name[len - 1] == ')')
+    {
+      newname = xmalloc (len + 1);
+      strcpy (newname, name);
+      if (len > 4 && name[len - 4] == '(')
+	newname[len - 4] = '*';
+      else
+	newname[len - 3] = '*';
+      newname[len - 1] = 0;
+      return newname;
+    }
+  return name;
 }

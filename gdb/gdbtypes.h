@@ -187,18 +187,18 @@ enum type_code
 
 enum type_flag_value
 {
-  TYPE_FLAG_UNSIGNED = (1 << 8),
-  TYPE_FLAG_NOSIGN = (1 << 9),
-  TYPE_FLAG_STUB = (1 << 10),
-  TYPE_FLAG_TARGET_STUB = (1 << 11),
-  TYPE_FLAG_STATIC = (1 << 12),
-  TYPE_FLAG_PROTOTYPED = (1 << 13),
-  TYPE_FLAG_INCOMPLETE = (1 << 14),
-  TYPE_FLAG_VARARGS = (1 << 15),
-  TYPE_FLAG_VECTOR = (1 << 16),
-  TYPE_FLAG_FIXED_INSTANCE = (1 << 17),
-  TYPE_FLAG_STUB_SUPPORTED = (1 << 18),
-  TYPE_FLAG_GNU_IFUNC = (1 << 19),
+  TYPE_FLAG_UNSIGNED = (1 << 19),
+  TYPE_FLAG_NOSIGN = (1 << 20),
+  TYPE_FLAG_STUB = (1 << 21),
+  TYPE_FLAG_TARGET_STUB = (1 << 22),
+  TYPE_FLAG_STATIC = (1 << 23),
+  TYPE_FLAG_PROTOTYPED = (1 << 24),
+  TYPE_FLAG_INCOMPLETE = (1 << 25),
+  TYPE_FLAG_VARARGS = (1 << 26),
+  TYPE_FLAG_VECTOR = (1 << 27),
+  TYPE_FLAG_FIXED_INSTANCE = (1 << 28),
+  TYPE_FLAG_STUB_SUPPORTED = (1 << 29),
+  TYPE_FLAG_GNU_IFUNC = (1 << 30),
 
   /* Used for error-checking.  */
   TYPE_FLAG_MIN = TYPE_FLAG_UNSIGNED
@@ -217,17 +217,18 @@ enum type_instance_flag_value
   TYPE_INSTANCE_FLAG_ADDRESS_CLASS_2 = (1 << 5),
   TYPE_INSTANCE_FLAG_NOTTEXT = (1 << 6),
   TYPE_INSTANCE_FLAG_RESTRICT = (1 << 7),
+  TYPE_INSTANCE_FLAG_IS_CO_SHAPE = (1 << 8),
   /* CUDA - Memory Segments */
-  TYPE_INSTANCE_FLAG_CUDA_CODE = (1 << 6),
-  TYPE_INSTANCE_FLAG_CUDA_CONST = (1 << 7),
-  TYPE_INSTANCE_FLAG_CUDA_GENERIC = (1 << 8),
-  TYPE_INSTANCE_FLAG_CUDA_GLOBAL = (1 << 9),
-  TYPE_INSTANCE_FLAG_CUDA_PARAM = (1 << 10),
-  TYPE_INSTANCE_FLAG_CUDA_SHARED = (1 << 11),
-  TYPE_INSTANCE_FLAG_CUDA_TEX = (1 << 12),
-  TYPE_INSTANCE_FLAG_CUDA_LOCAL = (1 << 13),
-  TYPE_INSTANCE_FLAG_CUDA_REG = (1 << 14),
-  TYPE_INSTANCE_FLAG_CUDA_MANAGED = (1<<15),
+  TYPE_INSTANCE_FLAG_CUDA_CODE = (1 << 9),
+  TYPE_INSTANCE_FLAG_CUDA_CONST = (1 << 10),
+  TYPE_INSTANCE_FLAG_CUDA_GENERIC = (1 << 11),
+  TYPE_INSTANCE_FLAG_CUDA_GLOBAL = (1 << 12),
+  TYPE_INSTANCE_FLAG_CUDA_PARAM = (1 << 13),
+  TYPE_INSTANCE_FLAG_CUDA_SHARED = (1 << 14),
+  TYPE_INSTANCE_FLAG_CUDA_TEX = (1 << 15),
+  TYPE_INSTANCE_FLAG_CUDA_LOCAL = (1 << 16),
+  TYPE_INSTANCE_FLAG_CUDA_REG = (1 << 17),
+  TYPE_INSTANCE_FLAG_CUDA_MANAGED = (1<<18),
 };
 
 /* Unsigned integer type.  If this is not set for a TYPE_CODE_INT, the
@@ -427,6 +428,11 @@ enum type_instance_flag_value
    | TYPE_INSTANCE_FLAG_CUDA_ALL)
 #define TYPE_ADDRESS_CLASS_ALL(t) (TYPE_INSTANCE_FLAGS(t) \
 				   & TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL)
+
+/* Co-Array Fortran.  If this is set, the range type describes a
+   coshape.  */
+
+#define TYPE_IS_CO_SHAPE(t)	(TYPE_INSTANCE_FLAGS (t) & TYPE_INSTANCE_FLAG_IS_CO_SHAPE)
 
 /* Determine which field of the union main_type.fields[x].loc is used.  */
 
@@ -665,6 +671,18 @@ struct main_type
       char low_undefined;
       char high_undefined;
 
+      void* low_baton;
+      void* high_baton;
+      void* count_baton;
+      void* baton_function;
+
+      void* lstride_baton;
+      void* stride_baton;
+      void* soffset_baton;
+
+      LONGEST lstride_value;
+      LONGEST stride_value;
+      LONGEST soffset_value;
     } *bounds;
 
   } flds_bnds;
@@ -1133,6 +1151,17 @@ extern void allocate_gnat_aux_type (struct type *);
 #define TYPE_RANGE_DATA(thistype) TYPE_MAIN_TYPE(thistype)->flds_bnds.bounds
 #define TYPE_LOW_BOUND(range_type) TYPE_RANGE_DATA(range_type)->low
 #define TYPE_HIGH_BOUND(range_type) TYPE_RANGE_DATA(range_type)->high
+#define TYPE_LOW_BOUND_BATON(range_type) TYPE_RANGE_DATA(range_type)->low_baton
+#define TYPE_HIGH_BOUND_BATON(range_type) TYPE_RANGE_DATA(range_type)->high_baton
+#define TYPE_COUNT_BOUND_BATON(range_type) TYPE_RANGE_DATA(range_type)->count_baton
+#define TYPE_LSTRIDE_BATON(range_type) TYPE_RANGE_DATA(range_type)->lstride_baton
+#define TYPE_LSTRIDE_VALUE(range_type) TYPE_RANGE_DATA(range_type)->lstride_value
+#define TYPE_STRIDE_BATON(range_type) TYPE_RANGE_DATA(range_type)->stride_baton
+#define TYPE_STRIDE_VALUE(range_type) TYPE_RANGE_DATA(range_type)->stride_value
+#define TYPE_SOFFSET_BATON(range_type) TYPE_RANGE_DATA(range_type)->soffset_baton
+#define TYPE_SOFFSET_VALUE(range_type) TYPE_RANGE_DATA(range_type)->soffset_value
+#define TYPE_BOUND_BATON_FUNCTION(range_type) TYPE_RANGE_DATA(range_type)->baton_function
+
 #define TYPE_LOW_BOUND_UNDEFINED(range_type) \
    TYPE_RANGE_DATA(range_type)->low_undefined
 #define TYPE_HIGH_BOUND_UNDEFINED(range_type) \
@@ -1589,6 +1618,26 @@ extern struct type *lookup_function_type_with_arguments (struct type *,
 
 extern struct type *create_range_type (struct type *, struct type *, LONGEST,
 				       LONGEST);
+ 
+extern struct type *create_range_type_d (struct type *, struct type *,
+				        int, int, void *, void *,  void*,
+					LONGEST (*)(void*, CORE_ADDR, void*));
+
+extern struct type * create_range_type_d_pgi (struct type *result_type, struct type *index_type,
+					    int low_bound, int high_bound, int stride, int soffset, int lstride,
+					    void *dwarf_low, void *dwarf_high, void *dwarf_count,
+					    void *dwarf_stride, void *dwarf_soffset, void *dwarf_lstride,
+					    LONGEST (*expr_evaluate)(void*, CORE_ADDR, void*));
+
+extern struct type *create_range_type_d (struct type *, struct type *,
+					 int, int, void *, void *,  void*,
+					 LONGEST (*)(void*, CORE_ADDR, void*));
+
+extern struct type * create_range_type_d_pgi (struct type *result_type, struct type *index_type,
+		         int low_bound, int high_bound, int stride, int soffset, int lstride,
+                         void *dwarf_low, void *dwarf_high, void *dwarf_count,
+                         void *dwarf_stride, void *dwarf_soffset, void *dwarf_lstride,
+		         LONGEST (*expr_evaluate)(void*, CORE_ADDR, void*));
 
 extern struct type *create_array_type (struct type *, struct type *,
 				       struct type *);
@@ -1638,6 +1687,8 @@ extern int is_ancestor (struct type *, struct type *);
 extern int is_public_ancestor (struct type *, struct type *);
 
 extern int is_unique_ancestor (struct type *, struct value *);
+
+extern int range_is_co_shape_p (struct type *);
 
 /* Overload resolution */
 

@@ -133,6 +133,15 @@ typedef enum {
     CUDBGAPIREQ_getManagedMemoryRegionInfo,
     CUDBGAPIREQ_isDeviceCodeAddress,
     CUDBGAPIREQ_requestCleanupOnDetach,
+
+    /* 6.5 Extensions */
+    CUDBGAPIREQ_readPredicates,
+    CUDBGAPIREQ_writePredicates,
+    CUDBGAPIREQ_getNumPredicates,
+    CUDBGAPIREQ_readCCRegister,
+    CUDBGAPIREQ_writeCCRegister,
+
+    CUDBGAPIREQ_getDeviceName,
 } CUDBGAPIREQ_t;
 
 typedef enum {
@@ -142,10 +151,12 @@ typedef enum {
     LIBCUDBG_PIPE_ENDPOINT_DEBUG_CLIENT_CB,
 } libcudbg_pipe_endpoint_t;
 
+#pragma pack(push,1)
 typedef struct  {
     uint32_t tid;
     uint32_t terminate;
     uint32_t timeout;
 } CUDBGCBMSG_t;
+#pragma pack(pop)
 
 #endif

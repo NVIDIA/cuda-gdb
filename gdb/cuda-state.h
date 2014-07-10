@@ -40,13 +40,17 @@ void     cuda_system_set_device_spec    (uint32_t, uint32_t, uint32_t,
 context_t cuda_system_find_context_by_addr     (CORE_ADDR addr);
 
 /* Device State */
+const char* device_get_device_name         (uint32_t dev_id);
 const char* device_get_device_type         (uint32_t dev_id);
 const char* device_get_sm_type             (uint32_t dev_id);
 uint32_t    device_get_num_sms             (uint32_t dev_id);
 uint32_t    device_get_num_warps           (uint32_t dev_id);
 uint32_t    device_get_num_lanes           (uint32_t dev_id);
 uint32_t    device_get_num_registers       (uint32_t dev_id);
+uint32_t    device_get_num_predicates      (uint32_t dev_id);
 uint32_t    device_get_num_kernels         (uint32_t dev_id);
+uint32_t    device_get_pci_bus_id          (uint32_t dev_id);
+uint32_t    device_get_pci_dev_id          (uint32_t dev_id);
 void        device_filter_exception_state  (uint32_t dev_id);
 
 bool        device_is_valid                (uint32_t dev_id);
@@ -98,7 +102,11 @@ uint64_t         lane_get_virtual_pc (uint32_t dev_id, uint32_t sm_id, uint32_t 
 CuDim3           lane_get_thread_idx (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id);
 CUDBGException_t lane_get_exception  (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id);
 uint32_t         lane_get_register   (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id, uint32_t regno);
+uint32_t         lane_get_cc_register (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id);
+bool             lane_get_predicate  (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id, uint32_t predicate);
 void             lane_set_register   (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id, uint32_t regno, uint32_t value);
+void             lane_set_predicate  (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id, uint32_t predicate, bool value);
+void             lane_set_cc_register (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id, uint32_t value);
 int32_t          lane_get_call_depth (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id);
 int32_t          lane_get_syscall_call_depth (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id);
 uint64_t         lane_get_virtual_return_address (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id, int32_t level);

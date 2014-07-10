@@ -58,7 +58,7 @@ static struct partial_symbol *lookup_partial_symbol (struct objfile *,
 						     const char *, int,
 						     domain_enum);
 
-static const char *psymtab_to_fullname (struct partial_symtab *ps);
+const char *psymtab_to_fullname (struct partial_symtab *ps);
 
 static struct partial_symbol *find_pc_sect_psymbol (struct objfile *,
 						    struct partial_symtab *,
@@ -68,7 +68,7 @@ static struct partial_symbol *find_pc_sect_psymbol (struct objfile *,
 static void fixup_psymbol_section (struct partial_symbol *psym,
 				   struct objfile *objfile);
 
-static struct symtab *psymtab_to_symtab (struct objfile *objfile,
+struct symtab *psymtab_to_symtab (struct objfile *objfile,
 					 struct partial_symtab *pst);
 
 /* Ensure that the partial symbols for OBJFILE have been loaded.  This
@@ -766,7 +766,7 @@ lookup_partial_symbol (struct objfile *objfile,
 /* Get the symbol table that corresponds to a partial_symtab.
    This is fast after the first time you do it.  */
 
-static struct symtab *
+struct symtab *
 psymtab_to_symtab (struct objfile *objfile, struct partial_symtab *pst)
 {
   /* If it is a shared psymtab, find an unshared psymtab that includes
@@ -1175,7 +1175,7 @@ map_symbol_filenames_psymtab (struct objfile *objfile,
    If this function fails to find the file that this partial_symtab represents,
    NULL will be returned and ps->fullname will be set to NULL.  */
 
-static const char *
+const char *
 psymtab_to_fullname (struct partial_symtab *ps)
 {
   gdb_assert (!ps->anonymous);

@@ -658,7 +658,9 @@ ada_val_print_1 (struct type *type, const gdb_byte *valaddr,
       struct value *mark = value_mark ();
       struct value *val;
 
-      val = value_from_contents_and_address (type, valaddr + offset, address);
+      val = value_from_contents_and_address (type, valaddr + offset,
+					    original_value ? value_length (original_value) : TYPE_LENGTH (type),
+					    address);
       /* If this is a reference, coerce it now.  This helps taking care
 	 of the case where ADDRESS is meaningless because original_value
 	 was not an lval.  */
@@ -702,6 +704,7 @@ ada_val_print_1 (struct type *type, const gdb_byte *valaddr,
 	    struct value *val =
 	      value_from_contents_and_address (type,
 					       valaddr + offset_aligned,
+					       original_value ? value_length (original_value) : TYPE_LENGTH (type),
 					       address + offset_aligned);
 	    const char *name = ada_tag_name (val);
 
@@ -732,7 +735,9 @@ ada_val_print_1 (struct type *type, const gdb_byte *valaddr,
 	         nonsense value.  Actually, we could use the same
 	         code regardless of lengths; I'm just avoiding a cast.  */
 	      struct value *v1
-		= value_from_contents_and_address (type, valaddr + offset, 0);
+		= value_from_contents_and_address (type, valaddr + offset,
+						   original_value ? value_length (original_value) : TYPE_LENGTH (type),
+						   0);
 	      struct value *v = value_cast (target_type, v1);
 
 	      ada_val_print_1 (target_type,

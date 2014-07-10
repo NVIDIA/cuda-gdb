@@ -158,13 +158,17 @@ ensure_python_env (struct gdbarch *gdbarch,
   return make_cleanup (restore_python_env, env);
 }
 
+static int quit_flag;
 /* Clear the quit flag.  */
 
 void
 clear_quit_flag (void)
 {
-  /* This clears the flag as a side effect.  */
-  PyOS_InterruptOccurred ();
+  if (!is_python_available ())
+    quit_flag = 0;
+  else
+    /* This clears the flag as a side effect.  */
+    PyOS_InterruptOccurred ();
 }
 
 /* Set the quit flag.  */
@@ -172,7 +176,10 @@ clear_quit_flag (void)
 void
 set_quit_flag (void)
 {
-  PyErr_SetInterrupt ();
+  if (!is_python_available ())
+    quit_flag++;
+  else
+    PyErr_SetInterrupt ();
 }
 
 /* Return true if the quit flag has been set, false otherwise.  */
@@ -180,7 +187,15 @@ set_quit_flag (void)
 int
 check_quit_flag (void)
 {
-  return PyOS_InterruptOccurred ();
+  if (is_python_available ())
+    return PyOS_InterruptOccurred ();
+  /* This is written in a particular way to avoid races. */
+  if (quit_flag)
+    {
+      quit_flag = 0;
+      return quit_flag;
+    }
+  return 0;
 }
 
 /* Evaluate a Python command like PyRun_SimpleString, but uses
@@ -362,6 +377,8 @@ python_command (char *arg, int from_tty)
 {
   struct cleanup *cleanup;
 
+  if (!is_python_available ())
+    error (_("Python scripting is not supported(libpython could not be found)."));
   cleanup = ensure_python_env (get_current_arch (), current_language);
 
   make_cleanup_restore_integer (&interpreter_async);
@@ -410,9 +427,9 @@ gdbpy_parameter_value (enum var_types type, void *var)
     case var_boolean:
       {
 	if (* (int *) var)
-	  Py_RETURN_TRUE;
+	  GDB_PY_RETURN_TRUE;
 	else
-	  Py_RETURN_FALSE;
+	  GDB_PY_RETURN_FALSE;
       }
 
     case var_auto_boolean:
@@ -420,16 +437,16 @@ gdbpy_parameter_value (enum var_types type, void *var)
 	enum auto_boolean ab = * (enum auto_boolean *) var;
 
 	if (ab == AUTO_BOOLEAN_TRUE)
-	  Py_RETURN_TRUE;
+	  GDB_PY_RETURN_TRUE;
 	else if (ab == AUTO_BOOLEAN_FALSE)
-	  Py_RETURN_FALSE;
+	  GDB_PY_RETURN_FALSE;
 	else
-	  Py_RETURN_NONE;
+	  GDB_PY_RETURN_NONE;
       }
 
     case var_integer:
       if ((* (int *) var) == INT_MAX)
-	Py_RETURN_NONE;
+	GDB_PY_RETURN_NONE;
       /* Fall through.  */
     case var_zinteger:
       return PyLong_FromLong (* (int *) var);
@@ -439,12 +456,12 @@ gdbpy_parameter_value (enum var_types type, void *var)
 	unsigned int val = * (unsigned int *) var;
 
 	if (val == UINT_MAX)
-	  Py_RETURN_NONE;
+	  GDB_PY_RETURN_NONE;
 	return PyLong_FromUnsignedLong (val);
       }
     }
 
-  return PyErr_Format (PyExc_RuntimeError, 
+  return gdbpy_ErrFormat (gdbpyExc_RuntimeError,
 		       _("Programmer error: unhandled type."));
 }
 
@@ -460,7 +477,7 @@ gdbpy_parameter (PyObject *self, PyObject *args)
   int found = -1;
   volatile struct gdb_exception except;
 
-  if (! PyArg_ParseTuple (args, "s", &arg))
+  if (! gdbpy_ArgParseTuple (args, "s", &arg))
     return NULL;
 
   newarg = concat ("show ", arg, (char *) NULL);
@@ -472,11 +489,11 @@ gdbpy_parameter (PyObject *self, PyObject *args)
   xfree (newarg);
   GDB_PY_HANDLE_EXCEPTION (except);
   if (!found)
-    return PyErr_Format (PyExc_RuntimeError,
+    return gdbpy_ErrFormat (gdbpyExc_RuntimeError,
 			 _("Could not find parameter `%s'."), arg);
 
   if (! cmd->var)
-    return PyErr_Format (PyExc_RuntimeError, 
+    return gdbpy_ErrFormat (gdbpyExc_RuntimeError, 
 			 _("`%s' is not a parameter."), arg);
   return gdbpy_parameter_value (cmd->var_type, cmd->var);
 }
@@ -513,9 +530,9 @@ execute_gdb_command (PyObject *self, PyObject *args, PyObject *kw)
   static char *keywords[] = {"command", "from_tty", "to_string", NULL };
   char *result = NULL;
 
-  if (! PyArg_ParseTupleAndKeywords (args, kw, "s|O!O!", keywords, &arg,
-				     &PyBool_Type, &from_tty_obj,
-				     &PyBool_Type, &to_string_obj))
+  if (! gdbpy_ArgParseTupleAndKeywords (args, kw, "s|O!O!", keywords, &arg,
+				     gdbpy_BoolType, &from_tty_obj,
+				     gdbpy_BoolType, &to_string_obj))
     return NULL;
 
   from_tty = 0;
@@ -567,7 +584,7 @@ execute_gdb_command (PyObject *self, PyObject *args, PyObject *kw)
       xfree (result);
       return r;
     }
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Implementation of gdb.solib_name (Long) -> String.
@@ -580,7 +597,7 @@ gdbpy_solib_name (PyObject *self, PyObject *args)
   PyObject *str_obj;
   gdb_py_longest pc;
 
-  if (!PyArg_ParseTuple (args, GDB_PY_LL_ARG, &pc))
+  if (!gdbpy_ArgParseTuple (args, GDB_PY_LL_ARG, &pc))
     return NULL;
 
   soname = solib_name_from_address (current_program_space, pc);
@@ -588,8 +605,8 @@ gdbpy_solib_name (PyObject *self, PyObject *args)
     str_obj = PyString_Decode (soname, strlen (soname), host_charset (), NULL);
   else
     {
-      str_obj = Py_None;
-      Py_INCREF (Py_None);
+      str_obj = gdbpy_None;
+      Py_INCREF (gdbpy_None);
     }
 
   return str_obj;
@@ -611,7 +628,7 @@ gdbpy_decode_line (PyObject *self, PyObject *args)
   PyObject *unparsed = NULL;
   volatile struct gdb_exception except;
 
-  if (! PyArg_ParseTuple (args, "|s", &arg))
+  if (! gdbpy_ArgParseTuple (args, "|s", &arg))
     return NULL;
 
   cleanups = make_cleanup (null_cleanup, NULL);
@@ -670,8 +687,8 @@ gdbpy_decode_line (PyObject *self, PyObject *args)
     }
   else
     {
-      result = Py_None;
-      Py_INCREF (Py_None);
+      result = gdbpy_None;
+      Py_INCREF (gdbpy_None);
     }
 
   return_result = PyTuple_New (2);
@@ -694,8 +711,8 @@ gdbpy_decode_line (PyObject *self, PyObject *args)
     }
   else
     {
-      unparsed = Py_None;
-      Py_INCREF (Py_None);
+      unparsed = gdbpy_None;
+      Py_INCREF (gdbpy_None);
     }
 
   PyTuple_SetItem (return_result, 0, unparsed);
@@ -715,7 +732,7 @@ gdbpy_parse_and_eval (PyObject *self, PyObject *args)
   struct value *result = NULL;
   volatile struct gdb_exception except;
 
-  if (!PyArg_ParseTuple (args, "s", &expr_str))
+  if (!gdbpy_ArgParseTuple (args, "s", &expr_str))
     return NULL;
 
   TRY_CATCH (except, RETURN_MASK_ALL)
@@ -737,7 +754,7 @@ gdbpy_find_pc_line (PyObject *self, PyObject *args)
   volatile struct gdb_exception except;
   PyObject *result = NULL; /* init for gcc -Wall */
 
-  if (!PyArg_ParseTuple (args, GDB_PY_LLU_ARG, &pc_llu))
+  if (!gdbpy_ArgParseTuple (args, GDB_PY_LLU_ARG, &pc_llu))
     return NULL;
 
   TRY_CATCH (except, RETURN_MASK_ALL)
@@ -836,12 +853,12 @@ gdbpy_post_event (PyObject *self, PyObject *args)
   PyObject *func;
   int wakeup;
 
-  if (!PyArg_ParseTuple (args, "O", &func))
+  if (!gdbpy_ArgParseTuple (args, "O", &func))
     return NULL;
 
   if (!PyCallable_Check (func))
     {
-      PyErr_SetString (PyExc_RuntimeError, 
+      PyErr_SetString (gdbpyExc_RuntimeError, 
 		       _("Posted event is not callable"));
       return NULL;
     }
@@ -864,10 +881,10 @@ gdbpy_post_event (PyObject *self, PyObject *args)
       char c = 'q';		/* Anything. */
 
       if (serial_write (gdbpy_event_fds[1], &c, 1))
-        return PyErr_SetFromErrno (PyExc_IOError);
+        return PyErr_SetFromErrno (gdbpyExc_IOError);
     }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Initialize the Python event handler.  */
@@ -909,7 +926,7 @@ before_prompt_hook (const char *current_gdb_prompt)
 	  if (current_prompt == NULL)
 	    goto fail;
 
-	  result = PyObject_CallFunctionObjArgs (hook, current_prompt, NULL);
+	  result = gdbpy_ObjectCallFunctionObjArgs (hook, current_prompt, NULL);
 
 	  Py_DECREF (current_prompt);
 
@@ -921,15 +938,15 @@ before_prompt_hook (const char *current_gdb_prompt)
 	  /* Return type should be None, or a String.  If it is None,
 	     fall through, we will not set a prompt.  If it is a
 	     string, set  PROMPT.  Anything else, set an exception.  */
-	  if (result != Py_None && ! PyString_Check (result))
+	  if (result != gdbpy_None && ! gdbpy_StringCheck (result))
 	    {
-	      PyErr_Format (PyExc_RuntimeError,
+	      gdbpy_ErrFormat (gdbpyExc_RuntimeError,
 			    _("Return from prompt_hook must " \
 			      "be either a Python string, or None"));
 	      goto fail;
 	    }
 
-	  if (result != Py_None)
+	  if (result != gdbpy_None)
 	    {
 	      prompt = python_string_to_host_string (result);
 
@@ -971,7 +988,7 @@ gdbpy_write (PyObject *self, PyObject *args, PyObject *kw)
   int stream_type = 0;
   volatile struct gdb_exception except;
   
-  if (! PyArg_ParseTupleAndKeywords (args, kw, "s|i", keywords, &arg,
+  if (! gdbpy_ArgParseTupleAndKeywords (args, kw, "s|i", keywords, &arg,
 				     &stream_type))
     return NULL;
 
@@ -995,7 +1012,7 @@ gdbpy_write (PyObject *self, PyObject *args, PyObject *kw)
     }
   GDB_PY_HANDLE_EXCEPTION (except);
      
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* A python function to flush a gdb stream.  The optional keyword
@@ -1008,7 +1025,7 @@ gdbpy_flush (PyObject *self, PyObject *args, PyObject *kw)
   static char *keywords[] = {"stream", NULL };
   int stream_type = 0;
   
-  if (! PyArg_ParseTupleAndKeywords (args, kw, "|i", keywords,
+  if (! gdbpy_ArgParseTupleAndKeywords (args, kw, "|i", keywords,
 				     &stream_type))
     return NULL;
 
@@ -1028,7 +1045,7 @@ gdbpy_flush (PyObject *self, PyObject *args, PyObject *kw)
       gdb_flush (gdb_stdout);
     }
      
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Print a python exception trace, print just a message, or print
@@ -1167,7 +1184,7 @@ gdbpy_get_current_objfile (PyObject *unused1, PyObject *unused2)
   PyObject *result;
 
   if (! gdbpy_current_objfile)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   result = objfile_to_objfile_object (gdbpy_current_objfile);
   if (result)
@@ -1211,6 +1228,9 @@ start_type_printers (void)
   struct cleanup *cleanups;
   PyObject *type_module, *func, *result_obj = NULL;
 
+  if (!is_python_available ())
+    return NULL;
+
   cleanups = ensure_python_env (get_current_arch (), current_language);
 
   type_module = PyImport_ImportModule ("gdb.types");
@@ -1229,7 +1249,7 @@ start_type_printers (void)
     }
   make_cleanup_py_decref (func);
 
-  result_obj = PyObject_CallFunctionObjArgs (func, (char *) NULL);
+  result_obj = gdbpy_ObjectCallFunctionObjArgs (func, (char *) NULL);
   if (result_obj == NULL)
     gdbpy_print_stack ();
 
@@ -1283,7 +1303,7 @@ apply_type_printers (void *printers, struct type *type)
     }
   make_cleanup_py_decref (func);
 
-  result_obj = PyObject_CallFunctionObjArgs (func, printers_obj,
+  result_obj = gdbpy_ObjectCallFunctionObjArgs (func, printers_obj,
 					     type_obj, (char *) NULL);
   if (result_obj == NULL)
     {
@@ -1292,7 +1312,7 @@ apply_type_printers (void *printers, struct type *type)
     }
   make_cleanup_py_decref (result_obj);
 
-  if (result_obj != Py_None)
+  if (result_obj != gdbpy_None)
     {
       result = python_string_to_host_string (result_obj);
       if (result == NULL)
@@ -1440,6 +1460,11 @@ finalize_python (void *ignore)
 
   Py_Finalize ();
 }
+#else
+bool
+is_python_available (void) {
+  return false;
+}
 #endif
 
 /* Provide a prototype to silence -Wmissing-prototypes.  */
@@ -1458,7 +1483,7 @@ _initialize_python (void)
 
   add_com ("python-interactive", class_obscure,
 	   python_interactive_command,
-#ifdef HAVE_PYTHON
+	   is_python_available() ?
 	   _("\
 Start an interactive Python prompt.\n\
 \n\
@@ -1471,19 +1496,17 @@ printed.  For example:\n\
 \n\
     (gdb) python-interactive 2 + 3\n\
     5\n\
-")
-#else /* HAVE_PYTHON */
+") :
 	   _("\
 Start a Python interactive prompt.\n\
 \n\
 Python scripting is not supported in this copy of GDB.\n\
 This command is only a placeholder.")
-#endif /* HAVE_PYTHON */
 	   );
   add_com_alias ("pi", "python-interactive", class_obscure, 1);
 
   add_com ("python", class_obscure, python_command,
-#ifdef HAVE_PYTHON
+	   is_python_available() ?
 	   _("\
 Evaluate a Python command.\n\
 \n\
@@ -1493,14 +1516,12 @@ The command can be given as an argument, for instance:\n\
 \n\
 If no argument is given, the following lines are read and used\n\
 as the Python commands.  Type a line containing \"end\" to indicate\n\
-the end of the command.")
-#else /* HAVE_PYTHON */
+the end of the command.") :
 	   _("\
 Evaluate a Python command.\n\
 \n\
 Python scripting is not supported in this copy of GDB.\n\
 This command is only a placeholder.")
-#endif /* HAVE_PYTHON */
 	   );
   add_com_alias ("py", "python", class_obscure, 1);
 
@@ -1526,6 +1547,8 @@ message == an error message without a stack will be printed."),
 			&user_set_python_list,
 			&user_show_python_list);
 
+    if (!is_python_available())
+      return;
 #ifdef HAVE_PYTHON
 #ifdef WITH_PYTHON_PATH
   /* Work around problem where python gets confused about where it is,
@@ -1590,7 +1613,7 @@ message == an error message without a stack will be printed."),
   PyModule_AddIntConstant (gdb_module, "STDERR", 1);
   PyModule_AddIntConstant (gdb_module, "STDLOG", 2);
 
-  gdbpy_gdb_error = PyErr_NewException ("gdb.error", PyExc_RuntimeError, NULL);
+  gdbpy_gdb_error = PyErr_NewException ("gdb.error", gdbpyExc_RuntimeError, NULL);
   PyModule_AddObject (gdb_module, "error", gdbpy_gdb_error);
 
   gdbpy_gdb_memory_error = PyErr_NewException ("gdb.MemoryError",
@@ -1664,6 +1687,9 @@ finish_python_initialization (void)
   PyObject *sys_path;
   struct cleanup *cleanup;
 
+  if (!is_python_available())
+    return;
+
   cleanup = ensure_python_env (get_current_arch (), current_language);
 
   /* Add the initial data-directory to sys.path.  */
@@ -1674,7 +1700,7 @@ finish_python_initialization (void)
   sys_path = PySys_GetObject ("path");
 
   /* If sys.path is not defined yet, define it first.  */
-  if (!(sys_path && PyList_Check (sys_path)))
+  if (!(sys_path && gdbpy_ListCheck (sys_path)))
     {
 #ifdef IS_PY3K
       PySys_SetPath (L"");
@@ -1683,7 +1709,7 @@ finish_python_initialization (void)
 #endif
       sys_path = PySys_GetObject ("path");
     }
-  if (sys_path && PyList_Check (sys_path))  
+  if (sys_path && gdbpy_ListCheck (sys_path))  
     {
       PyObject *pythondir;
       int err;

@@ -205,11 +205,16 @@ ps_pglobal_lookup (gdb_ps_prochandle_t ph, const char *obj,
 		   const char *name, psaddr_t *sym_addr)
 {
   struct minimal_symbol *ms;
+/* Bionic's libthread_db calls ps_pglobal_lookup with first two arguments set to NULL */
+#ifndef __ANDROID__
   struct cleanup *old_chain = save_current_program_space ();
   struct inferior *inf = find_inferior_pid (ptid_get_pid (ph->ptid));
+#endif
   ps_err_e result;
 
+#ifndef __ANDROID__
   set_current_program_space (inf->pspace);
+#endif
 
   /* FIXME: kettenis/2000-09-03: What should we do with OBJ?  */
   ms = lookup_minimal_symbol (name, NULL, NULL);
@@ -220,8 +225,9 @@ ps_pglobal_lookup (gdb_ps_prochandle_t ph, const char *obj,
       *sym_addr = core_addr_to_ps_addr (SYMBOL_VALUE_ADDRESS (ms));
       result = PS_OK;
     }
-
+#ifndef __ANDROID__
   do_cleanups (old_chain);
+#endif
   return result;
 }
 

@@ -23,6 +23,6 @@ cuda_print_message_nvidia_version (struct ui_file *stream)
 {
   fprintf_unfiltered (stream,
                       "NVIDIA (R) CUDA Debugger\n"
-                      "6.0 release\n"
+                      "6.5 release\n"
                       "Portions Copyright (C) 2007-2014 NVIDIA Corporation\n");
 }

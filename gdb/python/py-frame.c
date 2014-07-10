@@ -110,9 +110,9 @@ frapy_is_valid (PyObject *self, PyObject *args)
   GDB_PY_HANDLE_EXCEPTION (except);
 
   if (frame == NULL)
-    Py_RETURN_FALSE;
+    GDB_PY_RETURN_FALSE;
 
-  Py_RETURN_TRUE;
+  GDB_PY_RETURN_TRUE;
 }
 
 /* Implementation of gdb.Frame.name (self) -> String.
@@ -139,8 +139,8 @@ frapy_name (PyObject *self, PyObject *args)
     result = PyUnicode_Decode (name, strlen (name), host_charset (), NULL);
   else
     {
-      result = Py_None;
-      Py_INCREF (Py_None);
+      result = gdbpy_None;
+      Py_INCREF (gdbpy_None);
     }
 
   return result;
@@ -252,7 +252,7 @@ frapy_block (PyObject *self, PyObject *args)
 
   if (block == NULL || fn_block == NULL || BLOCK_FUNCTION (fn_block) == NULL)
     {
-      PyErr_SetString (PyExc_RuntimeError,
+      PyErr_SetString (gdbpyExc_RuntimeError,
 		       _("Cannot locate object file for block."));
       return NULL;
     }
@@ -265,7 +265,7 @@ frapy_block (PyObject *self, PyObject *args)
       return block_to_block_object (block, symt->objfile);
     }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 
@@ -290,7 +290,7 @@ frapy_function (PyObject *self, PyObject *args)
   if (sym)
     return symbol_to_symbol_object (sym);
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Convert a frame_info struct to a Python Frame object.
@@ -305,7 +305,7 @@ frame_info_to_frame_object (struct frame_info *frame)
   frame_obj = PyObject_New (frame_object, &frame_object_type);
   if (frame_obj == NULL)
     {
-      PyErr_SetString (PyExc_MemoryError, 
+      PyErr_SetString (gdbpyExc_MemoryError, 
 		       _("Could not allocate frame object."));
       return NULL;
     }
@@ -355,8 +355,8 @@ frapy_older (PyObject *self, PyObject *args)
 	prev_obj = (PyObject *) frame_info_to_frame_object (prev);
       else
 	{
-	  Py_INCREF (Py_None);
-	  prev_obj = Py_None;
+	  Py_INCREF (gdbpy_None);
+	  prev_obj = gdbpy_None;
 	}
     }
   GDB_PY_HANDLE_EXCEPTION (except);
@@ -384,8 +384,8 @@ frapy_newer (PyObject *self, PyObject *args)
 	next_obj = (PyObject *) frame_info_to_frame_object (next);
       else
 	{
-	  Py_INCREF (Py_None);
-	  next_obj = Py_None;
+	  Py_INCREF (gdbpy_None);
+	  next_obj = gdbpy_None;
 	}
     }
   GDB_PY_HANDLE_EXCEPTION (except);
@@ -432,7 +432,7 @@ frapy_read_var (PyObject *self, PyObject *args)
   struct value *val = NULL;
   volatile struct gdb_exception except;
 
-  if (!PyArg_ParseTuple (args, "O|O", &sym_obj, &block_obj))
+  if (!gdbpy_ArgParseTuple (args, "O|O", &sym_obj, &block_obj))
     return NULL;
 
   if (PyObject_TypeCheck (sym_obj, &symbol_object_type))
@@ -454,7 +454,7 @@ frapy_read_var (PyObject *self, PyObject *args)
 	  block = block_object_to_block (block_obj);
 	  if (!block)
 	    {
-	      PyErr_SetString (PyExc_RuntimeError,
+	      PyErr_SetString (gdbpyExc_RuntimeError,
 			       _("Second argument must be block."));
 	      return NULL;
 	    }
@@ -472,7 +472,7 @@ frapy_read_var (PyObject *self, PyObject *args)
 
       if (!var)
 	{
-	  PyErr_Format (PyExc_ValueError,
+	  gdbpy_ErrFormat (gdbpyExc_ValueError,
 			_("Variable '%s' not found."), var_name);
 	  do_cleanups (cleanup);
 
@@ -483,7 +483,7 @@ frapy_read_var (PyObject *self, PyObject *args)
     }
   else
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Argument must be a symbol or string."));
       return NULL;
     }
@@ -515,7 +515,7 @@ frapy_select (PyObject *self, PyObject *args)
     }
   GDB_PY_HANDLE_EXCEPTION (except);
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Implementation of gdb.newest_frame () -> gdb.Frame.
@@ -567,12 +567,12 @@ gdbpy_frame_stop_reason_string (PyObject *self, PyObject *args)
   int reason;
   const char *str;
 
-  if (!PyArg_ParseTuple (args, "i", &reason))
+  if (!gdbpy_ArgParseTuple (args, "i", &reason))
     return NULL;
 
   if (reason < UNWIND_FIRST || reason > UNWIND_LAST)
     {
-      PyErr_SetString (PyExc_ValueError, 
+      PyErr_SetString (gdbpyExc_ValueError, 
 		       _("Invalid frame stop reason."));
       return NULL;
     }
@@ -593,8 +593,8 @@ frapy_richcompare (PyObject *self, PyObject *other, int op)
   if (!PyObject_TypeCheck (other, &frame_object_type)
       || (op != Py_EQ && op != Py_NE))
     {
-      Py_INCREF (Py_NotImplemented);
-      return Py_NotImplemented;
+      Py_INCREF (gdbpy_NotImplemented);
+      return gdbpy_NotImplemented;
     }
 
   if (frame_id_eq (((frame_object *) self)->frame_id,
@@ -604,8 +604,8 @@ frapy_richcompare (PyObject *self, PyObject *other, int op)
     result = Py_NE;
 
   if (op == result)
-    Py_RETURN_TRUE;
-  Py_RETURN_FALSE;
+    GDB_PY_RETURN_TRUE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Sets up the Frame API in the gdb module.  */

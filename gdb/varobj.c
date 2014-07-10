@@ -565,6 +565,9 @@ is_root_p (struct varobj *var)
 static struct cleanup *
 varobj_ensure_python_env (struct varobj *var)
 {
+  if (!is_python_available ())
+    return make_cleanup (null_cleanup, NULL);
+
   return ensure_python_env (var->root->exp->gdbarch,
 			    var->root->exp->language_defn);
 }
@@ -886,7 +889,7 @@ instantiate_pretty_printer (PyObject *constructor, struct value *value)
   if (! val_obj)
     return NULL;
 
-  printer = PyObject_CallFunctionObjArgs (constructor, val_obj, NULL);
+  printer = gdbpy_ObjectCallFunctionObjArgs (constructor, val_obj, NULL);
   Py_DECREF (val_obj);
   return printer;
 }
@@ -1103,7 +1106,7 @@ update_dynamic_varobj_children (struct varobj *var,
 
   if (update_children || !var->child_iter)
     {
-      children = PyObject_CallMethodObjArgs (printer, gdbpy_children_cst,
+      children = gdbpy_ObjectCallMethodObjArgs (printer, gdbpy_children_cst,
 					     NULL);
 
       if (!children)
@@ -1171,7 +1174,7 @@ update_dynamic_varobj_children (struct varobj *var,
 		}
 
 	      name_str = xstrprintf ("<error at %d>", i);
-	      item = Py_BuildValue ("(ss)", name_str, value_str);
+	      item = gdbpy_BuildValue ("(ss)", name_str, value_str);
 	      xfree (name_str);
 	      xfree (value_str);
 	      if (!item)
@@ -1201,7 +1204,7 @@ update_dynamic_varobj_children (struct varobj *var,
 
 	  inner = make_cleanup_py_decref (item);
 
-	  if (!PyArg_ParseTuple (item, "sO", &name, &py_v))
+	  if (!gdbpy_ArgParseTuple (item, "sO", &name, &py_v))
 	    {
 	      gdbpy_print_stack ();
 	      error (_("Invalid item from the child list"));
@@ -1566,7 +1569,7 @@ install_default_visualizer (struct varobj *var)
 	    }
 	}
       
-      if (pretty_printer == Py_None)
+      if (pretty_printer == gdbpy_None)
 	{
 	  Py_DECREF (pretty_printer);
 	  pretty_printer = NULL;
@@ -1589,7 +1592,7 @@ construct_visualizer (struct varobj *var, PyObject *constructor)
     return;
 
   Py_INCREF (constructor);
-  if (constructor == Py_None)
+  if (constructor == gdbpy_None)
     pretty_printer = NULL;
   else
     {
@@ -1598,11 +1601,11 @@ construct_visualizer (struct varobj *var, PyObject *constructor)
 	{
 	  gdbpy_print_stack ();
 	  Py_DECREF (constructor);
-	  constructor = Py_None;
+	  constructor = gdbpy_None;
 	  Py_INCREF (constructor);
 	}
 
-      if (pretty_printer == Py_None)
+      if (pretty_printer == gdbpy_None)
 	{
 	  Py_DECREF (pretty_printer);
 	  pretty_printer = NULL;
@@ -1623,7 +1626,7 @@ install_new_value_visualizer (struct varobj *var)
 #if HAVE_PYTHON
   /* If the constructor is None, then we want the raw value.  If VAR
      does not have a value, just skip this.  */
-  if (var->constructor != Py_None && var->value)
+  if (var->constructor != gdbpy_None && var->value)
     {
       struct cleanup *cleanup;
 

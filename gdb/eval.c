@@ -45,6 +45,7 @@
 #include "gdb_assert.h"
 
 #include <ctype.h>
+#include <math.h>
 
 /* This is defined in valops.c */
 extern int overload_resolution;
@@ -1800,10 +1801,7 @@ evaluate_subexp_standard (struct type *expect_type,
       switch (code)
 	{
 	case TYPE_CODE_ARRAY:
-	  if (exp->elts[*pos].opcode == OP_F90_RANGE)
-	    return value_f90_subarray (arg1, exp, pos, noside);
-	  else
-	    goto multi_f77_subscript;
+	  goto multi_f77_subscript;
 
 	case TYPE_CODE_STRING:
 	  if (exp->elts[*pos].opcode == OP_F90_RANGE)
@@ -1827,6 +1825,49 @@ evaluate_subexp_standard (struct type *expect_type,
 	    argvec[tem] = evaluate_subexp_with_coercion (exp, pos, noside);
 	  argvec[tem] = 0;	/* signal end of arglist */
 	  goto do_call_it;
+
+  
+	case TYPE_CODE_COMPLEX:
+	  {
+	    /* selecting real/complex part */
+	    struct value *part;
+	    struct type* type;
+	    struct value *value;
+	    long index;
+	    if (nargs != 1)
+	      {
+		error(_("Too many/few arguments to select part of complex: need one argument")); 
+	      }
+	    part = evaluate_subexp_with_coercion (exp, pos, noside);
+	    index = value_as_long (part);
+
+	  
+	    if (index > 2 || index < 0)
+	      {
+		error(_("Invalid complex part -- needs 1 (real) or 2 (complex)"));
+	      }
+	    index--;
+
+
+	    type = value_type(arg1);
+	    switch (TYPE_LENGTH (type))
+	    {
+	    case 8:
+	      type = builtin_f_type(exp->gdbarch)->builtin_real;
+	      break;
+	    case 16:
+	      type = builtin_f_type(exp->gdbarch)->builtin_real_s8;
+	      break;
+	    case 32:
+	      type = builtin_f_type(exp->gdbarch)->builtin_real_s16;
+	      break;
+	    default:
+	      error (_("Cannot print out complex*%d variables"), TYPE_LENGTH (type));
+	    }	  
+	    
+	    return value_at(type, (value_as_address (value_addr(arg1))) + (CORE_ADDR) (index * TYPE_LENGTH(type)));
+	  }
+
 
 	default:
 	  error (_("Cannot perform substring on this type"));
@@ -2241,9 +2282,22 @@ evaluate_subexp_standard (struct type *expect_type,
 
     multi_f77_subscript:
       {
-	LONGEST subscript_array[MAX_FORTRAN_DIMS];
+	enum f90_range_type range_types[MAX_FORTRAN_DIMS] = {NONE_BOUND_DEFAULT};
+	LONGEST low_bounds[MAX_FORTRAN_DIMS] = {0};
+	LONGEST high_bounds[MAX_FORTRAN_DIMS] = {0};
 	int ndimensions = 1, i;
 	struct value *array = arg1;
+	int seen_slice = 0, is_subscript = 1;
+	struct type *element_type;
+	struct type *range_type;
+	struct type *new_range_types[MAX_FORTRAN_DIMS];
+	LONGEST offset = 0;
+	LONGEST oldlowerbound, lowerbound, upperbound;	
+	const gdb_byte *valaddr = NULL;
+
+        if (VALUE_LVAL (array) == lval_memory
+	    && !value_address (array))
+	  error (_("cannot subscript an array that is not allocated"));
 
 	if (nargs > MAX_FORTRAN_DIMS)
 	  error (_("Too many subscripts for F77 (%d Max)"), MAX_FORTRAN_DIMS);
@@ -2261,23 +2315,72 @@ evaluate_subexp_standard (struct type *expect_type,
 	/* Take array indices left to right.  */
 	for (i = 0; i < nargs; i++)
 	  {
-	    /* Evaluate each subscript; it must be a legal integer in F77.  */
-	    arg2 = evaluate_subexp_with_coercion (exp, pos, noside);
-
-	    /* Fill in the subscript array.  */
-
-	    subscript_array[i] = value_as_long (arg2);
+	    /* Evaluate each subscript, It must be a legal integer in F77 */
+	    if (exp->elts[*pos].opcode == OP_F90_RANGE)
+	      {
+		int pc = (*pos) + 1;
+		range_types[i] = longest_to_int (exp->elts[pc].longconst); 
+		*pos += 3;
+		if (range_types[i] != LOW_BOUND_DEFAULT && range_types[i] != BOTH_BOUND_DEFAULT)
+		  low_bounds[i] = value_as_long (evaluate_subexp (NULL_TYPE, exp, pos, noside));
+		if (range_types[i] != HIGH_BOUND_DEFAULT && range_types[i] != BOTH_BOUND_DEFAULT)
+		  high_bounds[i] = value_as_long (evaluate_subexp (NULL_TYPE, exp, pos, noside));
+		if (range_types[i] == NONE_BOUND_DEFAULT && low_bounds[i] > high_bounds[i])
+		  error(_("Upper bound must be less than lower bound"));
+		is_subscript = 0;
+	      }
+	    else
+	      {
+		range_types[i] = NONE_BOUND_DEFAULT;
+		low_bounds[i] = high_bounds[i] = value_as_long (evaluate_subexp_with_coercion (exp, pos, noside));
+	      }
+	      if (seen_slice && (range_types[i] != NONE_BOUND_DEFAULT || low_bounds[i] != high_bounds[i]))
+	        error(_("GDB does not (yet) support this kind of array slice"));
+	      if (range_types[i] != BOTH_BOUND_DEFAULT)
+	        seen_slice = 1;
 	  }
 
-	/* Internal type of array is arranged right to left.  */
 	for (i = nargs; i > 0; i--)
 	  {
-	    struct type *array_type = check_typedef (value_type (array));
-	    LONGEST index = subscript_array[i - 1];
-
-	    array = value_subscripted_rvalue (array, index,
-					      f77_get_lowerbound (array_type));
+	    oldlowerbound = lowerbound = f77_get_lowerbound (type);
+	    upperbound = f77_get_upperbound (type);
+	    if (range_types[i - 1] != LOW_BOUND_DEFAULT && range_types[i - 1] != BOTH_BOUND_DEFAULT)
+	      lowerbound = low_bounds[i - 1];
+	    if (range_types[i - 1] != HIGH_BOUND_DEFAULT && range_types[i - 1] != BOTH_BOUND_DEFAULT)
+	      upperbound = high_bounds[i - 1];
+	    if (!is_subscript)
+	      {
+		element_type = TYPE_TARGET_TYPE (type);
+		range_type = TYPE_INDEX_TYPE (type);
+		new_range_types[i - 1] = create_range_type ((struct type *) NULL,
+						            TYPE_TARGET_TYPE (range_type),
+						            lowerbound,
+						            upperbound);
+	      }
+	    type = check_typedef (TYPE_TARGET_TYPE (type));
+	    offset += (lowerbound - oldlowerbound) * TYPE_LENGTH (type);
 	  }
+	if (!is_subscript)
+	  {
+	    for (i = 0; i < nargs; i++)
+	      type = create_array_type ((struct type *) NULL, 
+					type,
+					new_range_types[i]);
+	  }
+	if (VALUE_LVAL (array) == lval_memory)
+	  {
+	    array = value_from_contents_and_address (type, NULL,
+						    get_limited_length (type),
+						    value_address (arg1) + offset);
+	  }
+	else if (!value_lazy (array))
+	  {
+	    valaddr = value_contents (array) + offset;
+	    array = allocate_value (type);
+	    memcpy (value_contents_raw (array), valaddr, value_length (array));
+	  }
+	else
+	  error (_("cannot subscript arrays that are not in memory"));
 
 	return array;
       }
@@ -2815,6 +2918,145 @@ evaluate_subexp_standard (struct type *expect_type,
 	}
       else
         error (_("Attempt to use a type as an expression"));
+
+    case UNOP_ISNAN:
+      arg1 = evaluate_subexp (NULL_TYPE, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        goto nosideret;
+      return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, isnan (value_as_double (arg1)));
+      
+    case UNOP_IEEE_IS_NAN:
+      arg1 = evaluate_subexp (NULL_TYPE, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        goto nosideret;
+      return value_from_longest (language_bool_type (exp->language_defn, exp->gdbarch), isnan (value_as_double (arg1)) != 0);
+      
+    case UNOP_ISINF:
+      arg1 = evaluate_subexp (NULL_TYPE, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        goto nosideret;
+      return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, isinf (value_as_double (arg1)));
+      
+    case UNOP_IEEE_IS_INF:
+      arg1 = evaluate_subexp (NULL_TYPE, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        goto nosideret;
+      return value_from_longest (language_bool_type (exp->language_defn, exp->gdbarch), isinf (value_as_double (arg1)) != 0);
+      
+    case UNOP_ISFINITE:
+      arg1 = evaluate_subexp (NULL_TYPE, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        goto nosideret;
+      return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, isfinite (value_as_double (arg1)));
+      
+    case UNOP_IEEE_IS_FINITE:
+      arg1 = evaluate_subexp (NULL_TYPE, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        goto nosideret;
+      return value_from_longest (language_bool_type (exp->language_defn, exp->gdbarch), isfinite (value_as_double (arg1)) != 0);
+      
+    case UNOP_ISNORMAL:
+      arg1 = evaluate_subexp (NULL_TYPE, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        goto nosideret;
+      return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, isnormal (value_as_double (arg1)));
+      
+    case UNOP_IEEE_IS_NORMAL:
+      arg1 = evaluate_subexp (NULL_TYPE, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        goto nosideret;
+      return value_from_longest (language_bool_type (exp->language_defn, exp->gdbarch), isnormal (value_as_double (arg1)) != 0);
+      
+    case UNOP_CREAL:
+      arg1 = evaluate_subexp (NULL_TYPE, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        goto nosideret;
+      return value_real (arg1);
+      
+    case UNOP_CIMAG:
+      arg1 = evaluate_subexp (NULL_TYPE, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        goto nosideret;
+      return value_imag (arg1);
+      
+    case UNOP_FABS:
+      arg1 = evaluate_subexp (NULL_TYPE, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        goto nosideret;
+      type = value_type (arg1);
+      if (TYPE_CODE (type) != TYPE_CODE_FLT)
+        type = builtin_type (exp->gdbarch)->builtin_double;
+      return value_from_double (type, fabs (value_as_double (arg1)));
+      
+    case UNOP_CEIL:
+      arg1 = evaluate_subexp (NULL_TYPE, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        goto nosideret;
+      type = value_type (arg1);
+      if (TYPE_CODE (type) != TYPE_CODE_FLT)
+        type = builtin_type (exp->gdbarch)->builtin_double;      
+      return value_from_double (type, ceil (value_as_double (arg1)));
+      
+    case UNOP_FLOOR:
+      arg1 = evaluate_subexp (NULL_TYPE, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        goto nosideret;
+      type = value_type (arg1);
+      if (TYPE_CODE (type) != TYPE_CODE_FLT)
+        type = builtin_type (exp->gdbarch)->builtin_double;      
+      return value_from_double (type, floor (value_as_double (arg1)));
+      
+    case BINOP_FMOD:
+      arg1 = evaluate_subexp (NULL_TYPE, exp, pos, noside);
+      arg2 = evaluate_subexp (value_type (arg1), exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        goto nosideret;
+      type = value_type (arg1);
+      if (TYPE_CODE (type) != TYPE_CODE_FLT
+          && TYPE_CODE (value_type (arg2)) == TYPE_CODE_FLT)
+        type = value_type (arg2);
+      if (TYPE_CODE (type) != TYPE_CODE_FLT)
+        return value_from_longest (value_type (arg1), fmod (value_as_long (arg1), value_as_long (arg2)));
+      else
+        return value_from_double (type, fmod (value_as_double (arg1), value_as_double (arg2)));
+
+    case BINOP_MODULO:
+      arg1 = evaluate_subexp (NULL_TYPE, exp, pos, noside);
+      arg2 = evaluate_subexp (value_type (arg1), exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        goto nosideret;
+      {
+        /* MODULO(A, P) = A - FLOOR (A / P) * P */
+        type = value_type (arg1);
+        if (TYPE_CODE (type) != TYPE_CODE_FLT
+            && TYPE_CODE (value_type (arg2)) == TYPE_CODE_FLT)
+          type = value_type (arg2);
+        if (TYPE_CODE (type) != TYPE_CODE_FLT)
+          {
+            LONGEST a = value_as_long (arg1);
+            LONGEST p = value_as_long (arg2);
+            LONGEST result = a - (a / p) * p;
+            if (result != 0 && (a < 0) != (p < 0))
+              result += p;
+            return value_from_longest (value_type (arg1), result);
+          }
+        else
+          {
+            double a = value_as_double (arg1);
+            double p = value_as_double (arg2);
+            double result = fmod (a, p);
+            if (result != 0 && (a < 0.0) != (p < 0.0))
+              result += p;
+            return value_from_double (type, result);
+          }
+      }
+
+    case BINOP_CMPLX:
+      arg1 = evaluate_subexp (NULL_TYPE, exp, pos, noside);
+      arg2 = evaluate_subexp (value_type (arg1), exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        goto nosideret;
+      return value_literal_complex (arg1, arg2, builtin_f_type(exp->gdbarch)->builtin_complex_s16);
 
     default:
       /* Removing this case and compiling with gcc -Wall reveals that

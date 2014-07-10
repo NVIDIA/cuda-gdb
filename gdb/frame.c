@@ -1880,14 +1880,14 @@ frame_debug_got_null_frame (struct frame_info *this_frame,
 /* Is this (non-sentinel) frame in the "main"() function?  */
 
 static int
-inside_main_func (struct frame_info *this_frame)
+inside_func (struct frame_info *this_frame, const char *name, struct objfile *objfile)
 {
   struct minimal_symbol *msymbol;
   CORE_ADDR maddr;
 
-  if (symfile_objfile == 0)
+  if (name == NULL)
     return 0;
-  msymbol = lookup_minimal_symbol (main_name (), NULL, symfile_objfile);
+  msymbol = lookup_minimal_symbol (name, NULL, objfile);
   if (msymbol == NULL)
     return 0;
   /* Make certain that the code, and not descriptor, address is
@@ -1896,6 +1896,40 @@ inside_main_func (struct frame_info *this_frame)
 					      SYMBOL_VALUE_ADDRESS (msymbol),
 					      &current_target);
   return maddr == get_frame_func (this_frame);
+}
+
+static int
+inside_func_full (struct frame_info *this_frame, const char *name, struct objfile *objfile)
+{
+  struct symbol *sym = lookup_symbol(name, NULL, VAR_DOMAIN, 0);  
+  if (sym) {
+     CORE_ADDR maddr;
+     struct block *block;
+     block = SYMBOL_BLOCK_VALUE (sym); /* gives block for symtab */
+     if (block) {
+         maddr = gdbarch_convert_from_func_ptr_addr 
+         (get_frame_arch (this_frame),
+          BLOCK_START (block),
+          &current_target);
+         return maddr == get_frame_func (this_frame);
+     }
+  }
+  return 0;
+}
+
+static int
+inside_main_func (struct frame_info *this_frame)
+{
+  int ret = 0;
+  if (symfile_objfile != NULL)
+    {
+      ret = inside_func_full(this_frame, main_name (), symfile_objfile) ||
+            inside_func(this_frame, "MAIN__", symfile_objfile) ||
+            inside_func(this_frame, "_main_", symfile_objfile) ||
+            inside_func(this_frame, "start__", symfile_objfile) ||
+            inside_func(this_frame, "main", symfile_objfile);
+    }
+  return ret || inside_func(this_frame, "__libc_start_main", NULL);
 }
 
 /* Test whether THIS_FRAME is inside the process entry point function.  */

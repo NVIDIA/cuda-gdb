@@ -32,11 +32,11 @@ get_event_thread (void)
   if (non_stop)
     thread = (PyObject *) find_thread_object (inferior_ptid);
   else
-    thread = Py_None;
+    thread = gdbpy_None;
 
   if (!thread)
     {
-      PyErr_SetString (PyExc_RuntimeError, "Could not find event thread");
+      PyErr_SetString (gdbpyExc_RuntimeError, "Could not find event thread");
       return NULL;
     }
 

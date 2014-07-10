@@ -999,7 +999,13 @@ find_pc_sect_symtab_via_partial (CORE_ADDR pc, struct obj_section *section)
   /* If we know that this is not a text address, return failure.  This is
      necessary because we loop based on texthigh and textlow, which do
      not include the data ranges.  */
-  msymbol = lookup_minimal_symbol_by_pc_section (pc, section);
+  if (section == NULL)
+    {
+      struct obj_section *obj_section = find_pc_section (pc);
+      msymbol = lookup_minimal_symbol_by_pc_section (pc, obj_section);
+    }
+  else
+    msymbol = lookup_minimal_symbol_by_pc_section (pc, section);
   if (msymbol
       && (MSYMBOL_TYPE (msymbol) == mst_data
 	  || MSYMBOL_TYPE (msymbol) == mst_bss
@@ -1217,6 +1223,19 @@ demangle_for_lookup (const char *name, enum language lang,
 	  modified_name = demangled_name;
 	  make_cleanup (xfree, demangled_name);
 	}
+    }
+
+  if (current_language->la_case_sensitivity == case_sensitive_off)
+    {
+      int i;
+      demangled_name = xstrdup (modified_name);
+      if (demangled_name)
+        {
+          for (i = 0; demangled_name[i]; ++i)
+            demangled_name[i] = tolower (demangled_name[i]);
+          make_cleanup (xfree, demangled_name);
+          modified_name = demangled_name;
+        }
     }
 
   *result_name = modified_name;
@@ -2175,7 +2194,13 @@ find_pc_sect_symtab (CORE_ADDR pc, struct obj_section *section)
      addresses, which do not include the data ranges, and because
      we call find_pc_sect_psymtab which has a similar restriction based
      on the partial_symtab's texthigh and textlow.  */
-  msymbol = lookup_minimal_symbol_by_pc_section (pc, section);
+  if (section == NULL)
+    {
+      struct obj_section *obj_section = find_pc_section (pc);
+      msymbol = lookup_minimal_symbol_by_pc_section (pc, obj_section);
+    }
+  else
+    msymbol = lookup_minimal_symbol_by_pc_section (pc, section);
   if (msymbol
       && (MSYMBOL_TYPE (msymbol) == mst_data
 	  || MSYMBOL_TYPE (msymbol) == mst_bss
@@ -5147,6 +5172,12 @@ symtab_observer_executable_changed (void)
   set_main_name (NULL);
 }
 
+/* Command to display the symbol for the main function */
+static void info_main_command(char* arg, int from_tty)
+{
+  printf_unfiltered("%s\n", main_name());
+}
+
 /* Return 1 if the supplied producer string matches the ARM RealView
    compiler (armcc).  */
 
@@ -5185,6 +5216,8 @@ All global and static variable names, or those matching REGEXP."));
   add_info ("functions", functions_info,
 	    _("All function names, or those matching REGEXP."));
 
+  add_info ("main", info_main_command,
+	    _("Get main symbol to identify entry point into program."));
   /* FIXME:  This command has at least the following problems:
      1.  It prints builtin types (in a very strange and confusing fashion).
      2.  It doesn't print right, e.g. with

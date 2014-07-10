@@ -76,16 +76,16 @@ search_pp_list (PyObject *list, PyObject *value)
 	    continue;
 	}
 
-      printer = PyObject_CallFunctionObjArgs (function, value, NULL);
+      printer = gdbpy_ObjectCallFunctionObjArgs (function, value, NULL);
       if (! printer)
 	return NULL;
-      else if (printer != Py_None)
+      else if (printer != gdbpy_None)
 	return printer;
 
       Py_DECREF (printer);
     }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Subroutine of find_pretty_printer to simplify it.
@@ -119,13 +119,13 @@ find_pretty_printer_from_objfiles (PyObject *value)
     if (! function)
       return NULL;
 
-    if (function != Py_None)
+    if (function != gdbpy_None)
       return function;
     
     Py_DECREF (function);
   }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Subroutine of find_pretty_printer to simplify it.
@@ -164,12 +164,12 @@ find_pretty_printer_from_gdb (PyObject *value)
   /* Fetch the global pretty printer list.  */
   if (gdb_python_module == NULL
       || ! PyObject_HasAttrString (gdb_python_module, "pretty_printers"))
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
   pp_list = PyObject_GetAttrString (gdb_python_module, "pretty_printers");
-  if (pp_list == NULL || ! PyList_Check (pp_list))
+  if (pp_list == NULL || ! gdbpy_ListCheck (pp_list))
     {
       Py_XDECREF (pp_list);
-      Py_RETURN_NONE;
+      GDB_PY_RETURN_NONE;
     }
 
   function = search_pp_list (pp_list, value);
@@ -189,13 +189,13 @@ find_pretty_printer (PyObject *value)
   /* Look at the pretty-printer list for each objfile
      in the current program-space.  */
   function = find_pretty_printer_from_objfiles (value);
-  if (function == NULL || function != Py_None)
+  if (function == NULL || function != gdbpy_None)
     return function;
   Py_DECREF (function);
 
   /* Look at the pretty-printer list for the current program-space.  */
   function = find_pretty_printer_from_progspace (value);
-  if (function == NULL || function != Py_None)
+  if (function == NULL || function != gdbpy_None)
     return function;
   Py_DECREF (function);
 
@@ -221,11 +221,11 @@ pretty_print_one_value (PyObject *printer, struct value **out_value)
   *out_value = NULL;
   TRY_CATCH (except, RETURN_MASK_ALL)
     {
-      result = PyObject_CallMethodObjArgs (printer, gdbpy_to_string_cst, NULL);
+      result = gdbpy_ObjectCallMethodObjArgs (printer, gdbpy_to_string_cst, NULL);
       if (result)
 	{
-	  if (! gdbpy_is_string (result) && ! gdbpy_is_lazy_string (result)  
-	      && result != Py_None)
+	  if (! gdbpy_is_string (result) && ! gdbpy_is_lazy_string (result)
+	      && result != gdbpy_None)
 	    {
 	      *out_value = convert_value_from_python (result);
 	      if (PyErr_Occurred ())
@@ -252,7 +252,7 @@ gdbpy_get_display_hint (PyObject *printer)
   if (! PyObject_HasAttr (printer, gdbpy_display_hint_cst))
     return NULL;
 
-  hint = PyObject_CallMethodObjArgs (printer, gdbpy_display_hint_cst, NULL);
+  hint = gdbpy_ObjectCallMethodObjArgs (printer, gdbpy_display_hint_cst, NULL);
   if (hint)
     {
       if (gdbpy_is_string (hint))
@@ -318,7 +318,7 @@ print_string_repr (PyObject *printer, const char *hint,
     {
       struct cleanup *cleanup = make_cleanup_py_decref (py_str);
 
-      if (py_str == Py_None)
+      if (py_str == gdbpy_None)
 	result = string_repr_none;
       else if (gdbpy_is_lazy_string (py_str))
 	{
@@ -393,7 +393,7 @@ static void
 py_restore_tstate (void *p)
 {
   PyFrameObject *frame = p;
-  PyThreadState *tstate = PyThreadState_GET ();
+  PyThreadState *tstate = PyThreadState_Get ();
 
   tstate->frame = frame;
 }
@@ -450,7 +450,7 @@ push_dummy_python_frame (void)
       return NULL;
     }
 
-  tstate = PyThreadState_GET ();
+  tstate = PyThreadState_Get ();
 
   frame = PyFrame_New (tstate, code, globals, NULL);
 
@@ -492,7 +492,7 @@ print_children (PyObject *printer, const char *hint,
   is_map = hint && ! strcmp (hint, "map");
   is_array = hint && ! strcmp (hint, "array");
 
-  children = PyObject_CallMethodObjArgs (printer, gdbpy_children_cst,
+  children = gdbpy_ObjectCallMethodObjArgs (printer, gdbpy_children_cst,
 					 NULL);
   if (! children)
     {
@@ -553,7 +553,7 @@ print_children (PyObject *printer, const char *hint,
 	  break;
 	}
 
-      if (! PyArg_ParseTuple (item, "sO", &name, &py_v))
+      if (! gdbpy_ArgParseTuple (item, "sO", &name, &py_v))
 	{
 	  gdbpy_print_stack ();
 	  Py_DECREF (item);
@@ -704,6 +704,10 @@ apply_val_pretty_printer (struct type *type, const gdb_byte *valaddr,
   int result = 0;
   enum string_repr_result print_result;
 
+  /* No python runtime is available */
+  if (!is_python_available ())
+    return 0;
+
   /* No pretty-printer support for unavailable values.  */
   if (!value_bytes_available (val, embedded_offset, TYPE_LENGTH (type)))
     return 0;
@@ -714,6 +718,7 @@ apply_val_pretty_printer (struct type *type, const gdb_byte *valaddr,
   if (valaddr)
     valaddr += embedded_offset;
   value = value_from_contents_and_address (type, valaddr,
+					   val ? value_length (val) : TYPE_LENGTH (type),
 					   address + embedded_offset);
 
   set_value_component_location (value, val);
@@ -732,7 +737,7 @@ apply_val_pretty_printer (struct type *type, const gdb_byte *valaddr,
   printer = find_pretty_printer (val_obj);
   Py_DECREF (val_obj);
   make_cleanup_py_decref (printer);
-  if (! printer || printer == Py_None)
+  if (! printer || printer == gdbpy_None)
     goto done;
 
   /* If we are printing a map, we want some special formatting.  */
@@ -819,12 +824,12 @@ gdbpy_default_visualizer (PyObject *self, PyObject *args)
   PyObject *cons;
   struct value *value;
 
-  if (! PyArg_ParseTuple (args, "O", &val_obj))
+  if (! gdbpy_ArgParseTuple (args, "O", &val_obj))
     return NULL;
   value = value_object_to_value (val_obj);
   if (! value)
     {
-      PyErr_SetString (PyExc_TypeError, 
+      PyErr_SetString (gdbpyExc_TypeError, 
 		       _("Argument must be a gdb.Value."));
       return NULL;
     }

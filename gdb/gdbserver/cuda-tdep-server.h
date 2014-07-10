@@ -94,9 +94,6 @@ bool cuda_options_debug_notifications ();
 
 bool cuda_options_notify_youngest ();
 
-void cuda_elf_image_save (char *object_file_path, uint64_t module_id,
-                          uint64_t context_id, uint64_t elf_image_size, void *elf_image);
-
 bool cuda_check_pending_sigint (ptid_t ptid);
 
 /* Linux vs. Mac OS X */

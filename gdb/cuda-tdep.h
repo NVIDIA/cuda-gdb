@@ -113,7 +113,7 @@ int  cuda_startup (void);
 void cuda_kill (void);
 void cuda_cleanup (void);
 void cuda_final_cleanup (void *unused);
-void cuda_initialize_target (void);
+bool cuda_initialize_target (void);
 bool cuda_inferior_in_debug_mode (void);
 void cuda_inferior_update_suspended_devices_mask (void);
 void cuda_load_device_info (char *, struct partial_symtab *);
@@ -214,6 +214,6 @@ uint32_t    cuda_gdb_session_get_id (void);
 void cuda_nat_attach (void);
 void cuda_do_detach(bool remote);
 void cuda_remote_attach (void);
- 
+
 #endif
 

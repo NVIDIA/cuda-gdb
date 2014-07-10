@@ -20,6 +20,8 @@
 #ifndef GDB_PYTHON_H
 #define GDB_PYTHON_H
 
+#include <stdbool.h>
+
 #include "value.h"
 
 struct breakpoint_object;
@@ -54,5 +56,7 @@ void *start_type_printers (void);
 char *apply_type_printers (void *, struct type *type);
 
 void free_type_printers (void *arg);
+
+bool is_python_available (void);
 
 #endif /* GDB_PYTHON_H */

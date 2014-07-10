@@ -94,6 +94,11 @@ OP (BINOP_IN)			/* Returns 1 iff ARG1 IN ARG2.  */
    deleted) Chill.  */
 OP (BINOP_RANGE)
 
+/* Intrinsic functions (fmod etc.).  */
+OP (BINOP_FMOD)
+OP (BINOP_CMPLX)
+OP (BINOP_MODULO)
+
 /* This must be the highest BINOP_ value, for expprint.c.  */
 OP (BINOP_END)
 
@@ -255,6 +260,21 @@ OP (UNOP_MAX)
 OP (UNOP_MIN)
 OP (UNOP_ODD)
 OP (UNOP_TRUNC)
+
+/* Intrinsic functions (isnan, isinf, creal, cimag, etc.).  */
+OP (UNOP_ISNAN)
+OP (UNOP_ISINF)
+OP (UNOP_ISFINITE)
+OP (UNOP_ISNORMAL)
+OP (UNOP_CREAL)
+OP (UNOP_CIMAG)
+OP (UNOP_FABS)
+OP (UNOP_CEIL)
+OP (UNOP_FLOOR)
+OP (UNOP_IEEE_IS_NAN)
+OP (UNOP_IEEE_IS_INF)
+OP (UNOP_IEEE_IS_FINITE)
+OP (UNOP_IEEE_IS_NORMAL)
 
 OP (OP_BOOL)			/* Modula-2 builtin BOOLEAN type */
 OP (OP_M2_STRING)		/* Modula-2 string constants */

@@ -34,8 +34,8 @@ context_new (uint64_t context_id, uint32_t dev_id)
 {
   context_t context;
 
-  cuda_trace ("create context dev_id %u context_id 0x%"PRIx64,
-              dev_id, context_id);
+  cuda_trace ("create context dev_id %u context_id 0x%llx",
+              dev_id, (unsigned long long)context_id);
 
   context = xmalloc (sizeof *context);
   context->context_id = context_id;
@@ -53,8 +53,8 @@ context_delete (context_t this)
   gdb_assert (this);
   gdb_assert (get_current_context () != this);
 
-  cuda_trace ("delete context dev_id %u context_id 0x%"PRIx64,
-              this->dev_id, this->context_id);
+  cuda_trace ("delete context dev_id %u context_id 0x%llx",
+              this->dev_id, (unsigned long long)this->context_id);
 
   dev_id = context_get_device_id(this);
 
@@ -91,8 +91,9 @@ context_print (context_t this)
 {
   gdb_assert (this);
 
-  cuda_trace ("context %p context_id 0x%"PRIx64" dev_id %u modules %p",
-              this, this->context_id, this->dev_id, this->modules);
+  cuda_trace ("context %p context_id 0x%llx dev_id %u modules %p",
+              this, (unsigned long long)this->context_id,
+              this->dev_id, this->modules);
 
   modules_print (this->modules);
 }

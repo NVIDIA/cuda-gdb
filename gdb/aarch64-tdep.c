@@ -1870,7 +1870,7 @@ aarch64_vnb_type (struct gdbarch *gdbarch)
 /* Implement the "dwarf2_reg_to_regnum" gdbarch method.  */
 
 static int
-aarch64_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
+aarch64_dwarf_reg_to_regnum (struct gdbarch *gdbarch, reg_t reg)
 {
   if (reg >= AARCH64_DWARF_X0 && reg <= AARCH64_DWARF_X0 + 30)
     return AARCH64_X0_REGNUM + reg - AARCH64_DWARF_X0;

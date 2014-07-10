@@ -319,7 +319,8 @@ SUBDIR_PYTHON_OBS = \
 	py-threadevent.o \
 	py-type.o \
 	py-utils.o \
-	py-value.o
+	py-value.o \
+	python-dynobj.o
 
 SUBDIR_PYTHON_SRCS = \
 	python/python.c \
@@ -353,7 +354,8 @@ SUBDIR_PYTHON_SRCS = \
 	python/py-threadevent.c \
 	python/py-type.c \
 	python/py-utils.c \
-	python/py-value.c
+	python/py-value.c \
+	python/python-dynobj.c
 SUBDIR_PYTHON_DEPS =
 SUBDIR_PYTHON_LDFLAGS=
 SUBDIR_PYTHON_CFLAGS=
@@ -492,7 +494,7 @@ INTERNAL_LDFLAGS = $(CFLAGS) $(GLOBAL_CFLAGS) $(MH_LDFLAGS) $(LDFLAGS) $(CONFIG_
 # XM_CLIBS, defined in *config files, have host-dependent libs.
 # LIBIBERTY appears twice on purpose.
 CLIBS = $(SIM) $(READLINE) $(OPCODES) $(BFD) $(INTL) $(LIBIBERTY) $(LIBDECNUMBER) \
-	$(XM_CLIBS) $(NAT_CLIBS) $(GDBTKLIBS) @LIBS@ @PYTHON_LIBS@ \
+	$(XM_CLIBS) $(NAT_CLIBS) $(GDBTKLIBS) @LIBS@ \
 	$(LIBEXPAT) $(LIBLZMA) \
 	$(LIBIBERTY) $(WIN32LIBS) $(LIBGNU)
 CDEPS = $(XM_CDEPS) $(NAT_CDEPS) $(SIM) $(BFD) $(READLINE_DEPS) \
@@ -742,6 +744,7 @@ SFILES = ada-exp.y ada-lang.c ada-typeprint.c ada-valprint.c ada-tasks.c \
 	exceptions.c expprint.c \
 	f-exp.y f-lang.c f-typeprint.c f-valprint.c filesystem.c \
 	findcmd.c findvar.c frame.c frame-base.c frame-unwind.c \
+	f-module.c \
 	gdbarch.c arch-utils.c gdb_bfd.c gdb_obstack.c \
 	gdbtypes.c gnu-v2-abi.c gnu-v3-abi.c \
 	go-exp.y go-lang.c go-typeprint.c go-valprint.c \
@@ -914,6 +917,7 @@ COMMON_OBS = $(DEPFILES) $(CONFIG_OBS) $(YYOBJ) \
 	expprint.o environ.o stack.o thread.o \
 	exceptions.o \
 	filesystem.o \
+	f-module.o \
 	inf-child.o \
 	interps.o \
 	minidebug.o \
@@ -2239,6 +2243,10 @@ py-utils.o: $(srcdir)/python/py-utils.c
 
 py-value.o: $(srcdir)/python/py-value.c
 	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/py-value.c
+	$(POSTCOMPILE)
+
+python-dynobj.o: $(srcdir)/python/python-dynobj.c
+	$(COMPILE) $(PYTHON_CFLAGS) $(srcdir)/python/python-dynobj.c
 	$(POSTCOMPILE)
 
 #

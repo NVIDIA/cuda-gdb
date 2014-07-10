@@ -1078,7 +1078,7 @@ execute_stack_op (struct dwarf_expr_context *ctx,
 					byte_order, result);
 	      }
 
-	    result_val = value_from_contents_and_address (type, buf, addr);
+	    result_val = value_from_contents_and_address (type, buf, TYPE_LENGTH (type), addr);
 	    break;
 	  }
 
@@ -1372,6 +1372,12 @@ execute_stack_op (struct dwarf_expr_context *ctx,
             ctx->location = DWARF_VALUE_MEMORY;
 	  }
 	  goto no_push;
+
+	case DW_OP_push_object_address:
+	  if (ctx->funcs->get_object_address) {
+	    result = ctx->funcs->get_object_address(ctx->baton);
+	    break;
+	  }
 
 	case DW_OP_GNU_uninit:
 	  if (op_ptr != op_end)

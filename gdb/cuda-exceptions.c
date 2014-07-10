@@ -95,14 +95,12 @@ print_exception_origin (cuda_exception_t exception)
   c = cuda_exception_get_coords (exception);
   precise = warp_has_error_pc (c.dev, c.sm, c.wp);
 
-  ui_out_text (uiout, "The exception was triggered at ");
-
   if (!precise)
     {
-      ui_out_text (uiout, "an undetermined PC.\n");
       return;
     }
 
+  ui_out_text (uiout, "The exception was triggered at ");
   pc = warp_get_error_pc (c.dev, c.sm, c.wp);
   sal = find_pc_line ((CORE_ADDR)pc, 0);
 
@@ -116,7 +114,7 @@ print_exception_origin (cuda_exception_t exception)
     }
 
   ui_out_text (uiout, "PC ");
-  ui_out_field_fmt (uiout, "pc", "0x%"PRIx64,  pc);
+  ui_out_field_fmt (uiout, "pc", "0x%llx",  (unsigned long long)pc);
 
   if (filename)
     {
@@ -142,59 +140,6 @@ print_exception_device (cuda_exception_t exception)
   ui_out_text (current_uiout, "The exception was triggered in device ");
   ui_out_field_int    (current_uiout, "device", c.dev);
   ui_out_text         (current_uiout, ".\n");
-}
-
-static void
-print_exception_coords (cuda_exception_t exception, bool print_thread)
-{
-  cuda_coords_t c;
-  kernel_t kernel;
-  uint64_t kernel_id;
-  uint64_t start_pc;
-  const char *const_func_name;
-  char *func_name;
-  struct ui_out *uiout = current_uiout;
-
-  gdb_assert (cuda_exception_is_valid (exception));
-
-  c = cuda_exception_get_coords (exception);
-  kernel = warp_get_kernel (c.dev, c.sm, c.wp);
-  kernel_id = kernel_get_id (kernel);
-  start_pc = kernel_get_virt_code_base (kernel);
-  const_func_name = cuda_find_function_name_from_pc (start_pc, false);
-  func_name = xstrdup (const_func_name);
-  func_name = strtok (func_name, "(");
-
-  ui_out_text         (uiout, "The exception was triggered in");
-
-  ui_out_text         (uiout, " kernel ");
-  ui_out_field_int    (uiout, "kernel_id", kernel_id);
-
-  ui_out_text         (uiout, " function ");
-  ui_out_field_string (uiout, " function", func_name);
-
-  ui_out_text         (uiout, " block (");
-  ui_out_field_int    (uiout, "blockidx.x"  , c.blockIdx.x);
-  ui_out_text         (uiout, ",");
-  ui_out_field_int    (uiout, "blockidx.y"  , c.blockIdx.y);
-  ui_out_text         (uiout, ",");
-  ui_out_field_int    (uiout, "blockidx.z"  , c.blockIdx.z);
-  ui_out_text         (uiout, ")");
-
-  if (print_thread)
-    {
-      ui_out_text         (uiout, " thread (");
-      ui_out_field_int    (uiout, "threadidx.x"  , c.threadIdx.x);
-      ui_out_text         (uiout, ",");
-      ui_out_field_int    (uiout, "threadidx.y"  , c.threadIdx.y);
-      ui_out_text         (uiout, ",");
-      ui_out_field_int    (uiout, "threadidx.z"  , c.threadIdx.z);
-      ui_out_text         (uiout, ") ");
-    }
-
-  ui_out_text (uiout, ".\n");
-
-  xfree (func_name);
 }
 
 static void
@@ -238,7 +183,7 @@ print_lane_illegal_address_message (cuda_exception_t exception)
       ui_out_field_string (uiout, "error-address-space", addr_space);
       ui_out_text (uiout, ")");
     }
-  ui_out_field_fmt (uiout, "address", "0x%"PRIx64,  address);
+  ui_out_field_fmt (uiout, "address", "0x%llx",  (unsigned long long)address);
   ui_out_text (uiout, " detected.\n");
 }
 
@@ -273,12 +218,10 @@ cuda_exception_print_message (cuda_exception_t exception)
   {
     case GDB_SIGNAL_CUDA_WARP_ASSERT:
       print_assert_message (exception);
-      print_exception_coords (exception, true);
       print_exception_origin (exception);
       break;
     case GDB_SIGNAL_CUDA_LANE_ILLEGAL_ADDRESS:
       print_lane_illegal_address_message (exception);
-      print_exception_coords (exception, true);
       print_exception_origin (exception);
       break;
     case GDB_SIGNAL_CUDA_DEVICE_ILLEGAL_ADDRESS:
@@ -294,13 +237,11 @@ cuda_exception_print_message (cuda_exception_t exception)
     case GDB_SIGNAL_CUDA_WARP_HARDWARE_STACK_OVERFLOW:
     case GDB_SIGNAL_CUDA_WARP_ILLEGAL_ADDRESS:
       print_exception_name (exception);
-      print_exception_coords (exception, false);
       print_exception_origin (exception);
       break;
     case GDB_SIGNAL_CUDA_LANE_SYSCALL_ERROR:
     case GDB_SIGNAL_CUDA_LANE_USER_STACK_OVERFLOW:
       print_exception_name (exception);
-      print_exception_coords (exception, true);
       print_exception_origin (exception);
       break;
     case GDB_SIGNAL_CUDA_UNKNOWN_EXCEPTION:

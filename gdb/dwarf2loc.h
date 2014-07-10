@@ -83,7 +83,8 @@ struct value *dwarf2_evaluate_loc_desc (struct type *type,
 					struct frame_info *frame,
 					const gdb_byte *data,
 					size_t size,
-					struct dwarf2_per_cu_data *per_cu);
+					struct dwarf2_per_cu_data *per_cu,
+					CORE_ADDR push_obj);
 
 CORE_ADDR dwarf2_read_addr_index (struct dwarf2_per_cu_data *per_cu,
 				  unsigned int addr_index);
@@ -172,5 +173,21 @@ struct call_site_stuff;
 extern struct call_site_chain *call_site_find_chain (struct gdbarch *gdbarch,
 						     CORE_ADDR caller_pc,
 						     CORE_ADDR callee_pc);
+
+LONGEST dwarf2_evaluate_int (void* locbaton, struct value *,
+			       void *frame_info);
+
+
+
+struct array_location_batons
+{
+    struct dwarf2_loclist_baton *intel_location_baton;
+    struct dwarf2_loclist_baton *allocated_baton;
+    struct dwarf2_loclist_baton *pgi_lbase_baton;
+    struct dwarf2_loclist_baton *pgi_elem_skip_baton;
+
+    void *baton_evaluation_function;
+    struct objfile *objfile;
+};
 
 #endif /* dwarf2loc.h */

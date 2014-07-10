@@ -290,34 +290,6 @@ cuda_options_notify_youngest ()
 }
 
 void
-cuda_elf_image_save (char *object_file_path, uint64_t module_id,
-                     uint64_t context_id, uint64_t elf_image_size, void *elf_image)
-{
-  int object_file_fd;
-  struct stat object_file_stat;
-
-  uint64_t nbytes = 0;
-
-  snprintf (object_file_path, CUDA_GDB_TMP_BUF_SIZE,
-            "%s/elf.%"PRIx64".%"PRIx64".o.XXXXXX",
-            cuda_gdb_session_get_dir (), context_id, module_id);
-
-  object_file_fd = mkstemp (object_file_path);
-  if (object_file_fd == -1)
-    error ("Error: Failed to create device ELF symbol file!");
-
-  nbytes = write (object_file_fd, elf_image, elf_image_size);
-  close (object_file_fd);
-  if (nbytes != elf_image_size)
-    error ("Error: Failed to write the ELF image file");
-
-  if (stat (object_file_path, &object_file_stat))
-    error ("Error: Failed to stat device ELF symbol file!");
-  else if (object_file_stat.st_size != elf_image_size)
-    error ("Error: The device ELF file size is incorrect!");
-}
-
-void
 cuda_cleanup ()
 {
   int i;

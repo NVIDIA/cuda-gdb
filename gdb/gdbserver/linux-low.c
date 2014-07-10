@@ -684,6 +684,12 @@ linux_create_inferior (char *program, char **allargs)
 	      /* Errors ignored.  */;
 	    }
 	}
+      else
+	{
+	  close (listen_desc);
+	  if (gdb_connected ())
+	    close (remote_desc);
+	}
 
       execv (program, allargs);
       if (errno == ENOENT)

@@ -1,3 +1,14 @@
+2013-08-30  Tom Tromey  <tromey@redhat.com>
+
+	* gdb.base/random-signal.c: New file.
+	* gdb.base/random-signal.exp: New file.
+
+2013-08-28  Jan Kratochvil  <jan.kratochvil@redhat.com>
+
+	PR gdb/15415
+	* gdb.base/argv0-symlink.c: New file.
+	* gdb.base/argv0-symlink.exp: New file.
+
 2013-06-06  Doug Evans  <dje@google.com>
 
 	* gdb.cp/derivation.exp: Make tests have unique names.
@@ -9,6 +20,26 @@
 	* gdb.cp/derivation.cc (main): Call foo2.
 	* gdb.cp/derivation.exp: Add tests for typedefs in another
 	file, and when there's an active block.
+
+2013-05-10  Pedro Alves  <palves@redhat.com>
+
+	PR remote/15455
+
+	* gdb.trace/qtro.c: New file.
+	* gdb.trace/qtro.exp: New file.
+
+2013-05-07  Sergio Durigan Junior  <sergiodj@redhat.com>
+
+	PR breakpoints/15413:
+	* gdb.base/pending.exp: Add test for completion of the "condition"
+	command for pending breakpoints.
+	* gdb.linespec/linespec.ex: Add test for completion of the
+	"condition" command when dealing with multiple locations.
+
+2013-05-03  Hafiz Abid Qadeer  <abidh@codesourcery.com>
+
+	* status-stop.exp (test_tstart_tstart): Check for error
+	returned by the second 'tstart' command.
 
 2013-04-25  Sergio Durigan Junior  <sergiodj@redhat.com>
 

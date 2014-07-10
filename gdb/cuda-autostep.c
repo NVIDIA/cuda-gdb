@@ -83,8 +83,8 @@ autostep_report_exception_host (uint64_t before_pc)
 
   struct symtab_and_line before_sal = find_pc_line (before_pc, 0);
 
-  printf_filtered (_("Autostep precisely caught exception at %s:%d (0x%" PRIx64 ")\n"),
-    before_sal.symtab->filename, before_sal.line, before_pc);
+  printf_filtered (_("Autostep precisely caught exception at %s:%d (0x%llx)\n"),
+    before_sal.symtab->filename, before_sal.line, (unsigned long long)before_pc);
 
   set_internalvar (lookup_internalvar ("autostep_exception_pc"),
     value_from_longest (type_data_ptr, (LONGEST) before_pc));
@@ -114,10 +114,11 @@ autostep_report_exception_device (int before_ln, uint64_t before_pc,
       struct symtab_and_line before_sal = find_pc_line (before_pc, 0);
 
       if (before_sal.symtab && before_sal.line)
-        printf_filtered (_("Autostep precisely caught exception at %s:%d (0x%" PRIx64 ")\n"),
-        before_sal.symtab->filename, before_sal.line, before_pc);
+        printf_filtered (_("Autostep precisely caught exception at %s:%d (0x%llx)\n"),
+        before_sal.symtab->filename, before_sal.line, (unsigned long long)before_pc);
       else
-        printf_filtered (_("Autostep precisely caught exception. (0x%" PRIx64 ")\n"), before_pc);
+        printf_filtered (_("Autostep precisely caught exception. (0x%llx)\n"),
+        (unsigned long long)before_pc);
 
       set_internalvar (lookup_internalvar ("autostep_exception_pc"),
         value_from_longest (type_data_ptr, (LONGEST) before_pc));
@@ -137,10 +138,10 @@ autostep_report_exception_device (int before_ln, uint64_t before_pc,
 
       guess_sal = find_pc_line (guess_pc, 0);
 
-      printf_filtered (_("Autostep caught exception at instruction before 0x%" PRIx64 "\n"),
-        after_pc);
-      printf_filtered (_("This is probably %s:%d (0x%" PRIx64 ")\n"),
-        guess_sal.symtab->filename, guess_sal.line, guess_pc);
+      printf_filtered (_("Autostep caught exception at instruction before 0x%llx\n"),
+        (unsigned long long)after_pc);
+      printf_filtered (_("This is probably %s:%d (0x%llx)\n"),
+        guess_sal.symtab->filename, guess_sal.line, (unsigned long long)guess_pc);
 
       set_internalvar (lookup_internalvar ("autostep_exception_pc"),
         value_from_longest (type_data_ptr, (LONGEST) guess_pc));

@@ -1948,20 +1948,161 @@ cudbgRequestCleanupOnDetach (uint32_t appResumeFlag)
     return result;
 }
 
+static CUDBGResult
+cudbgReadPredicates (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint32_t predicates_size, uint32_t *predicates)
+{
+    char *ipc_buf;
+    CUDBGResult result;
+
+    CUDBG_IPC_PROFILE_START();
+
+    CUDBG_IPC_BEGIN(CUDBGAPIREQ_readPredicates);
+    CUDBG_IPC_APPEND(&dev,sizeof(dev));
+    CUDBG_IPC_APPEND(&sm,sizeof(sm));
+    CUDBG_IPC_APPEND(&wp,sizeof(wp));
+    CUDBG_IPC_APPEND(&ln,sizeof(ln));
+    CUDBG_IPC_APPEND(&predicates_size,sizeof(predicates_size));
+
+    CUDBG_IPC_REQUEST((void *)&ipc_buf);
+    result = *(CUDBGResult *)ipc_buf;
+    ipc_buf +=sizeof(CUDBGResult);
+    memcpy(predicates, ipc_buf, predicates_size*sizeof(uint32_t));
+
+    CUDBG_IPC_PROFILE_END(CUDBGAPIREQ_readPredicates, "readPredicates");
+
+    return result;
+}
+
+static CUDBGResult
+cudbgWritePredicates (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint32_t predicates_size, const uint32_t *predicates)
+{
+    char *ipc_buf;
+    CUDBGResult result;
+
+    CUDBG_IPC_PROFILE_START();
+
+    CUDBG_IPC_BEGIN(CUDBGAPIREQ_writePredicates);
+    CUDBG_IPC_APPEND(&dev,sizeof(dev));
+    CUDBG_IPC_APPEND(&sm,sizeof(sm));
+    CUDBG_IPC_APPEND(&wp,sizeof(wp));
+    CUDBG_IPC_APPEND(&ln,sizeof(ln));
+    CUDBG_IPC_APPEND(&predicates_size,sizeof(predicates_size));
+    CUDBG_IPC_APPEND((char *)predicates,predicates_size*sizeof(const uint32_t));
+
+    CUDBG_IPC_REQUEST((void *)&ipc_buf);
+    result = *(CUDBGResult *)ipc_buf;
+    ipc_buf +=sizeof(CUDBGResult);
+
+    CUDBG_IPC_PROFILE_END(CUDBGAPIREQ_writePredicates, "writePredicates");
+
+    return result;
+}
+
+static CUDBGResult
+cudbgGetNumPredicates (uint32_t dev, uint32_t *numPredicates)
+{
+    char *ipc_buf;
+    CUDBGResult result;
+
+    CUDBG_IPC_PROFILE_START();
+
+    CUDBG_IPC_BEGIN(CUDBGAPIREQ_getNumPredicates);
+    CUDBG_IPC_APPEND(&dev,sizeof(dev));
+
+    CUDBG_IPC_REQUEST((void *)&ipc_buf);
+    result = *(CUDBGResult *)ipc_buf;
+    ipc_buf +=sizeof(CUDBGResult);
+    *numPredicates = *((uint32_t *)ipc_buf); ipc_buf+=sizeof(uint32_t);
+
+    CUDBG_IPC_PROFILE_END(CUDBGAPIREQ_getNumPredicates, "getNumPredicates");
+
+    return result;
+}
+
+static CUDBGResult
+cudbgReadCCRegister (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint32_t *val)
+{
+    char *ipc_buf;
+    CUDBGResult result;
+
+    CUDBG_IPC_PROFILE_START();
+
+    CUDBG_IPC_BEGIN(CUDBGAPIREQ_readCCRegister);
+    CUDBG_IPC_APPEND(&dev,sizeof(dev));
+    CUDBG_IPC_APPEND(&sm,sizeof(sm));
+    CUDBG_IPC_APPEND(&wp,sizeof(wp));
+    CUDBG_IPC_APPEND(&ln,sizeof(ln));
+
+    CUDBG_IPC_REQUEST((void *)&ipc_buf);
+    result = *(CUDBGResult *)ipc_buf;
+    ipc_buf +=sizeof(CUDBGResult);
+    *val = *((uint32_t *)ipc_buf); ipc_buf+=sizeof(uint32_t);
+
+    CUDBG_IPC_PROFILE_END(CUDBGAPIREQ_readCCRegister, "readCCRegister");
+
+    return result;
+}
+
+static CUDBGResult
+cudbgWriteCCRegister (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint32_t val)
+{
+    char *ipc_buf;
+    CUDBGResult result;
+
+    CUDBG_IPC_PROFILE_START();
+
+    CUDBG_IPC_BEGIN(CUDBGAPIREQ_writeCCRegister);
+    CUDBG_IPC_APPEND(&dev,sizeof(dev));
+    CUDBG_IPC_APPEND(&sm,sizeof(sm));
+    CUDBG_IPC_APPEND(&wp,sizeof(wp));
+    CUDBG_IPC_APPEND(&ln,sizeof(ln));
+    CUDBG_IPC_APPEND(&val,sizeof(val));
+
+    CUDBG_IPC_REQUEST((void *)&ipc_buf);
+    result = *(CUDBGResult *)ipc_buf;
+    ipc_buf +=sizeof(CUDBGResult);
+
+    CUDBG_IPC_PROFILE_END(CUDBGAPIREQ_writeCCRegister, "writeCCRegister");
+
+    return result;
+}
+
+static CUDBGResult
+cudbgGetDeviceName (uint32_t dev, char *buf, uint32_t buf_size)
+{
+    char *ipc_buf;
+    CUDBGResult result;
+
+    CUDBG_IPC_PROFILE_START();
+
+    CUDBG_IPC_BEGIN(CUDBGAPIREQ_getDeviceName);
+    CUDBG_IPC_APPEND(&dev,sizeof(dev));
+    CUDBG_IPC_APPEND(&buf_size,sizeof(buf_size));
+
+    CUDBG_IPC_REQUEST((void *)&ipc_buf);
+    result = *(CUDBGResult *)ipc_buf;
+    ipc_buf +=sizeof(CUDBGResult);
+    memcpy(buf, ipc_buf, buf_size);
+
+    CUDBG_IPC_PROFILE_END(CUDBGAPIREQ_getDeviceName, "getDeviceName");
+
+    return result;
+}
+
 static const struct CUDBGAPI_st cudbgCurrentApi={
     /* Initialization */
     cudbgInitialize,
     cudbgFinalize,
-    
+
     /* Device Execution Control */
     cudbgSuspendDevice,
     cudbgResumeDevice,
     STUB_cudbgSingleStepWarp40,
-    
+
     /* Breakpoints */
     STUB_cudbgSetBreakpoint31,
     STUB_cudbgUnsetBreakpoint31,
-    
+
     /* Device State Inspection */
     STUB_cudbgReadGridId50,
     STUB_cudbgReadBlockIdx32,
@@ -1980,20 +2121,20 @@ static const struct CUDBGAPI_st cudbgCurrentApi={
     cudbgReadPC,
     cudbgReadVirtualPC,
     cudbgReadLaneStatus,
-    
+
     /* Device State Alteration */
     STUB_cudbgWriteGlobalMemory31,
     cudbgWriteParamMemory,
     cudbgWriteSharedMemory,
     cudbgWriteLocalMemory,
     cudbgWriteRegister,
-    
+
     /* Grid Properties */
     STUB_cudbgGetGridDim32,
     cudbgGetBlockDim,
     cudbgGetTID,
     STUB_cudbgGetElfImage32,
-    
+
     /* Device Properties */
     cudbgGetDeviceType,
     cudbgGetSmType,
@@ -2002,18 +2143,18 @@ static const struct CUDBGAPI_st cudbgCurrentApi={
     cudbgGetNumWarps,
     cudbgGetNumLanes,
     cudbgGetNumRegisters,
-    
+
     /* DWARF-related routines */
     STUB_cudbgGetPhysicalRegister30,
     cudbgDisassemble,
     STUB_cudbgIsDeviceCodeAddress55,
     cudbgLookupDeviceCodeSymbol,
-    
+
     /* Events */
     STUB_cudbgSetNotifyNewEventCallback31,
     STUB_cudbgGetNextEvent30,
     STUB_cudbgAcknowledgeEvent30,
-    
+
     /* 3.1 Extensions */
     cudbgGetGridAttribute,
     cudbgGetGridAttributes,
@@ -2021,12 +2162,12 @@ static const struct CUDBGAPI_st cudbgCurrentApi={
     cudbgReadLaneException,
     STUB_cudbgGetNextEvent32,
     STUB_cudbgAcknowledgeEvents42,
-    
+
     /* 3.1 - ABI */
     STUB_cudbgReadCallDepth32,
     STUB_cudbgReadReturnAddress32,
     STUB_cudbgReadVirtualReturnAddress32,
-    
+
     /* 3.2 Extensions */
     STUB_cudbgReadGlobalMemory55,
     STUB_cudbgWriteGlobalMemory55,
@@ -2035,7 +2176,7 @@ static const struct CUDBGAPI_st cudbgCurrentApi={
     cudbgSetBreakpoint,
     cudbgUnsetBreakpoint,
     STUB_cudbgSetNotifyNewEventCallback40,
-    
+
     /* 4.0 Extensions */
     STUB_cudbgGetNextEvent42,
     cudbgReadTextureMemory,
@@ -2045,16 +2186,16 @@ static const struct CUDBGAPI_st cudbgCurrentApi={
     cudbgReadReturnAddress,
     cudbgReadVirtualReturnAddress,
     STUB_cudbgGetElfImage,
-    
+
     /* 4.1 Extensions */
     cudbgGetHostAddrFromDeviceAddr,
     cudbgSingleStepWarp,
     cudbgSetNotifyNewEventCallback,
     cudbgReadSyscallCallDepth,
-    
+
     /* 4.2 Extensions */
     cudbgReadTextureMemoryBindless,
-    
+
     /* 5.0 Extensions */
     cudbgClearAttachState,
     STUB_cudbgGetNextSyncEvent50,
@@ -2064,7 +2205,7 @@ static const struct CUDBGAPI_st cudbgCurrentApi={
     STUB_cudbgRequestCleanupOnDetach55,
     cudbgInitializeAttachStub,
     STUB_cudbgGetGridStatus50,
-    
+
     /* 5.5 Extensions */
     STUB_cudbgGetNextSyncEvent55,
     STUB_cudbgGetNextAsyncEvent55,
@@ -2074,7 +2215,7 @@ static const struct CUDBGAPI_st cudbgCurrentApi={
     cudbgSetKernelLaunchNotificationMode,
     cudbgGetDevicePCIBusInfo,
     cudbgReadDeviceExceptionState,
-    
+
     /* 6.0 Extensions */
     cudbgGetAdjustedCodeAddress,
     cudbgReadErrorPC,
@@ -2090,6 +2231,15 @@ static const struct CUDBGAPI_st cudbgCurrentApi={
     cudbgGetManagedMemoryRegionInfo,
     cudbgIsDeviceCodeAddress,
     cudbgRequestCleanupOnDetach,
+
+    /* 6.5 Extensions */
+    cudbgReadPredicates,
+    cudbgWritePredicates,
+    cudbgGetNumPredicates,
+    cudbgReadCCRegister,
+    cudbgWriteCCRegister,
+
+    cudbgGetDeviceName,
 };
 
 CUDBGResult

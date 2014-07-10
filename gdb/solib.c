@@ -850,7 +850,12 @@ Do you need \"set solib-search-path\" or \"set sysroot\"?"),
 int
 libpthread_name_p (const char *name)
 {
+#ifndef __ANDROID__
   return (strstr (name, "/libpthread") != NULL);
+#else
+  /* On Android pthread routines are implemented in libc */
+  return (strstr (name, "/libc") != NULL);
+#endif
 }
 
 /* Return non-zero if SO is the libpthread shared library.  */

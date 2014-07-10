@@ -28,11 +28,13 @@
 #include "parser-defs.h"
 #include "language.h"
 #include "f-lang.h"
+#include "f-module.h"
 #include "valprint.h"
 #include "value.h"
 #include "cp-support.h"
 #include "charset.h"
 #include "c-lang.h"
+#include "dwarf2loc.h"          /* dl added this for the baton stuff */
 
 
 /* Local functions */
@@ -118,7 +120,318 @@ f_printstr (struct ui_file *stream, struct type *type, const gdb_byte *string,
 		    force_ellipses, '\'', 0, options);
 }
 
+static void
+reset_lengths(struct type* type) 
+{
+  struct type* range_type;
+  int high_bound; 
+  int low_bound; 
+  if (TYPE_CODE(TYPE_TARGET_TYPE(type)) == TYPE_CODE_ARRAY || 
+     TYPE_CODE(TYPE_TARGET_TYPE(type)) == TYPE_CODE_STRING) 
+    reset_lengths(TYPE_TARGET_TYPE(type));
+  range_type = TYPE_FIELD_TYPE(type, 0);
+  high_bound = TYPE_HIGH_BOUND (range_type);
+  low_bound = TYPE_LOW_BOUND (range_type);
+  TYPE_LENGTH(type) = 
+    TYPE_LENGTH (TYPE_TARGET_TYPE(type)) * (high_bound - low_bound + 1);
+}
+
+static void 
+setup_array_bounds (struct value *v, struct value *objptr, struct frame_info *frame)
+{
+  struct type *tmp_type = value_type (v);
 
+  if (!value_address (objptr))
+    return;
+  
+  if (frame == NULL)
+    frame = deprecated_safe_get_selected_frame ();
+
+  while (TYPE_CODE(tmp_type)== TYPE_CODE_ARRAY
+	 || TYPE_CODE(tmp_type)== TYPE_CODE_STRING) 
+   {
+      /* check the array bounds -- could be dynamic */
+      struct type* range_type = TYPE_FIELD_TYPE(tmp_type, 0);
+
+      if (TYPE_CODE(range_type) == TYPE_CODE_RANGE)
+	{
+	  if (TYPE_BOUND_BATON_FUNCTION(range_type)) 
+	    {
+	      if (frame) {
+		/* one of DL's hacked types */
+		int high_bound;
+		int low_bound;
+		
+		if (TYPE_LOW_BOUND_BATON(range_type)) 
+		  {
+		    void *baton;
+		    long r;
+		    /* recalculate */
+		    CORE_ADDR(*f)(void*, struct value *, void*);
+		    f = (CORE_ADDR(*)(void*, struct value *, void*))
+		      TYPE_BOUND_BATON_FUNCTION(range_type);
+		    
+		    baton = TYPE_LOW_BOUND_BATON(range_type);
+		    
+		    r = (int) f(baton, objptr, frame);
+		    
+ 		    if (r > 1000L * 1000L* 1000L || r < -100000L) r = 1; /* FIXME */ 
+		    TYPE_LOW_BOUND(range_type) = (int) r;
+		    TYPE_LOW_BOUND_UNDEFINED (range_type) = 0;
+		  }
+		if (TYPE_HIGH_BOUND_BATON(range_type)) 
+		  {
+		    /* recalculate */
+		    void *baton;
+		    long r;
+		    CORE_ADDR(*f)(void*, struct value *, void*);
+		    f = (CORE_ADDR(*)(void*, struct value *, void*))
+		      TYPE_BOUND_BATON_FUNCTION(range_type);
+		    
+		    baton = TYPE_HIGH_BOUND_BATON(range_type);
+		    
+		    r = (int) f(baton, objptr, frame);
+ 		    if (r > 1000L * 1000L* 1000L || r < -100000L) r = 1; /* FIXME */ 
+		    TYPE_HIGH_BOUND(range_type) = (int) r;
+		    TYPE_HIGH_BOUND_UNDEFINED (range_type) = 0;
+		  }
+		if (TYPE_COUNT_BOUND_BATON(range_type)) 
+		  { 
+		    /* the DW_AT_count field */
+		    void *baton;
+		    CORE_ADDR r;
+		    /* recalculate */
+		    CORE_ADDR(*f)(void*, struct value *, void*);
+		    f = (CORE_ADDR(*)(void*, struct value *, void*))
+		      TYPE_BOUND_BATON_FUNCTION(range_type);
+		    
+		    baton = TYPE_COUNT_BOUND_BATON(range_type);
+		    
+		    r = (int) f(baton, objptr, frame);
+		    
+ 		    if (r > 1000L * 1000L* 1000L) r = 1; /* FIXME */ 
+		    /* note.. upper bound is inclusive */
+		    TYPE_HIGH_BOUND(range_type) = ((int) r) + TYPE_LOW_BOUND(range_type) - 1;
+		  }
+		if (TYPE_LOW_BOUND(range_type) > 
+		    TYPE_HIGH_BOUND(range_type)) 
+		  {
+		    TYPE_LOW_BOUND(range_type) = 
+		      TYPE_HIGH_BOUND(range_type) + 1;
+		    TYPE_HIGH_BOUND_UNDEFINED (range_type) = 0;
+		    TYPE_LOW_BOUND_UNDEFINED (range_type) = 0;
+		  }
+	      }
+	    }
+	}
+      tmp_type = TYPE_TARGET_TYPE(tmp_type);  
+    }
+  tmp_type = value_type (v);
+  
+  if (TYPE_CODE(tmp_type) == TYPE_CODE_ARRAY
+      || TYPE_CODE(tmp_type) == TYPE_CODE_STRING)
+    {
+      reset_lengths(tmp_type);
+    }
+}
+
+static CORE_ADDR
+get_new_address (struct value *v, struct value *objptr, struct frame_info *frame)
+{
+  struct type *type = value_type (v);
+  CORE_ADDR r = value_address (v);
+
+  if (frame == NULL)
+    frame = deprecated_safe_get_selected_frame ();
+
+  /* array memory location is dynamic : eg. f90 */
+  if (TYPE_CODE (type) == TYPE_CODE_ARRAY && TYPE_NFIELDS (type) == 2)
+    {
+      struct array_location_batons *baton_holder
+	= (struct array_location_batons *) TYPE_FIELD_TYPE (type, 1);
+
+      void *baton_evaluation_function;
+
+      int alloced = -1;
+
+      CORE_ADDR (*f) (void *, struct value *, void *);
+      f = (CORE_ADDR (*)(void *, struct value *, void *))
+	baton_holder->baton_evaluation_function;
+
+      if (baton_holder->allocated_baton)
+	{
+	  alloced = (int) f (baton_holder->allocated_baton, objptr, frame);
+         }
+
+      if (!alloced)
+        {
+          r = (CORE_ADDR) 0;
+        }
+
+      if (r && baton_holder->intel_location_baton)
+        {
+	  r = f (baton_holder->intel_location_baton, objptr, frame);
+	}
+
+
+      if (r && baton_holder->pgi_lbase_baton)
+	{
+	  struct type *tmp_type = NULL;
+	  int elem_skip = 1;
+	  int lbase = 0;
+
+	  if (baton_holder->pgi_elem_skip_baton)
+	    {
+	      elem_skip = (int) f (baton_holder->pgi_elem_skip_baton,
+				   objptr, frame);
+	    }
+	  if (elem_skip == 0)
+	    return (CORE_ADDR) 0;	/* seen with PGI for non-allocated arrays */
+
+	  /* 
+	     pgi uses lbase_baton to allow you to define an alloc array
+	     in a subset of an existing array
+
+	     the logic is to add l_base_baton, then to take subscript of
+	     index and add the section offset of that index.  Ticket 4243 in
+	     tracker has the pgi spec.
+
+	     but, gdb at this point just wants to know where the array starts, it
+	     can handle the rest -- assuming the 'section offset' is the obvious
+	     place to find the ith index..
+
+	   */
+
+	  lbase = ((int) f (baton_holder->pgi_lbase_baton, objptr, frame));
+
+	  r = r + (lbase - 1) * elem_skip;
+
+	  if (frame == NULL)
+	    frame = deprecated_safe_get_selected_frame ();
+
+	  tmp_type = type;
+
+	  while (TYPE_CODE (tmp_type) == TYPE_CODE_PTR)
+	    tmp_type = TYPE_TARGET_TYPE (tmp_type);
+
+	  while (TYPE_CODE (tmp_type) == TYPE_CODE_ARRAY
+		 || TYPE_CODE (tmp_type) == TYPE_CODE_STRING)
+	    {
+	      /* check the array bounds -- could be dynamic */
+	      struct type *range_type = TYPE_FIELD_TYPE (tmp_type, 0);
+
+	      if (TYPE_CODE (range_type) == TYPE_CODE_RANGE && r)
+		{
+		  if (TYPE_BOUND_BATON_FUNCTION (range_type))
+		    {
+		      if (frame)
+			{
+			  int stride = 1;
+			  int soffset = 0;
+			  int lstride = 0;
+                         int low = 1;
+
+			  void *baton;
+			  CORE_ADDR (*f) (void *, struct value *, void *);
+			  f = TYPE_BOUND_BATON_FUNCTION (range_type);
+ 
+
+			  low = TYPE_LOW_BOUND (range_type);
+			  if (TYPE_LOW_BOUND_BATON (range_type))
+			    {
+			      baton = 
+				TYPE_LOW_BOUND_BATON (range_type);
+			      low = f (baton, objptr, frame);
+			    }
+			  stride = TYPE_STRIDE_VALUE(range_type);
+			  if (TYPE_STRIDE_BATON(range_type))
+			    {
+			      baton =
+				(void *)
+				TYPE_STRIDE_BATON(range_type);
+			      stride = f (baton, objptr, frame);
+			    }
+			  soffset = TYPE_SOFFSET_VALUE (range_type);
+			  if (TYPE_SOFFSET_BATON (range_type))
+			    {
+			      baton =
+				(void *)
+				TYPE_SOFFSET_BATON (range_type);
+			      soffset = f (baton, objptr, frame);
+			    }
+			  lstride = TYPE_LSTRIDE_VALUE (range_type);
+			  if (TYPE_LSTRIDE_BATON (range_type))
+			    {
+			      baton =
+				(void *)
+				TYPE_LSTRIDE_BATON (range_type);
+			      lstride = f (baton, objptr, frame);
+			    }
+
+			  r += (low * stride + soffset) * lstride * elem_skip;
+			}
+		    }
+		}
+	      tmp_type = TYPE_TARGET_TYPE (tmp_type);
+	    }
+	  tmp_type = type;
+	}
+    }
+
+  return r;
+}
+
+struct value *
+f_fixup_value (struct value *v, struct frame_info *frame)
+{
+  struct type *type;
+  CORE_ADDR address;
+  struct value *objptr = v;
+  
+  if (!v)
+    return v;
+
+  type = value_type (v);
+  
+  /* Automatically follow pointers.  */
+  if (current_language->la_language == language_fortran)
+    {
+      while (TYPE_CODE (type) == TYPE_CODE_PTR)
+	{
+	  address = unpack_pointer (type, value_contents (v));
+
+	  /* If address is invalid then leave the pointer intact.  */
+	  if (address < 65536)
+	    break;
+	  type = TYPE_TARGET_TYPE (type);      
+	  v = value_at_lazy (type, address);
+	}
+    }
+
+  /* Fix the size and address of dynamic arrays.  */
+  if (VALUE_LVAL (v) == lval_memory
+      && (TYPE_CODE (type)== TYPE_CODE_ARRAY
+	  || TYPE_CODE (type)== TYPE_CODE_STRING))
+    {
+      /* refresh the calculated array bounds DL */
+      if (value_lazy (v))
+	setup_array_bounds(v, objptr, frame);	
+  
+      /* Handle the situation where it is dynamic */
+      if (TYPE_CODE (type) == TYPE_CODE_ARRAY)
+	{
+	  address = get_new_address (v, objptr, frame);
+	  if (address != value_address (v))
+	    {
+	      set_value_address (v, address);
+	      set_value_offset (v, 0);
+	    }
+	}
+    }
+
+  return v;
+}
+
 /* Table of operators and their precedences for printing expressions.  */
 
 static const struct op_print f_op_print_tab[] =
@@ -143,6 +456,17 @@ static const struct op_print f_op_print_tab[] =
   {".LT.", BINOP_LESS, PREC_ORDER, 0},
   {"**", UNOP_IND, PREC_PREFIX, 0},
   {"@", BINOP_REPEAT, PREC_REPEAT, 0},
+  {"ABS", UNOP_FABS, PREC_BUILTIN_FUNCTION, 0},
+  {"AIMAG", UNOP_CIMAG, PREC_BUILTIN_FUNCTION, 0},
+  {"REALPART", UNOP_CREAL, PREC_BUILTIN_FUNCTION, 0},
+  {"CMPLX", BINOP_CMPLX, PREC_BUILTIN_FUNCTION, 0},
+  {"IEEE_IS_INF", UNOP_IEEE_IS_INF, PREC_BUILTIN_FUNCTION, 0},
+  {"IEEE_IS_FINITE", UNOP_IEEE_IS_FINITE, PREC_BUILTIN_FUNCTION, 0},
+  {"IEEE_IS_NAN", UNOP_IEEE_IS_NAN, PREC_BUILTIN_FUNCTION, 0},
+  {"IEEE_IS_NORMAL", UNOP_IEEE_IS_NORMAL, PREC_BUILTIN_FUNCTION, 0},
+  {"CEILING", UNOP_CEIL, PREC_BUILTIN_FUNCTION, 0},
+  {"FLOOR", UNOP_FLOOR, PREC_BUILTIN_FUNCTION, 0},
+  {"MOD", BINOP_FMOD, PREC_BUILTIN_FUNCTION, 0},
   {NULL, 0, 0, 0}
 };
 
@@ -154,6 +478,7 @@ enum f_primitive_types {
   f_primitive_type_logical_s8,
   f_primitive_type_integer,
   f_primitive_type_integer_s2,
+  f_primitive_type_integer_s8,
   f_primitive_type_real,
   f_primitive_type_real_s8,
   f_primitive_type_real_s16,
@@ -184,6 +509,8 @@ f_language_arch_info (struct gdbarch *gdbarch,
     = builtin->builtin_logical_s2;
   lai->primitive_type_vector [f_primitive_type_logical_s8]
     = builtin->builtin_logical_s8;
+  lai->primitive_type_vector [f_primitive_type_integer_s8]
+    = builtin->builtin_integer_s8;    
   lai->primitive_type_vector [f_primitive_type_real]
     = builtin->builtin_real;
   lai->primitive_type_vector [f_primitive_type_real_s8]
@@ -293,6 +620,9 @@ build_fortran_types (struct gdbarch *gdbarch)
   builtin_f_type->builtin_integer_s2
     = arch_integer_type (gdbarch, gdbarch_short_bit (gdbarch), 0,
 			 "integer*2");
+  builtin_f_type->builtin_integer_s8
+    = arch_integer_type (gdbarch, gdbarch_long_long_bit (gdbarch), 0,
+			 "integer*8");
 
   builtin_f_type->builtin_logical_s2
     = arch_boolean_type (gdbarch, gdbarch_short_bit (gdbarch), 1,

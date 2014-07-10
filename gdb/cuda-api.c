@@ -292,8 +292,8 @@ cuda_api_resume_warps_until_pc (uint32_t dev, uint32_t sm, uint64_t warp_mask, u
 
   if (res != CUDBG_SUCCESS)
     error (_("Error: Failed to resume warps "
-             "(dev=%u, sm=%u, warp_mask=0x%"PRIx64", error=%u).\n"),
-           dev, sm, warp_mask, res);
+             "(dev=%u, sm=%u, warp_mask=0x%llx, error=%u).\n"),
+           dev, sm, (unsigned long long)warp_mask, res);
   return true;
 }
 
@@ -332,8 +332,8 @@ cuda_api_set_breakpoint (uint32_t dev, uint64_t addr)
 
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS && res != CUDBG_ERROR_INVALID_ADDRESS)
-    error (_("Error: Failed to set a breakpoint on device %u at address 0x%"PRIx64
-             " (error=%u)."), dev, addr, res);
+    error (_("Error: Failed to set a breakpoint on device %u at address 0x%llx"
+             " (error=%u)."), dev, (unsigned long long)addr, res);
   return res != CUDBG_ERROR_INVALID_ADDRESS;
 }
 
@@ -349,8 +349,8 @@ cuda_api_unset_breakpoint (uint32_t dev, uint64_t addr)
 
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS && res != CUDBG_ERROR_INVALID_ADDRESS)
-    error (_("Error: Failed to unset a breakpoint on device %u at address 0x%"PRIx64
-             " (error=%u)."), dev, addr, res);
+    error (_("Error: Failed to unset a breakpoint on device %u at address 0x%llx"
+             " (error=%u)."), dev, (unsigned long long)addr, res);
   return res != CUDBG_ERROR_INVALID_ADDRESS;
 }
 
@@ -484,8 +484,8 @@ cuda_api_read_code_memory (uint32_t dev, uint64_t addr, void *buf, uint32_t sz)
   res = cudbgAPI->readCodeMemory (dev, addr, buf, sz);
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS)
-    error (_("Error: Failed to read code memory at address 0x%"PRIx64
-             " on device %u (error=%u)."), addr, dev, res);
+    error (_("Error: Failed to read code memory at address 0x%llx"
+             " on device %u (error=%u)."), (unsigned long long)addr, dev, res);
 }
 
 void
@@ -500,8 +500,8 @@ cuda_api_read_const_memory (uint32_t dev, uint64_t addr, void *buf, uint32_t sz)
 
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS)
-    error (_("Error: Failed to read const memory at address 0x%"PRIx64
-             " on device %u (error=%u)."), addr, dev, res);
+    error (_("Error: Failed to read const memory at address 0x%llx"
+             " on device %u (error=%u)."), (unsigned long long)addr, dev, res);
 }
 
 void
@@ -516,8 +516,9 @@ cuda_api_read_generic_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t l
   res = cudbgAPI->readGenericMemory (dev, sm, wp, ln, addr, buf, sz);
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS && res != CUDBG_ERROR_ADDRESS_NOT_IN_DEVICE_MEM)
-    error (_("Error: Failed to read generic memory at address 0x%"PRIx64
-             " on device %u sm %u warp %u lane %u (error=%u)."), addr, dev, sm, wp, ln, res);
+    error (_("Error: Failed to read generic memory at address 0x%llx"
+             " on device %u sm %u warp %u lane %u (error=%u)."),
+             (unsigned long long)addr, dev, sm, wp, ln, res);
 
   if (res == CUDBG_ERROR_ADDRESS_NOT_IN_DEVICE_MEM)
     {
@@ -540,8 +541,8 @@ cuda_api_read_pinned_memory (uint64_t addr, void *buf, uint32_t sz)
   res = cudbgAPI->readPinnedMemory (addr, buf, sz);
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS && res != CUDBG_ERROR_MEMORY_MAPPING_FAILED)
-    error (_("Error: Failed to read pinned memory at address 0x%"PRIx64
-             " (error=%u)."), addr, res);
+    error (_("Error: Failed to read pinned memory at address 0x%llx"
+             " (error=%u)."), (unsigned long long)addr, res);
   return res == CUDBG_SUCCESS;
 }
 
@@ -556,8 +557,9 @@ cuda_api_read_param_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint64_t add
   res = cudbgAPI->readParamMemory (dev, sm, wp, addr, buf, sz);
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS)
-    error (_("Error: Failed to read param memory at address 0x%"PRIx64
-             " on device %u sm %u warp %u (error=%u)."), addr, dev, sm, wp, res);
+    error (_("Error: Failed to read param memory at address 0x%llx"
+             " on device %u sm %u warp %u (error=%u)."),
+             (unsigned long long)addr, dev, sm, wp, res);
 }
 
 void
@@ -571,8 +573,9 @@ cuda_api_read_shared_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint64_t ad
   res = cudbgAPI->readSharedMemory (dev, sm, wp, addr, buf, sz);
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS)
-    error (_("Error: Failed to read shared memory at address 0x%"PRIx64
-             " on device %u sm %u warp %u (error=%u)."), addr, dev, sm, wp, res);
+    error (_("Error: Failed to read shared memory at address 0x%llx"
+             " on device %u sm %u warp %u (error=%u)."),
+             (unsigned long long)addr, dev, sm, wp, res);
 }
 
 void
@@ -615,8 +618,9 @@ cuda_api_read_local_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln,
   res = cudbgAPI->readLocalMemory (dev, sm, wp, ln, addr, buf, sz);
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS)
-    error (_("Error: Failed to read local memory at address 0x%"PRIx64
-             " on device %u sm %u warp %u lane %u (error=%u)."), addr, dev, sm, wp, ln, res);
+    error (_("Error: Failed to read local memory at address 0x%llx"
+             " on device %u sm %u warp %u lane %u (error=%u)."),
+             (unsigned long long)addr, dev, sm, wp, ln, res);
 }
 
 void
@@ -634,6 +638,40 @@ cuda_api_read_register (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln,
       error (_("Error: Failed to read register %d "
                "(dev=%u, sm=%u, wp=%u, ln=%u, error=%u).\n"),
              regno, dev, sm, wp, ln, res);
+}
+
+void
+cuda_api_read_predicates (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln,
+                          uint32_t predicates_size, uint32_t *predicates)
+{
+  CUDBGResult res;
+
+  if (!api_initialized)
+    return;
+
+  res = cudbgAPI->readPredicates (dev, sm, wp, ln, predicates_size, predicates);
+  cuda_api_print_api_call_result (res);
+  if (res != CUDBG_SUCCESS)
+      error (_("Error: Failed to read predicates "
+               "(dev=%u, sm=%u, wp=%u, ln=%u, error=%u).\n"),
+             dev, sm, wp, ln, res);
+}
+
+void
+cuda_api_read_cc_register (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln,
+                           uint32_t *val)
+{
+  CUDBGResult res;
+
+  if (!api_initialized)
+    return;
+
+  res = cudbgAPI->readCCRegister (dev, sm, wp, ln, val);
+  cuda_api_print_api_call_result (res);
+  if (res != CUDBG_SUCCESS)
+      error (_("Error: Failed to read CC register "
+               "(dev=%u, sm=%u, wp=%u, ln=%u, error=%u).\n"),
+             dev, sm, wp, ln, res);
 }
 
 void
@@ -799,8 +837,9 @@ cuda_api_write_generic_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t 
   res = cudbgAPI->writeGenericMemory (dev, sm, wp, ln, addr, buf, sz);
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS && res != CUDBG_ERROR_ADDRESS_NOT_IN_DEVICE_MEM)
-    error (_("Error: Failed to write generic memory at address 0x%"PRIx64
-             " on device %u sm %u warp %u lane %u (error=%u)."), addr, dev, sm, wp, ln, res);
+    error (_("Error: Failed to write generic memory at address 0x%llx"
+             " on device %u sm %u warp %u lane %u (error=%u)."),
+             (unsigned long long)addr, dev, sm, wp, ln, res);
 
   if (res == CUDBG_ERROR_ADDRESS_NOT_IN_DEVICE_MEM)
     {
@@ -823,8 +862,8 @@ cuda_api_write_pinned_memory (uint64_t addr, const void *buf, uint32_t sz)
   res = cudbgAPI->writePinnedMemory (addr, buf, sz);
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS && res != CUDBG_ERROR_MEMORY_MAPPING_FAILED)
-    error (_("Error: Failed to write pinned memory at address 0x%"PRIx64
-             " (error=%u)."), addr, res);
+    error (_("Error: Failed to write pinned memory at address 0x%llx"
+             " (error=%u)."), (unsigned long long)addr, res);
   return res == CUDBG_SUCCESS;
 }
 
@@ -839,8 +878,9 @@ cuda_api_write_param_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint64_t ad
   res = cudbgAPI->writeParamMemory (dev, sm, wp, addr, buf, sz);
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS)
-    error (_("Error: Failed to write param memory at address 0x%"PRIx64
-             " on device %u sm %u warp %u (error=%u)."), addr, dev, sm, wp, res);
+    error (_("Error: Failed to write param memory at address 0x%llx"
+             " on device %u sm %u warp %u (error=%u)."),
+             (unsigned long long)addr, dev, sm, wp, res);
 }
 
 void
@@ -854,8 +894,9 @@ cuda_api_write_shared_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint64_t a
   res = cudbgAPI->writeSharedMemory (dev, sm, wp, addr, buf, sz);
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS)
-    error (_("Error: Failed to write shared memory at address 0x%"PRIx64
-             " on device %u sm %u warp %u (error=%u)."), addr, dev, sm, wp, res);
+    error (_("Error: Failed to write shared memory at address 0x%llx"
+             " on device %u sm %u warp %u (error=%u)."),
+             (unsigned long long)addr, dev, sm, wp, res);
 }
 
 void
@@ -869,8 +910,9 @@ cuda_api_write_local_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln
   res = cudbgAPI->writeLocalMemory (dev, sm, wp, ln, addr, buf, sz);
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS)
-    error (_("Error: Failed to write local memory at address 0x%"PRIx64
-             " on device %u sm %u warp %u lane %u (error=%u)."), addr, dev, sm, wp, ln, res);
+    error (_("Error: Failed to write local memory at address 0x%llx"
+             " on device %u sm %u warp %u lane %u (error=%u)."),
+             (unsigned long long)addr, dev, sm, wp, ln, res);
 }
 
 void
@@ -887,6 +929,38 @@ cuda_api_write_register (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, ui
       error (_("Error: Failed to write register %d "
                "(dev=%u, sm=%u, wp=%u, ln=%u, error=%u).\n"),
              regno, dev, sm, wp, ln, res);
+}
+
+void
+cuda_api_write_predicates (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint32_t predicates_size, const uint32_t *predicates)
+{
+  CUDBGResult res;
+
+  if (!api_initialized)
+    return;
+
+  res = cudbgAPI->writePredicates (dev, sm, wp, ln, predicates_size, predicates);
+  cuda_api_print_api_call_result (res);
+  if (res != CUDBG_SUCCESS)
+      error (_("Error: Failed to write predicates "
+               "(dev=%u, sm=%u, wp=%u, ln=%u, error=%u).\n"),
+             dev, sm, wp, ln, res);
+}
+
+void
+cuda_api_write_cc_register (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint32_t val)
+{
+  CUDBGResult res;
+
+  if (!api_initialized)
+    return;
+
+  res = cudbgAPI->writeCCRegister (dev, sm, wp, ln, val);
+  cuda_api_print_api_call_result (res);
+  if (res != CUDBG_SUCCESS)
+      error (_("Error: Failed to write CC register "
+               "(dev=%u, sm=%u, wp=%u, ln=%u, error=%u).\n"),
+             dev, sm, wp, ln, res);
 }
 
 void
@@ -1004,6 +1078,21 @@ cuda_api_get_sm_type (uint32_t dev, char *buf, uint32_t sz)
 }
 
 void
+cuda_api_get_device_name (uint32_t dev, char *buf, uint32_t sz)
+{
+  CUDBGResult res;
+
+  if (!api_initialized)
+    return;
+
+  res = cudbgAPI->getDeviceName (dev, buf, sz);
+  cuda_api_print_api_call_result (res);
+  if (res != CUDBG_SUCCESS)
+    error (_("Error: Failed to get the device name"
+             "(dev=%u, error=%u).\n"), dev, res);
+}
+
+void
 cuda_api_get_num_devices (uint32_t *numDev)
 {
   CUDBGResult res;
@@ -1080,6 +1169,20 @@ cuda_api_get_num_registers (uint32_t dev, uint32_t *numRegs)
              "(dev=%u, error=%u).\n"), dev, res);
 }
 
+void
+cuda_api_get_num_predicates (uint32_t dev, uint32_t *numPredicates)
+{
+  CUDBGResult res;
+
+  if (!api_initialized)
+    return;
+
+  res = cudbgAPI->getNumPredicates (dev, numPredicates);
+  cuda_api_print_api_call_result (res);
+  if (res != CUDBG_SUCCESS)
+    error (_("Error: Failed to get the number of predicates"
+             "(dev=%u, error=%u).\n"), dev, res);
+}
 
 void
 cuda_api_is_device_code_address (uint64_t addr, bool *is_device_address)
@@ -1095,8 +1198,8 @@ cuda_api_is_device_code_address (uint64_t addr, bool *is_device_address)
   res = cudbgAPI->isDeviceCodeAddress (addr, is_device_address);
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS)
-      error (_("Error: Failed to determine if address 0x%"PRIx64" corresponds "
-               "to the host or device (error=%u). "), addr, res);
+    error (_("Error: Failed to determine if address 0x%llx corresponds "
+             "to the host or device (error=%u). "), (unsigned long long)addr, res);
 }
 
 void
@@ -1178,8 +1281,8 @@ cuda_api_disassemble (uint32_t dev, uint64_t addr, uint32_t *instSize, char *buf
 
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS)
-    error (_("Error: Failed to disassemble instruction at address 0x%"PRIx64
-             " on CUDA device %u (error=%u)."), addr, dev, res);
+    error (_("Error: Failed to disassemble instruction at address 0x%llx"
+             " on CUDA device %u (error=%u)."), (unsigned long long)addr, dev, res);
 }
 
 void
@@ -1254,8 +1357,8 @@ cuda_api_get_grid_status (uint32_t dev, uint64_t grid_id, CUDBGGridStatus *statu
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS)
     error (_("Error: Failed to get grid status "
-             "(dev=%u, grid_id=%"PRId64", error=%u).\n"),
-           dev, grid_id, res);
+             "(dev=%u, grid_id=%lld, error=%u).\n"),
+           dev, (long long)grid_id, res);
 }
 
 void
@@ -1270,8 +1373,8 @@ cuda_api_get_grid_info (uint32_t dev, uint64_t grid_id, CUDBGGridInfo *info)
 
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS)
-    error (_("Error: Failed to get grid info (dev=%u, grid_id=%"PRId64", error=%u).\n"),
-           dev, grid_id, res);
+    error (_("Error: Failed to get grid info (dev=%u, grid_id=%lld, error=%u).\n"),
+           dev, (long long)grid_id, res);
 }
 
 bool
@@ -1294,8 +1397,8 @@ cuda_api_get_adjusted_code_address (uint32_t dev, uint64_t addr, uint64_t *adjus
   cuda_api_print_api_call_result (res);
   if (res != CUDBG_SUCCESS)
     error (_("Error: Failed to get adjusted code address "
-             "(dev=%u, addr=0x%"PRIx64", error=%u).\n"),
-             dev, addr, res);
+             "(dev=%u, addr=0x%llx, error=%u).\n"),
+             dev, (unsigned long long)addr, res);
 }
 
 void

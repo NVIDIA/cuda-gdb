@@ -816,6 +816,25 @@ struct type *
 create_range_type (struct type *result_type, struct type *index_type,
 		   LONGEST low_bound, LONGEST high_bound)
 {
+  return create_range_type_d (result_type, index_type, low_bound, high_bound, 0, 0, 0, 0);
+}
+
+struct type *
+create_range_type_d (struct type *result_type, struct type *index_type,
+		   int low_bound, int high_bound, void *dwarf_low, 
+		     void *dwarf_high, void *dwarf_count,
+		     LONGEST (*expr_evaluate)(void*, CORE_ADDR, void*))
+{
+  return create_range_type_d_pgi (result_type, index_type, low_bound, high_bound, 0, 0, 0, dwarf_low, dwarf_high, dwarf_count, 0, 0, 0, expr_evaluate);
+}
+
+struct type *
+create_range_type_d_pgi (struct type *result_type, struct type *index_type,
+		         int low_bound, int high_bound, int stride, int soffset, int lstride,
+                         void *dwarf_low, void *dwarf_high, void *dwarf_count,
+                         void *dwarf_stride, void *dwarf_soffset, void *dwarf_lstride,
+		         LONGEST (*expr_evaluate)(void*, CORE_ADDR, void*))
+{
   if (result_type == NULL)
     result_type = alloc_type_copy (index_type);
   TYPE_CODE (result_type) = TYPE_CODE_RANGE;
@@ -828,7 +847,16 @@ create_range_type (struct type *result_type, struct type *index_type,
     TYPE_ZALLOC (result_type, sizeof (struct range_bounds));
   TYPE_LOW_BOUND (result_type) = low_bound;
   TYPE_HIGH_BOUND (result_type) = high_bound;
-
+  TYPE_LOW_BOUND_BATON (result_type) = dwarf_low;
+  TYPE_HIGH_BOUND_BATON (result_type) = dwarf_high;
+  TYPE_COUNT_BOUND_BATON (result_type) = dwarf_count;
+  TYPE_STRIDE_BATON (result_type) = dwarf_stride;
+  TYPE_LSTRIDE_BATON (result_type) = dwarf_lstride;
+  TYPE_SOFFSET_BATON (result_type) = dwarf_soffset;
+  TYPE_STRIDE_VALUE (result_type) = stride;
+  TYPE_LSTRIDE_VALUE (result_type) = lstride;
+  TYPE_SOFFSET_VALUE (result_type) = soffset;
+  TYPE_BOUND_BATON_FUNCTION (result_type) = expr_evaluate;
   if (low_bound >= 0)
     TYPE_UNSIGNED (result_type) = 1;
 
@@ -1737,6 +1765,11 @@ check_typedef (struct type *type)
     }
 
   type = make_qualified_type (type, instance_flags, NULL);
+
+  /* Ignore codimensions.  */
+  while (TYPE_CODE (type) == TYPE_CODE_ARRAY &&
+         range_is_co_shape_p (type))
+    type = TYPE_TARGET_TYPE (type);
 
   /* Cache TYPE_LENGTH for future use.  */
   TYPE_LENGTH (orig_type) = TYPE_LENGTH (type);
@@ -3173,6 +3206,10 @@ recursive_dump_type (struct type *type, int spaces)
       printf_filtered ("(UNKNOWN TYPE CODE)");
       break;
     }
+  if (TYPE_IS_CO_SHAPE (type))
+    {
+      puts_filtered (" TYPE_INSTANCE_FLAG_IS_CO_SHAPE");
+    }    
   puts_filtered ("\n");
   printfi_filtered (spaces, "length %d\n", TYPE_LENGTH (type));
   if (TYPE_OBJFILE_OWNED (type))
@@ -3832,6 +3869,22 @@ append_composite_type_field (struct type *t, char *name,
 			     struct type *field)
 {
   append_composite_type_field_aligned (t, name, field, 0);
+}
+
+int
+range_is_co_shape_p (struct type *type)
+{
+  if (TYPE_CODE (type) == TYPE_CODE_ARRAY)
+    {
+      if (TYPE_NFIELDS (type) && TYPE_FIELDS (type))
+	{
+	  struct type *subrange_type = TYPE_FIELDS (type)->type;
+	  if (subrange_type
+	      && TYPE_IS_CO_SHAPE (subrange_type))
+	    return 1;
+	}  
+    }
+  return 0;
 }
 
 static struct gdbarch_data *gdbtypes_data;

@@ -80,18 +80,25 @@ typedef struct {
   bool num_warps_p;
   bool num_lanes_p;
   bool num_registers_p;
+  bool num_predicates_p;
+  bool pci_bus_info_p;
   bool dev_type_p;
   bool sm_type_p;
+  bool dev_name_p;
   bool filter_exception_state_p;
   bool valid;             // at least one active lane
   /* the above fields are invalidated on resume */
   bool suspended;         // true if the device is suspended
   char dev_type[256];
+  char dev_name[256];
   char sm_type[16];
   uint32_t num_sms;
   uint32_t num_warps;
   uint32_t num_lanes;
   uint32_t num_registers;
+  uint32_t num_predicates;
+  uint32_t pci_dev_id;
+  uint32_t pci_bus_id;
   sm_state_t sm[CUDBG_MAX_SMS];
   contexts_t contexts;    // state for contexts associated with this device
 } device_state_t;
@@ -106,6 +113,7 @@ typedef struct {
 
 /* GPU register cache */
 #define CUDBG_CACHED_REGISTERS_COUNT 256
+#define CUDBG_CACHED_PREDICATES_COUNT 7
 typedef struct {
   uint32_t dev;
   uint32_t sm;
@@ -113,6 +121,10 @@ typedef struct {
   uint32_t ln;
   uint32_t registers[CUDBG_CACHED_REGISTERS_COUNT];
   uint32_t register_valid_mask[CUDBG_CACHED_REGISTERS_COUNT>>5];
+  uint32_t predicates[CUDBG_CACHED_PREDICATES_COUNT];
+  bool     predicates_valid_p;
+  uint32_t cc_register;
+  bool     cc_register_valid_p;
 } cuda_reg_cache_element_t;
 DEF_VEC_O(cuda_reg_cache_element_t);
 static VEC(cuda_reg_cache_element_t) *cuda_register_cache = NULL;
@@ -191,12 +203,14 @@ cuda_system_set_device_spec (uint32_t dev_id, uint32_t num_sms,
   strcpy (dev->dev_type, dev_type);
   strcpy (dev->sm_type, sm_type);
 
-  dev->num_sms_p       = CACHED;
-  dev->num_warps_p     = CACHED;
-  dev->num_lanes_p     = CACHED;
-  dev->num_registers_p = CACHED;
-  dev->dev_type_p      = CACHED;
-  dev->sm_type_p       = CACHED;
+  dev->num_sms_p        = CACHED;
+  dev->num_warps_p      = CACHED;
+  dev->num_lanes_p      = CACHED;
+  dev->num_registers_p  = CACHED;
+  dev->dev_type_p       = CACHED;
+  dev->dev_name_p       = CACHED;
+  dev->sm_type_p        = CACHED;
+  dev->num_predicates_p = false;
 }
 
 uint32_t
@@ -455,6 +469,61 @@ device_get_sm_type (uint32_t dev_id)
   return dev->sm_type;
 }
 
+const char*
+device_get_device_name (uint32_t dev_id)
+{
+  device_state_t *dev;
+
+  gdb_assert (dev_id < cuda_system_get_num_devices ());
+
+  dev = &cuda_system_info.dev[dev_id];
+
+  if (dev->dev_name_p)
+    return dev->dev_name;
+
+  cuda_api_get_device_name (dev_id, dev->dev_name, sizeof dev->dev_name);
+  dev->dev_name_p = CACHED;
+  return dev->dev_name;
+}
+
+uint32_t
+device_get_pci_bus_id (uint32_t dev_id)
+{
+  device_state_t *dev;
+
+  gdb_assert (dev_id < cuda_system_get_num_devices ());
+
+  dev = &cuda_system_info.dev[dev_id];
+
+  if (dev->pci_bus_info_p)
+    return dev->pci_bus_id;
+
+  cuda_api_get_device_pci_bus_info (dev_id, &dev->pci_bus_id, &dev->pci_dev_id);
+  gdb_assert (dev->num_sms <= CUDBG_MAX_SMS);
+  dev->pci_bus_info_p = CACHED;
+
+  return dev->pci_bus_id;
+}
+
+uint32_t
+device_get_pci_dev_id (uint32_t dev_id)
+{
+  device_state_t *dev;
+
+  gdb_assert (dev_id < cuda_system_get_num_devices ());
+
+  dev = &cuda_system_info.dev[dev_id];
+
+  if (dev->pci_bus_info_p)
+    return dev->pci_dev_id;
+
+  cuda_api_get_device_pci_bus_info (dev_id, &dev->pci_bus_id, &dev->pci_dev_id);
+  gdb_assert (dev->num_sms <= CUDBG_MAX_SMS);
+  dev->pci_bus_info_p = CACHED;
+
+  return dev->pci_dev_id;
+}
+
 uint32_t
 device_get_num_sms (uint32_t dev_id)
 {
@@ -529,6 +598,26 @@ device_get_num_registers (uint32_t dev_id)
 
   return dev->num_registers;
 }
+
+uint32_t
+device_get_num_predicates (uint32_t dev_id)
+{
+  device_state_t *dev;
+
+  gdb_assert (dev_id < cuda_system_get_num_devices ());
+
+  dev = &cuda_system_info.dev[dev_id];
+
+  if (dev->num_predicates_p)
+    return dev->num_predicates;
+
+  cuda_api_get_num_predicates (dev_id, &dev->num_predicates);
+  dev->num_predicates_p = CACHED;
+  gdb_assert (dev->num_predicates <= CUDBG_CACHED_PREDICATES_COUNT);
+
+  return dev->num_predicates;
+}
+
 
 uint32_t
 device_get_num_kernels (uint32_t dev_id)
@@ -1659,6 +1748,101 @@ lane_set_register (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_
   elem = cuda_reg_cache_find_element (dev_id, sm_id, wp_id, ln_id);
   elem->registers[regno] = value;
   elem->register_valid_mask[regno>>5]|=1UL<<(regno&31);
+}
+
+bool
+lane_get_predicate (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id,
+                    uint32_t predicate)
+{
+  cuda_reg_cache_element_t *elem;
+
+  gdb_assert (dev_id < cuda_system_get_num_devices ());
+  gdb_assert (sm_id < device_get_num_sms (dev_id));
+  gdb_assert (wp_id < device_get_num_warps (dev_id));
+  gdb_assert (ln_id < device_get_num_lanes (dev_id));
+  gdb_assert (predicate < device_get_num_predicates (dev_id));
+  gdb_assert (lane_is_valid (dev_id, sm_id, wp_id, ln_id));
+  elem = cuda_reg_cache_find_element (dev_id, sm_id, wp_id, ln_id);
+
+  if (elem->predicates_valid_p)
+    return elem->predicates[predicate] != 0;
+
+  cuda_api_read_predicates (dev_id, sm_id, wp_id, ln_id,
+                            device_get_num_predicates (dev_id),
+                            elem->predicates);
+  elem->predicates_valid_p = CACHED;
+
+  return elem->predicates[predicate] != 0;
+}
+
+void
+lane_set_predicate (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id,
+                    uint32_t predicate, bool value)
+{
+  cuda_reg_cache_element_t *elem;
+
+  gdb_assert (dev_id < cuda_system_get_num_devices ());
+  gdb_assert (sm_id < device_get_num_sms (dev_id));
+  gdb_assert (wp_id < device_get_num_warps (dev_id));
+  gdb_assert (ln_id < device_get_num_lanes (dev_id));
+  gdb_assert (predicate < device_get_num_predicates (dev_id));
+  gdb_assert (lane_is_valid (dev_id, sm_id, wp_id, ln_id));
+  elem = cuda_reg_cache_find_element (dev_id, sm_id, wp_id, ln_id);
+
+  if (!elem->predicates_valid_p)
+    {
+      cuda_api_read_predicates (dev_id, sm_id, wp_id, ln_id,
+                                device_get_num_predicates (dev_id),
+                                elem->predicates);
+      elem->predicates_valid_p = CACHED;
+    }
+
+  elem->predicates[predicate] = value;
+
+  cuda_api_write_predicates (dev_id, sm_id, wp_id, ln_id,
+                             device_get_num_predicates (dev_id),
+                             elem->predicates);
+}
+
+uint32_t
+lane_get_cc_register (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id)
+{
+  cuda_reg_cache_element_t *elem;
+
+  gdb_assert (dev_id < cuda_system_get_num_devices ());
+  gdb_assert (sm_id < device_get_num_sms (dev_id));
+  gdb_assert (wp_id < device_get_num_warps (dev_id));
+  gdb_assert (ln_id < device_get_num_lanes (dev_id));
+  gdb_assert (lane_is_valid (dev_id, sm_id, wp_id, ln_id));
+  elem = cuda_reg_cache_find_element (dev_id, sm_id, wp_id, ln_id);
+
+  if (elem->cc_register_valid_p)
+    return elem->cc_register;
+
+  cuda_api_read_cc_register (dev_id, sm_id, wp_id, ln_id,
+                            &elem->cc_register);
+  elem->cc_register_valid_p = CACHED;
+
+  return elem->cc_register;
+}
+
+void
+lane_set_cc_register (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id,
+                      uint32_t value)
+{
+  cuda_reg_cache_element_t *elem;
+
+  gdb_assert (dev_id < cuda_system_get_num_devices ());
+  gdb_assert (sm_id < device_get_num_sms (dev_id));
+  gdb_assert (wp_id < device_get_num_warps (dev_id));
+  gdb_assert (ln_id < device_get_num_lanes (dev_id));
+  gdb_assert (lane_is_valid (dev_id, sm_id, wp_id, ln_id));
+  elem = cuda_reg_cache_find_element (dev_id, sm_id, wp_id, ln_id);
+
+  elem->cc_register = value;
+  elem->cc_register_valid_p = CACHED;
+
+  cuda_api_write_cc_register (dev_id, sm_id, wp_id, ln_id, elem->cc_register);
 }
 
 int32_t

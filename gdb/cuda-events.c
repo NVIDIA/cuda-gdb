@@ -247,11 +247,11 @@ cuda_event_kernel_ready (uint32_t dev_id, uint64_t context_id, uint64_t module_i
   struct gdbarch  *gdbarch       = get_current_arch ();
 
   cuda_trace_event ("CUDBG_EVENT_KERNEL_READY dev_id=%u context=%llx"
-                    " module=%llx grid_id=%llx tid=%u type=%u"
-                    " parent_grid_id=%llx\n",
+                    " module=%llx grid_id=%lld tid=%u type=%u"
+                    " parent_grid_id=%lld\n",
                     dev_id, (unsigned long long)context_id,
-                    (unsigned long long)module_id, (unsigned long long)grid_id,
-                    tid, type, (unsigned long long)parent_grid_id);
+                    (unsigned long long)module_id, (long long)grid_id,
+                    tid, type, (long long)parent_grid_id);
 
   if (tid == ~0U)
     error (_("A CUDA event reported an invalid thread id."));
@@ -282,8 +282,8 @@ cuda_event_kernel_finished (uint32_t dev_id, uint64_t grid_id)
 {
   kernel_t  kernel;
 
-  cuda_trace_event ("CUDBG_EVENT_KERNEL_FINISHED dev_id=%u grid_id=%"PRIu64"\n",
-                    dev_id, grid_id);
+  cuda_trace_event ("CUDBG_EVENT_KERNEL_FINISHED dev_id=%u grid_id=%lld\n",
+                    dev_id, (long long)grid_id);
 
   kernel = kernels_find_kernel_by_grid_id (dev_id, grid_id);
   kernels_terminate_kernel (kernel);

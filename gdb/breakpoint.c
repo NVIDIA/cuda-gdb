@@ -1071,27 +1071,14 @@ condition_completer (struct cmd_list_element *cmd, char *text, char *word)
       len = strlen (text);
 
       ALL_BREAKPOINTS (b)
-      {
-	int single = b->loc->next == NULL;
-	struct bp_location *loc;
-	int count = 1;
+	{
+	  char number[50];
 
-	for (loc = b->loc; loc; loc = loc->next)
-	  {
-	    char location[50];
+	  xsnprintf (number, sizeof (number), "%d", b->number);
 
-	    if (single)
-	      xsnprintf (location, sizeof (location), "%d", b->number);
-	    else
-	      xsnprintf (location, sizeof (location),  "%d.%d", b->number,
-			 count);
-
-	    if (strncmp (location, text, len) == 0)
-	      VEC_safe_push (char_ptr, result, xstrdup (location));
-
-	    ++count;
-	  }
-      }
+	  if (strncmp (number, text, len) == 0)
+	    VEC_safe_push (char_ptr, result, xstrdup (number));
+	}
 
       return result;
     }
@@ -4305,7 +4292,7 @@ bpstat_find_breakpoint (bpstat bsp, struct breakpoint *breakpoint)
 /* See breakpoint.h.  */
 
 enum bpstat_signal_value
-bpstat_explains_signal (bpstat bsp)
+bpstat_explains_signal (bpstat bsp, enum gdb_signal sig)
 {
   enum bpstat_signal_value result = BPSTAT_SIGNAL_NO;
 
@@ -4313,10 +4300,20 @@ bpstat_explains_signal (bpstat bsp)
     {
       /* Ensure that, if we ever entered this loop, then we at least
 	 return BPSTAT_SIGNAL_HIDE.  */
-      enum bpstat_signal_value newval = BPSTAT_SIGNAL_HIDE;
+      enum bpstat_signal_value newval;
 
-      if (bsp->breakpoint_at != NULL)
-	newval = bsp->breakpoint_at->ops->explains_signal (bsp->breakpoint_at);
+      if (bsp->breakpoint_at == NULL)
+	{
+	  /* A moribund location can never explain a signal other than
+	     GDB_SIGNAL_TRAP.  */
+	  if (sig == GDB_SIGNAL_TRAP)
+	    newval = BPSTAT_SIGNAL_HIDE;
+	  else
+	    newval = BPSTAT_SIGNAL_NO;
+	}
+      else
+	newval = bsp->breakpoint_at->ops->explains_signal (bsp->breakpoint_at,
+							   sig);
 
       if (newval > result)
 	result = newval;
@@ -5573,6 +5570,8 @@ bpstat_stop_status (struct address_space *aspace,
 	      if (command_line_is_silent (bs->commands
 					  ? bs->commands->commands : NULL))
 		bs->print = 0;
+
+	      b->ops->after_condition_true (bs);
 	    }
 
 	}
@@ -6040,27 +6039,17 @@ print_breakpoint_location (struct breakpoint *b,
     ui_out_field_string (uiout, "what", b->addr_string);
   else if (loc && loc->symtab)
     {
-      /* CUDA - breakpoints */
-      if (loc && loc->cuda.function_name[0])
+      struct symbol *sym
+         = find_pc_sect_function (loc->address, loc->section);
+      if (sym)
         {
           ui_out_text (uiout, "in ");
-          ui_out_field_string (uiout, "func", loc->cuda.function_name);
+          ui_out_field_string (uiout, "func", SYMBOL_PRINT_NAME (sym));
+          ui_out_text (uiout, " ");
           ui_out_wrap_hint (uiout, wrap_indent_at_field (uiout, "what"));
-          ui_out_text (uiout, " at ");
+          ui_out_text (uiout, "at ");
         }
-      else
-        {
-          struct symbol *sym
-             = find_pc_sect_function (loc->address, loc->section);
-          if (sym)
-            {
-              ui_out_text (uiout, "in ");
-              ui_out_field_string (uiout, "func", SYMBOL_PRINT_NAME (sym));
-              ui_out_text (uiout, " ");
-              ui_out_wrap_hint (uiout, wrap_indent_at_field (uiout, "what"));
-              ui_out_text (uiout, "at ");
-            }
-        }
+
       ui_out_field_string (uiout, "file",
 			   symtab_to_filename_for_display (loc->symtab));
       ui_out_text (uiout, ":");
@@ -6068,7 +6057,7 @@ print_breakpoint_location (struct breakpoint *b,
       if (ui_out_is_mi_like_p (uiout))
 	ui_out_field_string (uiout, "fullname",
 			     symtab_to_fullname (loc->symtab));
-      
+
       ui_out_field_int (uiout, "line", loc->line_number);
     }
   else if (loc)
@@ -7919,13 +7908,9 @@ cuda_add_location (struct breakpoint *b, elf_image_t elf_image)
   loc = add_location_to_breakpoint (b, &sal);
   loc->cuda.elf_image   = elf_image;
   loc->cuda.type        = cuda_bp_driver_api;
-  loc->cuda.line_number = sal.line;
   loc->cuda_breakpoint  = true;
   b->cuda_breakpoint    = true;
   b->gdbarch            = arch;
-  if (symbol)
-    strncpy (loc->cuda.function_name, SYMBOL_PRINT_NAME (symbol),
-             sizeof loc->cuda.function_name);
 
   loc->address = adjust_breakpoint_address (b->gdbarch, loc->address,
                                             (enum bptype)loc->cuda.type);
@@ -8005,13 +7990,9 @@ cuda_promote_location (struct bp_location* loc, elf_image_t elf_image)
   loc->address          = addr;
   loc->cuda.elf_image   = elf_image;
   loc->cuda.type        = bp_type;
-  loc->cuda.line_number = find_pc_line (addr, 0).line;
   loc->cuda_breakpoint  = true;
   b->cuda_breakpoint    = true;
   b->gdbarch            = arch;
-  if (symbol)
-    strncpy (loc->cuda.function_name, SYMBOL_PRINT_NAME (symbol),
-             sizeof loc->cuda.function_name);
 
 
   cuda_trace_breakpoint ("promoted CUDA breakpoint location: breakpoint %d addr %p",
@@ -9872,25 +9853,16 @@ update_dprintf_command_list (struct breakpoint *b)
 		    _("Invalid dprintf style."));
 
   gdb_assert (printf_line != NULL);
-  /* Manufacture a printf/continue sequence.  */
+  /* Manufacture a printf sequence.  */
   {
-    struct command_line *printf_cmd_line, *cont_cmd_line = NULL;
-
-    if (strcmp (dprintf_style, dprintf_style_agent) != 0)
-      {
-	cont_cmd_line = xmalloc (sizeof (struct command_line));
-	cont_cmd_line->control_type = simple_control;
-	cont_cmd_line->body_count = 0;
-	cont_cmd_line->body_list = NULL;
-	cont_cmd_line->next = NULL;
-	cont_cmd_line->line = xstrdup ("continue");
-      }
+    struct command_line *printf_cmd_line
+      = xmalloc (sizeof (struct command_line));
 
     printf_cmd_line = xmalloc (sizeof (struct command_line));
     printf_cmd_line->control_type = simple_control;
     printf_cmd_line->body_count = 0;
     printf_cmd_line->body_list = NULL;
-    printf_cmd_line->next = cont_cmd_line;
+    printf_cmd_line->next = NULL;
     printf_cmd_line->line = printf_line;
 
     breakpoint_set_commands (b, printf_cmd_line);
@@ -11615,6 +11587,20 @@ print_recreate_watchpoint (struct breakpoint *b, struct ui_file *fp)
 
   fprintf_unfiltered (fp, " %s", w->exp_string);
   print_recreate_thread (b, fp);
+}
+
+/* Implement the "explains_signal" breakpoint_ops method for
+   watchpoints.  */
+
+static enum bpstat_signal_value
+explains_signal_watchpoint (struct breakpoint *b, enum gdb_signal sig)
+{
+  /* A software watchpoint cannot cause a signal other than
+     GDB_SIGNAL_TRAP.  */
+  if (b->type == bp_watchpoint && sig != GDB_SIGNAL_TRAP)
+    return BPSTAT_SIGNAL_NO;
+
+  return BPSTAT_SIGNAL_HIDE;
 }
 
 /* The breakpoint_ops structure to be used in hardware watchpoints.  */
@@ -14042,9 +14028,17 @@ base_breakpoint_decode_linespec (struct breakpoint *b, char **s,
 /* The default 'explains_signal' method.  */
 
 static enum bpstat_signal_value
-base_breakpoint_explains_signal (struct breakpoint *b)
+base_breakpoint_explains_signal (struct breakpoint *b, enum gdb_signal sig)
 {
   return BPSTAT_SIGNAL_HIDE;
+}
+
+/* The default "after_condition_true" method.  */
+
+static void
+base_breakpoint_after_condition_true (struct bpstats *bs)
+{
+  /* Nothing to do.   */
 }
 
 struct breakpoint_ops base_breakpoint_ops =
@@ -14066,7 +14060,8 @@ struct breakpoint_ops base_breakpoint_ops =
   base_breakpoint_create_sals_from_address,
   base_breakpoint_create_breakpoints_sal,
   base_breakpoint_decode_linespec,
-  base_breakpoint_explains_signal
+  base_breakpoint_explains_signal,
+  base_breakpoint_after_condition_true,
 };
 
 /* Default breakpoint_ops methods.  */
@@ -14663,6 +14658,44 @@ dprintf_print_recreate (struct breakpoint *tp, struct ui_file *fp)
   fprintf_unfiltered (fp, "dprintf %s%s", tp->addr_string,
 		      tp->extra_string);
   print_recreate_thread (tp, fp);
+}
+
+/* Implement the "after_condition_true" breakpoint_ops method for
+   dprintf.
+
+   dprintf's are implemented with regular commands in their command
+   list, but we run the commands here instead of before presenting the
+   stop to the user, as dprintf's don't actually cause a stop.  This
+   also makes it so that the commands of multiple dprintfs at the same
+   address are all handled.  */
+
+static void
+dprintf_after_condition_true (struct bpstats *bs)
+{
+  struct cleanup *old_chain;
+  struct bpstats tmp_bs = { NULL };
+  struct bpstats *tmp_bs_p = &tmp_bs;
+
+  /* dprintf's never cause a stop.  This wasn't set in the
+     check_status hook instead because that would make the dprintf's
+     condition not be evaluated.  */
+  bs->stop = 0;
+
+  /* Run the command list here.  Take ownership of it instead of
+     copying.  We never want these commands to run later in
+     bpstat_do_actions, if a breakpoint that causes a stop happens to
+     be set at same address as this dprintf, or even if running the
+     commands here throws.  */
+  tmp_bs.commands = bs->commands;
+  bs->commands = NULL;
+  old_chain = make_cleanup_decref_counted_command_line (&tmp_bs.commands);
+
+  bpstat_do_actions_1 (&tmp_bs_p);
+
+  /* 'tmp_bs.commands' will usually be NULL by now, but
+     bpstat_do_actions_1 may return early without processing the whole
+     list.  */
+  do_cleanups (old_chain);
 }
 
 /* The breakpoint_ops structure to be used on static tracepoints with
@@ -17238,6 +17271,7 @@ initialize_breakpoint_ops (void)
   ops->print_it = print_it_watchpoint;
   ops->print_mention = print_mention_watchpoint;
   ops->print_recreate = print_recreate_watchpoint;
+  ops->explains_signal = explains_signal_watchpoint;
 
   /* Masked watchpoints.  */
   ops = &masked_watchpoint_breakpoint_ops;
@@ -17342,6 +17376,7 @@ initialize_breakpoint_ops (void)
   ops->print_it = bkpt_print_it;
   ops->print_mention = bkpt_print_mention;
   ops->print_recreate = dprintf_print_recreate;
+  ops->after_condition_true = dprintf_after_condition_true;
 }
 
 /* Chain containing all defined "enable breakpoint" subcommands.  */

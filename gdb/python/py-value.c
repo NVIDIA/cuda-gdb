@@ -130,7 +130,7 @@ valpy_new (PyTypeObject *subtype, PyObject *args, PyObject *keywords)
 
   if (PyTuple_Size (args) != 1)
     {
-      PyErr_SetString (PyExc_TypeError, _("Value object creation takes only "
+      PyErr_SetString (gdbpyExc_TypeError, _("Value object creation takes only "
 					  "1 argument"));
       return NULL;
     }
@@ -138,7 +138,7 @@ valpy_new (PyTypeObject *subtype, PyObject *args, PyObject *keywords)
   value_obj = (value_object *) subtype->tp_alloc (subtype, 1);
   if (value_obj == NULL)
     {
-      PyErr_SetString (PyExc_MemoryError, _("Could not allocate memory to "
+      PyErr_SetString (gdbpyExc_MemoryError, _("Could not allocate memory to "
 					    "create Value object."));
       return NULL;
     }
@@ -254,8 +254,8 @@ valpy_get_address (PyObject *self, void *closure)
 	}
       if (except.reason < 0)
 	{
-	  val_obj->address = Py_None;
-	  Py_INCREF (Py_None);
+	  val_obj->address = gdbpy_None;
+	  Py_INCREF (gdbpy_None);
 	}
     }
 
@@ -367,7 +367,7 @@ valpy_lazy_string (PyObject *self, PyObject *args, PyObject *kw)
   PyObject *str_obj = NULL;
   volatile struct gdb_exception except;
 
-  if (!PyArg_ParseTupleAndKeywords (args, kw, "|s" GDB_PY_LL_ARG, keywords,
+  if (!gdbpy_ArgParseTupleAndKeywords (args, kw, "|s" GDB_PY_LL_ARG, keywords,
 				    &user_encoding, &length))
     return NULL;
 
@@ -410,7 +410,7 @@ valpy_string (PyObject *self, PyObject *args, PyObject *kw)
   struct type *char_type;
   static char *keywords[] = { "encoding", "errors", "length", NULL };
 
-  if (!PyArg_ParseTupleAndKeywords (args, kw, "|ssi", keywords,
+  if (!gdbpy_ArgParseTupleAndKeywords (args, kw, "|ssi", keywords,
 				    &user_encoding, &errors, &length))
     return NULL;
 
@@ -437,13 +437,13 @@ valpy_do_cast (PyObject *self, PyObject *args, enum exp_opcode op)
   struct type *type;
   volatile struct gdb_exception except;
 
-  if (! PyArg_ParseTuple (args, "O", &type_obj))
+  if (! gdbpy_ArgParseTuple (args, "O", &type_obj))
     return NULL;
 
   type = type_object_to_type (type_obj);
   if (! type)
     {
-      PyErr_SetString (PyExc_RuntimeError, 
+      PyErr_SetString (gdbpyExc_RuntimeError, 
 		       _("Argument must be a type."));
       return NULL;
     }
@@ -500,7 +500,7 @@ static Py_ssize_t
 valpy_length (PyObject *self)
 {
   /* We don't support getting the number of elements in a struct / class.  */
-  PyErr_SetString (PyExc_NotImplementedError,
+  PyErr_SetString (gdbpyExc_NotImplementedError,
 		   _("Invalid operation on gdb.Value."));
   return -1;
 }
@@ -567,7 +567,7 @@ valpy_getitem (PyObject *self, PyObject *key)
 static int
 valpy_setitem (PyObject *self, PyObject *key, PyObject *value)
 {
-  PyErr_Format (PyExc_NotImplementedError,
+  gdbpy_ErrFormat (gdbpyExc_NotImplementedError,
 		_("Setting of struct elements is not currently supported."));
   return -1;
 }
@@ -593,14 +593,14 @@ valpy_call (PyObject *self, PyObject *args, PyObject *keywords)
 
   if (TYPE_CODE (ftype) != TYPE_CODE_FUNC)
     {
-      PyErr_SetString (PyExc_RuntimeError,
+      PyErr_SetString (gdbpyExc_RuntimeError,
 		       _("Value is not callable (not TYPE_CODE_FUNC)."));
       return NULL;
     }
 
-  if (! PyTuple_Check (args))
+  if (! gdbpy_TupleCheck (args))
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Inferior arguments must be provided in a tuple."));
       return NULL;
     }
@@ -685,9 +685,9 @@ valpy_get_is_optimized_out (PyObject *self, void *closure)
   GDB_PY_HANDLE_EXCEPTION (except);
 
   if (opt)
-    Py_RETURN_TRUE;
+    GDB_PY_RETURN_TRUE;
 
-  Py_RETURN_FALSE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Implements gdb.Value.is_lazy.  */
@@ -705,9 +705,9 @@ valpy_get_is_lazy (PyObject *self, void *closure)
   GDB_PY_HANDLE_EXCEPTION (except);
 
   if (opt)
-    Py_RETURN_TRUE;
+    GDB_PY_RETURN_TRUE;
 
-  Py_RETURN_FALSE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Implements gdb.Value.fetch_lazy ().  */
@@ -724,7 +724,7 @@ valpy_fetch_lazy (PyObject *self, PyObject *args)
     }
   GDB_PY_HANDLE_EXCEPTION (except);
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Calculate and return the address of the PyObject as the value of
@@ -900,9 +900,9 @@ valpy_power (PyObject *self, PyObject *other, PyObject *unused)
   /* We don't support the ternary form of pow.  I don't know how to express
      that, so let's just throw NotImplementedError to at least do something
      about it.  */
-  if (unused != Py_None)
+  if (unused != gdbpy_None)
     {
-      PyErr_SetString (PyExc_NotImplementedError,
+      PyErr_SetString (gdbpyExc_NotImplementedError,
 		       "Invalid operation on gdb.Value.");
       return NULL;
     }
@@ -1053,21 +1053,21 @@ valpy_richcompare (PyObject *self, PyObject *other, int op)
   int result = 0;
   volatile struct gdb_exception except;
 
-  if (other == Py_None)
+  if (other == gdbpy_None)
     /* Comparing with None is special.  From what I can tell, in Python
        None is smaller than anything else.  */
     switch (op) {
       case Py_LT:
       case Py_LE:
       case Py_EQ:
-	Py_RETURN_FALSE;
+	GDB_PY_RETURN_FALSE;
       case Py_NE:
       case Py_GT:
       case Py_GE:
-	Py_RETURN_TRUE;
+	GDB_PY_RETURN_TRUE;
       default:
 	/* Can't happen.  */
-	PyErr_SetString (PyExc_NotImplementedError,
+	PyErr_SetString (gdbpyExc_NotImplementedError,
 			 _("Invalid operation on gdb.Value."));
 	return NULL;
     }
@@ -1109,7 +1109,7 @@ valpy_richcompare (PyObject *self, PyObject *other, int op)
 	  break;
 	default:
 	  /* Can't happen.  */
-	  PyErr_SetString (PyExc_NotImplementedError,
+	  PyErr_SetString (gdbpyExc_NotImplementedError,
 			   _("Invalid operation on gdb.Value."));
 	  result = -1;
 	  break;
@@ -1124,9 +1124,9 @@ valpy_richcompare (PyObject *self, PyObject *other, int op)
     return NULL;
 
   if (result == 1)
-    Py_RETURN_TRUE;
+    GDB_PY_RETURN_TRUE;
 
-  Py_RETURN_FALSE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Helper function to determine if a type is "int-like".  */
@@ -1259,20 +1259,20 @@ convert_value_from_python (PyObject *obj)
 
   TRY_CATCH (except, RETURN_MASK_ALL)
     {
-      if (PyBool_Check (obj)) 
+      if (PyObject_TypeCheck (obj, gdbpy_BoolType))
 	{
 	  cmp = PyObject_IsTrue (obj);
 	  if (cmp >= 0)
 	    value = value_from_longest (builtin_type_pybool, cmp);
 	}
-      else if (PyInt_Check (obj))
+      else if (gdbpy_IntCheck (obj))
 	{
 	  long l = PyInt_AsLong (obj);
 
 	  if (! PyErr_Occurred ())
 	    value = value_from_longest (builtin_type_pyint, l);
 	}
-      else if (PyLong_Check (obj))
+      else if (gdbpy_LongCheck (obj))
 	{
 	  LONGEST l = PyLong_AsLongLong (obj);
 
@@ -1280,7 +1280,7 @@ convert_value_from_python (PyObject *obj)
 	    {
 	      /* If the error was an overflow, we can try converting to
 	         ULONGEST instead.  */
-	      if (PyErr_ExceptionMatches (PyExc_OverflowError))
+	      if (PyErr_ExceptionMatches (gdbpyExc_OverflowError))
 		{
 		  PyObject *etype, *evalue, *etraceback, *zero;
 
@@ -1306,7 +1306,7 @@ convert_value_from_python (PyObject *obj)
 	  else
 	    value = value_from_longest (builtin_type_pylong, l);
 	}
-      else if (PyFloat_Check (obj))
+      else if (PyObject_TypeCheck (obj, gdbpy_FloatType))
 	{
 	  double d = PyFloat_AsDouble (obj);
 
@@ -1333,23 +1333,23 @@ convert_value_from_python (PyObject *obj)
 	{
 	  PyObject *result;
 
-	  result = PyObject_CallMethodObjArgs (obj, gdbpy_value_cst,  NULL);
+	  result = gdbpy_ObjectCallMethodObjArgs (obj, gdbpy_value_cst,  NULL);
 	  value = value_copy (((value_object *) result)->value);
 	}
       else
 #ifdef IS_PY3K
-	PyErr_Format (PyExc_TypeError,
+	gdbpy_ErrFormat (gdbpyExc_TypeError,
 		      _("Could not convert Python object: %S."), obj);
 #else
-	PyErr_Format (PyExc_TypeError,
+	gdbpy_ErrFormat (gdbpyExc_TypeError,
 		      _("Could not convert Python object: %s."),
 		      PyString_AsString (PyObject_Str (obj)));
 #endif
     }
   if (except.reason < 0)
     {
-      PyErr_Format (except.reason == RETURN_QUIT
-		    ? PyExc_KeyboardInterrupt : PyExc_RuntimeError,
+      gdbpy_ErrFormat (except.reason == RETURN_QUIT
+		    ? gdbpyExc_KeyboardInterrupt : gdbpyExc_RuntimeError,
 		    "%s", except.message);
       return NULL;
     }
@@ -1365,7 +1365,7 @@ gdbpy_history (PyObject *self, PyObject *args)
   struct value *res_val = NULL;	  /* Initialize to appease gcc warning.  */
   volatile struct gdb_exception except;
 
-  if (!PyArg_ParseTuple (args, "i", &i))
+  if (!gdbpy_ArgParseTuple (args, "i", &i))
     return NULL;
 
   TRY_CATCH (except, RETURN_MASK_ALL)

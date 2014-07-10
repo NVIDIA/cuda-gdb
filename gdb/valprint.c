@@ -1613,10 +1613,14 @@ val_print_array_elements (struct type *type,
   /* Number of repetitions we have detected so far.  */
   unsigned int reps;
   LONGEST low_bound, high_bound;
+  unsigned int print_max;
 
   elttype = TYPE_TARGET_TYPE (type);
   eltlen = TYPE_LENGTH (check_typedef (elttype));
   index_type = TYPE_INDEX_TYPE (type);
+  /* Check index_type is actually capable of holding an index. */
+  if (TYPE_LENGTH (index_type) < sizeof(int))
+      index_type = builtin_type (get_type_arch (type))->builtin_int;
 
   if (get_array_bounds (type, &low_bound, &high_bound))
     {
@@ -1628,7 +1632,9 @@ val_print_array_elements (struct type *type,
       if (low_bound > high_bound)
 	len = 0;
       else
-	len = high_bound - low_bound + 1;
+	len = val
+	       ? min (high_bound - low_bound + 1, value_length (val) / eltlen)
+	       : (high_bound - low_bound + 1);
     }
   else
     {
@@ -1637,9 +1643,13 @@ val_print_array_elements (struct type *type,
       len = 0;
     }
 
+  print_max = options->print_max;
+  if (val && value_repeated (val) && recurse == 0)
+    print_max = INT_MAX;
+
   annotate_array_section_begin (i, elttype);
 
-  for (; i < len && things_printed < options->print_max; i++)
+  for (; i < len && things_printed < print_max; i++)
     {
       if (i != 0)
 	{
@@ -2485,7 +2495,7 @@ val_print_string (struct type *elttype, const char *encoding,
 {
   int force_ellipsis = 0;	/* Force ellipsis to be printed if nonzero.  */
   int errcode;			/* Errno returned from bad reads.  */
-  int found_nul;		/* Non-zero if we found the nul char.  */
+  int found_nul = 0;		/* Non-zero if we found the nul char.  */
   unsigned int fetchlimit;	/* Maximum number of chars to print.  */
   int bytes_read;
   gdb_byte *buffer = NULL;	/* Dynamically growable fetch buffer.  */
@@ -2516,8 +2526,9 @@ val_print_string (struct type *elttype, const char *encoding,
      LEN is -1.  */
 
   /* Determine found_nul by looking at the last character read.  */
-  found_nul = extract_unsigned_integer (buffer + bytes_read - width, width,
-					byte_order) == 0;
+  if (bytes_read > 0) /* Don't try reading before the start of buffer. */
+    found_nul = extract_unsigned_integer (buffer + bytes_read - width, width,
+					  byte_order) == 0;
   if (len == -1 && !found_nul)
     {
       gdb_byte *peekbuf;

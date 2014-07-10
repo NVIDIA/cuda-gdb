@@ -115,7 +115,7 @@ evpy_emit_event (PyObject *event,
       if (func == NULL)
 	goto fail;
 
-      if (!PyObject_CallFunctionObjArgs (func, event, NULL))
+      if (!gdbpy_ObjectCallFunctionObjArgs (func, event, NULL))
 	{
 	  /* Print the trace here, but keep going -- we want to try to
 	     call all of the callbacks even if one is broken.  */

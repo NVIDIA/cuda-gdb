@@ -80,6 +80,8 @@ void cuda_api_read_texture_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint3
 void cuda_api_read_texture_memory_bindless (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t tex_symtab_index, uint32_t dim, uint32_t *coords, void *buf, uint32_t sz);
 void cuda_api_read_local_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint64_t addr, void *buf, uint32_t sz);
 void cuda_api_read_register (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint32_t regno, uint32_t *val);
+void cuda_api_read_predicates (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint32_t predicates_size, uint32_t *predicates);
+void cuda_api_read_cc_register (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint32_t *val);
 void cuda_api_read_pc (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint64_t *pc);
 void cuda_api_read_virtual_pc (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint64_t *pc);
 void cuda_api_read_lane_exception (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, CUDBGException_t *exception);
@@ -101,6 +103,8 @@ void cuda_api_write_param_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint64
 void cuda_api_write_shared_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint64_t addr, const void *buf, uint32_t sz);
 void cuda_api_write_local_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint64_t addr, const void *buf, uint32_t sz);
 void cuda_api_write_register (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint32_t regno, uint32_t val);
+void cuda_api_write_predicates (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint32_t predicates_size, const uint32_t *predicates);
+void cuda_api_write_cc_register (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint32_t val);
 
 /* Grid Properties */
 void cuda_api_get_grid_dim (uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 *grid_dim);
@@ -112,6 +116,7 @@ void cuda_api_get_grid_status (uint32_t dev, uint64_t grid_id, CUDBGGridStatus *
 void cuda_api_get_grid_info (uint32_t dev, uint64_t grid_id, CUDBGGridInfo *info);
 
 /* Device Properties */
+void cuda_api_get_device_name (uint32_t dev, char *buf, uint32_t sz);
 void cuda_api_get_device_type (uint32_t dev, char *buf, uint32_t sz);
 void cuda_api_get_sm_type (uint32_t dev, char *buf, uint32_t sz);
 void cuda_api_get_num_devices (uint32_t *numDev);
@@ -119,6 +124,7 @@ void cuda_api_get_num_sms (uint32_t dev, uint32_t *numSMs);
 void cuda_api_get_num_warps (uint32_t dev, uint32_t *numWarps);
 void cuda_api_get_num_lanes (uint32_t dev, uint32_t *numLanes);
 void cuda_api_get_num_registers (uint32_t dev, uint32_t *numRegs);
+void cuda_api_get_num_predicates (uint32_t dev, uint32_t *numPredicates);
 void cuda_api_get_device_pci_bus_info (uint32_t dev, uint32_t *pci_bus_id, uint32_t *pci_dev_id);
 
 /* DWARF-related routines */

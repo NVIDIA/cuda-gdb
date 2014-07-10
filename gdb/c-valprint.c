@@ -169,7 +169,9 @@ c_val_print (struct type *type, const gdb_byte *valaddr,
             error (_("Could not determine the array high bound"));
 
 	  eltlen = TYPE_LENGTH (elttype);
-	  len = high_bound - low_bound + 1;
+	  len = original_value
+		 ? min (high_bound - low_bound + 1, value_length (original_value) / eltlen)
+		 : (high_bound - low_bound + 1);
 	  if (options->prettyprint_arrays)
 	    {
 	      print_spaces_filtered (2 + 2 * recurse, stream);
@@ -550,13 +552,15 @@ c_value_print (struct value *val, struct ui_file *stream,
 	}
       else
 	{
-	  /* normal case */
-	  fprintf_filtered (stream, "(");
-          /* CUDA - managed_variables */
-          if (cuda_is_value_managed_pointer (val))
-            fprintf_filtered (stream, "@managed ");
-	  type_print (value_type (val), "", stream, -1);
-	  fprintf_filtered (stream, ") ");
+	  if (current_language->la_language != language_fortran)
+	    {
+	      fprintf_filtered (stream, "(");
+              /* CUDA - managed_variables */
+              if (cuda_is_value_managed_pointer (val))
+                fprintf_filtered (stream, "@managed ");
+	      type_print (value_type (val), "", stream, -1);
+	      fprintf_filtered (stream, ") ");
+	    }
 	}
     }
 

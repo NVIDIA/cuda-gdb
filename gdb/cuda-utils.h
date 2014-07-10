@@ -74,6 +74,10 @@ bool cuda_is_value_managed_pointer (struct value *value);
 bool cuda_is_uvm_used (void);
 void cuda_set_uvm_used (bool);
 #ifndef GDBSERVER
+static inline void cuda_write_bool (CORE_ADDR addr, bool val)
+{
+  target_write_memory (addr, (char *)&val, 1);
+}
 bool cuda_managed_address_p (CORE_ADDR addr);
 void cuda_managed_memory_add_region (CORE_ADDR begin, CORE_ADDR end);
 #endif

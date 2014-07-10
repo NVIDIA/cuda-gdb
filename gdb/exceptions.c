@@ -530,6 +530,21 @@ catch_exceptions_with_msg (struct ui_out *func_uiout,
 
 /* This function is superseded by catch_exceptions().  */
 
+gdb_byte* catch_errors_with_ptr_return (catch_errors_with_ptr_return_ftype *func, 
+                                         void *func_args, char *errstring, return_mask mask)
+{
+  volatile gdb_byte *val = 0;
+  volatile struct gdb_exception exception;
+  TRY_CATCH (exception, mask)
+    {
+      val = func (func_args);
+    }
+  print_any_exception (gdb_stderr, errstring, exception);
+  if (exception.reason != 0)
+    return 0;
+  return (gdb_byte*) val;
+}
+
 int
 catch_errors (catch_errors_ftype *func, void *func_args, char *errstring,
 	      return_mask mask)

@@ -54,7 +54,7 @@ gdbpy_readline_wrapper (FILE *sys_stdin, FILE *sys_stdout,
 	 with the original value saved in the following undocumented
 	 variable (see Python's Parser/myreadline.c and
 	 Modules/readline.c).  */
-      PyEval_RestoreThread (_PyOS_ReadlineTState);
+      PyEval_RestoreThread (gdbpy_OSReadlineTState);
       gdbpy_convert_exception (except);
       PyEval_SaveThread ();
       return NULL;
@@ -108,6 +108,6 @@ class GdbRemoveReadlineFinder:\n\
 sys.meta_path.append(GdbRemoveReadlineFinder())\n\
 ");
 
-  PyOS_ReadlineFunctionPointer = gdbpy_readline_wrapper;
+ gdbpyOS_ReadlineFunctionPointer = gdbpy_readline_wrapper;
 }
 

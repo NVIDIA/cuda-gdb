@@ -323,6 +323,10 @@ struct objfile
 
     struct minimal_symbol *msymbol_hash[MINIMAL_SYMBOL_HASH_SIZE];
 
+    /* This is a hash table used to index the minimal symbols by lowercase name.  */
+
+    struct minimal_symbol *msymbol_lowercase_hash[MINIMAL_SYMBOL_HASH_SIZE];
+
     /* This hash table is used to index the minimal symbols by their
        demangled names.  */
 

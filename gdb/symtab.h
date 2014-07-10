@@ -386,10 +386,15 @@ struct minimal_symbol
 
   struct minimal_symbol *hash_next;
 
-  /* Minimal symbols are stored in two different hash tables.  This is
+  /* Minimal symbols are stored in three different hash tables.  This is
      the `next' pointer for the demangled hash table.  */
 
   struct minimal_symbol *demangled_hash_next;
+
+  /* Minimal symbols are stored in three different hash tables.  This is
+     the `next' pointer for the lowercase hash table.  */
+
+  struct minimal_symbol *lowercase_hash_next;
 };
 
 #define MSYMBOL_TARGET_FLAG_1(msymbol)  (msymbol)->target_flag_1

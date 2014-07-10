@@ -175,8 +175,9 @@ kernel_new (uint32_t dev_id, uint64_t grid_id, uint64_t virt_code_base,
   kernel_add_child (parent_kernel, kernel);
 
   if (should_print_kernel_event(kernel))
-    printf_unfiltered (_("[Launch of CUDA Kernel %"PRIu64" (%s%s) on Device %u, level %u]\n"),
-                       kernel->id, kernel->name, kernel->dimensions, kernel->dev_id, kernel->depth);
+    printf_unfiltered (_("[Launch of CUDA Kernel %llu (%s%s) on Device %u, level %u]\n"),
+                       (unsigned long long)kernel->id, kernel->name, kernel->dimensions,
+                       kernel->dev_id, kernel->depth);
 
   return kernel;
 }
@@ -189,8 +190,9 @@ kernel_delete (kernel_t kernel)
   kernel_remove_child (kernel->parent, kernel);
 
   if (should_print_kernel_event(kernel))
-    printf_unfiltered (_("[Termination of CUDA Kernel %"PRIu64" (%s%s) on Device %u, level %u]\n"),
-                       kernel->id, kernel->name, kernel->dimensions, kernel->dev_id, kernel->depth);
+    printf_unfiltered (_("[Termination of CUDA Kernel %llu (%s%s) on Device %u, level %u]\n"),
+                       (unsigned long long)kernel->id, kernel->name, kernel->dimensions,
+                       kernel->dev_id, kernel->depth);
 
   disasm_cache_destroy (kernel->disasm_cache);
   xfree (kernel->name);
@@ -201,7 +203,7 @@ kernel_delete (kernel_t kernel)
 void
 kernel_invalidate (kernel_t kernel)
 {
-  cuda_trace ("kernel %"PRIu64": invalidate", kernel->id);
+  cuda_trace ("kernel %llu: invalidate", (unsigned long long)kernel->id);
 
   kernel->grid_status_p = false;
 }
@@ -470,16 +472,16 @@ kernel_print (kernel_t kernel)
 {
   gdb_assert (kernel);
 
-  fprintf (stderr, "    Kernel %"PRIu64":\n", kernel->id);
+  fprintf (stderr, "    Kernel %llu:\n", (unsigned long long)kernel->id);
   fprintf (stderr, "        name        : %s\n", kernel->name);
   fprintf (stderr, "        device id   : %u\n", kernel->dev_id);
-  fprintf (stderr, "        grid id     : %"PRId64"\n", kernel->grid_id);
-  fprintf (stderr, "        module id   : 0x%"PRIx64"\n", module_get_id (kernel->module));
-  fprintf (stderr, "        entry point : 0x%"PRIx64"\n", kernel->virt_code_base);
+  fprintf (stderr, "        grid id     : %lld\n", (long long)kernel->grid_id);
+  fprintf (stderr, "        module id   : 0x%llx\n", (unsigned long long)module_get_id (kernel->module));
+  fprintf (stderr, "        entry point : 0x%llx\n", (unsigned long long)kernel->virt_code_base);
   fprintf (stderr, "        dimensions  : %s\n", kernel->dimensions);
   fprintf (stderr, "        launched    : %s\n", kernel->launched ? "yes" : "no");
   fprintf (stderr, "        present     : %s\n", kernel_is_present (kernel)? "yes" : "no");
-  fprintf (stderr, "        next        : 0x%"PRIx64"\n", (uint64_t)(uintptr_t)kernel->next);
+  fprintf (stderr, "        next        : 0x%llx\n", (unsigned long long)(uintptr_t)kernel->next);
   fflush (stderr);
 }
 

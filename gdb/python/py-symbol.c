@@ -44,7 +44,7 @@ typedef struct sympy_symbol_object {
     symbol = symbol_object_to_symbol (symbol_obj);	\
     if (symbol == NULL)					\
       {							\
-	PyErr_SetString (PyExc_RuntimeError,		\
+	PyErr_SetString (gdbpyExc_RuntimeError,		\
 			 _("Symbol is invalid."));	\
 	return NULL;					\
       }							\
@@ -74,8 +74,8 @@ sympy_get_type (PyObject *self, void *closure)
 
   if (SYMBOL_TYPE (symbol) == NULL)
     {
-      Py_INCREF (Py_None);
-      return Py_None;
+      Py_INCREF (gdbpy_None);
+      return gdbpy_None;
     }
 
   return type_to_type_object (SYMBOL_TYPE (symbol));
@@ -202,8 +202,8 @@ sympy_needs_frame (PyObject *self, void *closure)
   GDB_PY_HANDLE_EXCEPTION (except);
 
   if (result)
-    Py_RETURN_TRUE;
-  Py_RETURN_FALSE;
+    GDB_PY_RETURN_TRUE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Implementation of gdb.Symbol.line -> int.
@@ -229,9 +229,9 @@ sympy_is_valid (PyObject *self, PyObject *args)
 
   symbol = symbol_object_to_symbol (self);
   if (symbol == NULL)
-    Py_RETURN_FALSE;
+    GDB_PY_RETURN_FALSE;
 
-  Py_RETURN_TRUE;
+  GDB_PY_RETURN_TRUE;
 }
 
 /* Implementation of gdb.Symbol.value (self[, frame]) -> gdb.Value.  Returns
@@ -246,19 +246,19 @@ sympy_value (PyObject *self, PyObject *args)
   struct value *value = NULL;
   volatile struct gdb_exception except;
 
-  if (!PyArg_ParseTuple (args, "|O", &frame_obj))
+  if (!gdbpy_ArgParseTuple (args, "|O", &frame_obj))
     return NULL;
 
   if (frame_obj != NULL && !PyObject_TypeCheck (frame_obj, &frame_object_type))
     {
-      PyErr_SetString (PyExc_TypeError, "argument is not a frame");
+      PyErr_SetString (gdbpyExc_TypeError, "argument is not a frame");
       return NULL;
     }
 
   SYMPY_REQUIRE_VALID (self, symbol);
   if (SYMBOL_CLASS (symbol) == LOC_TYPEDEF)
     {
-      PyErr_SetString (PyExc_TypeError, "cannot get the value of a typedef");
+      PyErr_SetString (gdbpyExc_TypeError, "cannot get the value of a typedef");
       return NULL;
     }
 
@@ -363,7 +363,7 @@ gdbpy_lookup_symbol (PyObject *self, PyObject *args, PyObject *kw)
   const struct block *block = NULL;
   volatile struct gdb_exception except;
 
-  if (! PyArg_ParseTupleAndKeywords (args, kw, "s|O!i", keywords, &name,
+  if (! gdbpy_ArgParseTupleAndKeywords (args, kw, "s|O!i", keywords, &name,
 				     &block_object_type, &block_obj, &domain))
     return NULL;
 
@@ -403,12 +403,12 @@ gdbpy_lookup_symbol (PyObject *self, PyObject *args, PyObject *kw)
     }
   else
     {
-      sym_obj = Py_None;
-      Py_INCREF (Py_None);
+      sym_obj = gdbpy_None;
+      Py_INCREF (gdbpy_None);
     }
   PyTuple_SET_ITEM (ret_tuple, 0, sym_obj);
 
-  bool_obj = (is_a_field_of_this.type != NULL) ? Py_True : Py_False;
+  bool_obj = (is_a_field_of_this.type != NULL) ? gdbpy_True : gdbpy_False;
   Py_INCREF (bool_obj);
   PyTuple_SET_ITEM (ret_tuple, 1, bool_obj);
 
@@ -428,7 +428,7 @@ gdbpy_lookup_global_symbol (PyObject *self, PyObject *args, PyObject *kw)
   PyObject *sym_obj;
   volatile struct gdb_exception except;
 
-  if (! PyArg_ParseTupleAndKeywords (args, kw, "s|i", keywords, &name,
+  if (! gdbpy_ArgParseTupleAndKeywords (args, kw, "s|i", keywords, &name,
 				     &domain))
     return NULL;
 
@@ -446,8 +446,8 @@ gdbpy_lookup_global_symbol (PyObject *self, PyObject *args, PyObject *kw)
     }
   else
     {
-      sym_obj = Py_None;
-      Py_INCREF (Py_None);
+      sym_obj = gdbpy_None;
+      Py_INCREF (gdbpy_None);
     }
 
   return sym_obj;

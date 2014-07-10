@@ -52,7 +52,7 @@ objfpy_get_filename (PyObject *self, void *closure)
   if (obj->objfile)
     return PyString_Decode (obj->objfile->name, strlen (obj->objfile->name),
 			    host_charset (), NULL);
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 static void
@@ -108,14 +108,14 @@ objfpy_set_printers (PyObject *o, PyObject *value, void *ignore)
 
   if (! value)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Cannot delete the pretty_printers attribute."));
       return -1;
     }
 
-  if (! PyList_Check (value))
+  if (! gdbpy_ListCheck (value))
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("The pretty_printers attribute must be a list."));
       return -1;
     }
@@ -150,14 +150,14 @@ objfpy_set_type_printers (PyObject *o, PyObject *value, void *ignore)
 
   if (! value)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Cannot delete the type_printers attribute."));
       return -1;
     }
 
-  if (! PyList_Check (value))
+  if (! gdbpy_ListCheck (value))
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("The type_printers attribute must be a list."));
       return -1;
     }
@@ -180,9 +180,9 @@ objfpy_is_valid (PyObject *self, PyObject *args)
   objfile_object *obj = (objfile_object *) self;
 
   if (! obj->objfile)
-    Py_RETURN_FALSE;
+    GDB_PY_RETURN_FALSE;
 
-  Py_RETURN_TRUE;
+  GDB_PY_RETURN_TRUE;
 }
 
 

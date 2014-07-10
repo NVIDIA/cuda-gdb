@@ -1065,13 +1065,14 @@ scalar_binop (struct value *arg1, struct value *arg2, enum exp_opcode op)
 	  v = v1 ^ v2;
           break;
               
-        case BINOP_EQUAL:
-          v = v1 == v2;
+
+	case BINOP_EQUAL:
+	  v = !((!v1 && v2) || (v1 && !v2));
           break;
           
         case BINOP_NOTEQUAL:
-          v = v1 != v2;
-	  break;
+          v = (!v1 && v2) || (v1 && !v2);
+          break;
 
 	default:
 	  error (_("Invalid operation on booleans."));

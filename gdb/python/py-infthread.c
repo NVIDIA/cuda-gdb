@@ -30,7 +30,7 @@ static PyTypeObject thread_object_type;
   do {								\
     if (!Thread->thread)					\
       {								\
-	PyErr_SetString (PyExc_RuntimeError,			\
+	PyErr_SetString (gdbpyExc_RuntimeError,			\
 			 _("Thread no longer exists."));	\
 	return NULL;						\
       }								\
@@ -75,7 +75,7 @@ thpy_get_name (PyObject *self, void *ignore)
     name = target_thread_name (thread_obj->thread);
 
   if (name == NULL)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   return PyString_FromString (name);
 }
@@ -88,21 +88,21 @@ thpy_set_name (PyObject *self, PyObject *newvalue, void *ignore)
 
   if (! thread_obj->thread)
     {
-      PyErr_SetString (PyExc_RuntimeError, _("Thread no longer exists."));
+      PyErr_SetString (gdbpyExc_RuntimeError, _("Thread no longer exists."));
       return -1;
     }
 
   if (newvalue == NULL)
     {
-      PyErr_SetString (PyExc_TypeError, 
+      PyErr_SetString (gdbpyExc_TypeError, 
 		       _("Cannot delete `name' attribute."));
       return -1;
     }
-  else if (newvalue == Py_None)
+  else if (newvalue == gdbpy_None)
     name = NULL;
   else if (! gdbpy_is_string (newvalue))
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("The value of `name' must be a string."));
       return -1;
     }
@@ -172,7 +172,7 @@ thpy_switch (PyObject *self, PyObject *args)
     }
   GDB_PY_HANDLE_EXCEPTION (except);
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Implementation of InferiorThread.is_stopped () -> Boolean.
@@ -185,9 +185,9 @@ thpy_is_stopped (PyObject *self, PyObject *args)
   THPY_REQUIRE_VALID (thread_obj);
 
   if (is_stopped (thread_obj->thread->ptid))
-    Py_RETURN_TRUE;
+    GDB_PY_RETURN_TRUE;
 
-  Py_RETURN_FALSE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Implementation of InferiorThread.is_running () -> Boolean.
@@ -200,9 +200,9 @@ thpy_is_running (PyObject *self, PyObject *args)
   THPY_REQUIRE_VALID (thread_obj);
 
   if (is_running (thread_obj->thread->ptid))
-    Py_RETURN_TRUE;
+    GDB_PY_RETURN_TRUE;
 
-  Py_RETURN_FALSE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Implementation of InferiorThread.is_exited () -> Boolean.
@@ -215,9 +215,9 @@ thpy_is_exited (PyObject *self, PyObject *args)
   THPY_REQUIRE_VALID (thread_obj);
 
   if (is_exited (thread_obj->thread->ptid))
-    Py_RETURN_TRUE;
+    GDB_PY_RETURN_TRUE;
 
-  Py_RETURN_FALSE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Implementation of gdb.InfThread.is_valid (self) -> Boolean.
@@ -230,9 +230,9 @@ thpy_is_valid (PyObject *self, PyObject *args)
   thread_object *thread_obj = (thread_object *) self;
 
   if (! thread_obj->thread)
-    Py_RETURN_FALSE;
+    GDB_PY_RETURN_FALSE;
 
-  Py_RETURN_TRUE;
+  GDB_PY_RETURN_TRUE;
 }
 
 /* Implementation of gdb.selected_thread () -> gdb.InferiorThread.
@@ -249,7 +249,7 @@ gdbpy_selected_thread (PyObject *self, PyObject *args)
       return thread_obj;
     }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 

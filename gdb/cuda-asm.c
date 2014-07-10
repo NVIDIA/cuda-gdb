@@ -16,6 +16,7 @@
  */
 
 #include <string.h>
+#include <ctype.h>
 
 #include "defs.h"
 #include "frame.h"
@@ -39,6 +40,8 @@
 
 typedef struct inst_st      *inst_t;
 
+#define INSN_MAX_LENGTH 80
+
 struct inst_st {
   uint64_t      pc;      /* the PC of the disassembled instruction */
   char         *text;    /* the dissassembled instruction */
@@ -47,7 +50,7 @@ struct inst_st {
 };
 
 static inst_t
-inst_create (uint64_t pc, const char *text, inst_t next)
+inst_create (uint64_t pc, const char *text, uint32_t size, inst_t next)
 {
   inst_t inst;
   int len;
@@ -61,7 +64,7 @@ inst_create (uint64_t pc, const char *text, inst_t next)
   inst->pc   = pc;
   inst->text= strncpy (inst->text, text, len + 1);
   inst->next = next;
-  inst->size = 0;
+  inst->size = size;
 
   return inst;
 }
@@ -192,6 +195,64 @@ static char *find_cuobjdump (void)
   return cuobjdump_path;
 }
 
+static bool
+disasm_cache_parse_line(const char *line, char *insn, uint64_t *offs, uint32_t *insn_size)
+{
+  #define INSN_HEX_SIGNATURE "/* 0x"
+  #define INSN_HEX_LENGTH strlen(INSN_HEX_SIGNATURE)
+  char *size_start_ptr = strstr(line, INSN_HEX_SIGNATURE);
+  char *size_end_ptr = size_start_ptr ? strchr (size_start_ptr + INSN_HEX_LENGTH, ' ') : NULL;
+  char *offs_start_ptr = strstr(line, "/*");
+  char *offs_end_ptr = offs_start_ptr + 2;
+  char *semi_colon;
+  unsigned long length;
+
+  memset (insn, 0, INSN_MAX_LENGTH);
+  *offs = (uint64_t)-1LL;
+  *insn_size = (uint32_t)-1;
+
+  /* If instruction size signature can not be found, return false*/
+  if (!size_end_ptr)
+    return false;
+
+  /* Check that there is nothing but spaces before the instruction offset location */
+  while (isspace (*line)) ++line;
+  if (line != offs_start_ptr)
+    return false;
+
+  *insn_size = ((unsigned long)size_end_ptr - (unsigned long)size_start_ptr - INSN_HEX_LENGTH)/2;
+
+  /* If offs_ptr is NULL - return empty line instruction */
+  if (!offs_start_ptr || offs_start_ptr == size_start_ptr)
+      return true;
+
+  *offs = strtoull (offs_start_ptr + 2, &offs_end_ptr, 16);
+  /* Fail If field containing offset is present, but has invalid hexadecimal number */
+  if (offs_end_ptr == offs_start_ptr + 2)
+    return false;
+  if (offs_end_ptr[0] != '*' || offs_end_ptr[1] != '/')
+    return false;
+
+  /* Strip whitespaces before the start of the assembly mnemonic */
+  for (offs_end_ptr += 2; isspace (*offs_end_ptr); ++offs_end_ptr);
+
+  /* Ignore everything after semicolon (if present)*/
+  semi_colon = strchr (offs_end_ptr, ';');
+  if (semi_colon)
+    size_start_ptr = semi_colon;
+  else
+    /* Strip whitespaces and the end of the assembly mnemonic */
+    for (--size_start_ptr; isspace (*size_start_ptr); --size_start_ptr);
+
+  length = (unsigned long)size_start_ptr - (unsigned long)offs_end_ptr;
+
+  /* If necessary, trim mnemonic length*/
+  if (length >= INSN_MAX_LENGTH) length = INSN_MAX_LENGTH-1;
+  memcpy (insn, offs_end_ptr, length);
+
+  return true;
+}
+
 static void
 disasm_cache_populate_from_elf_image (disasm_cache_t disasm_cache, uint64_t pc)
 {
@@ -199,16 +260,14 @@ disasm_cache_populate_from_elf_image (disasm_cache_t disasm_cache, uint64_t pc)
   module_t module;
   elf_image_t elf_img;
   struct objfile *objfile;
-  uint32_t devId;
+  uint32_t devId, size;
   uint64_t ofst = 0, entry_pc = 0;
   FILE *sass;
   char command[1024], line[1024], header[1024];
   char *filename;
   const char *function_name;
   char *function_base_name;
-  char text[80], *semi_colon;
-  CORE_ADDR pc1, pc2;
-  inst_t prev_inst = NULL;
+  char text[INSN_MAX_LENGTH];
   bool header_found = false;
 
   /* early exit if already cached */
@@ -260,32 +319,15 @@ disasm_cache_populate_from_elf_image (disasm_cache_t disasm_cache, uint64_t pc)
       if (strcmp (line, "\n") == 0)
         break;
 
-      /* read the instruction line and ignore others */
-      memset (text, 0, sizeof text);
-
-      if (sscanf (line, " /*%"PRIx64"*/ %79c", &ofst, text) != 2)
-        continue;
-
-      /* discard the ';' and everything afterwards */
-      semi_colon = strchr (text, ';');
-      if (semi_colon)
-        *semi_colon = 0;
+       if (!disasm_cache_parse_line (line, text, &ofst, &size))
+         continue;
+       if (ofst == (uint64_t)-1LL)
+           ofst = disasm_cache->head ? disasm_cache->head->pc + disasm_cache->head->size : entry_pc;
+       else
+           ofst += entry_pc;
 
       /* add the instruction to the cache at the found offset */
-      prev_inst = disasm_cache->head;
-      disasm_cache->head = inst_create (entry_pc + ofst, text, disasm_cache->head);
-
-      /* update the size of the previous instruction */
-      if (prev_inst)
-        prev_inst->size = entry_pc + ofst - prev_inst->pc;
-    }
-
-  /* update the instruction size of the last instruction */
-  if (disasm_cache->head)
-    {
-      pc1 = get_pc_function_start (entry_pc + ofst);
-      pc2 = get_pc_function_start (entry_pc + ofst +4);
-      disasm_cache->head->size = (pc1 != 0 && pc2 != 0 && pc1 == pc2) ? 8 : 4;
+      disasm_cache->head = inst_create (ofst, text, size, disasm_cache->head);
     }
 
   /* close the sass file */
@@ -312,10 +354,7 @@ disasm_cache_read_from_device_memory (disasm_cache_t disasm_cache, uint64_t pc, 
   devId = cuda_current_device ();
   cuda_api_disassemble (devId, pc, inst_size, buf, sizeof (buf));
 
-  disasm_cache->head = inst_create (pc, buf, disasm_cache->head);
-  disasm_cache->head->size = *inst_size;
-
-  return;
+  disasm_cache->head = inst_create (pc, buf, *inst_size, disasm_cache->head);
 }
 
 const char *
@@ -340,7 +379,7 @@ disasm_cache_find_instruction (disasm_cache_t disasm_cache,
       break;
 
   /* return the instruction or NULL if not found */
-  if (inst && inst->text && *inst->text != 0)
+  if (inst && inst->text)
     {
       *inst_size = inst->size;
       return inst->text;

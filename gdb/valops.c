@@ -56,6 +56,7 @@
 #include "user-regs.h"
 #include "tracepoint.h"
 #include <errno.h>
+#include <ctype.h>
 #include "gdb_string.h"
 #include "gdb_assert.h"
 #include "cp-support.h"
@@ -424,7 +425,7 @@ value_cast (struct type *type, struct value *arg2)
       if (element_length > 0 && TYPE_ARRAY_UPPER_BOUND_IS_UNDEFINED (type))
 	{
 	  struct type *range_type = TYPE_INDEX_TYPE (type);
-	  int val_length = TYPE_LENGTH (type2);
+	  int val_length = value_length (arg2);
 	  LONGEST low_bound, high_bound, new_length;
 
 	  if (get_discrete_bounds (range_type, &low_bound, &high_bound) < 0)
@@ -496,7 +497,7 @@ value_cast (struct type *type, struct value *arg2)
       if (code2 == TYPE_CODE_FLT)
 	decimal_from_floating (arg2, dec, dec_len, byte_order);
       else if (code2 == TYPE_CODE_DECFLOAT)
-	decimal_convert (value_contents (arg2), TYPE_LENGTH (type2),
+	decimal_convert (value_contents (arg2), value_length (arg2),
 			 byte_order, dec, dec_len, byte_order);
       else
 	/* The only option left is an integral type.  */
@@ -523,7 +524,7 @@ value_cast (struct type *type, struct value *arg2)
          bits.  */
       if (code2 == TYPE_CODE_PTR)
         longest = extract_unsigned_integer
-		    (value_contents (arg2), TYPE_LENGTH (type2),
+		    (value_contents (arg2), value_length (arg2),
 		     gdbarch_byte_order (get_type_arch (type2)));
       else
         longest = value_as_long (arg2);
@@ -940,7 +941,7 @@ get_value_at (struct type *type, CORE_ADDR addr, int lazy)
   if (TYPE_CODE (check_typedef (type)) == TYPE_CODE_VOID)
     error (_("Attempt to dereference a generic pointer."));
 
-  val = value_from_contents_and_address (type, NULL, addr);
+  val = value_from_contents_and_address (type, NULL, 0, addr);
 
   if (!lazy)
     value_fetch_lazy (val);
@@ -1018,20 +1019,19 @@ value_fetch_lazy (struct value *val)
 				      value_bitsize (val), parent, &num))
 	mark_value_bytes_unavailable (val,
 				      value_embedded_offset (val),
-				      TYPE_LENGTH (type));
+				      value_length (val));
       else
-	store_signed_integer (value_contents_raw (val), TYPE_LENGTH (type),
+	store_signed_integer (value_contents_raw (val), value_length (val),
 			      byte_order, num);
     }
   else if (VALUE_LVAL (val) == lval_memory)
     {
       CORE_ADDR addr = value_address (val);
-      struct type *type = check_typedef (value_enclosing_type (val));
 
-      if (TYPE_LENGTH (type))
+      if (value_length (val))
 	read_value_memory (val, 0, value_stack (val),
 			   addr, value_contents_all_raw (val),
-			   TYPE_LENGTH (type));
+			   value_length (val));
     }
   else if (VALUE_LVAL (val) == lval_register)
     {
@@ -1075,7 +1075,7 @@ value_fetch_lazy (struct value *val)
 	  set_value_lazy (val, 0);
 	  value_contents_copy (val, value_embedded_offset (val),
 			       new_val, value_embedded_offset (new_val),
-			       TYPE_LENGTH (type));
+			       min (value_length (val), value_length (new_val)));
 	}
 
       if (frame_debug)
@@ -1396,7 +1396,7 @@ value_assign (struct value *toval, struct value *fromval)
 	      {
 		put_frame_register_bytes (frame, value_reg,
 					  value_offset (toval),
-					  TYPE_LENGTH (type),
+					  min (value_length (toval), value_length (fromval)),
 					  value_contents (fromval));
 	      }
 	  }
@@ -1479,7 +1479,7 @@ value_assign (struct value *toval, struct value *fromval)
   val = value_copy (toval);
   set_value_lazy (val, 0);
   memcpy (value_contents_raw (val), value_contents (fromval),
-	  TYPE_LENGTH (type));
+	  min (value_length (val), value_length (fromval)));
 
   /* We copy over the enclosing type and pointed-to offset from FROMVAL
      in the case of pointer types.  For object types, the enclosing type
@@ -1507,13 +1507,14 @@ value_repeat (struct value *arg1, int count)
     error (_("Invalid number %d of repetitions."), count);
 
   val = allocate_repeat_value (value_enclosing_type (arg1), count);
+  set_value_repeated (val, 1);
 
   VALUE_LVAL (val) = lval_memory;
   set_value_address (val, value_address (arg1));
 
   read_value_memory (val, 0, value_stack (val), value_address (val),
 		     value_contents_all_raw (val),
-		     TYPE_LENGTH (value_enclosing_type (val)));
+		     value_length (val));
 
   return val;
 }
@@ -1643,7 +1644,7 @@ value_coerce_to_target (struct value *val)
   if (!value_must_coerce_to_target (val))
     return val;
 
-  length = TYPE_LENGTH (check_typedef (value_type (val)));
+  length = value_length (val);
   addr = allocate_space_in_inferior (length);
   /* CUDA - memory segments */
   type = check_typedef (value_type (val));
@@ -1840,7 +1841,7 @@ value_array (int lowbound, int highbound, struct value **elemvec)
 {
   int nelem;
   int idx;
-  unsigned int typelength;
+  unsigned int typelength, vallength;
   struct value *val;
   struct type *arraytype;
 
@@ -1853,6 +1854,7 @@ value_array (int lowbound, int highbound, struct value **elemvec)
       error (_("bad array bounds (%d, %d)"), lowbound, highbound);
     }
   typelength = TYPE_LENGTH (value_enclosing_type (elemvec[0]));
+  vallength = value_length (elemvec[0]);
   for (idx = 1; idx < nelem; idx++)
     {
       if (TYPE_LENGTH (value_enclosing_type (elemvec[idx])) != typelength)
@@ -1869,7 +1871,7 @@ value_array (int lowbound, int highbound, struct value **elemvec)
       val = allocate_value (arraytype);
       for (idx = 0; idx < nelem; idx++)
 	value_contents_copy (val, idx * typelength, elemvec[idx], 0,
-			     typelength);
+			     vallength);
       return val;
     }
 
@@ -1878,7 +1880,7 @@ value_array (int lowbound, int highbound, struct value **elemvec)
 
   val = allocate_value (arraytype);
   for (idx = 0; idx < nelem; idx++)
-    value_contents_copy (val, idx * typelength, elemvec[idx], 0, typelength);
+    value_contents_copy (val, idx * typelength, elemvec[idx], 0, vallength);
   return val;
 }
 
@@ -2162,7 +2164,7 @@ do_search_struct_field (const char *name, struct value *arg1, int offset,
 	      base_addr = value_address (arg1) + boffset;
 	      if (target_read_memory (base_addr, 
 				      value_contents_raw (v2),
-				      TYPE_LENGTH (basetype)) != 0)
+				      value_length (v2)) != 0)
 		error (_("virtual baseclass botch"));
 	      VALUE_LVAL (v2) = lval_memory;
 	      set_value_address (v2, base_addr);
@@ -2325,6 +2327,7 @@ search_struct_method (const char *name, struct value **arg1p,
 
 	      base_val = value_from_contents_and_address (baseclass,
 							  tmp,
+							  TYPE_LENGTH (baseclass),
 							  address + offset);
 	      base_valaddr = value_contents_for_printing (base_val);
 	      this_offset = 0;
@@ -2412,11 +2415,39 @@ value_struct_elt (struct value **argp, struct value **args,
 
   if (!args)
     {
+      int i;
+      char *nname;
+      int len;
+
+      len = strlen(name);
+      
+      if (current_language
+	  && current_language->la_case_sensitivity == case_sensitive_off) 
+	{
+	  int i;
+	  nname = xmalloc(len + 1);
+	  for (i = 0; i < len + 1; i++) 
+	    {
+	      nname[i] = tolower(name[i]);
+	    }
+	}
+      else 
+	{
+	  nname = xmalloc(len + 1);
+	  memcpy(nname, name, len + 1);
+	}
+      
+    
       /* if there are no arguments ...do this...  */
 
       /* Try as a field first, because if we succeed, there is less
          work to be done.  */
-      v = search_struct_field (name, *argp, 0, t, 0);
+
+
+      v = search_struct_field (nname, *argp, 0, t, 0);
+
+      xfree(nname);
+
       if (v)
 	return v;
 
@@ -3783,7 +3814,7 @@ value_slice (struct value *array, int lowbound, int length)
 	{
 	  slice = allocate_value (slice_type);
 	  value_contents_copy (slice, 0, array, offset,
-			       TYPE_LENGTH (slice_type));
+			       value_length (slice));
 	}
 
       set_value_component_location (slice, array);
@@ -3812,9 +3843,9 @@ value_literal_complex (struct value *arg1,
   arg2 = value_cast (real_type, arg2);
 
   memcpy (value_contents_raw (val),
-	  value_contents (arg1), TYPE_LENGTH (real_type));
+	  value_contents (arg1), value_length (arg1));
   memcpy (value_contents_raw (val) + TYPE_LENGTH (real_type),
-	  value_contents (arg2), TYPE_LENGTH (real_type));
+	  value_contents (arg2), value_length (arg2));
   return val;
 }
 
@@ -3832,10 +3863,10 @@ cast_into_complex (struct type *type, struct value *val)
       struct value *im_val = allocate_value (val_real_type);
 
       memcpy (value_contents_raw (re_val),
-	      value_contents (val), TYPE_LENGTH (val_real_type));
+	      value_contents (val), value_length (re_val));
       memcpy (value_contents_raw (im_val),
 	      value_contents (val) + TYPE_LENGTH (val_real_type),
-	      TYPE_LENGTH (val_real_type));
+	      value_length (im_val));
 
       return value_literal_complex (re_val, im_val, type);
     }
@@ -3846,6 +3877,43 @@ cast_into_complex (struct type *type, struct value *val)
 				  type);
   else
     error (_("cannot cast non-number to complex"));
+}
+
+struct value *
+value_real (struct value *val)
+{
+  struct type *val_real_type = TYPE_TARGET_TYPE (value_type (val));
+
+  if (TYPE_CODE (value_type (val)) == TYPE_CODE_COMPLEX)
+    {
+      struct value *re_val = allocate_value(val_real_type);
+
+      memcpy (value_contents_raw (re_val),
+	      value_contents (val), value_length (re_val));
+
+      return re_val;
+    }
+  else
+    error (_("value is not a complex number"));
+}
+
+struct value *
+value_imag (struct value *val)
+{
+  struct type *val_real_type = TYPE_TARGET_TYPE (value_type (val));
+
+  if (TYPE_CODE (value_type (val)) == TYPE_CODE_COMPLEX)
+    {
+      struct value *im_val = allocate_value(val_real_type);
+
+      memcpy (value_contents_raw (im_val),
+	      value_contents (val) + TYPE_LENGTH (val_real_type),
+	      value_length (im_val));
+
+      return im_val;
+    }
+  else
+    error (_("value is not a complex number"));
 }
 
 void

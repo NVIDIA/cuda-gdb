@@ -81,7 +81,7 @@ static PyObject *
 cmdpy_dont_repeat (PyObject *self, PyObject *args)
 {
   dont_repeat ();
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 
@@ -143,9 +143,9 @@ cmdpy_function (struct cmd_list_element *command, char *args, int from_tty)
       error (_("Could not convert arguments to Python string."));
     }
 
-  ttyobj = from_tty ? Py_True : Py_False;
+  ttyobj = from_tty ? gdbpy_True : gdbpy_False;
   Py_INCREF (ttyobj);
-  result = PyObject_CallMethodObjArgs ((PyObject *) obj, invoke_cst, argobj,
+  result = gdbpy_ObjectCallMethodObjArgs ((PyObject *) obj, invoke_cst, argobj,
 				       ttyobj, NULL);
   Py_DECREF (argobj);
   Py_DECREF (ttyobj);
@@ -232,7 +232,7 @@ cmdpy_completer (struct cmd_list_element *command, char *text, char *word)
   if (! wordobj)
     error (_("Could not convert argument to Python string."));
 
-  resultobj = PyObject_CallMethodObjArgs ((PyObject *) obj, complete_cst,
+  resultobj = gdbpy_ObjectCallMethodObjArgs ((PyObject *) obj, complete_cst,
 					  textobj, wordobj, NULL);
   Py_DECREF (textobj);
   Py_DECREF (wordobj);
@@ -274,7 +274,7 @@ cmdpy_completer (struct cmd_list_element *command, char *text, char *word)
 	  VEC_safe_push (char_ptr, result, item);
 	}
     }
-  else if (PyInt_Check (resultobj))
+  else if (gdbpy_IntCheck (resultobj))
     {
       /* User code may also return one of the completion constants,
 	 thus requesting that sort of completion.  */
@@ -327,7 +327,7 @@ gdbpy_parse_command_name (const char *name,
     ;
   if (i < 0)
     {
-      PyErr_SetString (PyExc_RuntimeError, _("No command name found."));
+      PyErr_SetString (gdbpyExc_RuntimeError, _("No command name found."));
       return NULL;
     }
   lastchar = i;
@@ -359,7 +359,7 @@ gdbpy_parse_command_name (const char *name,
   elt = lookup_cmd_1 (&prefix_text2, *start_list, NULL, 1);
   if (!elt || elt == (struct cmd_list_element *) -1)
     {
-      PyErr_Format (PyExc_RuntimeError, _("Could not find command prefix %s."),
+      gdbpy_ErrFormat (gdbpyExc_RuntimeError, _("Could not find command prefix %s."),
 		    prefix_text);
       xfree (prefix_text);
       xfree (result);
@@ -373,7 +373,7 @@ gdbpy_parse_command_name (const char *name,
       return result;
     }
 
-  PyErr_Format (PyExc_RuntimeError, _("'%s' is not a prefix command."),
+  gdbpy_ErrFormat (gdbpyExc_RuntimeError, _("'%s' is not a prefix command."),
 		prefix_text);
   xfree (prefix_text);
   xfree (result);
@@ -420,12 +420,12 @@ cmdpy_init (PyObject *self, PyObject *args, PyObject *kw)
     {
       /* Note: this is apparently not documented in Python.  We return
 	 0 for success, -1 for failure.  */
-      PyErr_Format (PyExc_RuntimeError,
+      gdbpy_ErrFormat (gdbpyExc_RuntimeError,
 		    _("Command object already initialized."));
       return -1;
     }
 
-  if (! PyArg_ParseTupleAndKeywords (args, kw, "si|iO",
+  if (! gdbpy_ArgParseTupleAndKeywords (args, kw, "si|iO",
 				     keywords, &name, &cmdtype,
 			  &completetype, &is_prefix))
     return -1;
@@ -437,13 +437,13 @@ cmdpy_init (PyObject *self, PyObject *args, PyObject *kw)
       && cmdtype != class_trace && cmdtype != class_obscure
       && cmdtype != class_maintenance && cmdtype != class_user)
     {
-      PyErr_Format (PyExc_RuntimeError, _("Invalid command class argument."));
+      gdbpy_ErrFormat (gdbpyExc_RuntimeError, _("Invalid command class argument."));
       return -1;
     }
 
   if (completetype < -1 || completetype >= (int) N_COMPLETERS)
     {
-      PyErr_Format (PyExc_RuntimeError,
+      gdbpy_ErrFormat (gdbpyExc_RuntimeError,
 		    _("Invalid completion type argument."));
       return -1;
     }
@@ -539,8 +539,8 @@ cmdpy_init (PyObject *self, PyObject *args, PyObject *kw)
       xfree (docstring);
       xfree (pfx_name);
       Py_DECREF (self);
-      PyErr_Format (except.reason == RETURN_QUIT
-		    ? PyExc_KeyboardInterrupt : PyExc_RuntimeError,
+      gdbpy_ErrFormat (except.reason == RETURN_QUIT
+		    ? gdbpyExc_KeyboardInterrupt : gdbpyExc_RuntimeError,
 		    "%s", except.message);
       return -1;
     }
@@ -661,7 +661,7 @@ gdbpy_string_to_argv (PyObject *self, PyObject *args)
   PyObject *py_argv;
   const char *input;
 
-  if (!PyArg_ParseTuple (args, "s", &input))
+  if (!gdbpy_ArgParseTuple (args, "s", &input))
     return NULL;
 
   py_argv = PyList_New (0);

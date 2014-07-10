@@ -48,6 +48,7 @@
 #include "parser-defs.h"
 #include "language.h"
 #include "f-lang.h"
+#include "f-module.h"
 #include "bfd.h" /* Required by objfiles.h.  */
 #include "symfile.h" /* Required by objfiles.h.  */
 #include "objfiles.h" /* For have_full_symbols and have_partial_symbols */
@@ -127,6 +128,8 @@ static void growbuf_by_size (int);
 
 static int match_string_literal (void);
 
+static struct type *follow_f_types (struct type *follow_type);
+
 %}
 
 /* Although the yacc "value" of an expression is not used,
@@ -162,12 +165,12 @@ static int parse_number (char *, int, int, YYSTYPE *);
 
 %type <voidval> exp  type_exp start variable 
 %type <tval> type typebase
-%type <tvec> nonempty_typelist
 /* %type <bval> block */
 
 /* Fancy type parsing.  */
-%type <voidval> func_mod direct_abs_decl abs_decl
 %type <tval> ptype
+
+%type <lval> signed_int
 
 %token <typed_val> INT
 %token <dval> FLOAT
@@ -194,21 +197,24 @@ static int parse_number (char *, int, int, YYSTYPE *);
 
 %token <ssym> NAME_OR_INT 
 
-%token  SIZEOF 
+%token POINTER SIZEOF COLONCOLON KIND
 %token ERROR
 
 /* Special type cases, put in to allow the parser to distinguish different
    legal basetypes.  */
-%token INT_KEYWORD INT_S2_KEYWORD LOGICAL_S1_KEYWORD LOGICAL_S2_KEYWORD 
+%token INT_KEYWORD INT_S2_KEYWORD INT_S8_KEYWORD LOGICAL_S1_KEYWORD LOGICAL_S2_KEYWORD
 %token LOGICAL_S8_KEYWORD
 %token LOGICAL_KEYWORD REAL_KEYWORD REAL_S8_KEYWORD REAL_S16_KEYWORD 
-%token COMPLEX_S8_KEYWORD COMPLEX_S16_KEYWORD COMPLEX_S32_KEYWORD 
-%token BOOL_AND BOOL_OR BOOL_NOT   
+%token COMPLEX_KEYWORD COMPLEX_S8_KEYWORD COMPLEX_S16_KEYWORD COMPLEX_S32_KEYWORD 
+%token BOOL_AND BOOL_OR BOOL_NOT BIN_MOD
+%token SINGLE DOUBLE PRECISION
 %token <lval> CHARACTER 
 
 %token <voidval> VARIABLE
 
 %token <opcode> ASSIGN_MODIFY
+%token <opcode> UNOP_INTRINSIC
+%token <opcode> BINOP_INTRINSIC
 
 %left ','
 %left ABOVE_COMMA
@@ -230,6 +236,10 @@ static int parse_number (char *, int, int, YYSTYPE *);
 %right '%'
 %right UNARY 
 %right '('
+%right ARROW
+%left COLONCOLON
+%left BELOW_SIZE
+%left SIZE
 
 
 %%
@@ -286,6 +296,13 @@ exp	:	exp '('
 			  write_exp_elt_opcode (OP_F77_UNDETERMINED_ARGLIST); }
 	;
 
+exp     :       UNOP_INTRINSIC '(' exp ')'
+                        { write_exp_elt_opcode ($1); }
+        ;
+
+exp     :       BINOP_INTRINSIC '(' exp ',' exp ')'
+                        { write_exp_elt_opcode ($1); }
+
 arglist	:
 	;
 
@@ -301,6 +318,10 @@ arglist	:	arglist ',' exp   %prec ABOVE_COMMA
 			{ arglist_len++; }
 	;
 
+arglist	:	arglist ',' subrange   %prec ABOVE_COMMA
+			{ arglist_len++; }
+	;
+
 /* There are four sorts of subrange types in F90.  */
 
 subrange:	exp ':' exp	%prec ABOVE_COMMA
@@ -309,19 +330,19 @@ subrange:	exp ':' exp	%prec ABOVE_COMMA
 			  write_exp_elt_opcode (OP_F90_RANGE); }
 	;
 
-subrange:	exp ':'	%prec ABOVE_COMMA
+subrange:	exp colon_star	%prec ABOVE_COMMA
 			{ write_exp_elt_opcode (OP_F90_RANGE);
 			  write_exp_elt_longcst (HIGH_BOUND_DEFAULT);
 			  write_exp_elt_opcode (OP_F90_RANGE); }
 	;
 
-subrange:	':' exp	%prec ABOVE_COMMA
+subrange:	star_colon exp	%prec ABOVE_COMMA
 			{ write_exp_elt_opcode (OP_F90_RANGE);
 			  write_exp_elt_longcst (LOW_BOUND_DEFAULT);
 			  write_exp_elt_opcode (OP_F90_RANGE); }
 	;
 
-subrange:	':'	%prec ABOVE_COMMA
+subrange:	star_colon_star	%prec ABOVE_COMMA
 			{ write_exp_elt_opcode (OP_F90_RANGE);
 			  write_exp_elt_longcst (BOTH_BOUND_DEFAULT);
 			  write_exp_elt_opcode (OP_F90_RANGE); }
@@ -407,6 +428,14 @@ exp	:	exp GREATERTHAN exp
 			{ write_exp_elt_opcode (BINOP_GTR); }
 	;
 
+exp	:	exp '>' exp
+			{ write_exp_elt_opcode (BINOP_GTR); }
+	;
+
+exp	:	exp '<' exp
+			{ write_exp_elt_opcode (BINOP_LESS); }
+	;
+
 exp	:	exp '&' exp
 			{ write_exp_elt_opcode (BINOP_BITWISE_AND); }
 	;
@@ -423,9 +452,12 @@ exp     :       exp BOOL_AND exp
 			{ write_exp_elt_opcode (BINOP_LOGICAL_AND); }
 	;
 
-
 exp	:	exp BOOL_OR exp
 			{ write_exp_elt_opcode (BINOP_LOGICAL_OR); }
+	;
+
+exp	:	exp BIN_MOD exp
+			{ write_exp_elt_opcode (BINOP_REM); }
 	;
 
 exp	:	exp '=' exp
@@ -490,6 +522,18 @@ exp	:	STRING_LITERAL
 			}
 	;
 
+exp	:	exp ARROW name
+			{ write_exp_elt_opcode (STRUCTOP_PTR);
+			  write_exp_string ($3);
+			  write_exp_elt_opcode (STRUCTOP_PTR); }
+	;
+
+exp	:	exp '.' name
+			{ write_exp_elt_opcode (STRUCTOP_STRUCT);
+			  write_exp_string ($3);
+			  write_exp_elt_opcode (STRUCTOP_STRUCT); }
+	;
+
 variable:	name_not_typename
 			{ struct symbol *sym = $1.sym;
 
@@ -529,125 +573,191 @@ variable:	name_not_typename
 			}
 	;
 
-
 type    :       ptype
         ;
 
 ptype	:	typebase
-	|	typebase abs_decl
-		{
-		  /* This is where the interesting stuff happens.  */
-		  int done = 0;
-		  int array_size;
-		  struct type *follow_type = $1;
-		  struct type *range_type;
-		  
-		  while (!done)
-		    switch (pop_type ())
-		      {
-		      case tp_end:
-			done = 1;
-			break;
-		      case tp_pointer:
-			follow_type = lookup_pointer_type (follow_type);
-			break;
-		      case tp_reference:
-			follow_type = lookup_reference_type (follow_type);
-			break;
-		      case tp_array:
-			array_size = pop_type_int ();
-			if (array_size != -1)
-			  {
-			    range_type =
-			      create_range_type ((struct type *) NULL,
-						 parse_f_type->builtin_integer,
-						 0, array_size - 1);
-			    follow_type =
-			      create_array_type ((struct type *) NULL,
-						 follow_type, range_type);
-			  }
-			else
-			  follow_type = lookup_pointer_type (follow_type);
-			break;
-		      case tp_function:
-			follow_type = lookup_function_type (follow_type);
-			break;
-		      }
-		  $$ = follow_type;
-		}
+	|	typebase ',' POINTER
+			{ $$ = lookup_pointer_type ($1); }
+	|	typebase array_mod
+			{ $$ = follow_f_types ($1); }
+	|	typebase ',' POINTER array_mod
+			{ $$ = lookup_pointer_type (follow_f_types ($1)); }
 	;
 
-abs_decl:	'*'
-			{ push_type (tp_pointer); $$ = 0; }
-	|	'*' abs_decl
-			{ push_type (tp_pointer); $$ = $2; }
-	|	'&'
-			{ push_type (tp_reference); $$ = 0; }
-	|	'&' abs_decl
-			{ push_type (tp_reference); $$ = $2; }
-	|	direct_abs_decl
+array_mod:	'(' range ')'
 	;
 
-direct_abs_decl: '(' abs_decl ')'
-			{ $$ = $2; }
-	| 	direct_abs_decl func_mod
-			{ push_type (tp_function); }
-	|	func_mod
-			{ push_type (tp_function); }
+range:		subrange2 ',' range
+	|	subrange2
 	;
 
-func_mod:	'(' ')'
-			{ $$ = 0; }
-	|	'(' nonempty_typelist ')'
-			{ free ($2); $$ = 0; }
+subrange2:	signed_int ':' signed_int
+			{
+			  push_type_int ($1);
+			  push_type_int ($3);
+			  push_type (tp_array); }
 	;
 
-typebase  /* Implements (approximately): (type-qualifier)* type-specifier */
+subrange2:	signed_int colon_star
+			{
+			  push_type_int ($1);
+			  push_type_int ($1 - 1);
+			  push_type (tp_array); }
+	;
+
+subrange2:	star_colon signed_int
+			{ push_type_int (1);
+			  push_type_int ($2);
+			  push_type (tp_array); }
+	;
+
+subrange2:	star_colon_star
+			{ push_type_int (1);
+			  push_type_int (0);
+			  push_type (tp_array); }
+	;
+
+subrange2:	signed_int
+			{ push_type_int (1);
+			  push_type_int ($1);
+			  push_type (tp_array); }
+	;
+
+star_colon:	':'
+	|	'*' ':'
+	;
+
+colon_star:	':'
+	|	':' '*'
+	;
+
+star_colon_star:	':'
+	|		'*'
+	|		':' '*'
+	|		'*' '|'
+	|		'*' ':' '*'
+	;
+
+signed_int:	INT
+			{ $$ = $1.val; }
+	|	'-' INT
+			{ $$ = -$2.val; }
+	;
+
+typebase
 	:	TYPENAME
 			{ $$ = $1.type; }
-	|	INT_KEYWORD
+	|	INT_KEYWORD	%prec BELOW_SIZE
 			{ $$ = parse_f_type->builtin_integer; }
+	|	INT_KEYWORD '*' INT	%prec SIZE
+			{ if ($3.val == 2)
+			  	$$ = parse_f_type->builtin_integer_s2;
+			  else if ($3.val == 4)
+			  	$$ = parse_f_type->builtin_integer;
+			  else if ($3.val == 8)
+				$$ = parse_f_type->builtin_integer_s8; }
+	|	INT_KEYWORD KIND '=' INT ')'	%prec SIZE
+			{ if ($4.val == 2)
+			  	$$ = parse_f_type->builtin_integer_s2;
+			  else if ($4.val == 4)
+			  	$$ = parse_f_type->builtin_integer;
+			  else if ($4.val == 8)
+				$$ = parse_f_type->builtin_integer_s8; }
 	|	INT_S2_KEYWORD 
 			{ $$ = parse_f_type->builtin_integer_s2; }
+	|	INT_S8_KEYWORD 
+			{ $$ = parse_f_type->builtin_integer_s8; }
 	|	CHARACTER 
 			{ $$ = parse_f_type->builtin_character; }
+	|	CHARACTER '*' INT	%prec SIZE
+			{ if ($3.val == 1) $$ = parse_f_type->builtin_character; }
+	|       CHARACTER KIND '=' INT ')'      %prec SIZE
+			{ if ($4.val == 1) $$ = parse_f_type->builtin_character; }
+	|	LOGICAL_KEYWORD	%prec BELOW_SIZE
+			{ $$ = parse_f_type->builtin_logical;} 
+	|	LOGICAL_KEYWORD '*' INT	%prec SIZE
+			{ if ($3.val == 1)
+				$$ = parse_f_type->builtin_logical_s1;
+			  else if ($3.val == 2)
+				$$ = parse_f_type->builtin_logical_s2;
+			  else if ($3.val == 4)
+				$$ = parse_f_type->builtin_logical;
+			  else if ($3.val == 8)
+				$$ = parse_f_type->builtin_logical_s8; }
+	|	LOGICAL_KEYWORD KIND '=' INT ')'	%prec SIZE
+			{ if ($4.val == 1)
+				$$ = parse_f_type->builtin_logical_s1;
+			  else if ($4.val == 2)
+				$$ = parse_f_type->builtin_logical_s2;
+			  else if ($4.val == 4)
+				$$ = parse_f_type->builtin_logical;
+			  else if ($4.val == 8)
+				$$ = parse_f_type->builtin_logical_s8; }
 	|	LOGICAL_S8_KEYWORD
-			{ $$ = parse_f_type->builtin_logical_s8; }
-	|	LOGICAL_KEYWORD 
-			{ $$ = parse_f_type->builtin_logical; }
+			{ $$ = parse_f_type->builtin_logical_s8;}
 	|	LOGICAL_S2_KEYWORD
-			{ $$ = parse_f_type->builtin_logical_s2; }
+			{ $$ = parse_f_type->builtin_logical_s2;}
 	|	LOGICAL_S1_KEYWORD 
-			{ $$ = parse_f_type->builtin_logical_s1; }
-	|	REAL_KEYWORD 
-			{ $$ = parse_f_type->builtin_real; }
-	|       REAL_S8_KEYWORD
-			{ $$ = parse_f_type->builtin_real_s8; }
+			{ $$ = parse_f_type->builtin_logical_s1;}
+	|	REAL_KEYWORD	 %prec BELOW_SIZE
+			{ $$ = parse_f_type->builtin_real;}
+	|	REAL_KEYWORD '*' INT	%prec SIZE
+			{ if ($3.val == 4)
+				$$ = parse_f_type->builtin_real;
+			  else if ($3.val == 8)
+				$$ = parse_f_type->builtin_real_s8;
+			  else if ($3.val == 16)
+				$$ = parse_f_type->builtin_real_s16; }
+	|	REAL_KEYWORD KIND '=' INT ')'	%prec SIZE
+			{ if ($4.val == 4)
+				$$ = parse_f_type->builtin_real;
+			  else if ($4.val == 8)
+				$$ = parse_f_type->builtin_real_s8;
+			  else if ($4.val == 16)
+				$$ = parse_f_type->builtin_real_s16; }
+	|	REAL_S8_KEYWORD
+			{ $$ = parse_f_type->builtin_real_s8;}
 	|	REAL_S16_KEYWORD
 			{ $$ = parse_f_type->builtin_real_s16; }
-	|	COMPLEX_S8_KEYWORD
-			{ $$ = parse_f_type->builtin_complex_s8; }
+	|	COMPLEX_S8_KEYWORD '*' INT	%prec SIZE
+			{ if ($3.val == 8)
+				$$ = parse_f_type->builtin_complex_s8;
+			  else if ($3.val == 16)
+				$$ = parse_f_type->builtin_complex_s16;
+			  else if ($3.val == 32)
+				$$ = parse_f_type->builtin_complex_s32; }
+	|	COMPLEX_S8_KEYWORD KIND '=' INT ')'	%prec SIZE
+			{ if ($4.val == 4)
+				$$ = parse_f_type->builtin_complex_s8;
+			  else if ($4.val == 8)
+				$$ = parse_f_type->builtin_complex_s16;
+			  else if ($4.val == 16)
+				$$ = parse_f_type->builtin_complex_s32; }
+	|	COMPLEX_S8_KEYWORD	 %prec BELOW_SIZE
+			{ $$ = parse_f_type->builtin_complex_s8;}
+	|	COMPLEX_KEYWORD
+			{ $$ = parse_f_type->builtin_complex_s8;}
 	|	COMPLEX_S16_KEYWORD 
-			{ $$ = parse_f_type->builtin_complex_s16; }
+			{ $$ = parse_f_type->builtin_complex_s16;}
 	|	COMPLEX_S32_KEYWORD 
 			{ $$ = parse_f_type->builtin_complex_s32; }
-	;
-
-nonempty_typelist
-	:	type
-		{ $$ = (struct type **) malloc (sizeof (struct type *) * 2);
-		  $<ivec>$[0] = 1;	/* Number of types in vector */
-		  $$[1] = $1;
-		}
-	|	nonempty_typelist ',' type
-		{ int len = sizeof (struct type *) * (++($<ivec>1[0]) + 1);
-		  $$ = (struct type **) realloc ((char *) $1, len);
-		  $$[$<ivec>$[0]] = $3;
-		}
+	|	SINGLE PRECISION
+			{ $$ = parse_f_type->builtin_real;}
+	|	DOUBLE PRECISION
+			{ $$ = parse_f_type->builtin_real_s8;}
+	|	SINGLE COMPLEX_KEYWORD
+			{ $$ = parse_f_type->builtin_complex_s8;}
+	|	DOUBLE COMPLEX_KEYWORD
+			{ $$ = parse_f_type->builtin_complex_s16;}
 	;
 
 name	:	NAME
-		{  $$ = $1.stoken; }
+			{ $$ = $1.stoken; }
+	|	TYPENAME
+			{ $$ = $1.stoken; }
+	|	NAME_OR_INT
+			{ $$ = $1.stoken; }
 	;
 
 name_not_typename :	NAME
@@ -817,6 +927,9 @@ static const struct token dot_ops[] =
   { ".AND.", BOOL_AND, BINOP_END },
   { ".or.", BOOL_OR, BINOP_END },
   { ".OR.", BOOL_OR, BINOP_END },
+  { ".mod.", BIN_MOD, BINOP_END },
+  { ".MOD.", BIN_MOD, BINOP_END },
+  { "==", EQUAL, BINOP_END },
   { ".not.", BOOL_NOT, BINOP_END },
   { ".NOT.", BOOL_NOT, BINOP_END },
   { ".eq.", EQUAL, BINOP_END },
@@ -825,12 +938,15 @@ static const struct token dot_ops[] =
   { ".NEQV.", NOTEQUAL, BINOP_END },
   { ".neqv.", NOTEQUAL, BINOP_END },
   { ".EQV.", EQUAL, BINOP_END },
+  { "!=", NOTEQUAL, BINOP_END },
   { ".ne.", NOTEQUAL, BINOP_END },
   { ".NE.", NOTEQUAL, BINOP_END },
   { ".le.", LEQ, BINOP_END },
   { ".LE.", LEQ, BINOP_END },
+  { "<=", LEQ, BINOP_END },
   { ".ge.", GEQ, BINOP_END },
   { ".GE.", GEQ, BINOP_END },
+  { ">=", GEQ, BINOP_END },
   { ".gt.", GREATERTHAN, BINOP_END },
   { ".GT.", GREATERTHAN, BINOP_END },
   { ".lt.", LESSTHAN, BINOP_END },
@@ -864,14 +980,39 @@ static const struct token f77_keywords[] =
   { "logical_8", LOGICAL_S8_KEYWORD, BINOP_END },
   { "complex_8", COMPLEX_S8_KEYWORD, BINOP_END },
   { "integer", INT_KEYWORD, BINOP_END },
+  { "integer_8", INT_S8_KEYWORD, BINOP_END },
   { "logical", LOGICAL_KEYWORD, BINOP_END },
   { "real_16", REAL_S16_KEYWORD, BINOP_END },
-  { "complex", COMPLEX_S8_KEYWORD, BINOP_END },
+  { "complex", COMPLEX_KEYWORD, BINOP_END },
   { "sizeof", SIZEOF, BINOP_END },
   { "real_8", REAL_S8_KEYWORD, BINOP_END },
   { "real", REAL_KEYWORD, BINOP_END },
+  { "pointer", POINTER, BINOP_END },
+  { "single", SINGLE, BINOP_END },
+  { "double", DOUBLE, BINOP_END },
+  { "precision", PRECISION, BINOP_END },
   { NULL, 0, 0 }
 }; 
+
+static const struct token intrinsics[] =
+  {
+    {"ABS", UNOP_INTRINSIC, UNOP_FABS},
+    {"AIMAG", UNOP_INTRINSIC, UNOP_CIMAG},
+    {"CMPLX", BINOP_INTRINSIC, BINOP_CMPLX},
+    {"REALPART", UNOP_INTRINSIC, UNOP_CREAL},
+    {"ISINF", UNOP_INTRINSIC, UNOP_IEEE_IS_INF},
+    {"IEEE_IS_INF", UNOP_INTRINSIC, UNOP_IEEE_IS_INF},
+    {"ISFINITE", UNOP_INTRINSIC, UNOP_IEEE_IS_FINITE},
+    {"IEEE_IS_FINITE", UNOP_INTRINSIC, UNOP_IEEE_IS_FINITE},
+    {"ISNAN", UNOP_INTRINSIC, UNOP_IEEE_IS_NAN},
+    {"IEEE_IS_NAN", UNOP_INTRINSIC, UNOP_IEEE_IS_NAN},
+    {"ISNORMAL", UNOP_INTRINSIC, UNOP_IEEE_IS_NORMAL},
+    {"IEEE_IS_NORMAL", UNOP_INTRINSIC, UNOP_IEEE_IS_NORMAL},
+    {"CEILING", UNOP_INTRINSIC, UNOP_CEIL},
+    {"FLOOR", UNOP_INTRINSIC, UNOP_FLOOR},
+    {"MOD", BINOP_INTRINSIC, BINOP_FMOD},
+    {"MODULO", BINOP_INTRINSIC, BINOP_MODULO},
+  };
 
 /* Implementation of a dynamically expandable buffer for processing input
    characters acquired through lexptr and building a value to return in
@@ -947,6 +1088,53 @@ match_string_literal (void)
     }
 }
 
+static struct type *
+follow_f_types (struct type *follow_type)
+{
+  /* This is where the interesting stuff happens.  */
+  int done = 0;
+  int lower_bound, upper_bound;
+  int *bounds, index;
+  enum type_pieces type;
+  struct type *range_type;
+
+  while (!done)
+    switch (pop_type ())
+      {
+      case tp_end:
+		done = 1;
+		break;
+      case tp_pointer:
+		follow_type = lookup_pointer_type (follow_type);
+		break;
+      case tp_array:
+		bounds = xmalloc (80 * sizeof (int));
+		index = 0;
+		do {
+		  upper_bound = pop_type_int ();
+		  lower_bound = pop_type_int ();
+		  bounds[index++] = upper_bound;
+		  bounds[index++] = lower_bound;
+		} while ((type = pop_type()) == tp_array);
+		push_type (type);
+		while (index > 0)
+		  {
+			lower_bound = bounds[--index];
+			upper_bound = bounds[--index];
+			range_type =
+				create_range_type ((struct type *) NULL,
+				  parse_f_type->builtin_integer, lower_bound,
+				  upper_bound);
+			follow_type =
+				create_array_type ((struct type *) NULL,
+				  follow_type, range_type);
+		  }
+		xfree (bounds);
+		break;
+	  }
+  return follow_type;
+}
+
 /* Read one token, getting characters through lexptr.  */
 
 static int
@@ -970,7 +1158,7 @@ yylex (void)
     { 
       for (i = 0; boolean_values[i].name != NULL; i++)
 	{
-	  if (strncmp (tokstart, boolean_values[i].name,
+	  if (strncasecmp (tokstart, boolean_values[i].name,
 		       strlen (boolean_values[i].name)) == 0)
 	    {
 	      lexptr += strlen (boolean_values[i].name); 
@@ -983,7 +1171,7 @@ yylex (void)
   /* See if it is a special .foo. operator.  */
   
   for (i = 0; dot_ops[i].operator != NULL; i++)
-    if (strncmp (tokstart, dot_ops[i].operator,
+    if (strncasecmp (tokstart, dot_ops[i].operator,
 		 strlen (dot_ops[i].operator)) == 0)
       {
 	lexptr += strlen (dot_ops[i].operator);
@@ -1020,6 +1208,15 @@ yylex (void)
     case '(':
       paren_depth++;
       lexptr++;
+      if (strncasecmp(lexptr, "KIND", 4) == 0)
+	{
+	  /* yacc only supports one lookahead symbols but two are needed to
+	   * decide whether a left paranthesis is starting a size/kind or
+	   * array dimensions. */
+	  lexptr += 4;
+	  yylval.opcode = BINOP_END;
+	  return KIND;
+	}
       return c;
       
     case ')':
@@ -1104,8 +1301,12 @@ yylex (void)
 	return toktype;
       }
       
-    case '+':
     case '-':
+      if (tokstart[1] == '>'){
+	lexptr+=2;
+	return ARROW;
+      }
+    case '+':
     case '*':
     case '/':
     case '%':
@@ -1120,7 +1321,13 @@ yylex (void)
     case '[':
     case ']':
     case '?':
+      lexptr++;
+      return c;
     case ':':
+      if (tokstart[1] == ':'){
+	lexptr+=2;
+	return COLONCOLON;
+      }
     case '=':
     case '{':
     case '}':
@@ -1152,13 +1359,21 @@ yylex (void)
   
   for (i = 0; f77_keywords[i].operator != NULL; i++)
     if (strlen (f77_keywords[i].operator) == namelen
-	&& strncmp (tokstart, f77_keywords[i].operator, namelen) == 0)
+	&& strncasecmp (tokstart, f77_keywords[i].operator, namelen) == 0)
       {
 	/* 	lexptr += strlen(f77_keywords[i].operator); */ 
 	yylval.opcode = f77_keywords[i].opcode;
 	return f77_keywords[i].token;
       }
-  
+
+  for (i = 0; i < sizeof intrinsics / sizeof intrinsics[0]; i++)
+    if (strncasecmp (tokstart, intrinsics[i].operator, strlen(intrinsics[i].operator)) == 0
+ 	&& strlen(intrinsics[i].operator) == namelen)
+      {
+        yylval.opcode = intrinsics[i].opcode;
+        return intrinsics[i].token;
+      }
+
   yylval.sval.ptr = tokstart;
   yylval.sval.length = namelen;
   
@@ -1167,7 +1382,7 @@ yylex (void)
       write_dollar_variable (yylval.sval);
       return VARIABLE;
     }
-  
+
   /* Use token-type TYPENAME for symbols that happen to be defined
      currently as names of types; NAME for other symbols.
      The caller is not constrained to care about the distinction.  */

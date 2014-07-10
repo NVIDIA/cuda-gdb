@@ -104,16 +104,16 @@ archpy_disassemble (PyObject *self, PyObject *args, PyObject *kw)
   PyObject *result_list, *end_obj = NULL, *count_obj = NULL;
   struct gdbarch *gdbarch = arch_object_to_gdbarch (self);
 
-  if (!PyArg_ParseTupleAndKeywords (args, kw, GDB_PY_LLU_ARG "|OO", keywords,
+  if (!gdbpy_ArgParseTupleAndKeywords (args, kw, GDB_PY_LLU_ARG "|OO", keywords,
                                     &start_temp, &end_obj, &count_obj))
     return NULL;
 
   start = start_temp;
   if (end_obj)
     {
-      if (PyLong_Check (end_obj))
+      if (gdbpy_LongCheck (end_obj))
         end = PyLong_AsUnsignedLongLong (end_obj);
-      else if (PyInt_Check (end_obj))
+      else if (gdbpy_IntCheck (end_obj))
         /* If the end_pc value is specified without a trailing 'L', end_obj will
            be an integer and not a long integer.  */
         end = PyInt_AsLong (end_obj);
@@ -121,7 +121,7 @@ archpy_disassemble (PyObject *self, PyObject *args, PyObject *kw)
         {
           Py_DECREF (end_obj);
           Py_XDECREF (count_obj);
-          PyErr_SetString (PyExc_TypeError,
+          PyErr_SetString (gdbpyExc_TypeError,
                            _("Argument 'end_pc' should be a (long) integer."));
 
           return NULL;
@@ -131,7 +131,7 @@ archpy_disassemble (PyObject *self, PyObject *args, PyObject *kw)
         {
           Py_DECREF (end_obj);
           Py_XDECREF (count_obj);
-          PyErr_SetString (PyExc_ValueError,
+          PyErr_SetString (gdbpyExc_ValueError,
                            _("Argument 'end_pc' should be greater than or "
                              "equal to the argument 'start_pc'."));
 
@@ -145,7 +145,7 @@ archpy_disassemble (PyObject *self, PyObject *args, PyObject *kw)
         {
           Py_DECREF (count_obj);
           Py_XDECREF (end_obj);
-          PyErr_SetString (PyExc_TypeError,
+          PyErr_SetString (gdbpyExc_TypeError,
                            _("Argument 'count' should be an non-negative "
                              "integer."));
 

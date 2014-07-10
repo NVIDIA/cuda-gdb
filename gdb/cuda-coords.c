@@ -88,8 +88,9 @@ cuda_coords_set_current (cuda_coords_t *c)
   current_coords = *c;
 
   cuda_trace ("focus set to dev %u sm %u wp %u ln %u "
-              "kernel %"PRIu64" grid %"PRId64", block (%u,%u,%u), thread (%u,%u,%u)",
-              c->dev, c->sm, c->wp, c->ln, c->kernelId, c->gridId,
+              "kernel %llu grid %lld, block (%u,%u,%u), thread (%u,%u,%u)",
+              c->dev, c->sm, c->wp, c->ln,
+              (unsigned long long)c->kernelId, (long long)c->gridId,
               c->blockIdx.x, c->blockIdx.y, c->blockIdx.z,
               c->threadIdx.x, c->threadIdx.y, c->threadIdx.z);
 
@@ -333,7 +334,7 @@ cuda_coords_to_fancy_string (cuda_coords_t *c, char *string, uint32_t size)
   case CUDA_INVALID:  s += sprintf (s, "invalid"); break;               \
   case CUDA_WILDCARD: s += sprintf (s, "*");       break;               \
   case CUDA_CURRENT:  s += sprintf (s, "current"); break;               \
-  default:            s += sprintf (s, "%"PRId64, (int64_t) c->x);     \
+  default:            s += sprintf (s, "%lld", (long long) c->x);       \
   }
 
 #define SPRINTF_SEPARATOR(s, first)                 \

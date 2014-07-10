@@ -167,7 +167,7 @@ fnpy_init (PyObject *self, PyObject *args, PyObject *kwds)
   const char *name;
   char *docstring = NULL;
 
-  if (! PyArg_ParseTuple (args, "s", &name))
+  if (! gdbpy_ArgParseTuple (args, "s", &name))
     return -1;
   Py_INCREF (self);
 

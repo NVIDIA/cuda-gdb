@@ -2354,6 +2354,8 @@ cmd_qtinit (char *packet)
   /* Make sure we don't try to read from a trace frame.  */
   current_traceframe = -1;
 
+  stop_tracing ();
+
   trace_debug ("Initializing the trace");
 
   clear_installed_tracepoints ();
@@ -3707,10 +3709,11 @@ response_tracepoint (char *packet, struct tracepoint *tpoint)
 {
   char *buf;
 
-  sprintf (packet, "T%x:%s:%c:%" PRIx64 ":%" PRIx64, tpoint->number,
+  sprintf (packet, "T%x:%s:%c:%llx:%llx", tpoint->number,
 	   paddress (tpoint->address),
-	   (tpoint->enabled ? 'E' : 'D'), tpoint->step_count,
-	   tpoint->pass_count);
+	   (tpoint->enabled ? 'E' : 'D'),
+	   (unsigned long long)tpoint->step_count,
+	   (unsigned long long)tpoint->pass_count);
   if (tpoint->type == fast_tracepoint)
     sprintf (packet + strlen (packet), ":F%x", tpoint->orig_size);
   else if (tpoint->type == static_tracepoint)

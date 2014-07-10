@@ -250,6 +250,9 @@ extern int catch_exceptions_with_msg (struct ui_out *uiout,
 typedef int (catch_errors_ftype) (void *);
 extern int catch_errors (catch_errors_ftype *, void *, char *, return_mask);
 
+typedef gdb_byte* (catch_errors_with_ptr_return_ftype) (void *);
+extern gdb_byte* catch_errors_with_ptr_return (catch_errors_with_ptr_return_ftype *, void *, char *, return_mask);
+
 /* Template to catch_errors() that wraps calls to command
    functions.  */
 

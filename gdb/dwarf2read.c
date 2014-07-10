@@ -1,6 +1,7 @@
 /* DWARF 2 debugging format support for GDB.
 
    Copyright (C) 1994-2013 Free Software Foundation, Inc.
+   Copyright (C) Allinea Software Ltd. 2013
 
    Adapted by Gary Funck (gary@intrepid.com), Intrepid Technology,
    Inc.  with support from Florida State University (under contract
@@ -86,6 +87,7 @@
 #include "gdb_bfd.h"
 #include "f-lang.h"
 #include "source.h"
+#include "f-module.h"
 
 #include <fcntl.h>
 #include "gdb_string.h"
@@ -1107,18 +1109,22 @@ struct die_info
 #define DW_ADDR(attr)	   ((attr)->u.addr)
 #define DW_SIGNATURED_TYPE(attr) ((attr)->u.signatured_type)
 
-/* Blocks are a bunch of untyped bytes.  */
-struct dwarf_block
-  {
-    size_t size;
-
-    /* Valid only if SIZE is not zero.  */
-    gdb_byte *data;
-  };
-
 #ifndef ATTR_ALLOC_CHUNK
 #define ATTR_ALLOC_CHUNK 4
 #endif
+#include <ctype.h>
+
+/* PGI Extensions */
+
+#define DW_AT_lbase 0x3a00
+#define DW_AT_soffset 0x3a01
+#define DW_AT_lstride 0x3a02
+// Coshape of Coarrays in Fortran 2008
+// http://dwarfstd.org/ShowIssue.php?issue=090824.1
+// DW_AT_is_co_shape is currently unassigned. 0x2029 is used by the Cray Fortran compiler.
+#define DW_AT_is_co_shape 0x2029
+
+/* Ends */
 
 /* Allocate fields for structs, unions and enums in this size.  */
 #ifndef DW_FIELD_ALLOC_CHUNK
@@ -5745,6 +5751,7 @@ scan_partial_symbols (struct partial_die_info *first_die, CORE_ADDR *lowpc,
 	    case DW_TAG_subprogram:
 	      add_partial_subprogram (pdi, lowpc, highpc, need_pc, cu);
 	      break;
+	    case DW_TAG_imported_declaration:
 	    case DW_TAG_constant:
 	    case DW_TAG_variable:
 	    case DW_TAG_typedef:
@@ -6010,6 +6017,7 @@ add_partial_symbol (struct partial_die_info *pdi, struct dwarf2_cu *cu)
 			     list, 0, 0, cu->language, objfile);
       }
       break;
+    case DW_TAG_imported_declaration:
     case DW_TAG_variable:
       if (pdi->d.locdesc)
 	addr = decode_locdesc (pdi->d.locdesc, cu);
@@ -6074,11 +6082,18 @@ add_partial_symbol (struct partial_die_info *pdi, struct dwarf2_cu *cu)
 			   0, (CORE_ADDR) 0, cu->language, objfile);
       break;
     case DW_TAG_namespace:
+    case DW_TAG_module:
       add_psymbol_to_list (actual_name, strlen (actual_name),
 			   built_actual_name != NULL,
 			   VAR_DOMAIN, LOC_TYPEDEF,
 			   &objfile->global_psymbols,
 			   0, (CORE_ADDR) 0, cu->language, objfile);
+
+      /* Remember this symbol if it is for a Fortran module.  */
+      if (cu->language == language_fortran)
+        {
+          f_module_announce (objfile, actual_name);
+        }
       break;
     case DW_TAG_class_type:
     case DW_TAG_interface_type:
@@ -6150,6 +6165,10 @@ static void
 add_partial_module (struct partial_die_info *pdi, CORE_ADDR *lowpc,
 		    CORE_ADDR *highpc, int need_pc, struct dwarf2_cu *cu)
 {
+  /* Add a symbol for the module.  */
+
+  add_partial_symbol (pdi, cu);
+
   /* Now scan partial symbols in that module.  */
 
   if (pdi->has_children)
@@ -6274,8 +6293,8 @@ peek_die_abbrev (gdb_byte *info_ptr, unsigned int *bytes_read,
   abbrev = abbrev_table_lookup_abbrev (cu->abbrev_table, abbrev_number);
   if (!abbrev)
     {
-      error (_("Dwarf Error: Could not find abbrev number %d [in module %s]"),
-	     abbrev_number, bfd_get_filename (abfd));
+      warning (_("Dwarf Error: Could not find abbrev number %d [in module %s]"),
+		abbrev_number, bfd_get_filename (abfd));
     }
 
   return abbrev;
@@ -7419,7 +7438,10 @@ dwarf2_compute_name (const char *name,
       if (attr == NULL)
 	attr = dwarf2_attr (die, DW_AT_MIPS_linkage_name, cu);
       if (attr && DW_STRING (attr))
-	return DW_STRING (attr);
+        {
+	  name = DW_STRING (attr);
+	  goto out;
+	}
     }
 
   /* These are the only languages we know how to qualify names in.  */
@@ -7537,7 +7559,8 @@ dwarf2_compute_name (const char *name,
 			v = dwarf2_evaluate_loc_desc (type, NULL,
 						      baton->data,
 						      baton->size,
-						      baton->per_cu);
+						      baton->per_cu,
+						      /* FIXME: What should be passed for object address here? */ 0);
 		      else if (bytes != NULL)
 			{
 			  v = allocate_value (type);
@@ -7622,6 +7645,21 @@ dwarf2_compute_name (const char *name,
 		name = cname;
 	    }
 	}
+    }
+    
+out:
+  if (name && cu->language_defn 
+      && (cu->language_defn->la_case_sensitivity == case_sensitive_off)) 
+    {
+      char *copy;
+      int len, i;
+
+      len = strlen (name);
+      copy = (char *) obstack_alloc (&cu->objfile->objfile_obstack, len + 1);
+      for (i= 0; i < len; i++)
+        copy[i] = tolower (name[i]);
+      copy[len] = 0;
+      name = copy;
     }
 
   return name;
@@ -10302,7 +10340,10 @@ get_scope_pc_bounds (struct die_info *die,
     }
   else
     {
+      int nested;
       struct die_info *child = die->child;
+
+      nested = (die->tag == DW_TAG_compile_unit);
 
       while (child && child->tag)
 	{
@@ -10326,6 +10367,26 @@ get_scope_pc_bounds (struct die_info *die,
 	      {
 		best_low = min (best_low, current_low);
 		best_high = max (best_high, current_high);
+
+                if (nested)
+                  {
+                    CORE_ADDR child_low  = (CORE_ADDR) -1; 
+                    CORE_ADDR child_high = (CORE_ADDR) 0;                    
+
+                    struct die_info* grandchild = child->child;
+                    while (grandchild && grandchild->tag)
+                      {
+                        switch (grandchild->tag)
+                          {
+                          case DW_TAG_subprogram:
+                            get_scope_pc_bounds (grandchild, &child_low, &child_high, cu);
+                            best_low = min (best_low, child_low);
+                            best_high = max (best_high, child_high);
+                            break;
+                          }
+                        grandchild =grandchild->sibling;
+                      }
+                  }
 	      }
 	    break;
 	  default:
@@ -10724,7 +10785,21 @@ dwarf2_add_field (struct field_info *fip, struct die_info *die,
 
       /* The name is already allocated along with this objfile, so we don't
 	 need to duplicate it for the type.  */
+
       fp->name = fieldname;
+
+
+      if (cu && cu->language_defn &&
+	  cu->language_defn->la_case_sensitivity == case_sensitive_off) 
+	{
+	  int i;
+	  int len;
+	  len = strlen(fieldname) + 1;
+	  fp->name = xmalloc (len);
+	  for (i= 0; i < len; i++)
+	    ((char *)fp->name)[i] = tolower (fieldname[i]);
+	}
+
 
       /* Change accessibility for artificial fields (e.g. virtual table
          pointer or virtual base class pointer) to private.  */
@@ -11415,7 +11490,8 @@ process_structure_scope (struct die_info *die, struct dwarf2_cu *cu)
       while (child_die && child_die->tag)
 	{
 	  if (child_die->tag == DW_TAG_member
-	      || child_die->tag == DW_TAG_variable)
+	      || 
+	      (cu->language == language_cplus && child_die->tag == DW_TAG_variable))
 	    {
 	      /* NOTE: carlton/2002-11-05: A C++ static data member
 		 should be a DW_TAG_member that is a declaration, but
@@ -11838,6 +11914,19 @@ make_segmented_type (struct objfile *objfile, struct type **sym_type, int flags)
   htab_delete (marked_types);
 }
 
+static struct dwarf2_loclist_baton *
+make_loclist_baton (struct dwarf2_cu *cu, struct dwarf_block *blk)
+{
+    struct dwarf2_loclist_baton *baton = obstack_alloc (&cu->objfile->objfile_obstack,
+                           sizeof (struct dwarf2_loclist_baton));
+    baton->per_cu = cu->per_cu;
+    baton->base_address = cu->base_address;
+    baton->size = blk->size;
+    baton->data = blk->data;
+    return baton;
+}
+
+
 /* Extract all information from a DW_TAG_array_type DIE and put it in
    the DIE's type field.  For now, this only handles one dimensional
    arrays.  */
@@ -11851,6 +11940,9 @@ read_array_type (struct die_info *die, struct dwarf2_cu *cu)
   struct type *element_type, *range_type, *index_type;
   struct type **range_types = NULL;
   struct attribute *attr;
+  struct attribute *attr_alloc;
+  struct attribute *attr_pgi;
+  struct die_info *subrange_die = NULL;
   int ndim = 0;
   struct cleanup *back_to;
   const char *name;
@@ -11939,6 +12031,62 @@ read_array_type (struct die_info *die, struct dwarf2_cu *cu)
 		   _("DW_AT_byte_size for array type smaller "
 		     "than the total size of elements"));
     }
+
+  attr = dwarf2_attr (die, DW_AT_data_location, cu);
+  if (attr || dwarf2_attr (die, DW_AT_lbase, cu)) 
+    {
+        struct array_location_batons *baton_holder;
+
+        struct type* range_type = TYPE_FIELD_TYPE (type, 0);
+
+        TYPE_NFIELDS (type) = 2;
+        TYPE_FIELDS (type) =
+	    (struct field *) TYPE_ALLOC (type, 2 * sizeof (struct field));
+        memset (TYPE_FIELDS (type), 0, sizeof (struct field));
+
+
+        TYPE_FIELD_TYPE (type, 0) = range_type;
+
+        baton_holder = OBSTACK_ZALLOC (&cu->objfile->objfile_obstack,
+                                       struct array_location_batons);
+
+        TYPE_FIELD_TYPE (type, 1) = (struct type*) baton_holder;
+        
+        baton_holder->objfile = objfile; 
+        baton_holder->baton_evaluation_function = (void*) dwarf2_evaluate_int; 
+
+        if (attr && attr_form_is_block (attr))
+            {
+                baton_holder->intel_location_baton = 
+                    make_loclist_baton(cu, DW_BLOCK(attr));
+
+                attr_alloc = dwarf2_attr(die, DW_AT_allocated, cu);
+                if (attr_alloc)
+                    baton_holder->allocated_baton = 
+                        make_loclist_baton (cu, DW_BLOCK(attr_alloc));
+            }
+
+        /* PGI extensions */
+
+        attr_pgi = dwarf2_attr (die, DW_AT_lbase, cu);
+        if (attr_pgi && attr_form_is_block (attr_pgi))
+           {
+               baton_holder->pgi_lbase_baton = 
+                   make_loclist_baton (cu, DW_BLOCK(attr_pgi));
+           }
+
+
+        attr_pgi = dwarf2_attr (die, DW_AT_stride_size, cu);
+        if (attr_pgi && attr_form_is_block (attr_pgi))
+            {
+                baton_holder->pgi_elem_skip_baton = 
+                   make_loclist_baton (cu, DW_BLOCK(attr_pgi));
+            }
+
+        /* end PGI */
+
+    }
+
 
   name = dwarf2_name (die, cu);
   if (name)
@@ -12248,9 +12396,11 @@ read_namespace (struct die_info *die, struct dwarf2_cu *cu)
       if (is_anonymous)
 	{
 	  const char *previous_prefix = determine_prefix (die, cu);
+	  const char* type_name = TYPE_NAME (type);
 
-	  cp_add_using_directive (previous_prefix, TYPE_NAME (type), NULL,
-				  NULL, NULL, 0, &objfile->objfile_obstack);
+	  if (type_name)
+	    cp_add_using_directive (previous_prefix, type_name, NULL,
+				    NULL, NULL, 0, &objfile->objfile_obstack);
 	}
     }
 
@@ -12282,9 +12432,23 @@ read_module_type (struct die_info *die, struct dwarf2_cu *cu)
     complaint (&symfile_complaints,
 	       _("DW_TAG_module has no name, offset 0x%x"),
                die->offset.sect_off);
-  type = init_type (TYPE_CODE_MODULE, 0, 0, module_name, objfile);
+  if (module_name && cu->language_defn 
+      && (cu->language_defn->la_case_sensitivity == case_sensitive_off)) 
+    {
+      char *copy;
+      int len, i;
+
+      len = strlen (module_name);
+      copy = (char *) obstack_alloc (&cu->objfile->objfile_obstack, len + 1);
+      for (i= 0; i < len; i++)
+        copy[i] = tolower (module_name[i]);
+      copy[len] = 0;
+      module_name = copy;
+    }
+  type = init_type (TYPE_CODE_MODULE, 0, 0, NULL, objfile);
 
   /* determine_prefix uses TYPE_TAG_NAME.  */
+  TYPE_NAME (type) = module_name;
   TYPE_TAG_NAME (type) = TYPE_NAME (type);
 
   return set_die_type (die, type, cu);
@@ -12296,12 +12460,45 @@ static void
 read_module (struct die_info *die, struct dwarf2_cu *cu)
 {
   struct die_info *child_die = die->child;
+  struct objfile *objfile = cu->objfile;
+  int is_anonymous;
+
+  /* Add a symbol associated to this if we haven't seen the namespace
+     before.  Also, add a using directive if it's an anonymous
+     namespace.  */
+
+  if (dwarf2_attr (die, DW_AT_extension, cu) == NULL)
+    {
+      struct type *type;
+
+      type = read_type_die (die, cu);
+      new_symbol (die, type, cu);
+
+      namespace_name (die, &is_anonymous, cu);
+      if (is_anonymous)
+	{
+	  const char *previous_prefix = determine_prefix (die, cu);
+	  const char* type_name = TYPE_NAME (type);
+
+	  if (type_name)
+	    cp_add_using_directive (previous_prefix, type_name, NULL,
+				    NULL, NULL, 0, &objfile->objfile_obstack);
+	}
+    }
 
   while (child_die && child_die->tag)
     {
       process_die (child_die, cu);
       child_die = sibling_die (child_die);
     }
+
+  /* Leaving a new Fortran module.  */
+  if (cu->language == language_fortran)
+    {
+      f_module_leave();
+    }
+
+
 }
 
 /* Return the name of the namespace represented by DIE.  Set
@@ -12549,12 +12746,41 @@ read_tag_string_type (struct die_info *die, struct dwarf2_cu *cu)
   struct gdbarch *gdbarch = get_objfile_arch (objfile);
   struct type *type, *range_type, *index_type, *char_type;
   struct attribute *attr;
+  struct dwarf2_loclist_baton *len_compute = 0;
   unsigned int length;
 
   attr = dwarf2_attr (die, DW_AT_string_length, cu);
   if (attr)
     {
-      length = DW_UNSND (attr);
+       if (attr->form == DW_FORM_block1) 
+ 	{
+	  int size;
+
+ 	  struct dwarf2_loclist_baton *baton;
+ 	  baton = obstack_alloc (&cu->objfile->objfile_obstack,
+ 				 sizeof (struct dwarf2_loclist_baton));
+
+	  size = DW_BLOCK(attr)->size; 
+
+ 	  baton->per_cu = cu->per_cu;
+ 	  baton->base_address = cu->base_address;
+	  baton->size = size + 1;
+
+ 	  baton->data = obstack_alloc (&cu->objfile->objfile_obstack,
+				       baton->size);
+	  
+ 	  memcpy ((gdb_byte *) baton->data, DW_BLOCK(attr)->data, size);
+	  ((gdb_byte *)baton->data)[size] = DW_OP_deref;
+	  
+ 
+ 	  len_compute = baton;
+ 	  length = 1;
+ 	  
+ 	}
+       else 
+ 	{
+ 	  length = DW_UNSND (attr);
+ 	}
     }
   else
     {
@@ -12571,7 +12797,7 @@ read_tag_string_type (struct die_info *die, struct dwarf2_cu *cu)
     }
 
   index_type = objfile_type (objfile)->builtin_int;
-  range_type = create_range_type (NULL, index_type, 1, length);
+  range_type = create_range_type_d (NULL, index_type, 1, length, NULL, NULL, len_compute, (LONGEST (*)(void*, CORE_ADDR, void*)) dwarf2_evaluate_int);
   char_type = language_string_char_type (cu->language_defn, gdbarch);
   type = create_string_type (NULL, char_type, range_type);
 
@@ -12630,6 +12856,23 @@ read_subroutine_type (struct die_info *die, struct dwarf2_cu *cu)
   else
     TYPE_CALLING_CONVENTION (ftype) = DW_CC_normal;
 
+   /* Check for the calling convention. A DW_CC_program indicates that
+      the subroutine is the the "main" of the program. This needs
+      to be set for languages that don't have a predefined name
+      for the starting subroutines, such as FORTRAN. */
+  switch (TYPE_CALLING_CONVENTION (ftype))
+    {
+      case DW_CC_program:
+	/* Set this subroutine as the "main" subroutine
+	   for the program. */
+	set_main_name (TYPE_NAME (ftype));
+	break;
+      case DW_CC_normal:
+      case DW_CC_nocall:
+	default:
+	break;
+    }
+  
   /* We need to add the subroutine type to the die immediately so
      we don't infinitely recurse when dealing with parameters
      declared as the same subroutine type.  */
@@ -12867,6 +13110,138 @@ read_base_type (struct die_info *die, struct dwarf2_cu *cu)
   return set_die_type (die, type, cu);
 }
 
+
+static struct dwarf2_loclist_baton *
+create_bound_baton (struct die_info *die, struct attribute *attr, struct dwarf2_cu *cu) 
+{
+  struct dwarf2_loclist_baton *baton = 0;
+
+  if (attr->form == DW_FORM_block1) 
+    {
+      baton = obstack_alloc (&cu->objfile->objfile_obstack,
+			     sizeof (struct dwarf2_loclist_baton));
+      baton->per_cu = cu->per_cu;
+      baton->base_address = cu->base_address;
+      baton->size = DW_BLOCK(attr)->size;
+      baton->data = DW_BLOCK(attr)->data;
+    }
+  else 
+    if (attr->form == DW_FORM_ref4)
+      {
+	int size;
+	struct die_info *ref_die =
+	  follow_die_ref (die, attr, &cu);
+	
+	if (ref_die) 
+	  {
+	    attr = dwarf2_attr(ref_die, DW_AT_location, cu);
+	    
+	    if (attr && attr->form == DW_FORM_block1)
+	      {
+		baton = obstack_alloc (&cu->objfile->objfile_obstack,
+				       sizeof (struct dwarf2_loclist_baton));
+		
+		size = DW_BLOCK(attr)->size; 
+		
+		baton->per_cu = cu->per_cu;
+		baton->base_address = cu->base_address;
+
+		if (cu->producer && strstr (cu->producer, "GNU"))
+		  {
+		    baton->size = size;
+		    baton->data = obstack_alloc (&cu->objfile->objfile_obstack,
+						 baton->size);
+			memcpy((gdb_byte *) baton->data, DW_BLOCK(attr)->data, size);
+		  }
+		else
+		{
+		  /* 11-7-13 andrewg@cray.com: Contributed by Cray Inc. */
+		  /* OpenACC fix - If there is a DW_AT_address_class in the ref_die, 
+		     assume that it is referring to an address class on the device. 
+		     This should then use DW_OP_xderef instead of DW_OP_deref. */
+		  int addr_class = 0;
+		  struct attribute *addr_attr = dwarf2_attr(ref_die, 
+		                 DW_AT_address_class, cu);
+		  if (addr_attr)
+		    addr_class = dwarf2_get_attr_constant_value (addr_attr, 0);
+		  if (addr_class)
+		    {
+		      baton->size = size + 2; 
+		      baton->data = obstack_alloc (&cu->objfile->objfile_obstack,
+			    		       baton->size);
+			  switch (addr_class)
+			    {
+			    case 1:
+			      ((gdb_byte *) baton->data)[0] = DW_OP_lit1;
+			      break;
+			    case 2:
+			      ((gdb_byte *) baton->data)[0] = DW_OP_lit2;
+			      break;
+			    case 3:
+			      ((gdb_byte *) baton->data)[0] = DW_OP_lit3;
+			      break;
+			    case 4:
+			      ((gdb_byte *) baton->data)[0] = DW_OP_lit4;
+			      break;
+			    case 5:
+			      ((gdb_byte *) baton->data)[0] = DW_OP_lit5;
+			      break;
+			    case 6:
+			      ((gdb_byte *) baton->data)[0] = DW_OP_lit6;
+			      break;
+			    case 7:
+			      ((gdb_byte *) baton->data)[0] = DW_OP_lit7;
+			      break;
+			    case 8:
+			      ((gdb_byte *) baton->data)[0] = DW_OP_lit8;
+			      break;
+			    case 9:
+			      ((gdb_byte *) baton->data)[0] = DW_OP_lit9;
+			      break;
+			    case 10:
+			      ((gdb_byte *) baton->data)[0] = DW_OP_lit10;
+			      break;
+			    case 11:
+			      ((gdb_byte *) baton->data)[0] = DW_OP_lit11;
+			      break;
+			    case 12:
+			      ((gdb_byte *) baton->data)[0] = DW_OP_lit12;
+			      break;
+			    case 13:
+			      ((gdb_byte *) baton->data)[0] = DW_OP_lit13;
+			      break;
+			    case 14:
+			      ((gdb_byte *) baton->data)[0] = DW_OP_lit14;
+			      break;
+			    case 15:
+			      ((gdb_byte *) baton->data)[0] = DW_OP_lit15;
+			      break;
+			    default:
+			      // XXX: How high should we go? How to handle error?
+			      complaint (&symfile_complaints, 
+			                  _("Unsupported DW_AT_address_class"));
+			      ((gdb_byte *) baton->data)[0] = DW_OP_lit6;
+			      break;
+			    }
+		      ((gdb_byte *) baton->data)[size+1] = DW_OP_xderef;
+		      memcpy(&((gdb_byte *)baton->data)[1], DW_BLOCK(attr)->data, size);
+		    }
+		  else
+		    {
+		      baton->size = size + 1; 
+		      baton->data = obstack_alloc (&cu->objfile->objfile_obstack,
+			    		       baton->size);
+		      ((gdb_byte *) baton->data)[size] = DW_OP_deref;
+		      memcpy((gdb_byte *)baton->data, DW_BLOCK(attr)->data, size);
+		    }
+		}
+		
+	      }
+	  }
+      }
+  return baton;
+}
+
 /* Read the given DW_AT_subrange DIE.  */
 
 static struct type *
@@ -12875,7 +13250,18 @@ read_subrange_type (struct die_info *die, struct dwarf2_cu *cu)
   struct type *base_type, *orig_base_type;
   struct type *range_type;
   struct attribute *attr;
+  struct attribute *upper_bound_attr;
+  struct dwarf2_loclist_baton *low_compute = 0;
+  struct dwarf2_loclist_baton *high_compute = 0;
+  struct dwarf2_loclist_baton *count_compute = 0;
+  struct dwarf2_loclist_baton *stride_compute = 0;
+  struct dwarf2_loclist_baton *soffset_compute = 0;
+  struct dwarf2_loclist_baton *lstride_compute = 0;
   LONGEST low, high;
+  int stride = 1;
+  int soffset = 0;
+  int lstride = 0;
+  int is_coshape = 0;
   int low_default_is_valid;
   const char *name;
   LONGEST negative_mask;
@@ -12927,8 +13313,13 @@ read_subrange_type (struct die_info *die, struct dwarf2_cu *cu)
      a variable rather than a constant value.  We'll allow it,
      but we don't know how to handle it.  */
   attr = dwarf2_attr (die, DW_AT_lower_bound, cu);
-  if (attr)
-    low = dwarf2_get_attr_constant_value (attr, low);
+  if (attr) 
+    {
+      low_compute = create_bound_baton (die, attr, cu);
+
+      if (!low_compute)
+	low = dwarf2_get_attr_constant_value (attr, 0);
+    }
   else if (!low_default_is_valid)
     complaint (&symfile_complaints, _("Missing DW_AT_lower_bound "
 				      "- DIE at 0x%x [in module %s]"),
@@ -12937,36 +13328,70 @@ read_subrange_type (struct die_info *die, struct dwarf2_cu *cu)
   attr = dwarf2_attr (die, DW_AT_upper_bound, cu);
   if (attr)
     {
-      if (attr_form_is_block (attr) || is_ref_attr (attr))
-        {
-          /* GCC encodes arrays with unspecified or dynamic length
-             with a DW_FORM_block1 attribute or a reference attribute.
-             FIXME: GDB does not yet know how to handle dynamic
-             arrays properly, treat them as arrays with unspecified
-             length for now.
-
-             FIXME: jimb/2003-09-22: GDB does not really know
-             how to handle arrays of unspecified length
-             either; we just represent them as zero-length
-             arrays.  Choose an appropriate upper bound given
-             the lower bound we've computed above.  */
-          high = low - 1;
-        }
+      high_compute = create_bound_baton (die, attr, cu);
+      if (high_compute)
+	high = low - 1;
       else
         high = dwarf2_get_attr_constant_value (attr, 1);
     }
   else
     {
+      /* seen in F90 compilers from Pathscale and IBM */
       attr = dwarf2_attr (die, DW_AT_count, cu);
       if (attr)
 	{
-	  int count = dwarf2_get_attr_constant_value (attr, 1);
-	  high = low + count - 1;
+	  count_compute = create_bound_baton(die, attr, cu);
+	  if (count_compute)
+	    high = low - 1;
+	  else
+	    {
+	      int count = dwarf2_get_attr_constant_value (attr, 1);
+	      high = low + count - 1;
+	    }
 	}
       else
 	{
 	  /* Unspecified array length.  */
 	  high = low - 1;
+	}
+    }
+  upper_bound_attr = attr;
+
+  /* PGI Fortran extensions */
+  attr = dwarf2_attr (die, DW_AT_stride, cu);
+  if (attr)
+    {
+      stride_compute = create_bound_baton (die, attr, cu);
+      if (!stride_compute) 
+	stride = (int) dwarf2_get_attr_constant_value (attr, 1);
+    }
+
+  attr = dwarf2_attr (die, DW_AT_soffset, cu);
+  if (attr)
+    {
+      soffset_compute = create_bound_baton (die, attr, cu);
+      if (!soffset_compute) 
+	soffset = dwarf2_get_attr_constant_value (attr, 1);
+    }
+
+  attr = dwarf2_attr (die, DW_AT_lstride, cu);
+  if (attr)
+    {
+      lstride_compute = create_bound_baton (die, attr, cu);
+      if (!lstride_compute) 
+	lstride = dwarf2_get_attr_constant_value (attr, 1);
+     }
+
+  if (!low_compute && !high_compute && low > (high + 1))
+    {
+      if (cu->producer && strstr (cu->producer, "DBG_GEN"))
+	{
+	  /* Sun FORTE says 255 for -1; 254 for -2, etc.. yuk! */
+	  low |= (-1 ^ 0xff);
+	}
+      else 
+	{
+	  low = high;
 	}
     }
 
@@ -13015,16 +13440,22 @@ read_subrange_type (struct die_info *die, struct dwarf2_cu *cu)
   if (!TYPE_UNSIGNED (base_type) && (high & negative_mask))
     high |= negative_mask;
 
-  range_type = create_range_type (NULL, orig_base_type, low, high);
+  range_type = create_range_type_d_pgi (NULL, orig_base_type, low, high,
+				       stride, soffset, lstride, 
+				       low_compute, high_compute,
+				       count_compute,
+				       stride_compute, soffset_compute,
+				       lstride_compute,
+				       (LONGEST (*)(void*, CORE_ADDR, void*)) dwarf2_evaluate_int);
 
   /* Mark arrays with dynamic length at least as an array of unspecified
      length.  GDB could check the boundary but before it gets implemented at
      least allow accessing the array elements.  */
-  if (attr && attr_form_is_block (attr))
+  if (upper_bound_attr && attr_form_is_block (upper_bound_attr))
     TYPE_HIGH_BOUND_UNDEFINED (range_type) = 1;
 
   /* Ada expects an empty array on no boundary attributes.  */
-  if (attr == NULL && cu->language != language_ada)
+  if (upper_bound_attr == NULL && cu->language != language_ada)
     TYPE_HIGH_BOUND_UNDEFINED (range_type) = 1;
 
   name = dwarf2_name (die, cu);
@@ -13034,6 +13465,11 @@ read_subrange_type (struct die_info *die, struct dwarf2_cu *cu)
   attr = dwarf2_attr (die, DW_AT_byte_size, cu);
   if (attr)
     TYPE_LENGTH (range_type) = DW_UNSND (attr);
+
+  is_coshape = dwarf2_flag_true_p (die,
+				   DW_AT_is_co_shape, cu);
+  if (is_coshape)
+    TYPE_INSTANCE_FLAGS (range_type) |= TYPE_INSTANCE_FLAG_IS_CO_SHAPE;
 
   set_die_type (die, range_type, cu);
 
@@ -13144,7 +13580,7 @@ read_full_die_1 (const struct die_reader_specs *reader,
 {
   unsigned int abbrev_number, bytes_read, i;
   sect_offset offset;
-  struct abbrev_info *abbrev;
+  struct abbrev_info *abbrev = NULL;
   struct die_info *die;
   struct dwarf2_cu *cu = reader->cu;
   bfd *abfd = reader->abfd;
@@ -13152,18 +13588,18 @@ read_full_die_1 (const struct die_reader_specs *reader,
   offset.sect_off = info_ptr - reader->buffer;
   abbrev_number = read_unsigned_leb128 (abfd, info_ptr, &bytes_read);
   info_ptr += bytes_read;
-  if (!abbrev_number)
+  if (abbrev_number)
+    abbrev = abbrev_table_lookup_abbrev (cu->abbrev_table, abbrev_number);
+  if (!abbrev_number || !abbrev)
     {
+      if (abbrev_number)
+	warning (_("Dwarf Error: could not find abbrev number %d [in module %s]"),
+		 abbrev_number,
+		 bfd_get_filename (abfd));
       *diep = NULL;
       *has_children = 0;
       return info_ptr;
     }
-
-  abbrev = abbrev_table_lookup_abbrev (cu->abbrev_table, abbrev_number);
-  if (!abbrev)
-    error (_("Dwarf Error: could not find abbrev number %d [in module %s]"),
-	   abbrev_number,
-	   bfd_get_filename (abfd));
 
   die = dwarf_alloc_die (cu, abbrev->num_attrs + num_extra_attrs);
   die->offset = offset;
@@ -13649,6 +14085,7 @@ load_partial_dies (const struct die_reader_specs *reader,
 	  || abbrev->tag == DW_TAG_subprogram
 	  || abbrev->tag == DW_TAG_variable
 	  || abbrev->tag == DW_TAG_namespace
+	  || abbrev->tag == DW_TAG_module
 	  || part_die->is_declaration)
 	{
 	  void **slot;
@@ -13676,6 +14113,7 @@ load_partial_dies (const struct die_reader_specs *reader,
       if (last_die->has_children
 	  && (load_all
 	      || last_die->tag == DW_TAG_namespace
+	      || last_die->tag == DW_TAG_subprogram	      
 	      || last_die->tag == DW_TAG_module
 	      || last_die->tag == DW_TAG_enumeration_type
 	      || (cu->language == language_cplus
@@ -13719,6 +14157,7 @@ read_partial_die (const struct die_reader_specs *reader,
   int has_low_pc_attr = 0;
   int has_high_pc_attr = 0;
   int high_pc_relative = 0;
+  int has_program_calling_convention = 0;
 
   memset (part_die, 0, sizeof (struct partial_die_info));
 
@@ -13755,9 +14194,10 @@ read_partial_die (const struct die_reader_specs *reader,
 	      part_die->name = DW_STRING (&attr);
 	      break;
 	    default:
-	      part_die->name
-		= dwarf2_canonicalize_name (DW_STRING (&attr), cu,
-					    &objfile->objfile_obstack);
+              if (part_die->name == NULL || cu->language == language_fortran)
+		part_die->name
+		  = dwarf2_canonicalize_name (DW_STRING (&attr), cu,
+					      &objfile->objfile_obstack);
 	      break;
 	    }
 	  break;
@@ -13766,7 +14206,7 @@ read_partial_die (const struct die_reader_specs *reader,
 	  /* Note that both forms of linkage name might appear.  We
 	     assume they will be the same, and we only store the last
 	     one we see.  */
-	  if (cu->language == language_ada)
+	  if (cu->language == language_ada || part_die->name == NULL)
 	    part_die->name = DW_STRING (&attr);
 	  part_die->linkage_name = DW_STRING (&attr);
 	  break;
@@ -13848,7 +14288,7 @@ read_partial_die (const struct die_reader_specs *reader,
 	  if (DW_UNSND (&attr) == DW_CC_program
 	      && cu->language == language_fortran)
 	    {
-	      set_main_name (part_die->name);
+	      has_program_calling_convention = 1;
 
 	      /* As this DIE has a static linkage the name would be difficult
 		 to look up later.  */
@@ -13874,6 +14314,9 @@ read_partial_die (const struct die_reader_specs *reader,
 	  break;
 	}
     }
+
+  if (has_program_calling_convention)
+    set_main_name (part_die->linkage_name ? part_die->linkage_name : part_die->name);
 
   if (high_pc_relative)
     part_die->highpc += part_die->lowpc;
@@ -16039,6 +16482,31 @@ new_symbol_full (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 	SYMBOL_TYPE (sym) = type;
       else
 	SYMBOL_TYPE (sym) = die_type (die, cu);
+
+
+      /* Check for the calling convention. A DW_CC_program indicates that
+         the subroutine is the the "main" of the program. This needs
+         to be set for languages that don't have a predefined name
+         for the starting subroutines, such as FORTRAN. */
+      attr = dwarf2_attr (die, DW_AT_calling_convention, cu);
+      if (attr && (DW_UNSND (attr) != 0))
+        {
+          switch (DW_UNSND (attr))
+            {
+            case DW_CC_program:
+              /* Set this subroutine as the "main" subroutine
+                 for the program. */
+              attr2 = dwarf2_attr (die, DW_AT_MIPS_linkage_name, cu);
+              set_main_name (attr2 ? DW_STRING (attr2) : name);
+              break;
+            case DW_CC_normal:
+            case DW_CC_nocall:
+            default:
+              break;
+            }
+        }
+
+
       attr = dwarf2_attr (die,
 			  inlined_func ? DW_AT_call_line : DW_AT_decl_line,
 			  cu);
@@ -16100,6 +16568,13 @@ new_symbol_full (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 	    {
 	      list_to_add = cu->list_in_scope;
 	    }
+
+          /* Remember this symbol if it is for a Fortran module.  */
+          if (cu->language == language_fortran &&
+              die->parent && die->parent->tag == DW_TAG_module)
+            {
+              f_module_sym_add(sym);
+            }
 	  break;
 	case DW_TAG_inlined_subroutine:
 	  /* SYMBOL_BLOCK_VALUE (sym) will be filled in later by
@@ -16108,8 +16583,30 @@ new_symbol_full (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 	  SYMBOL_INLINED (sym) = 1;
 	  list_to_add = cu->list_in_scope;
 	  break;
+	case DW_TAG_imported_declaration:
+	  attr = dwarf2_attr(die, DW_AT_import, cu);
+	  if (attr) 
+	    die = follow_die_ref (die, attr, &cu);
+	  else 
+	    {
+	      complaint (&symfile_complaints, _("cannot find DW_TAG_import in DW_TAG_imported_declaration: '%s'"),
+			name);
+	    }
+	  if (!die) 
+	    {
+	      complaint (&symfile_complaints, _("cannot follow die ref for DW_TAG_imported_declaration '%s'"),
+			name);
+	      /* Rather broken just add name anyway, it is likely to be
+		local to this block if imported.  Observed for
+		non-existant references with Pathscale 3.0, ticket #7903.
+	      */
+	      add_symbol_to_list (sym, cu->list_in_scope);
+	      return sym;
+	    }
+	  /* carry on through with the new die. */
 	case DW_TAG_template_value_param:
-	  suppress_add = 1;
+	  if (die->tag == DW_TAG_template_value_param)
+	    suppress_add = 1;
 	  /* Fall through.  */
 	case DW_TAG_constant:
 	case DW_TAG_variable:
@@ -16147,6 +16644,13 @@ new_symbol_full (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 		  else
 		    list_to_add = cu->list_in_scope;
 		}
+
+              /* Remember this symbol if it is for a Fortran module.  */
+              if (cu->language == language_fortran &&
+                  die->parent && die->parent->tag == DW_TAG_module)
+                {
+                  f_module_sym_add(sym);
+                }
 	      break;
 	    }
 	  attr = dwarf2_attr (die, DW_AT_location, cu);
@@ -16196,6 +16700,13 @@ new_symbol_full (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 		}
 	      else
 		list_to_add = cu->list_in_scope;
+
+              /* Remember this symbol if it is for a Fortran module.  */
+              if (cu->language == language_fortran &&
+                  die->parent && die->parent->tag == DW_TAG_module)
+                {
+                  f_module_sym_add(sym);
+                }
 	    }
 	  else
 	    {
@@ -16345,8 +16856,15 @@ new_symbol_full (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 	  }
 	  break;
 	case DW_TAG_namespace:
+        case DW_TAG_module:
 	  SYMBOL_CLASS (sym) = LOC_TYPEDEF;
 	  list_to_add = &global_symbols;
+
+          /* Starting a new Fortran module.  */
+          if (cu->language == language_fortran)
+            {
+              f_module_enter(objfile, SYMBOL_LINKAGE_NAME(sym));
+            }
 	  break;
 	case DW_TAG_common_block:
 	  SYMBOL_CLASS (sym) = LOC_COMMON_BLOCK;
@@ -16577,6 +17095,7 @@ dwarf2_const_value (struct attribute *attr, struct symbol *sym,
 static struct type *
 die_type (struct die_info *die, struct dwarf2_cu *cu)
 {
+  struct type *type = NULL;  
   struct attribute *type_attr;
 
   type_attr = dwarf2_attr (die, DW_AT_type, cu);
@@ -16718,6 +17237,7 @@ lookup_die_type (struct die_info *die, struct attribute *attr,
     {
       struct die_info *type_die;
       struct dwarf2_cu *type_cu = cu;
+      struct attribute *next_type;
 
       type_die = follow_die_ref_or_sig (die, attr, &type_cu);
       /* If we found the type now, it's probably because the type came
@@ -16726,6 +17246,29 @@ lookup_die_type (struct die_info *die, struct attribute *attr,
       this_type = get_die_type (type_die, type_cu);
       if (this_type == NULL)
 	this_type = read_type_die_1 (type_die, type_cu);
+      if (cu->producer && strncmp (cu->producer, "PGCC", 4) == 0)
+        {
+          next_type = dwarf2_attr (type_die, DW_AT_type, cu);
+          if (next_type) 
+            {
+              struct die_info *next_type_die;
+              next_type_die = follow_die_ref (type_die, next_type, &cu);
+              if (next_type_die && next_type_die == die)
+	        {
+		  char *message, *saved;
+
+		  message = xstrprintf (_("<recursive type in %s, CU 0x%x, DIE 0x%x>"),
+					 objfile->name,
+					 cu->header.offset.sect_off,
+					 die->offset.sect_off);
+		  saved = obstack_copy0 (&objfile->objfile_obstack,
+					  message, strlen (message));
+		  xfree (message);
+
+		  this_type = init_type (TYPE_CODE_ERROR, 0, 0, saved, objfile);
+	        }
+            }
+        }
     }
 
   /* If we still don't have a type use an error marker.  */
@@ -17730,9 +18273,9 @@ follow_die_ref (struct die_info *src_die, struct attribute *attr,
 			    || cu->per_cu->is_dwz),
 			   ref_cu);
   if (!die)
-    error (_("Dwarf Error: Cannot find DIE at 0x%x referenced from DIE "
-	   "at 0x%x [in module %s]"),
-	   offset.sect_off, src_die->offset.sect_off, cu->objfile->name);
+    warning (_("Dwarf Error: Cannot find DIE at 0x%x referenced from DIE "
+	     "at 0x%x [in module %s]"),
+	     offset.sect_off, src_die->offset.sect_off, cu->objfile->name);
 
   return die;
 }
@@ -19413,6 +19956,11 @@ cuda_dwarf2_addr_size (struct objfile *objfile)
   gdb_assert (objfile->cuda_objfile);
 
   per_objfile = objfile_data (objfile, dwarf2_objfile_data_key);
+
+  /* Approximate addr_size from cuda gdbarch if .debug_info section is missing */
+  if (!per_objfile->info.buffer)
+    return gdbarch_ptr_bit (cuda_get_gdbarch ()) / TARGET_CHAR_BIT;
+
   info_ptr = per_objfile->info.buffer + offset;
 
   memset (&cu_header, 0, sizeof cu_header);
@@ -21559,3 +22107,5 @@ cuda_decode_line_table (struct objfile *objfile)
 
   free_line_header (lh);
 }
+
+

@@ -181,6 +181,7 @@ cuda_build_filter (char* filter_string, cuda_filters_t *default_filter, command_
 typedef struct {
   bool        current;
   uint32_t    device;
+  const char *name;
   const char *description;
   const char *sm_type;
   uint32_t    num_sms;
@@ -188,6 +189,8 @@ typedef struct {
   uint32_t    num_lanes;
   uint32_t    num_regs;
   uint32_t    active_sms_mask;
+  uint32_t    pci_bus_id;
+  uint32_t    pci_dev_id;
 } cuda_info_device_t;
 
 static void
@@ -222,6 +225,7 @@ cuda_info_devices (char *filter_string, cuda_info_device_t **devices, uint32_t *
 
       d->current         = cuda_coords_is_current (&c);
       d->device          = c.dev;
+      d->name            = device_get_device_name (c.dev);
       d->description     = device_get_device_type (c.dev);
       d->sm_type         = device_get_sm_type (c.dev);
       d->num_sms         = device_get_num_sms (c.dev);
@@ -229,6 +233,8 @@ cuda_info_devices (char *filter_string, cuda_info_device_t **devices, uint32_t *
       d->num_lanes       = device_get_num_lanes (c.dev);
       d->num_regs        = device_get_num_registers (c.dev);
       d->active_sms_mask = device_get_active_sms_mask (c.dev);
+      d->pci_bus_id      = device_get_pci_bus_id (c.dev);
+      d->pci_dev_id      = device_get_pci_dev_id (c.dev);
 
       ++*num_devices;
     }
@@ -247,12 +253,14 @@ info_cuda_devices_command (char *arg)
   cuda_info_device_t *devices, *d;
   uint32_t i, num_devices;
   struct cleanup *table_chain, *row_chain;
-  struct { uint32_t current, device, description, sm_type, num_sms,
-             num_warps, num_lanes, num_regs, active_sms_mask; } width;
+  struct { uint32_t current, device, pci_bus, name, description, sm_type,
+             num_sms, num_warps, num_lanes, num_regs, active_sms_mask; } width;
 
   /* column header */
   const char *header_current         = " ";
   const char *header_device          = "Dev";
+  const char *header_pci_bus         = "PCI Bus/Dev ID";
+  const char *header_name            = "Name";
   const char *header_description     = "Description";
   const char *header_sm_type         = "SM Type";
   const char *header_num_sms         = "SMs";
@@ -274,6 +282,8 @@ info_cuda_devices_command (char *arg)
   /* column widths */
   width.current         = strlen (header_current);
   width.device          = strlen (header_device);
+  width.pci_bus         = strlen (header_pci_bus);
+  width.name            = strlen (header_name);
   width.description     = strlen (header_description);
   width.sm_type         = strlen (header_sm_type);
   width.num_sms         = strlen (header_num_sms);
@@ -284,15 +294,18 @@ info_cuda_devices_command (char *arg)
 
   for (d = devices, i = 0; i < num_devices; ++i, ++d)
     {
+      width.name            = max (width.name, strlen (d->name));
       width.description     = max (width.description, strlen (d->description));
       width.sm_type         = max (width.sm_type,     strlen (d->sm_type));
       width.active_sms_mask = max (width.active_sms_mask, 10);
     }
 
   /* print table header */
-  table_chain = make_cleanup_ui_out_table_begin_end (uiout, 9, num_devices, "InfoCudaDevicesTable");
+  table_chain = make_cleanup_ui_out_table_begin_end (uiout, 11, num_devices, "InfoCudaDevicesTable");
   ui_out_table_header (uiout, width.current         , ui_right, "current"         , header_current);
   ui_out_table_header (uiout, width.device          , ui_right, "device"          , header_device);
+  ui_out_table_header (uiout, width.pci_bus         , ui_right, "pci_bus"         , header_pci_bus);
+  ui_out_table_header (uiout, width.name            , ui_right, "name"            , header_name);
   ui_out_table_header (uiout, width.description     , ui_right, "description"     , header_description);
   ui_out_table_header (uiout, width.sm_type         , ui_right, "sm_type"         , header_sm_type);
   ui_out_table_header (uiout, width.num_sms         , ui_right, "num_sms"         , header_num_sms);
@@ -305,9 +318,13 @@ info_cuda_devices_command (char *arg)
   /* print table rows */
   for (d = devices, i = 0; i < num_devices; ++i, ++d)
     {
+      char pci_bus[32];
+      snprintf (pci_bus, sizeof(pci_bus), "%02x:%02x.0", d->pci_bus_id, d->pci_dev_id);
       row_chain = make_cleanup_ui_out_tuple_begin_end (uiout, "InfoCudaDevicesRow");
       ui_out_field_string (uiout, "current"        , d->current ? "*" : " ");
       ui_out_field_int    (uiout, "device"         , d->device);
+      ui_out_field_string (uiout, "pci_bus"        , pci_bus);
+      ui_out_field_string (uiout, "name"           , d->name);
       ui_out_field_string (uiout, "description"    , d->description);
       ui_out_field_string (uiout, "sm_type"        , d->sm_type);
       ui_out_field_int    (uiout, "num_sms"        , d->num_sms);
@@ -431,7 +448,7 @@ info_cuda_sms_command (char *arg)
       row_chain = make_cleanup_ui_out_tuple_begin_end (uiout, "InfoCudaSmsRow");
       ui_out_field_string (uiout, "current"          , s->current ? "*" : " ");
       ui_out_field_int    (uiout, "sm"               , s->sm);
-      ui_out_field_fmt    (uiout, "active_warps_mask", "0x%016"PRIx64, s->active_warps_mask);
+      ui_out_field_fmt    (uiout, "active_warps_mask", "0x%016llx", (unsigned long long)s->active_warps_mask);
       ui_out_text         (uiout, "\n");
       do_cleanups (row_chain);
     }
@@ -513,7 +530,7 @@ cuda_info_warps (char *filter_string, cuda_info_warp_t **warps, uint32_t *num_wa
           snprintf (w->kernel_id            , sizeof (w->kernel_id)            , "%u"          , kernel_id);
           snprintf (w->blockIdx             , sizeof (w->blockIdx)             , "(%u,%u,%u)"  , blockIdx.x, blockIdx.y, blockIdx.z);
           snprintf (w->threadIdx            , sizeof (w->threadIdx)            , "(%u,%u,%u)"  , threadIdx.x, threadIdx.y, threadIdx.z);
-          snprintf (w->active_physical_pc   , sizeof (w->active_physical_pc)   , "0x%016"PRIx64, active_physical_pc);
+          snprintf (w->active_physical_pc   , sizeof (w->active_physical_pc)   , "0x%016llx"   , (unsigned long long)active_physical_pc);
         }
       else
         {
@@ -693,7 +710,7 @@ cuda_info_lanes (char *filter_string, cuda_info_lane_t **lanes, uint32_t *num_la
 
           snprintf (l->state      , sizeof (l->state)      , "%s", active ? "active" : "divergent");
           snprintf (l->threadIdx  , sizeof (l->threadIdx)  , "(%u,%u,%u)", threadIdx.x, threadIdx.y, threadIdx.z);
-          snprintf (l->physical_pc, sizeof (l->physical_pc), "0x%016"PRIx64, physical_pc);
+          snprintf (l->physical_pc, sizeof (l->physical_pc), "0x%016llx", (unsigned long long)physical_pc);
           l->exception = exception == CUDBG_EXCEPTION_NONE ? "None" : cuda_exception_type_to_name (exception);
         }
       else
@@ -857,7 +874,8 @@ cuda_info_kernels_build (char *filter_string, cuda_info_kernel_t **kernels, uint
       k->status     = status_string[kernel_get_status (kernel)];
 
       if (parent_kernel)
-        snprintf (k->parent, sizeof (k->parent), "%"PRIu64, kernel_get_id (parent_kernel));
+        snprintf (k->parent, sizeof (k->parent), "%llu",
+                  (unsigned long long)kernel_get_id (parent_kernel));
       else
         snprintf (k->parent, sizeof (k->parent), "-");
       snprintf(k->grid_dim, sizeof (k->grid_dim), "(%u,%u,%u)",
@@ -1140,7 +1158,7 @@ info_cuda_blocks_print_uncoalesced (cuda_info_block_t *blocks, uint32_t num_bloc
       if (!ui_out_is_mi_like_p (uiout) && b->kernel_id != kernel_id)
         {
           /* row are grouped per kernel only in CLI output */
-          ui_out_message (uiout, 0, "Kernel %"PRIu64"\n", b->kernel_id),
+          ui_out_message (uiout, 0, "Kernel %llu\n", (unsigned long long)b->kernel_id),
           kernel_id = b->kernel_id;
         }
 
@@ -1220,7 +1238,7 @@ info_cuda_blocks_print_coalesced (cuda_info_block_t *blocks, uint32_t num_blocks
       if (!ui_out_is_mi_like_p (uiout) && b->kernel_id != kernel_id)
         {
           /* row are grouped per kernel only in CLI output */
-          ui_out_message (uiout, 0, "Kernel %"PRIu64"\n", b->kernel_id),
+          ui_out_message (uiout, 0, "Kernel %llu\n", (unsigned long long)b->kernel_id),
           kernel_id = b->kernel_id;
         }
 
@@ -1504,7 +1522,7 @@ info_cuda_threads_print_uncoalesced (cuda_info_thread_t *threads, uint32_t num_t
       if (!ui_out_is_mi_like_p (uiout) && b->kernel_id != kernel_id)
         {
           /* row are grouped per kernel only in CLI output */
-          ui_out_message (uiout, 0, "Kernel %"PRIu64"\n", b->kernel_id),
+          ui_out_message (uiout, 0, "Kernel %llu\n", (unsigned long long)b->kernel_id),
           kernel_id = b->kernel_id;
         }
 
@@ -1514,7 +1532,7 @@ info_cuda_threads_print_uncoalesced (cuda_info_thread_t *threads, uint32_t num_t
         ui_out_field_int  (uiout, "kernel"    , b->kernel_id);
       ui_out_field_string (uiout, "blockIdx"  , b->start_block_idx_string);
       ui_out_field_string (uiout, "threadIdx" , b->start_thread_idx_string);
-      ui_out_field_fmt    (uiout, "virtual_pc", "0x%016"PRIx64, b->pc);
+      ui_out_field_fmt    (uiout, "virtual_pc", "0x%016llx", (unsigned long long)b->pc);
       ui_out_field_int    (uiout, "device"    , b->device);
       ui_out_field_int    (uiout, "sm"        , b->sm);
       ui_out_field_int    (uiout, "warp"      , b->wp);
@@ -1606,7 +1624,7 @@ info_cuda_threads_print_coalesced (cuda_info_thread_t *threads, uint32_t num_thr
       if (!ui_out_is_mi_like_p (uiout) && b->kernel_id != kernel_id)
         {
           /* row are grouped per kernel only in CLI output */
-          ui_out_message (uiout, 0, "Kernel %"PRIu64"\n", b->kernel_id),
+          ui_out_message (uiout, 0, "Kernel %llu\n", (unsigned long long)b->kernel_id),
           kernel_id = b->kernel_id;
         }
 
@@ -1619,7 +1637,7 @@ info_cuda_threads_print_coalesced (cuda_info_thread_t *threads, uint32_t num_thr
       ui_out_field_string (uiout, "to_blockIdx"   , b->end_block_idx_string);
       ui_out_field_string (uiout, "to_threadIdx"  , b->end_thread_idx_string);
       ui_out_field_int    (uiout, "count"         , b->count);
-      ui_out_field_fmt    (uiout, "virtual_pc"    , "0x%016"PRIx64, b->pc);
+      ui_out_field_fmt    (uiout, "virtual_pc"    , "0x%016llx", (unsigned long long)b->pc);
       ui_out_field_string (uiout, "filename"      , b->filename ? b->filename : "n/a");
       ui_out_field_int    (uiout, "line"          , b->line);
       ui_out_text         (uiout, "\n");
@@ -2101,7 +2119,7 @@ info_cuda_contexts_command (char *arg)
     {
       row_chain = make_cleanup_ui_out_tuple_begin_end (uiout, "InfoCudaContextsRow");
       ui_out_field_string (uiout, "current" , c->current ? "*" : " ");
-      ui_out_field_fmt    (uiout, "context" , "0x%08"PRIx64"", c->context_id);
+      ui_out_field_fmt    (uiout, "context" , "0x%016llx", (unsigned long long)c->context_id);
       ui_out_field_int    (uiout, "device"  , c->device);
       ui_out_field_string (uiout, "state"   , c->state);
       ui_out_text         (uiout, "\n");

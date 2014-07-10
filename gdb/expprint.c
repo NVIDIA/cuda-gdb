@@ -807,6 +807,8 @@ dump_subexp_body_standard (struct expression *exp,
     case BINOP_END:
     case STRUCTOP_MEMBER:
     case STRUCTOP_MPTR:
+    case BINOP_FMOD:
+    case BINOP_CMPLX:
       elt = dump_subexp (exp, stream, elt);
       /* FALL THROUGH */
     case UNOP_NEG:
@@ -830,6 +832,17 @@ dump_subexp_body_standard (struct expression *exp,
     case UNOP_MIN:
     case UNOP_ODD:
     case UNOP_TRUNC:
+    case UNOP_ISNAN:
+    case UNOP_ISINF:
+    case UNOP_CREAL:
+    case UNOP_CIMAG:
+    case UNOP_FABS:
+    case UNOP_CEIL:
+    case UNOP_FLOOR:
+    case UNOP_IEEE_IS_NAN:
+    case UNOP_IEEE_IS_INF:
+    case UNOP_IEEE_IS_FINITE:
+    case UNOP_IEEE_IS_NORMAL:      
       elt = dump_subexp (exp, stream, elt);
       break;
     case OP_LONG:

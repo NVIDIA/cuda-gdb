@@ -52,6 +52,11 @@
 #include "block.h"
 #include "objfiles.h"
 #include "language.h"
+#include "f-lang.h"
+
+void 
+setup_array_bounds (struct type *type, CORE_ADDR address,
+                    struct frame_info *frame); /* this belongs elsewhere */
 
 /* Basic byte-swapping routines.  All 'extract' functions return a
    host-format integer from a target-format integer at ADDR which is
@@ -650,8 +655,8 @@ default_read_var_value (struct symbol *var, struct frame_info *frame)
 
 /* Calls VAR's language la_read_var_value hook with the given arguments.  */
 
-struct value *
-read_var_value (struct symbol *var, struct frame_info *frame)
+static struct value *
+read_var_value_1 (struct symbol *var, struct frame_info *frame)
 {
   const struct language_defn *lang = language_def (SYMBOL_LANGUAGE (var));
 
@@ -659,6 +664,20 @@ read_var_value (struct symbol *var, struct frame_info *frame)
   gdb_assert (lang->la_read_var_value != NULL);
 
   return lang->la_read_var_value (var, frame);
+}
+
+struct value *
+read_var_value (struct symbol *var, struct frame_info *frame) 
+{
+  struct value* v;
+
+  /* FIXME drow/2003-09-06: this call to the selected frame should be
+     pushed upwards to the callers.  */
+  if (frame == NULL)
+    frame = deprecated_safe_get_selected_frame ();
+
+  v = read_var_value_1 (var, frame);
+  return f_fixup_value (v, frame);
 }
 
 /* Install default attributes for register values.  */

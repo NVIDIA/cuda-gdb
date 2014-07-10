@@ -71,7 +71,7 @@ static PyTypeObject membuf_object_type;
   do {								\
     if (!Inferior->inferior)					\
       {								\
-	PyErr_SetString (PyExc_RuntimeError,			\
+	PyErr_SetString (gdbpyExc_RuntimeError,			\
 			 _("Inferior no longer exists."));	\
 	return NULL;						\
       }								\
@@ -349,8 +349,8 @@ infpy_get_was_attached (PyObject *self, void *closure)
 
   INFPY_REQUIRE_VALID (inf);
   if (inf->inferior->attach_flag)
-    Py_RETURN_TRUE;
-  Py_RETURN_FALSE;
+    GDB_PY_RETURN_TRUE;
+  GDB_PY_RETURN_FALSE;
 }
 
 static int
@@ -412,7 +412,7 @@ infpy_read_memory (PyObject *self, PyObject *args, PyObject *kw)
   volatile struct gdb_exception except;
   static char *keywords[] = { "address", "length", NULL };
 
-  if (! PyArg_ParseTupleAndKeywords (args, kw, "OO", keywords,
+  if (! gdbpy_ArgParseTupleAndKeywords (args, kw, "OO", keywords,
 				     &addr_obj, &length_obj))
     return NULL;
 
@@ -445,7 +445,7 @@ infpy_read_memory (PyObject *self, PyObject *args, PyObject *kw)
   if (membuf_obj == NULL)
     {
       xfree (buffer);
-      PyErr_SetString (PyExc_MemoryError,
+      PyErr_SetString (gdbpyExc_MemoryError,
 		       _("Could not allocate memory buffer object."));
       return NULL;
     }
@@ -484,7 +484,7 @@ infpy_write_memory (PyObject *self, PyObject *args, PyObject *kw)
 #ifdef IS_PY3K
   Py_buffer pybuf;
 
-  if (! PyArg_ParseTupleAndKeywords (args, kw, "Os*|O", keywords,
+  if (! gdbpy_ArgParseTupleAndKeywords (args, kw, "Os*|O", keywords,
 				     &addr_obj, &pybuf,
 				     &length_obj))
     return NULL;
@@ -492,7 +492,7 @@ infpy_write_memory (PyObject *self, PyObject *args, PyObject *kw)
   buffer = pybuf.buf;
   buf_len = pybuf.len;
 #else
-  if (! PyArg_ParseTupleAndKeywords (args, kw, "Os#|O", keywords,
+  if (! gdbpy_ArgParseTupleAndKeywords (args, kw, "Os#|O", keywords,
 				     &addr_obj, &buffer, &buf_len,
 				     &length_obj))
     return NULL;
@@ -524,7 +524,7 @@ infpy_write_memory (PyObject *self, PyObject *args, PyObject *kw)
   if (error)
     return NULL;
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Destructor of Membuf objects.  */
@@ -541,7 +541,7 @@ mbpy_str (PyObject *self)
 {
   membuf_object *membuf_obj = (membuf_object *) self;
 
-  return PyString_FromFormat (_("Memory buffer for address %s, \
+  return gdbpy_StringFromFormat (_("Memory buffer for address %s, \
 which is %s bytes long."),
 			      paddress (python_gdbarch, membuf_obj->addr),
 			      pulongest (membuf_obj->length));
@@ -572,7 +572,7 @@ get_read_buffer (PyObject *self, Py_ssize_t segment, void **ptrptr)
 
   if (segment)
     {
-      PyErr_SetString (PyExc_SystemError,
+      PyErr_SetString (gdbpyExc_SystemError,
 		       _("The memory buffer supports only one segment."));
       return -1;
     }
@@ -633,7 +633,7 @@ infpy_search_memory (PyObject *self, PyObject *args, PyObject *kw)
 #ifdef IS_PY3K
   Py_buffer pybuf;
 
-  if (! PyArg_ParseTupleAndKeywords (args, kw, "OOs*", keywords,
+  if (! gdbpy_ArgParseTupleAndKeywords (args, kw, "OOs*", keywords,
 				     &start_addr_obj, &length_obj,
 				     &pybuf))
     return NULL;
@@ -643,14 +643,14 @@ infpy_search_memory (PyObject *self, PyObject *args, PyObject *kw)
 #else
   PyObject *pattern;
   
-  if (! PyArg_ParseTupleAndKeywords (args, kw, "OOO", keywords,
+  if (! gdbpy_ArgParseTupleAndKeywords (args, kw, "OOO", keywords,
  				     &start_addr_obj, &length_obj,
 				     &pattern))
      return NULL;
 
   if (!PyObject_CheckReadBuffer (pattern))
     {
-      PyErr_SetString (PyExc_RuntimeError,
+      PyErr_SetString (gdbpyExc_RuntimeError,
 		       _("The pattern is not a Python buffer."));
 
       return NULL;
@@ -665,7 +665,7 @@ infpy_search_memory (PyObject *self, PyObject *args, PyObject *kw)
     {
       if (!length)
 	{
-	  PyErr_SetString (PyExc_ValueError,
+	  PyErr_SetString (gdbpyExc_ValueError,
 			   _("Search range is empty."));
 
 #ifdef IS_PY3K
@@ -677,7 +677,7 @@ infpy_search_memory (PyObject *self, PyObject *args, PyObject *kw)
       else if (length > CORE_ADDR_MAX
 	       || (start_addr + length - 1) < start_addr)
 	{
-	  PyErr_SetString (PyExc_ValueError,
+	  PyErr_SetString (gdbpyExc_ValueError,
 			   _("The search range is too large."));
 
 #ifdef IS_PY3K
@@ -704,7 +704,7 @@ infpy_search_memory (PyObject *self, PyObject *args, PyObject *kw)
   if (found)
     return PyLong_FromLong (found_addr);
   else
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 }
 
 /* Implementation of gdb.Inferior.is_valid (self) -> Boolean.
@@ -716,9 +716,9 @@ infpy_is_valid (PyObject *self, PyObject *args)
   inferior_object *inf = (inferior_object *) self;
 
   if (! inf->inferior)
-    Py_RETURN_FALSE;
+    GDB_PY_RETURN_FALSE;
 
-  Py_RETURN_TRUE;
+  GDB_PY_RETURN_TRUE;
 }
 
 static void

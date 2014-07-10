@@ -604,7 +604,9 @@ read_atcb (CORE_ADDR task_id, struct ada_task_info *task_info)
     get_tcb_types_info ();
 
   tcb_value = value_from_contents_and_address (pspace_data->atcb_type,
-					       NULL, task_id);
+					       NULL,
+					       TYPE_LENGTH (pspace_data->atcb_type),
+					       task_id);
   common_value = value_field (tcb_value, pspace_data->atcb_fieldno.common);
 
   /* Fill in the task_id.  */
@@ -738,7 +740,9 @@ read_atcb (CORE_ADDR task_id, struct ada_task_info *task_info)
         {
           call_val =
             value_from_contents_and_address (pspace_data->atcb_call_type,
-					     NULL, call);
+					     NULL,
+					     TYPE_LENGTH (pspace_data->atcb_call_type),
+					     call);
           task_info->caller_task =
             value_as_address
 	      (value_field (call_val, pspace_data->atcb_fieldno.call_self));
@@ -830,7 +834,9 @@ read_known_tasks_list (struct ada_tasks_inferior_data *data)
 
       /* Read the chain.  */
       tcb_value = value_from_contents_and_address (pspace_data->atcb_type,
-						   NULL, task_id);
+						   NULL,
+						   TYPE_LENGTH (pspace_data->atcb_type),
+						   task_id);
       common_value = value_field (tcb_value, pspace_data->atcb_fieldno.common);
       task_id = value_as_address
 		  (value_field (common_value,

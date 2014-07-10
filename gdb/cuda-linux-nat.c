@@ -639,7 +639,9 @@ cuda_nat_wait (struct target_ops *ops, ptid_t ptid,
       return r;
     }
 
-  cuda_initialize_target ();
+  /* Return if cuda has not been initialized yet */
+  if (!cuda_initialize_target ())
+    return r;
 
   /* Suspend all the CUDA devices. */
   cuda_trace ("cuda_wait: suspend devices");
@@ -876,7 +878,8 @@ cuda_nat_insert_breakpoint (struct gdbarch *gdbarch, struct bp_target_info *bp_t
   bool inserted;
 
   gdb_assert (bp_tgt->owner != NULL ||
-              gdbarch_bfd_arch_info (gdbarch)->arch == bfd_arch_arm);
+              gdbarch_bfd_arch_info (gdbarch)->arch == bfd_arch_arm ||
+              gdbarch_bfd_arch_info (gdbarch)->arch == bfd_arch_aarch64);
 
   if (!bp_tgt->owner || !bp_tgt->owner->cuda_breakpoint)
     return host_target_ops.to_insert_breakpoint (gdbarch, bp_tgt);
@@ -898,7 +901,8 @@ cuda_nat_remove_breakpoint (struct gdbarch *gdbarch, struct bp_target_info *bp_t
   bool removed;
 
   gdb_assert (bp_tgt->owner != NULL ||
-              gdbarch_bfd_arch_info (gdbarch)->arch == bfd_arch_arm);
+              gdbarch_bfd_arch_info (gdbarch)->arch == bfd_arch_arm ||
+              gdbarch_bfd_arch_info (gdbarch)->arch == bfd_arch_aarch64);
 
   if (!bp_tgt->owner || !bp_tgt->owner->cuda_breakpoint)
     return host_target_ops.to_remove_breakpoint (gdbarch, bp_tgt);
@@ -993,12 +997,19 @@ cuda_update_cudart_symbols (void)
         error (_("Failed to create the cudart symbol file."));
 
       /* Select builtins appropriate for the target architecture*/
-      if (gdbarch_bfd_arch_info(target_gdbarch())->arch == bfd_arch_arm &&
-          gdbarch_bfd_arch_info(target_gdbarch())->bits_per_address == 32)
-       {
-        cuda_builtins = cuda_builtins_arm;
-        cuda_builtins_size = sizeof(cuda_builtins_arm);
-       }
+      if (gdbarch_bfd_arch_info(target_gdbarch())->arch == bfd_arch_arm)
+        {
+          if (gdbarch_bfd_arch_info(target_gdbarch())->bits_per_address == 32)
+            {
+              cuda_builtins = cuda_builtins_arm;
+              cuda_builtins_size = sizeof(cuda_builtins_arm);
+            }
+        }
+      else if (gdbarch_bfd_arch_info(target_gdbarch())->arch == bfd_arch_aarch64)
+        {
+          cuda_builtins = cuda_builtins_arm;
+          cuda_builtins_size = sizeof(cuda_builtins_arm);
+        }
       else if (gdbarch_bfd_arch_info(target_gdbarch())->arch == bfd_arch_i386)
         {
           if (gdbarch_bfd_arch_info(target_gdbarch())->bits_per_address == 32)
@@ -1245,7 +1256,6 @@ _initialize_cuda_nat (void)
     }
 
   /* Initialize the CUDA modules */
-  cuda_utils_initialize ();
   cuda_commands_initialize ();
   cuda_options_initialize ();
   cuda_notification_initialize ();
@@ -1264,11 +1274,9 @@ cuda_nat_attach (void)
   struct cmd_list_element *alias = NULL;
   struct cmd_list_element *prefix_cmd = NULL;
   struct cmd_list_element *cmd = NULL;
-  char *cudbgApiInitForAttach = "cudbgApiInit(1)";
+  char *cudbgApiAttach = "cudbgApiAttach()";
   CORE_ADDR debugFlagAddr;
   CORE_ADDR resumeAppOnAttachFlagAddr;
-  const unsigned char zero = 0;
-  const unsigned char one = 1;
   unsigned char resumeAppOnAttach;
   unsigned int timeOut = 5000000; /* 5 seconds */
   unsigned int timeElapsed = 0;
@@ -1276,29 +1284,31 @@ cuda_nat_attach (void)
   uint64_t internal_error_code;
   struct cleanup *cleanup = NULL;
 
-  debugFlagAddr = cuda_get_symbol_address (_STRING_(CUDBG_IPC_FLAG_NAME));
-
   /* Return early if CUDA driver isn't available. Attaching to the host
      process has already been completed at this point. */
-  if (!debugFlagAddr)
-    return;
-
-  /* If the CUDA driver has been loaded but software preemption has been turned
-     on, stop the attach process. */
-  if (cuda_options_software_preemption ())
-    error (_("Attaching to a running CUDA process with software preemption "
-             "enabled in the debugger is not supported."));
-
   cuda_api_set_attach_state (CUDA_ATTACH_STATE_IN_PROGRESS);
+  if (!cuda_initialize_target ())
+    {
+      cuda_api_set_attach_state (CUDA_ATTACH_STATE_NOT_STARTED);
+      return;
+    }
 
-  cuda_initialize_target ();
+   /* If the CUDA driver has been loaded but software preemption has been turned
+      on, stop the attach process. */
+   if (cuda_options_software_preemption ())
+    {
+       cuda_api_set_attach_state (CUDA_ATTACH_STATE_NOT_STARTED);
+       error (_("Attaching to a running CUDA process with software preemption "
+                "enabled in the debugger is not supported."));
+    }
+
 
   if (!lookup_cmd_composition ("call", &alias, &prefix_cmd, &cmd))
     error (_("Failed to initiate attach."));
 
   /* Fork off the CUDA debugger process from the inferior */
   cleanup = cuda_gdb_bypass_signals ();
-  cmd_func (cmd, cudbgApiInitForAttach, 0);
+  cmd_func (cmd, cudbgApiAttach, 0);
   do_cleanups (cleanup);
 
   internal_error_code = cuda_get_last_driver_internal_error_code();
@@ -1315,10 +1325,11 @@ cuda_nat_attach (void)
     error (_("Attach failed due to the internal driver error 0x%llx\n"),
             (unsigned long long) internal_error_code);
 
+  debugFlagAddr = cuda_get_symbol_address (_STRING_(CUDBG_IPC_FLAG_NAME));
   resumeAppOnAttachFlagAddr = cuda_get_symbol_address (_STRING_(CUDBG_RESUME_FOR_ATTACH_DETACH));
 
   /* If this is not available, the CUDA driver doesn't support attaching.  */
-  if (!resumeAppOnAttachFlagAddr)
+  if (resumeAppOnAttachFlagAddr == 0 || debugFlagAddr == 0)
     error (_("This CUDA driver does not support attaching to a running CUDA process."));
 
   /* Wait till the backend has started up and is ready to service API calls */
@@ -1364,7 +1375,7 @@ cuda_nat_attach (void)
   else
     {
       /* Enable debugger callbacks from the CUDA driver */
-      target_write_memory (debugFlagAddr, &one, 1);
+      cuda_write_bool (debugFlagAddr, true);
 
       /* No data to collect, attach complete. */
       cuda_api_set_attach_state (CUDA_ATTACH_STATE_COMPLETE);
@@ -1383,7 +1394,6 @@ void cuda_do_detach(bool remote)
   CORE_ADDR rpcFlagAddr;
   CORE_ADDR resumeAppOnDetachFlagAddr;
   unsigned char resumeAppOnDetach;
-  const unsigned char zero = 0;
   struct cleanup *cleanup = NULL;
   struct thread_info *tp;
   int pid;
@@ -1430,7 +1440,7 @@ void cuda_do_detach(bool remote)
   if (!rpcFlagAddr)
     error (_("Failed to detach cleanly from the inferior."));
 
-  target_write_memory (rpcFlagAddr, &zero, 1);
+  cuda_write_bool (rpcFlagAddr, false);
 
   /* If a cleanup is needed, resume the app to allow the cleanup to complete.
      The debugger backend will send a cleanup event to stop the app when the
@@ -1452,7 +1462,7 @@ void cuda_do_detach(bool remote)
   if (cuda_api_get_attach_state () != CUDA_ATTACH_STATE_DETACH_COMPLETE)
     warning (_("Unexpected CUDA API attach state."));
 
-  target_write_memory (debugFlagAddr, &zero, 1);
+  cuda_write_bool (debugFlagAddr, false);
 
   cuda_cleanup ();
 }

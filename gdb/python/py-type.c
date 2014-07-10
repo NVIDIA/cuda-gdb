@@ -194,7 +194,7 @@ convert_field (struct type *type, int field)
     arg = PyString_FromString (TYPE_FIELD_NAME (type, field));
   else
     {
-      arg = Py_None;
+      arg = gdbpy_None;
       Py_INCREF (arg);
     }
   if (!arg)
@@ -203,16 +203,16 @@ convert_field (struct type *type, int field)
     goto failarg;
   Py_DECREF (arg);
 
-  arg = TYPE_FIELD_ARTIFICIAL (type, field) ? Py_True : Py_False;
+  arg = TYPE_FIELD_ARTIFICIAL (type, field) ? gdbpy_True : gdbpy_False;
   Py_INCREF (arg);
   if (PyObject_SetAttrString (result, "artificial", arg) < 0)
     goto failarg;
   Py_DECREF (arg);
 
   if (TYPE_CODE (type) == TYPE_CODE_CLASS)
-    arg = field < TYPE_N_BASECLASSES (type) ? Py_True : Py_False;
+    arg = field < TYPE_N_BASECLASSES (type) ? gdbpy_True : gdbpy_False;
   else
-    arg = Py_False;
+    arg = gdbpy_False;
   Py_INCREF (arg);
   if (PyObject_SetAttrString (result, "is_base_class", arg) < 0)
     goto failarg;
@@ -228,7 +228,7 @@ convert_field (struct type *type, int field)
   /* A field can have a NULL type in some situations.  */
   if (TYPE_FIELD_TYPE (type, field) == NULL)
     {
-      arg = Py_None;
+      arg = gdbpy_None;
       Py_INCREF (arg);
     }
   else
@@ -260,7 +260,7 @@ field_name (struct type *type, int field)
     result = PyString_FromString (TYPE_FIELD_NAME (type, field));
   else
     {
-      result = Py_None;
+      result = gdbpy_None;
       Py_INCREF (result);
     }
   return result;
@@ -373,7 +373,7 @@ typy_fields (PyObject *self, PyObject *args)
   if (r == NULL)
     return NULL;
   
-  rl = Py_BuildValue ("[O]", r);
+  rl = gdbpy_BuildValue ("[O]", r);
   if (rl == NULL)
     {
       Py_DECREF (r);
@@ -406,7 +406,7 @@ typy_get_tag (PyObject *self, void *closure)
   struct type *type = ((type_object *) self)->type;
 
   if (!TYPE_TAG_NAME (type))
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
   return PyString_FromString (TYPE_TAG_NAME (type));
 }
 
@@ -460,7 +460,7 @@ typy_get_composite (struct type *type)
       && TYPE_CODE (type) != TYPE_CODE_UNION
       && TYPE_CODE (type) != TYPE_CODE_ENUM)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       "Type is not a structure, union, or enum type.");
       return NULL;
     }
@@ -479,14 +479,14 @@ typy_array_1 (PyObject *self, PyObject *args, int is_vector)
   struct type *type = ((type_object *) self)->type;
   volatile struct gdb_exception except;
 
-  if (! PyArg_ParseTuple (args, "l|O", &n1, &n2_obj))
+  if (! gdbpy_ArgParseTuple (args, "l|O", &n1, &n2_obj))
     return NULL;
 
   if (n2_obj)
     {
-      if (!PyInt_Check (n2_obj))
+      if (!gdbpy_IntCheck (n2_obj))
 	{
-	  PyErr_SetString (PyExc_RuntimeError,
+	  PyErr_SetString (gdbpyExc_RuntimeError,
 			   _("Array bound must be an integer"));
 	  return NULL;
 	}
@@ -502,7 +502,7 @@ typy_array_1 (PyObject *self, PyObject *args, int is_vector)
 
   if (n2 < n1)
     {
-      PyErr_SetString (PyExc_ValueError,
+      PyErr_SetString (gdbpyExc_ValueError,
 		       _("Array length must not be negative"));
       return NULL;
     }
@@ -566,7 +566,7 @@ typy_range (PyObject *self, PyObject *args)
       && TYPE_CODE (type) != TYPE_CODE_STRING
       && TYPE_CODE (type) != TYPE_CODE_RANGE)
     {
-      PyErr_SetString (PyExc_RuntimeError,
+      PyErr_SetString (gdbpyExc_RuntimeError,
 		       _("This type does not have a range."));
       return NULL;
     }
@@ -639,7 +639,7 @@ typy_target (PyObject *self, PyObject *args)
 
   if (!TYPE_TARGET_TYPE (type))
     {
-      PyErr_SetString (PyExc_RuntimeError, 
+      PyErr_SetString (gdbpyExc_RuntimeError, 
 		       _("Type does not have a target."));
       return NULL;
     }
@@ -821,7 +821,7 @@ typy_legacy_template_argument (struct type *type, const struct block *block,
 
   if (TYPE_NAME (type) == NULL)
     {
-      PyErr_SetString (PyExc_RuntimeError, _("Null type name."));
+      PyErr_SetString (gdbpyExc_RuntimeError, _("Null type name."));
       return NULL;
     }
 
@@ -834,7 +834,7 @@ typy_legacy_template_argument (struct type *type, const struct block *block,
 
   if (! info)
     {
-      PyErr_SetString (PyExc_RuntimeError, err);
+      PyErr_SetString (gdbpyExc_RuntimeError, err);
       return NULL;
     }
   demangled = info->tree;
@@ -848,7 +848,7 @@ typy_legacy_template_argument (struct type *type, const struct block *block,
   if (demangled->type != DEMANGLE_COMPONENT_TEMPLATE)
     {
       do_cleanups (cleanup);
-      PyErr_SetString (PyExc_RuntimeError, _("Type is not a template."));
+      PyErr_SetString (gdbpyExc_RuntimeError, _("Type is not a template."));
       return NULL;
     }
 
@@ -861,7 +861,7 @@ typy_legacy_template_argument (struct type *type, const struct block *block,
   if (! demangled)
     {
       do_cleanups (cleanup);
-      PyErr_Format (PyExc_RuntimeError, _("No argument %d in template."),
+      gdbpy_ErrFormat (gdbpyExc_RuntimeError, _("No argument %d in template."),
 		    argno);
       return NULL;
     }
@@ -885,7 +885,7 @@ typy_template_argument (PyObject *self, PyObject *args)
   struct value *val = NULL;
   volatile struct gdb_exception except;
 
-  if (! PyArg_ParseTuple (args, "i|O", &argno, &block_obj))
+  if (! gdbpy_ArgParseTuple (args, "i|O", &argno, &block_obj))
     return NULL;
 
   if (block_obj)
@@ -893,7 +893,7 @@ typy_template_argument (PyObject *self, PyObject *args)
       block = block_object_to_block (block_obj);
       if (! block)
 	{
-	  PyErr_SetString (PyExc_RuntimeError,
+	  PyErr_SetString (gdbpyExc_RuntimeError,
 			   _("Second argument must be block."));
 	  return NULL;
 	}
@@ -915,7 +915,7 @@ typy_template_argument (PyObject *self, PyObject *args)
 
   if (argno >= TYPE_N_TEMPLATE_ARGUMENTS (type))
     {
-      PyErr_Format (PyExc_RuntimeError, _("No argument %d in template."),
+      gdbpy_ErrFormat (gdbpyExc_RuntimeError, _("No argument %d in template."),
 		    argno);
       return NULL;
     }
@@ -925,7 +925,7 @@ typy_template_argument (PyObject *self, PyObject *args)
     return type_to_type_object (SYMBOL_TYPE (sym));
   else if (SYMBOL_CLASS (sym) == LOC_OPTIMIZED_OUT)
     {
-      PyErr_Format (PyExc_RuntimeError,
+      gdbpy_ErrFormat (gdbpyExc_RuntimeError,
 		    _("Template argument is optimized out"));
       return NULL;
     }
@@ -1154,8 +1154,8 @@ typy_richcompare (PyObject *self, PyObject *other, int op)
      for equality or inequality.  */
   if (type2 == NULL || (op != Py_EQ && op != Py_NE))
     {
-      Py_INCREF (Py_NotImplemented);
-      return Py_NotImplemented;
+      Py_INCREF (gdbpy_NotImplemented);
+      return gdbpy_NotImplemented;
     }
 
   if (type1 == type2)
@@ -1186,8 +1186,8 @@ typy_richcompare (PyObject *self, PyObject *other, int op)
     }
 
   if (op == result)
-    Py_RETURN_TRUE;
-  Py_RETURN_FALSE;
+    GDB_PY_RETURN_TRUE;
+  GDB_PY_RETURN_FALSE;
 }
 
 
@@ -1319,7 +1319,7 @@ typy_getitem (PyObject *self, PyObject *key)
 	  return convert_field (type, i);
 	}
     }
-  PyErr_SetObject (PyExc_KeyError, key);
+  PyErr_SetObject (gdbpyExc_KeyError, key);
   return NULL;
 }
 
@@ -1330,9 +1330,9 @@ typy_getitem (PyObject *self, PyObject *key)
 static PyObject *
 typy_get (PyObject *self, PyObject *args)
 {
-  PyObject *key, *defval = Py_None, *result;
+  PyObject *key, *defval = gdbpy_None, *result;
   
-  if (!PyArg_UnpackTuple (args, "get", 1, 2, &key, &defval))
+  if (!gdbpy_Arg_UnpackTuple (args, "get", 1, 2, &key, &defval))
     return NULL;
   
   result = typy_getitem (self, key);
@@ -1342,7 +1342,7 @@ typy_get (PyObject *self, PyObject *args)
   /* typy_getitem returned error status.  If the exception is
      KeyError, clear the exception status and return the defval
      instead.  Otherwise return the exception unchanged.  */
-  if (!PyErr_ExceptionMatches (PyExc_KeyError))
+  if (!PyErr_ExceptionMatches (gdbpyExc_KeyError))
     return NULL;
   
   PyErr_Clear ();
@@ -1359,7 +1359,7 @@ typy_has_key (PyObject *self, PyObject *args)
   const char *field;
   int i;
 
-  if (!PyArg_ParseTuple (args, "s", &field))
+  if (!gdbpy_ArgParseTuple (args, "s", &field))
     return NULL;
 
   /* We want just fields of this type, not of base types, so instead of 
@@ -1375,9 +1375,9 @@ typy_has_key (PyObject *self, PyObject *args)
       const char *t_field_name = TYPE_FIELD_NAME (type, i);
 
       if (t_field_name && (strcmp_iw (t_field_name, field) == 0))
-	Py_RETURN_TRUE;
+	GDB_PY_RETURN_TRUE;
     }
-  Py_RETURN_FALSE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Make an iterator object to iterate over keys, values, or items.  */
@@ -1508,7 +1508,7 @@ gdbpy_lookup_type (PyObject *self, PyObject *args, PyObject *kw)
   PyObject *block_obj = NULL;
   const struct block *block = NULL;
 
-  if (! PyArg_ParseTupleAndKeywords (args, kw, "s|O", keywords,
+  if (! gdbpy_ArgParseTupleAndKeywords (args, kw, "s|O", keywords,
 				     &type_name, &block_obj))
     return NULL;
 
@@ -1517,7 +1517,7 @@ gdbpy_lookup_type (PyObject *self, PyObject *args, PyObject *kw)
       block = block_object_to_block (block_obj);
       if (! block)
 	{
-	  PyErr_SetString (PyExc_RuntimeError,
+	  PyErr_SetString (gdbpyExc_RuntimeError,
 			   _("'block' argument must be a Block."));
 	  return NULL;
 	}

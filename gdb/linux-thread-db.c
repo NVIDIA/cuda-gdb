@@ -44,6 +44,10 @@
 #include "auto-load.h"
 #include "cli/cli-utils.h"
 
+#ifdef __ANDROID__
+#include "solist.h"
+#endif
+
 #include <signal.h>
 #include <ctype.h>
 
@@ -641,6 +645,8 @@ enable_thread_event_reporting (void)
       return;
     }
 
+  /* TD_DEATH event is not implemented in bionic's libthread_db */
+#ifndef __ANDROID__
   /* Set up the thread death event.  */
   err = enable_thread_event (TD_DEATH, &info->td_death_bp_addr);
   if (err != TD_OK)
@@ -649,6 +655,7 @@ enable_thread_event_reporting (void)
 	       thread_db_err_str (err));
       return;
     }
+#endif
 }
 
 /* Similar as thread_db_find_new_threads_1, but try to silently ignore errors
@@ -745,6 +752,29 @@ try_thread_db_load_1 (struct thread_db_info *info)
 	       thread_db_err_str (err));
       return 0;
     }
+#else
+  /* Theres is no td_init_p on Android.
+     But libthread_db should not be used until libc is loaded.
+     This change will impede thread event reception on multi-threaded,
+     statically linked apps.
+   */
+  {
+    bool found = false;
+    struct so_list *lib;
+
+    if (!master_so_list())
+      return 0;
+
+    for (lib = master_so_list(); lib; lib = lib->next)
+     if (lib->so_original_name &&
+         strcmp(lib->so_name, "/system/lib/libc.so")==0)
+       {
+         found = true;
+         break;
+       }
+    if (!found)
+      return 0;
+  }
 #endif
 
   info->td_ta_new_p = verbose_dlsym (info->handle, "td_ta_new");

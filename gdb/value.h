@@ -23,6 +23,15 @@
 #include "doublest.h"
 #include "frame.h"		/* For struct frame_id.  */
 
+/* The maximum number of array elements to read when fetching the array from 
+   the target. Set to print_max by printcmd.c and stack.c before calling some 
+   valops functions, then reset. 0 represents 'unlimited'. Used in 
+   get_limited_length for limiting array fetches - not necessarily structures 
+   with large array members for example. */
+int read_element_limit;
+
+unsigned int get_limited_length(struct type *type);
+
 struct block;
 struct expression;
 struct regcache;
@@ -470,7 +479,12 @@ extern void mark_value_bytes_unavailable (struct value *value,
    value_available_contents_eq(val, 4, val, 12, 2) => 1
    value_available_contents_eq(val, 4, val, 12, 4) => 0
    value_available_contents_eq(val, 3, val, 4, 4) => 0
-*/
+
+   We only know whether a value chunk is available if we've tried to
+   read it.  As this routine is used by printing routines, which may
+   be printing values in the value history, long after the inferior is
+   gone, it works with const values.  Therefore, this routine must not
+   be called with lazy values.  */
 
 extern int value_available_contents_eq (const struct value *val1, int offset1,
 					const struct value *val2, int offset2,
@@ -549,6 +563,7 @@ extern struct value *value_at_lazy (struct type *type, CORE_ADDR addr);
 
 extern struct value *value_from_contents_and_address (struct type *,
 						      const gdb_byte *,
+						      unsigned length,
 						      CORE_ADDR);
 extern struct value *value_from_contents (struct type *, const gdb_byte *);
 
@@ -952,6 +967,10 @@ extern struct value *value_slice (struct value *, int, int);
 extern struct value *value_literal_complex (struct value *, struct value *,
 					    struct type *);
 
+extern struct value *value_real (struct value *);
+
+extern struct value *value_imag (struct value *);
+
 extern struct value *find_function_in_inferior (const char *,
 						struct objfile **);
 
@@ -978,5 +997,16 @@ struct value *call_internal_function (struct gdbarch *gdbarch,
 				      int argc, struct value **argv);
 
 char *value_internal_function_name (struct value *);
+
+extern const gdb_byte * value_contents_all_safe (struct value *value);
+
+extern int value_repeated (const struct value *value);
+extern void set_value_repeated (struct value *value,
+				int repeated);
+
+extern unsigned value_length (const struct value *value);
+
+extern void value_copy_contents (struct value *to, struct value *from);
+extern void value_copy_contents_all_raw (struct value *to, struct value *from);
 
 #endif /* !defined (VALUE_H) */

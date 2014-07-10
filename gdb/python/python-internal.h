@@ -180,7 +180,7 @@ typedef struct breakpoint_object
 #define BPPY_REQUIRE_VALID(Breakpoint)                                  \
     do {                                                                \
       if ((Breakpoint)->bp == NULL)                                     \
-        return PyErr_Format (PyExc_RuntimeError,                        \
+        return gdbpy_ErrFormat (gdbpyExc_RuntimeError,                  \
                              _("Breakpoint %d is invalid."),            \
                              (Breakpoint)->number);                     \
     } while (0)
@@ -191,7 +191,7 @@ typedef struct breakpoint_object
     do {                                                                \
       if ((Breakpoint)->bp == NULL)                                     \
         {                                                               \
-          PyErr_Format (PyExc_RuntimeError, _("Breakpoint %d is invalid."), \
+          gdbpy_ErrFormat (gdbpyExc_RuntimeError, _("Breakpoint %d is invalid."), \
                         (Breakpoint)->number);                          \
           return -1;                                                    \
         }                                                               \
@@ -384,5 +384,73 @@ PyObject *gdb_py_object_from_ulongest (ULONGEST l);
 int gdb_py_int_as_long (PyObject *, long *);
 
 PyObject *gdb_py_generic_dict (PyObject *self, void *closure);
+
+extern int (*gdbpy_Arg_UnpackTuple) (PyObject *, const char *, Py_ssize_t, Py_ssize_t, ...);
+extern PyObject * (*_gdbpy_BuildValue_SizeT) (const char *, ...);
+extern PyObject * (*gdbpy_ErrFormat)(PyObject *, const char *, ...);
+extern PyObject * (*gdbpy_ObjectCallFunctionObjArgs) (PyObject *,...);
+extern PyObject * (*gdbpy_ObjectCallMethodObjArgs) (PyObject *, PyObject *,...);
+extern PyObject * (*gdbpy_ObjectCallMethod)(PyObject *o, char *m, char *format, ...);
+
+extern int (*gdbpy_ArgParseTuple) (PyObject *, const char *, ...);
+extern int (*gdbpy_ArgParseTupleAndKeywords) (PyObject *obj, PyObject *, const char *, char **, ...);
+extern PyObject * (*gdbpy_BuildValue) (const char *, ...);
+extern PyObject * (*gdbpy_StringFromFormat) (const char *, ...);
+
+/* Added for dynamic python library loading support */
+#define gdbpy_False gdbpy_Zero
+extern PyObject *gdbpy_None;
+extern PyObject *gdbpy_True;
+extern PyObject *gdbpy_Zero;
+extern PyObject *gdbpy_NotImplemented;
+extern PyTypeObject *gdbpy_FloatType;
+extern PyTypeObject *gdbpy_BoolType;
+extern PyTypeObject *gdbpy_IntType;
+extern PyTypeObject *gdbpy_LongType;
+extern PyTypeObject *gdbpy_StringType;
+extern PyTypeObject *gdbpy_ListType;
+extern PyTypeObject *gdbpy_TupleType;
+extern PyTypeObject *gdbpy_UnicodeType;
+
+extern PyObject **pgdbpyExc_AttributeError;
+extern PyObject **pgdbpyExc_IOError;
+extern PyObject **pgdbpyExc_KeyError;
+extern PyObject **pgdbpyExc_KeyboardInterrupt;
+extern PyObject **pgdbpyExc_MemoryError;
+extern PyObject **pgdbpyExc_NotImplementedError;
+extern PyObject **pgdbpyExc_OverflowError;
+extern PyObject **pgdbpyExc_RuntimeError;
+extern PyObject **pgdbpyExc_StopIteration;
+extern PyObject **pgdbpyExc_SystemError;
+extern PyObject **pgdbpyExc_TypeError;
+extern PyObject **pgdbpyExc_ValueError;
+extern PyThreadState **pgdbpy_OSReadlineTState;
+extern char * (**pgdbpyOS_ReadlineFunctionPointer) (FILE *, FILE *, char *);
+
+#define gdbpyExc_AttributeError (*pgdbpyExc_AttributeError)
+#define gdbpyExc_IOError (*pgdbpyExc_IOError)
+#define gdbpyExc_KeyError (*pgdbpyExc_KeyError)
+#define gdbpyExc_KeyboardInterrupt (*pgdbpyExc_KeyboardInterrupt)
+#define gdbpyExc_MemoryError (*pgdbpyExc_MemoryError)
+#define gdbpyExc_NotImplementedError (*pgdbpyExc_NotImplementedError)
+#define gdbpyExc_OverflowError (*pgdbpyExc_OverflowError)
+#define gdbpyExc_RuntimeError (*pgdbpyExc_RuntimeError)
+#define gdbpyOS_ReadlineFunctionPointer (*pgdbpyOS_ReadlineFunctionPointer)
+#define gdbpyExc_StopIteration (*pgdbpyExc_StopIteration)
+#define gdbpyExc_SystemError (*pgdbpyExc_SystemError)
+#define gdbpyExc_TypeError (*pgdbpyExc_TypeError)
+#define gdbpyExc_ValueError (*pgdbpyExc_ValueError)
+#define gdbpy_OSReadlineTState (*pgdbpy_OSReadlineTState)
+#define gdbpy_IntCheck(op) PyObject_TypeCheck(op, gdbpy_IntType)
+#define gdbpy_LongCheck(op) PyObject_TypeCheck(op, gdbpy_LongType)
+#define gdbpy_TupleCheck(op) PyObject_TypeCheck(op, gdbpy_TupleType)
+#define gdbpy_StringCheck(op) PyObject_TypeCheck(op, gdbpy_StringType)
+#define gdbpy_UnicodeCheck(op) PyObject_TypeCheck(op, gdbpy_UnicodeType)
+#define gdbpy_ListCheck(op) PyObject_TypeCheck(op, gdbpy_ListType)
+
+/* Macro for returning standard types from a function */
+#define GDB_PY_RETURN_NONE  return Py_INCREF(gdbpy_None), gdbpy_None
+#define GDB_PY_RETURN_TRUE  return Py_INCREF(gdbpy_True), gdbpy_True
+#define GDB_PY_RETURN_FALSE return Py_INCREF(gdbpy_Zero), gdbpy_Zero
 
 #endif /* GDB_PYTHON_INTERNAL_H */

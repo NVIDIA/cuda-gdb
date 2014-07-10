@@ -19,5 +19,5 @@
 	call lib_func
         if (var_i .ne. 2) call abort
         if (var_j .ne. 3) call abort
-        var_i = var_i                 ! i-is-2-in-main
+        if (var_i .eq. 2) write (*,*) 'nop'          ! i-is-2-in-main
 end

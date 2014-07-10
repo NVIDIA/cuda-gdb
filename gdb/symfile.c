@@ -2817,6 +2817,8 @@ init_filename_language_table (void)
       add_filename_language (".FTN", language_fortran);
       add_filename_language (".fpp", language_fortran);
       add_filename_language (".FPP", language_fortran);
+      add_filename_language (".f77", language_fortran);
+      add_filename_language (".F77", language_fortran);
       add_filename_language (".f90", language_fortran);
       add_filename_language (".F90", language_fortran);
       add_filename_language (".f95", language_fortran);
