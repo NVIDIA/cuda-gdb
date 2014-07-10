@@ -1089,15 +1089,11 @@ qsort_cmp (const void *a, const void *b)
       if (objfile1 == objfile2)
 	{
 	  /* Both sections came from the same objfile.  We are really confused.
-	     Sort on sequence order of sections within the objfile.  */
-
-	  const struct obj_section *osect;
-
-	  ALL_OBJFILE_OSECTIONS (objfile1, osect)
-	    if (osect == sect1)
-	      return -1;
-	    else if (osect == sect2)
-	      return 1;
+	     Use section index to determine which one comes first.  */
+	  if (sect1->the_bfd_section->index < sect2->the_bfd_section->index)
+	    return -1;
+	  if (sect1->the_bfd_section->index > sect2->the_bfd_section->index)
+	    return 1;
 
 	  /* We should have found one of the sections before getting here.  */
 	  gdb_assert_not_reached ("section not found");
@@ -1247,7 +1243,6 @@ filter_overlapping_sections (struct obj_section **map, int map_size)
 	      const CORE_ADDR sect2_endaddr = obj_section_endaddr (sect2);
 
 	      struct gdbarch *const gdbarch = get_objfile_arch (objf1);
-
 	      complaint (&symfile_complaints,
 			 _("unexpected overlap between:\n"
 			   " (A) section `%s' from `%s' [%s, %s)\n"

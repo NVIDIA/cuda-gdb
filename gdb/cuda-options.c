@@ -30,6 +30,7 @@
 #include "libcudbgipc.h"
 #include "objfiles.h"
 #include "cuda-regmap.h"
+#include "cuda-tdep.h"
 
 /*List of set/show cuda commands */
 struct cmd_list_element *setcudalist;
@@ -979,14 +980,18 @@ cuda_options_initialize_copyright (void)
 /*
  * set cuda api_failures
  */
-const char  cuda_api_failures_option_ignore[]   = "ignore";
-const char  cuda_api_failures_option_stop[]     = "stop";
-const char  cuda_api_failures_option_hide[]     = "hide";
+const char  cuda_api_failures_option_ignore[]       = "ignore";
+const char  cuda_api_failures_option_stop[]         = "stop";
+const char  cuda_api_failures_option_hide[]         = "hide";
+const char  cuda_api_failures_option_stop_all[]     = "stop_all";
+const char  cuda_api_failures_option_ignore_all[]   = "ignore_all";
 
 const char *cuda_api_failures_options_enums[] = {
     cuda_api_failures_option_ignore,
     cuda_api_failures_option_stop,
     cuda_api_failures_option_hide,
+    cuda_api_failures_option_stop_all,
+    cuda_api_failures_option_ignore_all,
     NULL
 };
 
@@ -1000,37 +1005,54 @@ cuda_show_api_failures (struct ui_file *file, int from_tty,
 }
 
 static void
+cuda_set_api_failures  (char *args, int from_tty, struct cmd_list_element *c)
+{
+  cuda_update_report_driver_api_error_flags ();
+}
+
+static void
 cuda_options_initialize_api_failures (void)
 {
   cuda_api_failures_option = cuda_api_failures_option_ignore;
 
   add_setshow_enum_cmd ("api_failures", class_cuda,
                         cuda_api_failures_options_enums, &cuda_api_failures_option,
-                        _("Set the api_failures to ignore/stop/hide on CUDA driver API call errors."), 
+                        _("Set the api_failures to ignore/stop/hide on CUDA driver API call errors."),
                         _("Show if cuda-gdb ignores/stops/hides on CUDA driver API call errors."),
-                        _("  ignore : no breakpoint is hit, only warning message is printed for every CUDA driver API call failure\n"
-                          "  stop   : a breakpoint is hit when a CUDA driver API call returns an error\n"
-                          "  hide   : no breakpoint is hit, no warning message is printed"),
-                        NULL, cuda_show_api_failures,
+                        _("  ignore     : Warning message is printed for every fatal CUDA API call failure (default)\n"
+                          "  stop       : The application is stopped when a CUDA API call returns a fatal error\n"
+                          "  ignore_all : Warning message is printed for every CUDA API call failure\n"
+                          "  stop_all   : The application is stopped when a CUDA API call returns any error\n"
+                          "  hide       : CUDA API call failures are not reported."),
+                        cuda_set_api_failures, cuda_show_api_failures,
                         &setcudalist, &showcudalist);
 }
 
 bool
 cuda_options_api_failures_ignore(void)
 {
-  return (cuda_api_failures_option == cuda_api_failures_option_ignore);
+  return (cuda_api_failures_option == cuda_api_failures_option_ignore) ||
+         (cuda_api_failures_option == cuda_api_failures_option_ignore_all);
 }
 
 bool
 cuda_options_api_failures_stop(void)
 {
-  return (cuda_api_failures_option == cuda_api_failures_option_stop);
+  return (cuda_api_failures_option == cuda_api_failures_option_stop) ||
+         (cuda_api_failures_option == cuda_api_failures_option_stop_all);
 }
 
 bool
 cuda_options_api_failures_hide(void)
 {
   return (cuda_api_failures_option == cuda_api_failures_option_hide);
+}
+
+bool
+cuda_options_api_failures_break_on_nonfatal(void)
+{
+  return (cuda_api_failures_option == cuda_api_failures_option_ignore_all) ||
+         (cuda_api_failures_option == cuda_api_failures_option_stop_all);
 }
 
 /*

@@ -1318,7 +1318,7 @@ cuda_nat_attach (void)
               "Please verify that software preemption is disabled "
               "and that nvidia-cuda-mps-server is not running."));
   if ((unsigned int)internal_error_code == CUDBG_ERROR_SOME_DEVICES_WATCHDOGGED)
-     error (_("Attaching to process running on watchdogged GPU is not possible.\n"
+     error (_("Attaching to a process running on a watchdogged GPU is not possible.\n"
               "Please repeat the attempt in console mode or "
               "restart the process with CUDA_VISIBLE_DEVICES environment variable set."));
   if (internal_error_code)

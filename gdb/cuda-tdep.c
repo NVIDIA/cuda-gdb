@@ -149,6 +149,9 @@ struct gdbarch_tdep
   /* CC register */
   int cc_regnum;
 
+  /* ErrorPC register */
+  int error_pc_regnum;
+
   /* Pseudo-Registers */
 
   /* Special register to indicate to look at the regmap search result */
@@ -202,6 +205,13 @@ bool cuda_cc_regnum_p (struct gdbarch *gdbarch, int regnum)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
   return regnum == tdep->cc_regnum;
+}
+
+static inline
+bool cuda_error_pc_regnum_p (struct gdbarch *gdbarch, int regnum)
+{
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  return regnum == tdep->error_pc_regnum;
 }
 
 int
@@ -449,6 +459,11 @@ cuda_register_name (struct gdbarch *gdbarch, int regnum)
   if (cuda_cc_regnum_p (gdbarch, regnum))
     return "CC";
 
+  /* The Error PC register */
+  if (cuda_error_pc_regnum_p (gdbarch, regnum))
+      return "errorpc";
+
+
   /* (everything else) */
   return NULL;
 }
@@ -460,7 +475,7 @@ cuda_register_type (struct gdbarch *gdbarch, int regnum)
   if (cuda_special_regnum_p (gdbarch, regnum))
     return builtin_type (gdbarch)->builtin_int64;
 
-  if (cuda_pc_regnum_p (gdbarch, regnum))
+  if (cuda_pc_regnum_p (gdbarch, regnum) || cuda_error_pc_regnum_p (gdbarch, regnum))
     return builtin_type (gdbarch)->builtin_func_ptr;
 
   return builtin_type (gdbarch)->builtin_int32;
@@ -663,6 +678,15 @@ cuda_pseudo_register_read (struct gdbarch *gdbarch,
       return REG_VALID;
     }
 
+  /* ErrorPC register */
+  if (cuda_error_pc_regnum_p (gdbarch, regnum))
+    {
+      if (!warp_has_error_pc (dev, sm, wp))
+        return REG_UNAVAILABLE;
+      *(CORE_ADDR *)buf = warp_get_error_pc (dev, sm, wp);
+      return REG_VALID;
+    }
+
   /* single SASS register */
   *buf = lane_get_register (dev, sm, wp, ln, regnum);
   return REG_VALID;
@@ -729,7 +753,8 @@ cuda_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 
   /* Include predicates and CC register in special and all register groups */
   if (cuda_pred_regnum_p (gdbarch, regnum)  ||
-      cuda_cc_regnum_p (gdbarch, regnum))
+      cuda_cc_regnum_p (gdbarch, regnum)    ||
+      cuda_error_pc_regnum_p (gdbarch, regnum))
     return group == system_reggroup || group == all_reggroup;
 
   return default_register_reggroup_p (gdbarch, regnum, group);
@@ -838,8 +863,21 @@ cuda_get_bfd_abi_version (bfd *obfd, unsigned int *abi_version)
         }
       else
         {
-          printf_filtered ("CUDA ELF Image contains unknown ABI version: %d\n", abiv);
-          gdb_assert (CUDA_ELFOSABIV_16BIT <= abiv && abiv <= CUDA_ELFOSABIV_LATEST);
+          static bool questionAsked = false;
+          if (!questionAsked)
+            {
+              printf_filtered ("CUDA ELF Image contains unknown ABI version: %d\n", abiv);
+              printf_filtered ("This might happen while debugging JITed code" \
+                               "using latest driver with older tools.\n" \
+                               "Further debugging might not be reliable.");
+              target_terminal_ours ();
+              if (!nquery ("Are you sure you want to continue? "))
+                  fatal ("CUDA ELF Image contains unknown ABI version");
+              target_terminal_inferior ();
+            }
+          *abi_version = abiv;
+          questionAsked = true;
+          return true;
         }
     }
 
@@ -1217,6 +1255,7 @@ cuda_initialize_target (void)
   cuda_write_bool     (memcheckAddr           , cuda_options_memcheck ());
   cuda_write_bool     (launchblockingAddr     , cuda_options_launch_blocking ());
   cuda_write_bool     (preemptionAddr         , cuda_options_software_preemption ());
+  cuda_update_report_driver_api_error_flags ();
 
   inferior_in_debug_mode = true;
   cuda_initialize_driver_api_error_report ();
@@ -2448,6 +2487,12 @@ cuda_value_to_register (struct frame_info *frame, int regnum,
       return;
     }
 
+  /* Ignore attempts to modify error pc */
+  if (cuda_error_pc_regnum_p (gdbarch, regnum))
+    {
+      return;
+    }
+
   put_frame_register (frame, regnum, from);
 }
 
@@ -2493,11 +2538,12 @@ cuda_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   tdep->pc_regnum       = 256; /* PC is after the last user register */
 
   tdep->num_regs           = 256 + 1;/* 256 general purpose registers + pc */
-  tdep->num_pseudo_regs    = 11; /* 7 for predicates, 1 for CC, 3 for special/invalid */
+  tdep->num_pseudo_regs    = 12; /* 7 for predicates, 1 for CC, 4 for special/invalid */
   tdep->first_pred_regnum  = tdep->num_regs;
   tdep->last_pred_regnum   = tdep->num_regs + 6;
   tdep->cc_regnum          = tdep->last_pred_regnum + 1;
-  tdep->special_regnum     = tdep->cc_regnum + 1;
+  tdep->error_pc_regnum    = tdep->cc_regnum + 1;
+  tdep->special_regnum     = tdep->error_pc_regnum + 1;
   tdep->invalid_lo_regnum  = tdep->special_regnum + 1;
   tdep->invalid_hi_regnum  = tdep->invalid_lo_regnum + 1;
 
@@ -2705,3 +2751,18 @@ cuda_adjust_device_code_address (CORE_ADDR original_addr, CORE_ADDR *adjusted_ad
   *adjusted_addr = (CORE_ADDR)addr;
 }
 
+void
+cuda_update_report_driver_api_error_flags (void)
+{
+  CORE_ADDR addr;
+  CUDBGReportDriverApiErrorFlags flags;
+
+  addr   = cuda_get_symbol_address (_STRING_(CUDBG_REPORT_DRIVER_API_ERROR_FLAGS));
+  flags  = cuda_options_api_failures_break_on_nonfatal() ?
+              CUDBG_REPORT_DRIVER_API_ERROR_FLAGS_NONE :
+              CUDBG_REPORT_DRIVER_API_ERROR_FLAGS_SUPPRESS_NOT_READY;
+  if (!addr)
+    return;
+
+   target_write_memory (addr, (char *)&flags, sizeof(flags));
+}

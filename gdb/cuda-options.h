@@ -45,6 +45,7 @@ bool cuda_options_thread_selection_physical (void);
 bool cuda_options_api_failures_ignore (void);
 bool cuda_options_api_failures_stop (void);
 bool cuda_options_api_failures_hide (void);
+bool cuda_options_api_failures_break_on_nonfatal(void);
 void cuda_options_disable_break_on_launch (void);
 bool cuda_options_notify_youngest (void);
 bool cuda_options_notify_random (void);

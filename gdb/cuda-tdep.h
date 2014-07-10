@@ -120,6 +120,7 @@ void cuda_load_device_info (char *, struct partial_symtab *);
 void cuda_signals_initialize (void);
 void cuda_initialize_driver_internal_error_report (void);
 void cuda_initialize_driver_api_error_report (void);
+void cuda_update_report_driver_api_error_flags (void);
 
 const char *cuda_find_function_name_from_pc (CORE_ADDR pc, bool demangle);
 bool     cuda_breakpoint_hit_p (cuda_clock_t clock);

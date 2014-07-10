@@ -999,6 +999,9 @@ create_array_type (struct type *result_type,
 
   TYPE_CODE (result_type) = TYPE_CODE_ARRAY;
   TYPE_TARGET_TYPE (result_type) = element_type;
+  /* CUDA: Copy instance flags as well */
+  TYPE_INSTANCE_FLAGS (result_type) = TYPE_INSTANCE_FLAGS (element_type);
+
   if (get_discrete_bounds (range_type, &low_bound, &high_bound) < 0)
     low_bound = high_bound = 0;
   CHECK_TYPEDEF (element_type);

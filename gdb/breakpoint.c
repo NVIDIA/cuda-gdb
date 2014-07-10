@@ -5703,7 +5703,7 @@ bpstat_what (bpstat bs_head)
           else
             this_action = BPSTAT_WHAT_SINGLE;
           break;
-	case bp_cuda_autostep: /* CUDA - autostep */
+        case bp_cuda_autostep: /* CUDA - autostep */
           /* Quietly go into single step mode */
           this_action = BPSTAT_WHAT_STOP_SILENT;
           break;
@@ -5712,19 +5712,11 @@ bpstat_what (bpstat bs_head)
           {
             char* func_name = NULL;
             uint64_t error_code = 0ULL;
-            bool runtime_api_error = false;
 
             error_code = cuda_get_last_driver_api_error_code ();
             cuda_get_last_driver_api_error_func_name (&func_name);
-            runtime_api_error = func_name && strlen (func_name) > 4 && !strncmp (func_name, "cuda", 4);
 
-            if ((runtime_api_error && error_code == 34  /* cudaErrorNotReady */) ||
-                (!runtime_api_error && error_code == 600 /* CUDA_ERROR_NOT_READY */))
-              {
-                /* Ignore non errors */
-                this_action = BPSTAT_WHAT_SINGLE;
-              }
-            else if (cuda_options_api_failures_stop ())
+            if (cuda_options_api_failures_stop ())
               {
                 /* Stop and show info about the error. */
                 this_action = BPSTAT_WHAT_STOP_NOISY;
@@ -16948,7 +16940,6 @@ cuda_auto_breakpoints_add_location (elf_image_t elf_image, CORE_ADDR addr, bool 
                              (*bp)->number, (unsigned long long)addr);
     }
 
-  cuda_auto_breakpoints_update_breakpoints ();
 }
 
 static void
@@ -16969,8 +16960,6 @@ cuda_auto_breakpoints_remove_locations_from_bp (struct breakpoint *bp, elf_image
         /* Dangling locations are freed in update_global_location_list */
         *ploc = loc->next;
       }
-
-  update_global_location_list (0);
 }
 
 void
@@ -16983,6 +16972,7 @@ cuda_auto_breakpoints_add_locations (elf_image_t elf_image, bool is_system)
   for (ix = 0; VEC_iterate (CORE_ADDR, cuda_kernel_entry_addresses, ix, kern_addr); ix++)
     cuda_auto_breakpoints_add_location (elf_image, kern_addr, is_system);
   VEC_truncate (CORE_ADDR, cuda_kernel_entry_addresses, 0);
+  cuda_auto_breakpoints_update_breakpoints ();
 }
 
 void
@@ -16990,6 +16980,7 @@ cuda_auto_breakpoints_remove_locations (elf_image_t elf_image)
 {
   cuda_auto_breakpoints_remove_locations_from_bp (cuda_auto_breakpoints_bp_system, elf_image);
   cuda_auto_breakpoints_remove_locations_from_bp (cuda_auto_breakpoints_bp_application, elf_image);
+  update_global_location_list (0);
 }
 
 static void
@@ -16997,21 +16988,24 @@ cuda_auto_breakpoints_update_one_breakpoint (struct breakpoint *bp,
                                              bool (*enabled)(void),
                                              bool (*silent)(void))
 {
-  if (bp)
+  if (!bp)
+    return;
+
+  if (enabled ())
     {
-      if (enabled ())
-        {
-          breakpoint_set_silent (bp, 0);
-          enable_breakpoint (bp);
+      breakpoint_set_silent (bp, 0);
+      enable_breakpoint (bp);
+      return;
     }
-      else if (silent ())
+
+  if (silent ())
     {
-          breakpoint_set_silent (bp, 1);
-          enable_breakpoint (bp);
-        }
-      else
-        disable_breakpoint (bp);
+      breakpoint_set_silent (bp, 1);
+      enable_breakpoint (bp);
+      return;
     }
+
+  disable_breakpoint (bp);
 }
 
 void

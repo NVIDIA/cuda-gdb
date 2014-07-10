@@ -4028,7 +4028,7 @@ handle_inferior_event (struct execution_control_state *ecs)
 	    }
 	}
 
-      if (thread_hop_needed)
+      if (thread_hop_needed && !cuda_sstep_is_active ())
 	{
 	  struct regcache *thread_regcache;
 	  int remove_status = 0;
@@ -4091,7 +4091,7 @@ handle_inferior_event (struct execution_control_state *ecs)
 
   /* See if something interesting happened to the non-current thread.  If
      so, then switch to that thread.  */
-  if (!ptid_equal (ecs->ptid, inferior_ptid))
+  if (!ptid_equal (ecs->ptid, inferior_ptid) && !cuda_sstep_is_active ())
     {
       if (debug_infrun)
 	fprintf_unfiltered (gdb_stdlog, "infrun: context switch\n");

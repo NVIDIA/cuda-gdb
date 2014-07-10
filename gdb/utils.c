@@ -3079,14 +3079,31 @@ phex_nz (ULONGEST l, int sizeof_l)
   return str;
 }
 
-/* Converts a LONGEST to a C-format hexadecimal literal and stores it
+/* Converts an ULONGEST to a C-format hexadecimal literal and stores it
    in a static string.  Returns a pointer to this string.  */
 char *
-hex_string (LONGEST num)
+hex_string (ULONGEST num)
 {
-  char *result = get_cell ();
+  const static char hexdigit[]="0123456789abcdef";
+  char *result = get_cell () + CELLSIZE;
 
-  xsnprintf (result, CELLSIZE, "0x%s", phex_nz (num, sizeof (num)));
+  *(--result) = 0;
+  do
+    {
+     if (num < 16)
+       {
+         *(--result) = hexdigit[num];
+         break;
+       }
+     result -= 2;
+     result[0] = hexdigit[(num>>4)&0xf];
+     result[1] = hexdigit[num&0xf];
+     num >>= 8;
+    } while (num);
+
+  result -= 2;
+  result[0] = '0';
+  result[1] = 'x';
   return result;
 }
 

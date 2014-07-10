@@ -90,7 +90,7 @@ typedef unsigned char bool;
 
 #define CUDBG_API_VERSION_MAJOR       6 /* Major release version number */
 #define CUDBG_API_VERSION_MINOR       5 /* Minor release version number */
-#define CUDBG_API_VERSION_REVISION  120 /* Revision (build) number */
+#define CUDBG_API_VERSION_REVISION  121 /* Revision (build) number */
 
 /*---------------------------------- Constants -------------------------------*/
 
@@ -197,6 +197,7 @@ typedef enum {
     CUDBG_ERROR_WARP_RESUME_NOT_POSSIBLE    = 0x0029,  /* The resumeWarpsUntilPC() API is not possible, use resumeDevice() or singleStepWarp() instead */
     CUDBG_ERROR_INVALID_WARP_MASK           = 0x002a,  /* Specified warp mask is zero, or contains invalid warps */
     CUDBG_ERROR_AMBIGUOUS_MEMORY_ADDRESS    = 0x002b,  /* Address cannot be resolved to a GPU unambiguously */
+    CUDBG_ERROR_RECURSIVE_API_CALL          = 0x002c,  /* Debug API entry point called from within a debug API callback */
 } CUDBGResult;
 
 

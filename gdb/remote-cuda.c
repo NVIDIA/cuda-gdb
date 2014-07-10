@@ -137,6 +137,7 @@ cuda_initialize_remote_target ()
     }
   cuda_remote_set_option ();
   cuda_gdb_session_create ();
+  cuda_update_report_driver_api_error_flags ();
   cuda_initialize_driver_api_error_report ();
   cuda_initialize_driver_internal_error_report ();
 }
