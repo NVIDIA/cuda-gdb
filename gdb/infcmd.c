@@ -1597,6 +1597,9 @@ finish_command_continuation (void *arg, int err)
 	    internal_error (__FILE__, __LINE__,
 			    _("finish_command: function has no target type"));
 
+	  /* CUDA: Resolve typedef before comparing the type to void */
+	  CHECK_TYPEDEF (value_type);
+
 	  if (TYPE_CODE (value_type) != TYPE_CODE_VOID)
 	    {
 	      volatile struct gdb_exception ex;

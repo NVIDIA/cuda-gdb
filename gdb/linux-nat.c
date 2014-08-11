@@ -237,7 +237,7 @@ static LONGEST (*super_xfer_partial) (struct target_ops *,
 				      const gdb_byte *,
 				      ULONGEST, LONGEST);
 
-static unsigned int debug_linux_nat;
+unsigned int debug_linux_nat = 0;
 static void
 show_debug_linux_nat (struct ui_file *file, int from_tty,
 		      struct cmd_list_element *c, const char *value)

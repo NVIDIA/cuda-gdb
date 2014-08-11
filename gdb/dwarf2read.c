@@ -12414,6 +12414,12 @@ read_namespace (struct die_info *die, struct dwarf2_cu *cu)
 	  child_die = sibling_die (child_die);
 	}
     }
+
+  /* Leaving a new Fortran module.  */
+  if (cu->language == language_fortran)
+    {
+      f_module_leave();
+    }
 }
 
 /* Read a Fortran module as type.  This DIE can be only a declaration used for
@@ -12497,8 +12503,6 @@ read_module (struct die_info *die, struct dwarf2_cu *cu)
     {
       f_module_leave();
     }
-
-
 }
 
 /* Return the name of the namespace represented by DIE.  Set
@@ -16571,7 +16575,8 @@ new_symbol_full (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 
           /* Remember this symbol if it is for a Fortran module.  */
           if (cu->language == language_fortran &&
-              die->parent && die->parent->tag == DW_TAG_module)
+              die->parent && (die->parent->tag == DW_TAG_module ||
+                              die->parent->tag == DW_TAG_namespace))
             {
               f_module_sym_add(sym);
             }
@@ -16647,7 +16652,8 @@ new_symbol_full (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 
               /* Remember this symbol if it is for a Fortran module.  */
               if (cu->language == language_fortran &&
-                  die->parent && die->parent->tag == DW_TAG_module)
+                  die->parent && (die->parent->tag == DW_TAG_module ||
+                                  die->parent->tag == DW_TAG_namespace))
                 {
                   f_module_sym_add(sym);
                 }
@@ -16703,7 +16709,8 @@ new_symbol_full (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 
               /* Remember this symbol if it is for a Fortran module.  */
               if (cu->language == language_fortran &&
-                  die->parent && die->parent->tag == DW_TAG_module)
+                  die->parent && (die->parent->tag == DW_TAG_module ||
+                                  die->parent->tag == DW_TAG_namespace))
                 {
                   f_module_sym_add(sym);
                 }
