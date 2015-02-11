@@ -1,6 +1,6 @@
 		     README for CUDA-GDB release
 
-This is CUDA-GDB, the NVIDIA CUDA source-level debugger for Linux and Mac OS, based on GDB-7.6, the GNU source-level debugger.
+This is CUDA-GDB, the NVIDIA CUDA source-level debugger for Linux and Mac OS, based on GDB-7.7, the GNU source-level debugger.
 
 For more information about gdb, please refer to README file in this folder or check the GDB home page at http://www.gnu.org/software/gdb
 
