@@ -33,6 +33,87 @@
 /* These types below (native_*) define a siginfo type that is layout
    the most complete siginfo available for the architecture.  */
 
+typedef int nat_int_t;
+typedef void* nat_uptr_t;
+
+typedef int nat_time_t;
+typedef int nat_timer_t;
+typedef int nat_clock_t;
+
+struct nat_timeval
+{
+  nat_time_t tv_sec;
+  int tv_usec;
+};
+
+typedef union nat_sigval
+{
+  nat_int_t sival_int;
+  nat_uptr_t sival_ptr;
+} nat_sigval_t;
+
+typedef struct nat_siginfo
+{
+  int si_signo;
+  int si_errno;
+  int si_code;
+
+  union
+  {
+    int _pad[((128 / sizeof (int)) - 4)];
+    /* kill() */
+    struct
+    {
+      unsigned int _pid;
+      unsigned int _uid;
+    } _kill;
+
+    /* POSIX.1b timers */
+    struct
+    {
+      nat_timer_t _tid;
+      int _overrun;
+      nat_sigval_t _sigval;
+    } _timer;
+
+    /* POSIX.1b signals */
+    struct
+    {
+      unsigned int _pid;
+      unsigned int _uid;
+      nat_sigval_t _sigval;
+    } _rt;
+
+    /* SIGCHLD */
+    struct
+    {
+      unsigned int _pid;
+      unsigned int _uid;
+      int _status;
+      nat_clock_t _utime;
+      nat_clock_t _stime;
+    } _sigchld;
+
+    /* SIGILL, SIGFPE, SIGSEGV, SIGBUS */
+    struct
+    {
+      nat_uptr_t _addr;
+      short int _addr_lsb;
+      struct
+      {
+	nat_uptr_t _lower;
+	nat_uptr_t _upper;
+      } si_addr_bnd;
+    } _sigfault;
+
+    /* SIGPOLL */
+    struct
+    {
+      int _band;
+      int _fd;
+    } _sigpoll;
+  } _sifields __attribute__ ((__aligned__ (8)));
+} nat_siginfo_t __attribute__ ((__aligned__ (8)));
 
 
 /* These types below (compat_*) define a siginfo type that is layout
@@ -194,6 +275,8 @@ typedef struct compat_x32_siginfo
 #define cpt_si_ptr _sifields._rt._sigval.sival_ptr
 #define cpt_si_addr _sifields._sigfault._addr
 #define cpt_si_addr_lsb _sifields._sigfault._addr_lsb
+#define cpt_si_lower _sifields._sigfault.si_addr_bnd._lower
+#define cpt_si_upper _sifields._sigfault.si_addr_bnd._upper
 #define cpt_si_band _sifields._sigpoll._band
 #define cpt_si_fd _sifields._sigpoll._fd
 
@@ -209,56 +292,59 @@ typedef struct compat_x32_siginfo
 static void
 compat_siginfo_from_siginfo (compat_siginfo_t *to, siginfo_t *from)
 {
+  nat_siginfo_t from_1;
 
+  gdb_assert (sizeof (nat_siginfo_t) == sizeof (siginfo_t));
+  memcpy (&from_1, from, sizeof (from_1));
   memset (to, 0, sizeof (*to));
 
-  to->si_signo = from->si_signo;
-  to->si_errno = from->si_errno;
-  to->si_code = from->si_code;
+  to->si_signo = from_1.si_signo;
+  to->si_errno = from_1.si_errno;
+  to->si_code = from_1.si_code;
 
   if (to->si_code == SI_TIMER)
     {
-      to->cpt_si_timerid = from->si_timerid;
-      to->cpt_si_overrun = from->si_overrun;
-      to->cpt_si_ptr = (intptr_t) from->si_ptr;
+      to->cpt_si_timerid = from_1.cpt_si_timerid;
+      to->cpt_si_overrun = from_1.cpt_si_overrun;
+      to->cpt_si_ptr = (intptr_t) from_1.cpt_si_ptr;
     }
   else if (to->si_code == SI_USER)
     {
-      to->cpt_si_pid = from->si_pid;
-      to->cpt_si_uid = from->si_uid;
+      to->cpt_si_pid = from_1.cpt_si_pid;
+      to->cpt_si_uid = from_1.cpt_si_uid;
     }
   else if (to->si_code < 0)
     {
-      to->cpt_si_pid = from->si_pid;
-      to->cpt_si_uid = from->si_uid;
-      to->cpt_si_ptr = (intptr_t) from->si_ptr;
+      to->cpt_si_pid = from_1.cpt_si_pid;
+      to->cpt_si_uid = from_1.cpt_si_uid;
+      to->cpt_si_ptr = (intptr_t) from_1.cpt_si_ptr;
     }
   else
     {
       switch (to->si_signo)
 	{
 	case SIGCHLD:
-	  to->cpt_si_pid = from->si_pid;
-	  to->cpt_si_uid = from->si_uid;
-	  to->cpt_si_status = from->si_status;
-	  to->cpt_si_utime = from->si_utime;
-	  to->cpt_si_stime = from->si_stime;
+	  to->cpt_si_pid = from_1.cpt_si_pid;
+	  to->cpt_si_uid = from_1.cpt_si_uid;
+	  to->cpt_si_status = from_1.cpt_si_status;
+	  to->cpt_si_utime = from_1.cpt_si_utime;
+	  to->cpt_si_stime = from_1.cpt_si_stime;
 	  break;
 	case SIGILL:
 	case SIGFPE:
 	case SIGSEGV:
 	case SIGBUS:
-	  to->cpt_si_addr = (intptr_t) from->si_addr;
-	  to->cpt_si_addr_lsb = (short) from->si_addr_lsb;
+	  to->cpt_si_addr = (intptr_t) from_1.cpt_si_addr;
+	  to->cpt_si_addr_lsb = (short) from_1.cpt_si_addr_lsb;
 	  break;
 	case SIGPOLL:
-	  to->cpt_si_band = from->si_band;
-	  to->cpt_si_fd = from->si_fd;
+	  to->cpt_si_band = from_1.cpt_si_band;
+	  to->cpt_si_fd = from_1.cpt_si_fd;
 	  break;
 	default:
-	  to->cpt_si_pid = from->si_pid;
-	  to->cpt_si_uid = from->si_uid;
-	  to->cpt_si_ptr = (intptr_t) from->si_ptr;
+	  to->cpt_si_pid = from_1.cpt_si_pid;
+	  to->cpt_si_uid = from_1.cpt_si_uid;
+	  to->cpt_si_ptr = (intptr_t) from_1.cpt_si_ptr;
 	  break;
 	}
     }
@@ -267,58 +353,64 @@ compat_siginfo_from_siginfo (compat_siginfo_t *to, siginfo_t *from)
 static void
 siginfo_from_compat_siginfo (siginfo_t *to, compat_siginfo_t *from)
 {
-  memset (&to, 0, sizeof (to));
+  nat_siginfo_t to_1;
 
-  to->si_signo = from->si_signo;
-  to->si_errno = from->si_errno;
-  to->si_code = from->si_code;
+  gdb_assert (sizeof (nat_siginfo_t) == sizeof (siginfo_t));
+  memset (&to_1, 0, sizeof (to_1));
 
-  if (to->si_code == SI_TIMER)
+  to_1.si_signo = from->si_signo;
+  to_1.si_errno = from->si_errno;
+  to_1.si_code = from->si_code;
+
+  if (to_1.si_code == SI_TIMER)
     {
-      to->si_timerid = from->cpt_si_timerid;
-      to->si_overrun = from->cpt_si_overrun;
-      to->si_ptr = (void *) (intptr_t) from->cpt_si_ptr;
+      to_1.cpt_si_timerid = from->cpt_si_timerid;
+      to_1.cpt_si_overrun = from->cpt_si_overrun;
+      to_1.cpt_si_ptr = (void *) (intptr_t) from->cpt_si_ptr;
     }
-  else if (to->si_code == SI_USER)
+  else if (to_1.si_code == SI_USER)
     {
-      to->si_pid = from->cpt_si_pid;
-      to->si_uid = from->cpt_si_uid;
+      to_1.cpt_si_pid = from->cpt_si_pid;
+      to_1.cpt_si_uid = from->cpt_si_uid;
     }
-  if (to->si_code < 0)
+  if (to_1.si_code < 0)
     {
-      to->si_pid = from->cpt_si_pid;
-      to->si_uid = from->cpt_si_uid;
-      to->si_ptr = (void *) (intptr_t) from->cpt_si_ptr;
+      to_1.cpt_si_pid = from->cpt_si_pid;
+      to_1.cpt_si_uid = from->cpt_si_uid;
+      to_1.cpt_si_ptr = (void *) (intptr_t) from->cpt_si_ptr;
     }
   else
     {
-      switch (to->si_signo)
+      switch (to_1.si_signo)
 	{
 	case SIGCHLD:
-	  to->si_pid = from->cpt_si_pid;
-	  to->si_uid = from->cpt_si_uid;
-	  to->si_status = from->cpt_si_status;
-	  to->si_utime = from->cpt_si_utime;
-	  to->si_stime = from->cpt_si_stime;
+	  to_1.cpt_si_pid = from->cpt_si_pid;
+	  to_1.cpt_si_uid = from->cpt_si_uid;
+	  to_1.cpt_si_status = from->cpt_si_status;
+	  to_1.cpt_si_utime = from->cpt_si_utime;
+	  to_1.cpt_si_stime = from->cpt_si_stime;
 	  break;
 	case SIGILL:
 	case SIGFPE:
 	case SIGSEGV:
 	case SIGBUS:
-	  to->si_addr = (void *) (intptr_t) from->cpt_si_addr;
-	  to->si_addr_lsb = (short) from->cpt_si_addr_lsb;
+	  to_1.cpt_si_addr = (void *) (intptr_t) from->cpt_si_addr;
+	  to_1.cpt_si_addr_lsb = (short) from->cpt_si_addr_lsb;
+	  to_1.cpt_si_lower = (void *) (intptr_t) from->cpt_si_lower;
+	  to_1.cpt_si_upper = (void *) (intptr_t) from->cpt_si_upper;
 	  break;
 	case SIGPOLL:
-	  to->si_band = from->cpt_si_band;
-	  to->si_fd = from->cpt_si_fd;
+	  to_1.cpt_si_band = from->cpt_si_band;
+	  to_1.cpt_si_fd = from->cpt_si_fd;
 	  break;
 	default:
-	  to->si_pid = from->cpt_si_pid;
-	  to->si_uid = from->cpt_si_uid;
-	  to->si_ptr = (void* ) (intptr_t) from->cpt_si_ptr;
+	  to_1.cpt_si_pid = from->cpt_si_pid;
+	  to_1.cpt_si_uid = from->cpt_si_uid;
+	  to_1.cpt_si_ptr = (void* ) (intptr_t) from->cpt_si_ptr;
 	  break;
 	}
     }
+  memcpy (to, &to_1, sizeof (to_1));
 }
 
 
@@ -470,6 +562,7 @@ amd64_linux_siginfo_fixup_low (siginfo_t *native, gdb_byte *inf,
   else if (mode == X32_FIXUP)
     {
       gdb_assert (sizeof (siginfo_t) == sizeof (compat_x32_siginfo_t));
+      gdb_assert (sizeof (nat_siginfo_t) == sizeof (siginfo_t));
 
       if (direction == 0)
 	compat_x32_siginfo_from_siginfo ((struct compat_x32_siginfo *) inf,
