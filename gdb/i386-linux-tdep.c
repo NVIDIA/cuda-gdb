@@ -223,6 +223,135 @@ i386_linux_rt_sigtramp_start (struct frame_info *this_frame)
   return pc;
 }
 
+static struct type *i386_siginfo_t = NULL;
+
+/* This function is suitable for architectures that don't
+   extend/override the standard siginfo structure.  */
+
+struct type *
+i386_get_siginfo_type (struct gdbarch *gdbarch)
+{
+    struct type *int_type, *uint_type, *long_type, *void_ptr_type, *short_type;
+    struct type *uid_type, *pid_type;
+    struct type *sigval_type, *clock_type;
+    struct type *siginfo_type, *sifields_type, *sigfault_bnd_fields;
+    struct type *type;
+
+  if (i386_siginfo_t != NULL)
+    return i386_siginfo_t;
+
+
+  int_type = arch_integer_type (gdbarch, gdbarch_int_bit (gdbarch),
+				0, "int");
+  uint_type = arch_integer_type (gdbarch, gdbarch_int_bit (gdbarch),
+				 1, "unsigned int");
+  long_type = arch_integer_type (gdbarch, gdbarch_long_bit (gdbarch),
+				 0, "long");
+  short_type = arch_integer_type (gdbarch, gdbarch_long_bit (gdbarch),
+				 0, "short");
+  void_ptr_type = lookup_pointer_type (builtin_type (gdbarch)->builtin_void);
+
+  /* sival_t */
+  sigval_type = arch_composite_type (gdbarch, NULL, TYPE_CODE_UNION);
+  TYPE_NAME (sigval_type) = xstrdup ("sigval_t");
+  append_composite_type_field (sigval_type, "sival_int", int_type);
+  append_composite_type_field (sigval_type, "sival_ptr", void_ptr_type);
+
+  /* __pid_t */
+  pid_type = arch_type (gdbarch, TYPE_CODE_TYPEDEF,
+			TYPE_LENGTH (int_type), "__pid_t");
+  TYPE_TARGET_TYPE (pid_type) = int_type;
+  TYPE_TARGET_STUB (pid_type) = 1;
+
+  /* __uid_t */
+  uid_type = arch_type (gdbarch, TYPE_CODE_TYPEDEF,
+			TYPE_LENGTH (uint_type), "__uid_t");
+  TYPE_TARGET_TYPE (uid_type) = uint_type;
+  TYPE_TARGET_STUB (uid_type) = 1;
+
+  /* __clock_t */
+  clock_type = arch_type (gdbarch, TYPE_CODE_TYPEDEF,
+			  TYPE_LENGTH (long_type), "__clock_t");
+  TYPE_TARGET_TYPE (clock_type) = long_type;
+  TYPE_TARGET_STUB (clock_type) = 1;
+
+  /* _sifields */
+  sifields_type = arch_composite_type (gdbarch, NULL, TYPE_CODE_UNION);
+
+  {
+    const int si_max_size = 128;
+    int si_pad_size;
+    int size_of_int = gdbarch_int_bit (gdbarch) / HOST_CHAR_BIT;
+
+    /* _pad */
+    if (gdbarch_ptr_bit (gdbarch) == 64)
+      si_pad_size = (si_max_size / size_of_int) - 4;
+    else
+      si_pad_size = (si_max_size / size_of_int) - 3;
+    append_composite_type_field (sifields_type, "_pad",
+				 init_vector_type (int_type, si_pad_size));
+  }
+
+  /* _kill */
+  type = arch_composite_type (gdbarch, NULL, TYPE_CODE_STRUCT);
+  append_composite_type_field (type, "si_pid", pid_type);
+  append_composite_type_field (type, "si_uid", uid_type);
+  append_composite_type_field (sifields_type, "_kill", type);
+
+  /* _timer */
+  type = arch_composite_type (gdbarch, NULL, TYPE_CODE_STRUCT);
+  append_composite_type_field (type, "si_tid", int_type);
+  append_composite_type_field (type, "si_overrun", int_type);
+  append_composite_type_field (type, "si_sigval", sigval_type);
+  append_composite_type_field (sifields_type, "_timer", type);
+
+  /* _rt */
+  type = arch_composite_type (gdbarch, NULL, TYPE_CODE_STRUCT);
+  append_composite_type_field (type, "si_pid", pid_type);
+  append_composite_type_field (type, "si_uid", uid_type);
+  append_composite_type_field (type, "si_sigval", sigval_type);
+  append_composite_type_field (sifields_type, "_rt", type);
+
+  /* _sigchld */
+  type = arch_composite_type (gdbarch, NULL, TYPE_CODE_STRUCT);
+  append_composite_type_field (type, "si_pid", pid_type);
+  append_composite_type_field (type, "si_uid", uid_type);
+  append_composite_type_field (type, "si_status", int_type);
+  append_composite_type_field (type, "si_utime", clock_type);
+  append_composite_type_field (type, "si_stime", clock_type);
+  append_composite_type_field (sifields_type, "_sigchld", type);
+
+  /* _sigfault */
+  type = arch_composite_type (gdbarch, NULL, TYPE_CODE_STRUCT);
+  append_composite_type_field (type, "si_addr", void_ptr_type);
+  append_composite_type_field (type, "_addr_lsb", short_type);
+
+  sigfault_bnd_fields = arch_composite_type (gdbarch, NULL, TYPE_CODE_STRUCT);
+  append_composite_type_field (sigfault_bnd_fields, "_lower", void_ptr_type);
+  append_composite_type_field (sigfault_bnd_fields, "_upper", void_ptr_type);
+  append_composite_type_field (type, "_addr_bnd", sigfault_bnd_fields);
+  append_composite_type_field (sifields_type, "_sigfault", type);
+
+  /* _sigpoll */
+  type = arch_composite_type (gdbarch, NULL, TYPE_CODE_STRUCT);
+  append_composite_type_field (type, "si_band", long_type);
+  append_composite_type_field (type, "si_fd", int_type);
+  append_composite_type_field (sifields_type, "_sigpoll", type);
+
+  /* struct siginfo */
+  siginfo_type = arch_composite_type (gdbarch, NULL, TYPE_CODE_STRUCT);
+  TYPE_NAME (siginfo_type) = xstrdup ("siginfo");
+  append_composite_type_field (siginfo_type, "si_signo", int_type);
+  append_composite_type_field (siginfo_type, "si_errno", int_type);
+  append_composite_type_field (siginfo_type, "si_code", int_type);
+  append_composite_type_field_aligned (siginfo_type,
+				       "_sifields", sifields_type,
+				       TYPE_LENGTH (long_type));
+
+  i386_siginfo_t  = siginfo_type;
+  return siginfo_type;
+}
+
 /* Return whether THIS_FRAME corresponds to a GNU/Linux sigtramp
    routine.  */
 
@@ -994,6 +1123,8 @@ i386_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_xml_syscall_file_name (gdbarch, XML_SYSCALL_FILENAME_I386);
   set_gdbarch_get_syscall_number (gdbarch,
                                   i386_linux_get_syscall_number);
+
+  set_gdbarch_get_siginfo_type (gdbarch, i386_get_siginfo_type);
 }
 
 /* Provide a prototype to silence -Wmissing-prototypes.  */

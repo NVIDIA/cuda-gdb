@@ -1838,6 +1838,8 @@ amd64_linux_init_abi_common(struct gdbarch_info info, struct gdbarch *gdbarch)
 
   set_gdbarch_process_record (gdbarch, i386_process_record);
   set_gdbarch_process_record_signal (gdbarch, amd64_linux_record_signal);
+
+  set_gdbarch_get_siginfo_type (gdbarch, i386_get_siginfo_type);
 }
 
 static void
@@ -2055,6 +2057,7 @@ amd64_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_dtrace_probe_is_enabled (gdbarch, amd64_dtrace_probe_is_enabled);
   set_gdbarch_dtrace_enable_probe (gdbarch, amd64_dtrace_enable_probe);
   set_gdbarch_dtrace_disable_probe (gdbarch, amd64_dtrace_disable_probe);
+
 }
 
 static void
@@ -2265,6 +2268,8 @@ amd64_x32_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   /* GNU/Linux uses SVR4-style shared libraries.  */
   set_solib_svr4_fetch_link_map_offsets
     (gdbarch, svr4_ilp32_fetch_link_map_offsets);
+
+  set_gdbarch_get_siginfo_type (gdbarch, i386_get_siginfo_type);
 }
 
 

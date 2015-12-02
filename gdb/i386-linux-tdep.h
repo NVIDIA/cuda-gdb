@@ -37,6 +37,8 @@
 /* Get XSAVE extended state xcr0 from core dump.  */
 extern uint64_t i386_linux_core_read_xcr0 (bfd *abfd);
 
+extern struct type *i386_get_siginfo_type (struct gdbarch *gdbarch);
+
 /* Linux target description.  */
 extern struct target_desc *tdesc_i386_linux;
 extern struct target_desc *tdesc_i386_mmx_linux;
