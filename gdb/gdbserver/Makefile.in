@@ -595,6 +595,9 @@ arm.o: ../arch/arm.c
 x86-dregs.o: ../nat/x86-dregs.c
 	$(COMPILE) $<
 	$(POSTCOMPILE)
+x86-siginfo.o: ../nat/x86-siginfo.c
+	$(COMPILE) $<
+	$(POSTCOMPILE)
 linux-btrace.o: ../nat/linux-btrace.c
 	$(COMPILE) $<
 	$(POSTCOMPILE)
