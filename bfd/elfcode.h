@@ -816,8 +816,11 @@ elf_object_p (bfd *abfd)
 	 a dummy placeholder entry, so we ignore it.  */
       num_sec = elf_numsections (abfd);
       for (shindex = 1; shindex < num_sec; shindex++)
-	if (!bfd_section_from_shdr (abfd, shindex))
-	  goto got_no_match;
+        /* Ignore the return value here since an unrecognized section type
+           doesn't make the entire file unusable.  The unrecognized section
+           simply won't be examined, and bfd_section_from_shdr will have
+           emitted an error message.  */
+	bfd_section_from_shdr (abfd, shindex);
 
       /* Set up ELF sections for SHF_GROUP and SHF_LINK_ORDER.  */
       if (! _bfd_elf_setup_sections (abfd))

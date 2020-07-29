@@ -1,3 +1,9 @@
+2020-07-29  Roland McGrath  <mcgrathr@google.com>
+
+	* elfcode.h (elf_object_p): Ignore errors from individual
+	bfd_section_from_shdr calls so a novel section type appearing in
+	the input doesn't break target-matching.
+
 2020-07-29  Alan Modra  <amodra@gmail.com>
 
 	* elflink.c (bfd_elf_final_link): Don't segfault on local dynsyms
