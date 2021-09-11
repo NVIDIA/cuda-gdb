@@ -15,7 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-AUTOMAKE_OPTIONS = dejagnu foreign no-dist subdir-objects
+AUTOMAKE_OPTIONS = dejagnu foreign info-in-builddir no-dist subdir-objects
 ACLOCAL_AMFLAGS = -Im4 -I.. -I../config
 
 GNULIB_PARENT_DIR = ..
@@ -39,6 +39,7 @@ EXTRA_PROGRAMS =
 
 CLEANFILES =
 DISTCLEANFILES =
+MAINTAINERCLEANFILES =
 MOSTLYCLEANFILES = core
 
 AM_CFLAGS = $(WERROR_CFLAGS) $(WARN_CFLAGS)
@@ -81,6 +82,7 @@ pkginclude_HEADERS += \
 endif
 
 include common/local.mk
+include doc/local.mk
 if SIM_ENABLE_IGEN
 include igen/local.mk
 endif
