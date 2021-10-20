@@ -286,6 +286,11 @@ struct windows_nat_target final : public x86_nat_target<inf_child_target>
   int get_windows_debug_event (int pid, struct target_waitstatus *ourstatus);
 
   void do_initial_windows_stuff (DWORD pid, bool attaching);
+
+  void async (int) override;
+
+  bool can_async_p () override;
+  bool is_async_p () override;
 };
 
 static windows_nat_target the_windows_nat_target;
@@ -1415,6 +1420,8 @@ windows_nat_target::resume (ptid_t ptid, int step, enum gdb_signal sig)
     windows_continue (continue_status, -1, 0);
   else
     windows_continue (continue_status, ptid.lwp (), 0);
+
+  mark_infrun_async_event_handler ();
 }
 
 /* Ctrl-C handler used when the inferior is not run in the same console.  The
@@ -1499,7 +1506,7 @@ windows_nat_target::get_windows_debug_event (int pid,
 
   last_sig = GDB_SIGNAL_0;
 
-  if (!(debug_event = wait_for_debug_event (&current_event, 1000)))
+  if (!(debug_event = wait_for_debug_event (&current_event, 20)))
     goto out;
 
   continue_status = DBG_CONTINUE;
@@ -1794,6 +1801,17 @@ windows_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
 
 	  if (detach)
 	    kill ();
+
+	  /* No interesting event to report to the core.  */
+
+	  if (options & TARGET_WNOHANG)
+	    {
+	      // linux_nat_debug_printf ("exit (ignore)");
+
+	      mark_infrun_async_event_handler ();
+	      ourstatus->kind = TARGET_WAITKIND_IGNORE;
+	      return minus_one_ptid;
+	    }
 	}
     }
 }
@@ -3095,6 +3113,31 @@ windows_nat_target::thread_name (struct thread_info *thr)
   return thread_rec (thr->ptid, DONT_INVALIDATE_CONTEXT)->name.get ();
 }
 
+/* target_async implementation.  */
+
+void
+windows_nat_target::async (int enable)
+{
+  return;
+}
+
+/* target_is_async_p implementation.  */
+
+bool
+windows_nat_target::is_async_p ()
+{
+  return 1;
+}
+
+/* target_can_async_p implementation.  */
+
+bool
+windows_nat_target::can_async_p ()
+{
+  /* We're always async, unless the user explicitly prevented it with
+     the "maint set target-async" command.  */
+  return target_async_permitted;
+}
 
 void _initialize_windows_nat ();
 void
