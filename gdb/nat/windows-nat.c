@@ -98,6 +98,9 @@ windows_thread_info::suspend ()
 	warning (_("SuspendThread (tid=0x%x) failed. (winerr %u)"),
 		 (unsigned) tid, (unsigned) err);
       suspended = -1;
+      warning (_("SuspendThread (tid=0x%x) failed. (winerr %u)"),
+	       (unsigned) tid, (unsigned) err);
+      gdb_assert (0);
     }
   else
     suspended = 1;
@@ -560,8 +563,9 @@ continue_last_debug_event (DWORD continue_status, bool debug_events)
   DEBUG_EVENTS ("ContinueDebugEvent (cpid=%d, ctid=0x%x, %s)",
 		(unsigned) last_wait_event.dwProcessId,
 		(unsigned) last_wait_event.dwThreadId,
-		continue_status == DBG_CONTINUE ?
-		"DBG_CONTINUE" : "DBG_EXCEPTION_NOT_HANDLED");
+		continue_status == DBG_CONTINUE ? "DBG_CONTINUE" :
+		continue_status == DBG_EXCEPTION_NOT_HANDLED ? "DBG_EXCEPTION_NOT_HANDLED" :
+		"DBG_REPLY_LATER");
 
   return ContinueDebugEvent (last_wait_event.dwProcessId,
 			     last_wait_event.dwThreadId,

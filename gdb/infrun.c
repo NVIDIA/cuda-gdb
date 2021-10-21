@@ -4622,6 +4622,10 @@ wait_one ()
 	    return event;
 	}
 
+      /* XXX: 'target->async_wait_fd ()' not implemented on Windows.
+	 Continue polling.  */
+      continue;
+
       /* Block waiting for some event.  */
 
       fd_set readfds;

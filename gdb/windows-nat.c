@@ -291,6 +291,8 @@ struct windows_nat_target final : public x86_nat_target<inf_child_target>
 
   bool can_async_p () override;
   bool is_async_p () override;
+
+  bool supports_non_stop () override;
 };
 
 static windows_nat_target the_windows_nat_target;
@@ -337,13 +339,19 @@ windows_nat::thread_rec (ptid_t ptid, thread_disposition_type disposition)
 		/* Nothing.  */
 		break;
 	      case INVALIDATE_CONTEXT:
+#if 0
 		if (ptid.lwp () != current_event.dwThreadId)
 		  th->suspend ();
+#endif
 		th->reload_context = true;
 		break;
 	      case DONT_SUSPEND:
 		th->reload_context = true;
-		th->suspended = -1;
+
+		/* We'll actually want to suspend the event thread for
+		   DBG_REPLY_LATER.  Setting this to -1 would prevent
+		   it.  */
+		// th->suspended = -1;
 		break;
 	      }
 	  }
@@ -1189,8 +1197,6 @@ windows_nat::handle_access_violation (const EXCEPTION_RECORD *rec)
 static BOOL
 windows_continue (DWORD continue_status, int id, int killed)
 {
-  BOOL res;
-
   desired_stop_thread_id = id;
 
   if (matching_pending_stop (debug_events))
@@ -1259,23 +1265,27 @@ windows_continue (DWORD continue_status, int id, int killed)
 	      }
 	  }
 	th->resume ();
+	gdb_assert (th->suspended == 0);
       }
     else
       {
 	/* When single-stepping a specific thread, other threads must
 	   be suspended.  */
-	th->suspend ();
+	//	th->suspend ();
       }
 
-  res = continue_last_debug_event (continue_status, debug_events);
+  if (!windows_initialization_done || !non_stop)
+    {
+      BOOL res = continue_last_debug_event (continue_status, debug_events);
 
-  if (!res)
-    error (_("Failed to resume program execution"
-	     " (ContinueDebugEvent failed, error %u)"),
-	   (unsigned int) GetLastError ());
+      if (!res)
+	error (_("Failed to resume program execution"
+		 " (ContinueDebugEvent failed, error %u)"),
+	       (unsigned int) GetLastError ());
+    }
 
   debug_registers_changed = 0;
-  return res;
+  return TRUE;
 }
 
 /* Called in pathological case where Windows fails to send a
@@ -1317,6 +1327,9 @@ windows_nat_target::resume (ptid_t ptid, int step, enum gdb_signal sig)
 
   if (sig != GDB_SIGNAL_0)
     {
+      /* XXX: shouldn't look at current_event, which is unrelated to
+	 the thread we're resuming in non-stop mode.  Also, should
+	 store 'continue_status' in th->auto_cont.  */
       if (current_event.dwDebugEventCode != EXCEPTION_DEBUG_EVENT)
 	{
 	  DEBUG_EXCEPT ("Cannot continue with signal %d here.", sig);
@@ -1357,6 +1370,9 @@ windows_nat_target::resume (ptid_t ptid, int step, enum gdb_signal sig)
   th = thread_rec (inferior_ptid, DONT_INVALIDATE_CONTEXT);
   if (th)
     {
+      if (th->auto_cont != 0)
+	th->auto_cont = continue_status;
+
 #ifdef __x86_64__
       if (wow64_process)
 	{
@@ -1689,7 +1705,9 @@ windows_nat_target::get_windows_debug_event (int pid,
     {
       CHECK (windows_continue (continue_status, desired_stop_thread_id, 0));
     }
-  else if (desired_stop_thread_id != -1 && desired_stop_thread_id != thread_id)
+  else if (!non_stop
+	   && desired_stop_thread_id != -1
+	   && desired_stop_thread_id != thread_id)
     {
       /* Pending stop.  See the comment by the definition of
 	 "pending_stops" for details on why this is needed.  */
@@ -1776,6 +1794,21 @@ windows_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
 
 	      if (th != nullptr)
 		{
+		  if (th->auto_cont != 0)
+		    {
+		      DEBUG_EVENTS ("auto-cont");
+		      BOOL res = continue_last_debug_event (th->auto_cont,
+							    debug_events);
+
+		      th->auto_cont = 0;
+
+		      if (!res)
+			error (_("Failed to auto-continue thread"
+				 " (ContinueDebugEvent failed, error %u)"),
+			       (unsigned int) GetLastError ());
+		      continue;
+		    }
+
 		  th->stopped_at_software_breakpoint = false;
 		  if (current_event.dwDebugEventCode == EXCEPTION_DEBUG_EVENT
 		      && ((current_event.u.Exception.ExceptionRecord.ExceptionCode
@@ -1787,9 +1820,44 @@ windows_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
 		      th->stopped_at_software_breakpoint = true;
 		      th->pc_adjusted = false;
 		    }
+
+		  if (windows_initialization_done
+		      && ourstatus->kind == TARGET_WAITKIND_SPURIOUS)
+		    {
+		      DEBUG_EVENTS ("TARGET_WAITKIND_SPURIOUS -> DBG_CONTINUE");
+
+		      BOOL res = continue_last_debug_event (DBG_CONTINUE,
+							    debug_events);
+		      if (!res)
+			error (_("Failed to DBG_CONTINUE internal event"
+				 " (ContinueDebugEvent failed, error %u)"),
+			       (unsigned int) GetLastError ());
+
+		      continue;
+		    }
+		}
+
+#ifndef DBG_REPLY_LATER
+# define DBG_REPLY_LATER 0x40010001L
+#endif
+
+	      if (windows_initialization_done && non_stop)
+		{
+		  gdb_assert (th->suspended == 0);
+		  th->suspend ();
+		  gdb_assert (th->suspended != 0);
+		  th->auto_cont = DBG_CONTINUE;
+		  BOOL res = continue_last_debug_event (DBG_REPLY_LATER,
+							debug_events);
+
+		  if (!res)
+		    error (_("Failed to defer event with DBG_REPLY_LATER"
+			     " (ContinueDebugEvent failed, error %u)"),
+			   (unsigned int) GetLastError ());
 		}
 	    }
 
+	  mark_infrun_async_event_handler ();
 	  return result;
 	}
       else
@@ -2858,6 +2926,25 @@ windows_nat_target::create_inferior (const char *exec_file,
 
   do_initial_windows_stuff (pi.dwProcessId, 0);
 
+  if (non_stop)
+    {
+      ptid_t ptid = ptid_t (current_event.dwProcessId,
+			    current_event.dwThreadId);
+      windows_thread_info *th = thread_rec (ptid, DONT_INVALIDATE_CONTEXT);
+
+      th->auto_cont = DBG_CONTINUE;
+
+      th->suspend ();
+
+      BOOL res = continue_last_debug_event (DBG_REPLY_LATER,
+					    debug_events);
+
+      if (!res)
+	error (_("Failed to defer event with DBG_REPLY_LATER"
+		 " (ContinueDebugEvent failed, error %u)"),
+	       (unsigned int) GetLastError ());
+    }
+
   /* windows_continue (DBG_CONTINUE, -1, 0); */
 }
 
@@ -3137,6 +3224,12 @@ windows_nat_target::can_async_p ()
   /* We're always async, unless the user explicitly prevented it with
      the "maint set target-async" command.  */
   return target_async_permitted;
+}
+
+bool
+windows_nat_target::supports_non_stop ()
+{
+  return true;
 }
 
 void _initialize_windows_nat ();

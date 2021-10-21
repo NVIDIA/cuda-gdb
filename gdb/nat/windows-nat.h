@@ -62,6 +62,12 @@ struct windows_thread_info
   /* Thread Information Block address.  */
   CORE_ADDR thread_local_base;
 
+  /* If the thread had its event postponed with DBG_REPLY_LATER, when
+     we later ResumeThread this thread, it'll re-report the event.
+     This field holds the DBG_XXX value to pass to ContinueDebugEvent
+     then.  0 if the thread has not had its event postponed.  */
+  DWORD auto_cont = 0;
+
   /* This keeps track of whether SuspendThread was called on this
      thread.  -1 means there was a failure or that the thread was
      explicitly not suspended, 1 means it was called, and 0 means it
