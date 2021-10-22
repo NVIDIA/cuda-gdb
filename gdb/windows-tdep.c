@@ -923,6 +923,157 @@ windows_solib_create_inferior_hook (int from_tty)
 
 static struct target_so_ops windows_so_ops;
 
+/* See linux-tdep.h.  */
+
+static CORE_ADDR
+linux_displaced_step_location (struct gdbarch *gdbarch)
+{
+  CORE_ADDR addr;
+  int bp_len;
+
+  /* Determine entry point from target auxiliary vector.  This avoids
+     the need for symbols.  Also, when debugging a stand-alone SPU
+     executable, entry_point_address () will point to an SPU
+     local-store address and is thus not usable as displaced stepping
+     location.  The auxiliary vector gets us the PowerPC-side entry
+     point address instead.  */
+  if (target_auxv_search (current_inferior ()->top_target (),
+			  AT_ENTRY, &addr) <= 0)
+    throw_error (NOT_SUPPORTED_ERROR,
+		 _("Cannot find AT_ENTRY auxiliary vector entry."));
+
+  /* Make certain that the address points at real code, and not a
+     function descriptor.  */
+  addr = gdbarch_convert_from_func_ptr_addr
+    (gdbarch, addr, current_inferior ()->top_target ());
+
+  /* Inferior calls also use the entry point as a breakpoint location.
+     We don't want displaced stepping to interfere with those
+     breakpoints, so leave space.  */
+  gdbarch_breakpoint_from_pc (gdbarch, &addr, &bp_len);
+  addr += bp_len * 2;
+
+  return addr;
+}
+
+/* Linux-specific cached data.  This is used by GDB for caching
+   purposes for each inferior.  This helps reduce the overhead of
+   transfering data from a remote target to the local host.  */
+struct linux_info
+{
+  /* Inferior's displaced step buffers.  */
+  gdb::optional<displaced_step_buffers> disp_step_bufs;
+};
+
+/* Per-inferior data key.  */
+static const struct inferior_key<linux_info> linux_inferior_data;
+
+/* Frees whatever allocated space there is to be freed and sets INF's
+   linux cache data pointer to NULL.  */
+
+static void
+invalidate_linux_cache_inf (struct inferior *inf)
+{
+  linux_inferior_data.clear (inf);
+}
+
+/* Fetch the linux cache info for INF.  This function always returns a
+   valid INFO pointer.  */
+
+static struct linux_info *
+get_linux_inferior_data (inferior *inf)
+{
+  linux_info *info = linux_inferior_data.get (inf);
+
+  if (info == nullptr)
+    info = linux_inferior_data.emplace (inf);
+
+  return info;
+}
+
+/* See linux-tdep.h.  */
+
+/* Fetch the linux cache info for INF.  This function always returns a
+   valid INFO pointer.  */
+
+static struct linux_info *
+get_linux_inferior_data (inferior *inf)
+{
+  linux_info *info = linux_inferior_data.get (inf);
+
+  if (info == nullptr)
+    info = linux_inferior_data.emplace (inf);
+
+  return info;
+}
+
+static displaced_step_prepare_status
+linux_displaced_step_prepare (gdbarch *arch, thread_info *thread,
+			      CORE_ADDR &displaced_pc)
+{
+  linux_info *per_inferior = get_linux_inferior_data (thread->inf);
+
+  if (!per_inferior->disp_step_bufs.has_value ())
+    {
+      /* Figure out the location of the buffers.  They are contiguous, starting
+	 at DISP_STEP_BUF_ADDR.  They are all of size BUF_LEN.  */
+      CORE_ADDR disp_step_buf_addr
+	= linux_displaced_step_location (thread->inf->gdbarch);
+      int buf_len = gdbarch_max_insn_length (arch);
+
+      linux_gdbarch_data *gdbarch_data = get_linux_gdbarch_data (arch);
+      gdb_assert (gdbarch_data->num_disp_step_buffers > 0);
+
+      std::vector<CORE_ADDR> buffers;
+      for (int i = 0; i < gdbarch_data->num_disp_step_buffers; i++)
+	buffers.push_back (disp_step_buf_addr + i * buf_len);
+
+      per_inferior->disp_step_bufs.emplace (buffers);
+    }
+
+  return per_inferior->disp_step_bufs->prepare (thread, displaced_pc);
+}
+
+/* See linux-tdep.h.  */
+
+static displaced_step_finish_status
+linux_displaced_step_finish (gdbarch *arch, thread_info *thread, gdb_signal sig)
+{
+  linux_info *per_inferior = get_linux_inferior_data (thread->inf);
+
+  gdb_assert (per_inferior->disp_step_bufs.has_value ());
+
+  return per_inferior->disp_step_bufs->finish (arch, thread, sig);
+}
+
+/* See linux-tdep.h.  */
+
+static const displaced_step_copy_insn_closure *
+linux_displaced_step_copy_insn_closure_by_addr (inferior *inf, CORE_ADDR addr)
+{
+  linux_info *per_inferior = linux_inferior_data.get (inf);
+
+  if (per_inferior == nullptr
+      || !per_inferior->disp_step_bufs.has_value ())
+    return nullptr;
+
+  return per_inferior->disp_step_bufs->copy_insn_closure_by_addr (addr);
+}
+
+/* See linux-tdep.h.  */
+
+static void
+linux_displaced_step_restore_all_in_ptid (inferior *parent_inf, ptid_t ptid)
+{
+  linux_info *per_inferior = linux_inferior_data.get (parent_inf);
+
+  if (per_inferior == nullptr
+      || !per_inferior->disp_step_bufs.has_value ())
+    return;
+
+  per_inferior->disp_step_bufs->restore_in_ptid (ptid);
+}
+
 /* Common parts for gdbarch initialization for the Windows and Cygwin OS
    ABIs.  */
 
@@ -945,6 +1096,21 @@ windows_init_abi_common (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_solib_ops (gdbarch, &windows_so_ops);
 
   set_gdbarch_get_siginfo_type (gdbarch, windows_get_siginfo_type);
+
+  int num_disp_step_buffers = 1;
+  if (num_disp_step_buffers > 0)
+    {
+      //      linux_gdbarch_data *gdbarch_data = get_linux_gdbarch_data (gdbarch);
+      // gdbarch_data->num_disp_step_buffers = num_disp_step_buffers;
+
+      set_gdbarch_displaced_step_prepare (gdbarch,
+					  linux_displaced_step_prepare);
+      set_gdbarch_displaced_step_finish (gdbarch, linux_displaced_step_finish);
+      set_gdbarch_displaced_step_copy_insn_closure_by_addr
+	(gdbarch, linux_displaced_step_copy_insn_closure_by_addr);
+      set_gdbarch_displaced_step_restore_all_in_ptid
+	(gdbarch, linux_displaced_step_restore_all_in_ptid);
+    }
 }
 
 /* See windows-tdep.h.  */
