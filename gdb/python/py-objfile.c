@@ -211,18 +211,45 @@ objfpy_initialize (objfile_object *self)
   return 1;
 }
 
-static PyObject *
-objfpy_new (PyTypeObject *type, PyObject *args, PyObject *keywords)
-{
-  gdbpy_ref<objfile_object> self ((objfile_object *) type->tp_alloc (type, 0));
+/* Object initializer; creates new objfile in current program space. 
 
-  if (self != NULL)
+   Use: __init__(NAME).  */
+
+static int
+objfpy_init (PyObject *zelf, PyObject *args, PyObject *kw)
+{
+  struct objfile_object *self = (struct objfile_object*) zelf;
+
+  if (self->objfile)
     {
-      if (!objfpy_initialize (self.get ()))
-	return NULL;
+      PyErr_Format (PyExc_RuntimeError,
+		    _("Objfile object already initialized."));
+      return -1;
     }
 
-  return (PyObject *) self.release ();
+   static const char *keywords[] = { "name", NULL };
+   const char *name;
+
+   if (!gdb_PyArg_ParseTupleAndKeywords (args, kw, "s",
+					keywords, &name))
+    return -1;
+
+  if (!objfpy_initialize (self))
+    {      
+      PyErr_Format (PyExc_RuntimeError,
+		    _("Failed to initialize Objfile object."));
+      return -1;
+    }
+
+  struct objfile *objfile;
+  
+  objfile = objfile::make (nullptr, name, OBJF_NOT_FILENAME | OBJF_READNOW);
+  objfile->per_bfd->gdbarch = target_gdbarch ();
+  
+  self->objfile = objfile;  
+  set_objfile_data (objfile, objfpy_objfile_data_key, gdbpy_ref<objfile_object>::new_reference (self).get ());
+  
+  return 0;
 }
 
 PyObject *
@@ -801,8 +828,8 @@ PyTypeObject objfile_object_type =
   0,				  /* tp_dict */
   0,				  /* tp_descr_get */
   0,				  /* tp_descr_set */
-  offsetof (objfile_object, dict), /* tp_dictoffset */
-  0,				  /* tp_init */
+  offsetof (objfile_object, dict),/* tp_dictoffset */
+  objfpy_init,	                  /* tp_init */
   0,				  /* tp_alloc */
-  objfpy_new,			  /* tp_new */
+  PyType_GenericNew,		  /* tp_new */
 };

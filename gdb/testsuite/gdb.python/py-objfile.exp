@@ -172,4 +172,12 @@ if ![ishost *-*-mingw*] {
 gdb_py_test_silent_cmd "python objfile = gdb.objfiles()\[0\]" \
     "get first objfile" 1
 gdb_file_cmd ${binfile}
-gdb_test "python print(objfile)" "<gdb.Objfile \\\(invalid\\\)>"
+gdb_test "python print(objfile)" "<gdb.Objfile \\\(invalid\\\)>" "print invalid objfile"
+
+# Test creating objfile dynamically from Python
+gdb_py_test_silent_cmd "python objfile = gdb.Objfile(\"Test objfile\")" \
+	"create objfile" 1
+
+gdb_test "python print(objfile)" \
+	"<gdb.Objfile filename=Test objfile>" \
+	"print dynamic objfile"
