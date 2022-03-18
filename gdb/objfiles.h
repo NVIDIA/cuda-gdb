@@ -769,6 +769,13 @@ public:
      next time.  If an objfile does not have the symbols, it will
      never have them.  */
   bool skip_jit_symbol_lookup = false;
+
+  /* Return true if this objfile is dynamic (created by JIT reader API or
+     by from Python by instantiating gdb.Objfile object).  */
+  bool is_dynamic() const
+  {
+    return this->obfd == nullptr;
+  }
 };
 
 /* A deleter for objfile.  */

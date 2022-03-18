@@ -92,6 +92,8 @@ gdb_test "python print (objfile.progspace)" "<gdb\.Progspace object at .*>" \
   "Get objfile program space"
 gdb_test "python print (objfile.is_valid())" "True" \
   "Get objfile validity"
+gdb_test "python print (objfile.is_dynamic)" "False" \
+  "Check is_dynamic() returns False"
 gdb_unload
 gdb_test "python print (objfile.is_valid())" "False" \
   "Get objfile validity after unload"
@@ -181,3 +183,6 @@ gdb_py_test_silent_cmd "python objfile = gdb.Objfile(\"Test objfile\")" \
 gdb_test "python print(objfile)" \
 	"<gdb.Objfile filename=Test objfile>" \
 	"print dynamic objfile"
+
+gdb_test "python print (objfile.is_dynamic)" "True" \
+  "Check is_dynamic() returns True for Python-created objfile"
