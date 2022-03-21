@@ -673,7 +673,7 @@ objfile_relocate1 (struct objfile *objfile,
 	if (BLOCKVECTOR_MAP (bv))
 	  addrmap_relocate (BLOCKVECTOR_MAP (bv), delta[block_line_section]);
 
-	for (int i = 0; i < BLOCKVECTOR_NBLOCKS (bv); ++i)
+	for (int i = 0; i < bv->nblocks (); ++i)
 	  {
 	    struct block *b;
 	    struct symbol *sym;

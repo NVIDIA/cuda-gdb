@@ -455,7 +455,7 @@ buildsym_compunit::make_blockvector ()
      each block into the list after its subblocks in order to make
      sure this is true.  */
 
-  BLOCKVECTOR_NBLOCKS (blockvector) = i;
+  blockvector->set_nblocks (i);
   for (next = m_pending_blocks; next; next = next->next)
     {
       BLOCKVECTOR_BLOCK (blockvector, --i) = next->block;
@@ -477,9 +477,9 @@ buildsym_compunit::make_blockvector ()
      Note: Remember that the first two blocks are the global and static
      blocks.  We could special case that fact and begin checking at block 2.
      To avoid making that assumption we do not.  */
-  if (BLOCKVECTOR_NBLOCKS (blockvector) > 1)
+  if (blockvector->nblocks () > 1)
     {
-      for (i = 1; i < BLOCKVECTOR_NBLOCKS (blockvector); i++)
+      for (i = 1; i < blockvector->nblocks (); i++)
 	{
 	  if (BLOCK_START (BLOCKVECTOR_BLOCK (blockvector, i - 1))
 	      > BLOCK_START (BLOCKVECTOR_BLOCK (blockvector, i)))
@@ -1035,7 +1035,7 @@ buildsym_compunit::end_compunit_symtab_with_blockvector
     /* The main source file's symtab.  */
     struct symtab *symtab = cu->primary_filetab ();
 
-    for (block_i = 0; block_i < BLOCKVECTOR_NBLOCKS (blockvector); block_i++)
+    for (block_i = 0; block_i < blockvector->nblocks (); block_i++)
       {
 	struct block *block = BLOCKVECTOR_BLOCK (blockvector, block_i);
 	struct symbol *sym;

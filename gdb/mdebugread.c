@@ -1166,7 +1166,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 
 	  /* f77 emits proc-level with address bounds==[0,0],
 	     So look for such child blocks, and patch them.  */
-	  for (i = 0; i < BLOCKVECTOR_NBLOCKS (bv); i++)
+	  for (i = 0; i < bv->nblocks (); i++)
 	    {
 	      struct block *b_bad = BLOCKVECTOR_BLOCK (bv, i);
 
@@ -4501,12 +4501,13 @@ add_block (struct block *b, struct symtab *s)
 
   bv = (struct blockvector *) xrealloc ((void *) bv,
 					(sizeof (struct blockvector)
-					 + BLOCKVECTOR_NBLOCKS (bv)
+					 + bv->nblocks ()
 					 * sizeof (bv->block)));
   if (bv != s->blockvector ())
     s->compunit ()->set_blockvector (bv);
 
-  BLOCKVECTOR_BLOCK (bv, BLOCKVECTOR_NBLOCKS (bv)++) = b;
+  BLOCKVECTOR_BLOCK (bv, bv->nblocks ()) = b;
+  bv->set_nblocks (bv->nblocks () + 1);
 }
 
 /* Add a new linenumber entry (LINENO,ADR) to a linevector LT.
@@ -4569,7 +4570,7 @@ sort_blocks (struct symtab *s)
      constructing the blockvector in this code.  */
   struct blockvector *bv = (struct blockvector *) s->blockvector ();
 
-  if (BLOCKVECTOR_NBLOCKS (bv) <= FIRST_LOCAL_BLOCK)
+  if (bv->nblocks () <= FIRST_LOCAL_BLOCK)
     {
       /* Cosmetic */
       if (BLOCK_END (BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK)) == 0)
@@ -4584,14 +4585,14 @@ sort_blocks (struct symtab *s)
    * are very different.  It would be nice to find a reliable test
    * to detect -O3 images in advance.
    */
-  if (BLOCKVECTOR_NBLOCKS (bv) > FIRST_LOCAL_BLOCK + 1)
+  if (bv->nblocks () > FIRST_LOCAL_BLOCK + 1)
     std::sort (&BLOCKVECTOR_BLOCK (bv, FIRST_LOCAL_BLOCK),
-	       &BLOCKVECTOR_BLOCK (bv, BLOCKVECTOR_NBLOCKS (bv)),
+	       &BLOCKVECTOR_BLOCK (bv, bv->nblocks ()),
 	       block_is_less_than);
 
   {
     CORE_ADDR high = 0;
-    int i, j = BLOCKVECTOR_NBLOCKS (bv);
+    int i, j = bv->nblocks ();
 
     for (i = FIRST_LOCAL_BLOCK; i < j; i++)
       if (high < BLOCK_END (BLOCKVECTOR_BLOCK (bv, i)))
@@ -4709,7 +4710,7 @@ new_bvect (int nblocks)
   size = sizeof (struct blockvector) + nblocks * sizeof (struct block *);
   bv = (struct blockvector *) xzalloc (size);
 
-  BLOCKVECTOR_NBLOCKS (bv) = nblocks;
+  bv->set_nblocks (nblocks);
 
   return bv;
 }

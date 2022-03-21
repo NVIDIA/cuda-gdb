@@ -565,7 +565,7 @@ finalize_symtab (struct gdb_symtab *stab, struct objfile *objfile)
   BLOCKVECTOR_MAP (bv) = NULL;
   begin = stab->blocks.front ().begin;
   end = stab->blocks.front ().end;
-  BLOCKVECTOR_NBLOCKS (bv) = actual_nblocks;
+  bv->set_nblocks (actual_nblocks);
 
   /* First run over all the gdb_block objects, creating a real block
      object for each.  Simultaneously, keep setting the real_block

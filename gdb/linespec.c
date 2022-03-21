@@ -1190,7 +1190,7 @@ iterate_over_all_matching_symtabs
 		  int i;
 
 		  for (i = FIRST_LOCAL_BLOCK;
-		       i < BLOCKVECTOR_NBLOCKS (symtab->blockvector ());
+		       i < symtab->blockvector ()->nblocks ();
 		       i++)
 		    {
 		      block = BLOCKVECTOR_BLOCK (symtab->blockvector (), i);

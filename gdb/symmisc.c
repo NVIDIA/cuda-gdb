@@ -279,7 +279,7 @@ dump_symtab_1 (struct symtab *symtab, struct ui_file *outfile)
     {
       gdb_printf (outfile, "\nBlockvector:\n\n");
       bv = symtab->blockvector ();
-      len = BLOCKVECTOR_NBLOCKS (bv);
+      len = bv->nblocks ();
       for (i = 0; i < len; i++)
 	{
 	  b = BLOCKVECTOR_BLOCK (bv, i);

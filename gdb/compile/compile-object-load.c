@@ -422,7 +422,7 @@ get_out_value_type (struct symbol *func_sym, struct objfile *objfile,
 				 symbol_name_match_type::SEARCH_NAME);
 
   bv = func_sym->owner.symtab->blockvector ();
-  nblocks = BLOCKVECTOR_NBLOCKS (bv);
+  nblocks = bv->nblocks ();
 
   gdb_ptr_type_sym = NULL;
   for (block_loop = 0; block_loop < nblocks; block_loop++)

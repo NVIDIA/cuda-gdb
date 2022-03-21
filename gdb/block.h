@@ -191,8 +191,22 @@ struct global_block
 
 struct blockvector
 {
+  int nblocks () const
+  {
+    return m_nblocks;
+  }
+
+  void set_nblocks (int nblocks)
+  {
+    m_nblocks = nblocks;
+  }
+
+ private:
+
   /* Number of blocks in the list.  */
-  int nblocks;
+  int m_nblocks;
+
+ public:
   /* An address map mapping addresses to blocks in this blockvector.
      This pointer is zero if the blocks' start and end addresses are
      enough.  */
@@ -201,7 +215,6 @@ struct blockvector
   struct block *block[1];
 };
 
-#define BLOCKVECTOR_NBLOCKS(blocklist) (blocklist)->nblocks
 #define BLOCKVECTOR_BLOCK(blocklist,n) (blocklist)->block[n]
 #define BLOCKVECTOR_MAP(blocklist) ((blocklist)->map)
 

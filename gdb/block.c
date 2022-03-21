@@ -147,9 +147,9 @@ find_block_in_blockvector (const struct blockvector *bl, CORE_ADDR pc)
      They both have the same START,END values.
      Historically this code would choose STATIC_BLOCK over GLOBAL_BLOCK but the
      fact that this choice was made was subtle, now we make it explicit.  */
-  gdb_assert (BLOCKVECTOR_NBLOCKS (bl) >= 2);
+  gdb_assert (bl->nblocks () >= 2);
   bot = STATIC_BLOCK;
-  top = BLOCKVECTOR_NBLOCKS (bl);
+  top = bl->nblocks ();
 
   while (top - bot > 1)
     {
