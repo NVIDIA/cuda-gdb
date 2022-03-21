@@ -364,7 +364,7 @@ gdbscm_symtab_global_block (SCM self)
   const struct block *block;
 
   blockvector = symtab->blockvector ();
-  block = BLOCKVECTOR_BLOCK (blockvector, GLOBAL_BLOCK);
+  block = blockvector->block (GLOBAL_BLOCK);
 
   return bkscm_scm_from_block (block, symtab->objfile ());
 }
@@ -382,7 +382,7 @@ gdbscm_symtab_static_block (SCM self)
   const struct block *block;
 
   blockvector = symtab->blockvector ();
-  block = BLOCKVECTOR_BLOCK (blockvector, STATIC_BLOCK);
+  block = blockvector->block (STATIC_BLOCK);
 
   return bkscm_scm_from_block (block, symtab->objfile ());
 }

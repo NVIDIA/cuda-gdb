@@ -628,8 +628,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
       break;
 
     case stGlobal:		/* External symbol, goes into global block.  */
-      b = BLOCKVECTOR_BLOCK (top_stack->cur_st->blockvector (),
-			     GLOBAL_BLOCK);
+      b = top_stack->cur_st->blockvector ()->block (GLOBAL_BLOCK);
       s = new_symbol (name);
       SET_SYMBOL_VALUE_ADDRESS (s, (CORE_ADDR) sh->value);
       add_data_symbol (sh, ax, bigend, s, LOC_STATIC, b, objfile, name);
@@ -776,13 +775,13 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 	  /* The next test should normally be true, but provides a
 	     hook for nested functions (which we don't want to make
 	     global).  */
-	  if (b == BLOCKVECTOR_BLOCK (bv, STATIC_BLOCK))
-	    b = BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK);
+	  if (b == bv->block (STATIC_BLOCK))
+	    b = bv->block (GLOBAL_BLOCK);
 	  /* Irix 5 sometimes has duplicate names for the same
 	     function.  We want to add such names up at the global
 	     level, not as a nested function.  */
 	  else if (sh->value == top_stack->procadr)
-	    b = BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK);
+	    b = bv->block (GLOBAL_BLOCK);
 	}
       add_symbol (s, top_stack->cur_st, b);
 
@@ -1168,7 +1167,7 @@ parse_symbol (SYMR *sh, union aux_ext *ax, char *ext_sh, int bigend,
 	     So look for such child blocks, and patch them.  */
 	  for (i = 0; i < bv->nblocks (); i++)
 	    {
-	      struct block *b_bad = BLOCKVECTOR_BLOCK (bv, i);
+	      struct block *b_bad = bv->block (i);
 
 	      if (BLOCK_SUPERBLOCK (b_bad) == cblock
 		  && BLOCK_START (b_bad) == top_stack->procadr
@@ -1965,8 +1964,7 @@ parse_procedure (PDR *pr, struct compunit_symtab *search_symtab,
 #else
       s = mylookup_symbol
 	(sh_name,
-	 BLOCKVECTOR_BLOCK (search_symtab->blockvector (),
-			    STATIC_BLOCK),
+	 search_symtab->blockvector ()->block (STATIC_BLOCK),
 	 VAR_DOMAIN,
 	 LOC_BLOCK);
 #endif
@@ -4098,7 +4096,7 @@ mdebug_expand_psymtab (legacy_psymtab *pst, struct objfile *objfile)
       push_parse_stack ();
       top_stack->cur_st = cust->primary_filetab ();
       top_stack->cur_block
-	= BLOCKVECTOR_BLOCK (cust->blockvector (), STATIC_BLOCK);
+	= cust->blockvector ()->block (STATIC_BLOCK);
       BLOCK_START (top_stack->cur_block) = pst->text_low (objfile);
       BLOCK_END (top_stack->cur_block) = 0;
       top_stack->blocktype = stFile;
@@ -4187,8 +4185,7 @@ mdebug_expand_psymtab (legacy_psymtab *pst, struct objfile *objfile)
 	 FIXME, Maybe quit once we have found the right number of ext's?  */
       top_stack->cur_st = cust->primary_filetab ();
       top_stack->cur_block
-	= BLOCKVECTOR_BLOCK (top_stack->cur_st->blockvector (),
-			     GLOBAL_BLOCK);
+	= top_stack->cur_st->blockvector ()->block (GLOBAL_BLOCK);
       top_stack->blocktype = stFile;
 
       ext_ptr = PST_PRIVATE (pst)->extern_tab;
@@ -4502,11 +4499,11 @@ add_block (struct block *b, struct symtab *s)
   bv = (struct blockvector *) xrealloc ((void *) bv,
 					(sizeof (struct blockvector)
 					 + bv->nblocks ()
-					 * sizeof (bv->block)));
+					 * sizeof (struct block *)));
   if (bv != s->blockvector ())
     s->compunit ()->set_blockvector (bv);
 
-  BLOCKVECTOR_BLOCK (bv, bv->nblocks ()) = b;
+  bv->set_block (bv->nblocks (), b);
   bv->set_nblocks (bv->nblocks () + 1);
 }
 
@@ -4545,20 +4542,6 @@ add_line (struct linetable *lt, int lineno, CORE_ADDR adr, int last)
 
 /* Sorting and reordering procedures.  */
 
-/* Blocks with a smaller low bound should come first.  */
-
-static bool
-block_is_less_than (const struct block *b1, const struct block *b2)
-{
-  CORE_ADDR start1 = BLOCK_START (b1);
-  CORE_ADDR start2 = BLOCK_START (b2);
-
-  if (start1 != start2)
-    return start1 < start2;
-
-  return (BLOCK_END (b2)) < (BLOCK_END (b1));
-}
-
 /* Sort the blocks of a symtab S.
    Reorder the blocks in the blockvector by code-address,
    as required by some MI search routines.  */
@@ -4573,10 +4556,10 @@ sort_blocks (struct symtab *s)
   if (bv->nblocks () <= FIRST_LOCAL_BLOCK)
     {
       /* Cosmetic */
-      if (BLOCK_END (BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK)) == 0)
-	BLOCK_START (BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK)) = 0;
-      if (BLOCK_END (BLOCKVECTOR_BLOCK (bv, STATIC_BLOCK)) == 0)
-	BLOCK_START (BLOCKVECTOR_BLOCK (bv, STATIC_BLOCK)) = 0;
+      if (BLOCK_END (bv->block (GLOBAL_BLOCK)) == 0)
+	BLOCK_START (bv->block (GLOBAL_BLOCK)) = 0;
+      if (BLOCK_END (bv->block (STATIC_BLOCK)) == 0)
+	BLOCK_START (bv->block (STATIC_BLOCK)) = 0;
       return;
     }
   /*
@@ -4585,28 +4568,25 @@ sort_blocks (struct symtab *s)
    * are very different.  It would be nice to find a reliable test
    * to detect -O3 images in advance.
    */
-  if (bv->nblocks () > FIRST_LOCAL_BLOCK + 1)
-    std::sort (&BLOCKVECTOR_BLOCK (bv, FIRST_LOCAL_BLOCK),
-	       &BLOCKVECTOR_BLOCK (bv, bv->nblocks ()),
-	       block_is_less_than);
+  bv->sort ();
 
   {
     CORE_ADDR high = 0;
     int i, j = bv->nblocks ();
 
     for (i = FIRST_LOCAL_BLOCK; i < j; i++)
-      if (high < BLOCK_END (BLOCKVECTOR_BLOCK (bv, i)))
-	high = BLOCK_END (BLOCKVECTOR_BLOCK (bv, i));
-    BLOCK_END (BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK)) = high;
+      if (high < BLOCK_END (bv->block (i)))
+	high = BLOCK_END (bv->block (i));
+    BLOCK_END (bv->block (GLOBAL_BLOCK)) = high;
   }
 
-  BLOCK_START (BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK)) =
-    BLOCK_START (BLOCKVECTOR_BLOCK (bv, FIRST_LOCAL_BLOCK));
+  BLOCK_START (bv->block (GLOBAL_BLOCK)) =
+    BLOCK_START (bv->block (FIRST_LOCAL_BLOCK));
 
-  BLOCK_START (BLOCKVECTOR_BLOCK (bv, STATIC_BLOCK)) =
-    BLOCK_START (BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK));
-  BLOCK_END (BLOCKVECTOR_BLOCK (bv, STATIC_BLOCK)) =
-    BLOCK_END (BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK));
+  BLOCK_START (bv->block (STATIC_BLOCK)) =
+    BLOCK_START (bv->block (GLOBAL_BLOCK));
+  BLOCK_END (bv->block (STATIC_BLOCK)) =
+    BLOCK_END (bv->block (GLOBAL_BLOCK));
 }
 
 
@@ -4631,10 +4611,10 @@ new_symtab (const char *name, int maxlines, struct objfile *objfile)
 
   /* All symtabs must have at least two blocks.  */
   bv = new_bvect (2);
-  BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK) = new_block (NON_FUNCTION_BLOCK, lang);
-  BLOCKVECTOR_BLOCK (bv, STATIC_BLOCK) = new_block (NON_FUNCTION_BLOCK, lang);
-  BLOCK_SUPERBLOCK (BLOCKVECTOR_BLOCK (bv, STATIC_BLOCK)) =
-    BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK);
+  bv->set_block (GLOBAL_BLOCK, new_block (NON_FUNCTION_BLOCK, lang));
+  bv->set_block (STATIC_BLOCK, new_block (NON_FUNCTION_BLOCK, lang));
+  BLOCK_SUPERBLOCK (bv->block (STATIC_BLOCK)) =
+    bv->block (GLOBAL_BLOCK);
   cust->set_blockvector (bv);
 
   cust->set_debugformat ("ECOFF");

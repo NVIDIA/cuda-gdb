@@ -598,7 +598,7 @@ finalize_symtab (struct gdb_symtab *stab, struct objfile *objfile)
 
       BLOCK_FUNCTION (new_block) = block_name;
 
-      BLOCKVECTOR_BLOCK (bv, block_idx) = new_block;
+      bv->set_block (block_idx, new_block);
       if (begin > BLOCK_START (new_block))
 	begin = BLOCK_START (new_block);
       if (end < BLOCK_END (new_block))
@@ -626,7 +626,7 @@ finalize_symtab (struct gdb_symtab *stab, struct objfile *objfile)
       BLOCK_START (new_block) = (CORE_ADDR) begin;
       BLOCK_END (new_block) = (CORE_ADDR) end;
 
-      BLOCKVECTOR_BLOCK (bv, i) = new_block;
+      bv->set_block (i, new_block);
 
       if (i == GLOBAL_BLOCK)
 	set_block_compunit_symtab (new_block, cust);
@@ -647,7 +647,7 @@ finalize_symtab (struct gdb_symtab *stab, struct objfile *objfile)
 	{
 	  /* And if not, we set a default parent block.  */
 	  BLOCK_SUPERBLOCK (gdb_block_iter.real_block) =
-	    BLOCKVECTOR_BLOCK (bv, STATIC_BLOCK);
+	    bv->block (STATIC_BLOCK);
 	}
     }
 }

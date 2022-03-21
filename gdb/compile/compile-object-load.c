@@ -430,7 +430,7 @@ get_out_value_type (struct symbol *func_sym, struct objfile *objfile,
       struct symbol *function = NULL;
       const struct block *function_block;
 
-      block = BLOCKVECTOR_BLOCK (bv, block_loop);
+      block = bv->block (block_loop);
       if (BLOCK_FUNCTION (block) != NULL)
 	continue;
       gdb_val_sym = block_lookup_symbol (block,
@@ -441,8 +441,8 @@ get_out_value_type (struct symbol *func_sym, struct objfile *objfile,
 	continue;
 
       function_block = block;
-      while (function_block != BLOCKVECTOR_BLOCK (bv, STATIC_BLOCK)
-	     && function_block != BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK))
+      while (function_block != bv->block (STATIC_BLOCK)
+	     && function_block != bv->block (GLOBAL_BLOCK))
 	{
 	  function_block = BLOCK_SUPERBLOCK (function_block);
 	  function = BLOCK_FUNCTION (function_block);
@@ -451,7 +451,7 @@ get_out_value_type (struct symbol *func_sym, struct objfile *objfile,
 	}
       if (function != NULL
 	  && (BLOCK_SUPERBLOCK (function_block)
-	      == BLOCKVECTOR_BLOCK (bv, STATIC_BLOCK))
+	      == bv->block (STATIC_BLOCK))
 	  && symbol_matches_search_name (function, func_matcher))
 	break;
     }

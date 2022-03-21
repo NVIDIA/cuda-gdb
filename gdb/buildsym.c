@@ -458,7 +458,7 @@ buildsym_compunit::make_blockvector ()
   blockvector->set_nblocks (i);
   for (next = m_pending_blocks; next; next = next->next)
     {
-      BLOCKVECTOR_BLOCK (blockvector, --i) = next->block;
+      blockvector->set_block (--i, next->block);
     }
 
   free_pending_blocks ();
@@ -480,11 +480,11 @@ buildsym_compunit::make_blockvector ()
     {
       for (i = 1; i < blockvector->nblocks (); i++)
 	{
-	  if (BLOCK_START (BLOCKVECTOR_BLOCK (blockvector, i - 1))
-	      > BLOCK_START (BLOCKVECTOR_BLOCK (blockvector, i)))
+	  if (BLOCK_START (blockvector->block (i - 1))
+	      > BLOCK_START (blockvector->block (i)))
 	    {
 	      CORE_ADDR start
-		= BLOCK_START (BLOCKVECTOR_BLOCK (blockvector, i));
+		= BLOCK_START (blockvector->block (i));
 
 	      complaint (_("block at %s out of order"),
 			 hex_string ((LONGEST) start));
@@ -1018,7 +1018,7 @@ buildsym_compunit::end_compunit_symtab_with_blockvector
 
   cu->set_blockvector (blockvector);
   {
-    struct block *b = BLOCKVECTOR_BLOCK (blockvector, GLOBAL_BLOCK);
+    struct block *b = blockvector->block (GLOBAL_BLOCK);
 
     set_block_compunit_symtab (b, cu);
   }
@@ -1036,7 +1036,7 @@ buildsym_compunit::end_compunit_symtab_with_blockvector
 
     for (block_i = 0; block_i < blockvector->nblocks (); block_i++)
       {
-	struct block *block = BLOCKVECTOR_BLOCK (blockvector, block_i);
+	struct block *block = blockvector->block (block_i);
 	struct symbol *sym;
 	struct mdict_iterator miter;
 
@@ -1178,7 +1178,7 @@ buildsym_compunit::augment_type_symtab ()
 
   if (m_file_symbols != NULL)
     {
-      struct block *block = BLOCKVECTOR_BLOCK (blockvector, STATIC_BLOCK);
+      struct block *block = blockvector->block (STATIC_BLOCK);
 
       /* First mark any symbols without a specified symtab as belonging
 	 to the primary symtab.  */
@@ -1189,7 +1189,7 @@ buildsym_compunit::augment_type_symtab ()
 
   if (m_global_symbols != NULL)
     {
-      struct block *block = BLOCKVECTOR_BLOCK (blockvector, GLOBAL_BLOCK);
+      struct block *block = blockvector->block (GLOBAL_BLOCK);
 
       /* First mark any symbols without a specified symtab as belonging
 	 to the primary symtab.  */

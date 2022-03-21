@@ -2322,7 +2322,7 @@ lookup_symbol_in_objfile_symtabs (struct objfile *objfile,
       struct block_symbol result;
 
       bv = cust->blockvector ();
-      block = BLOCKVECTOR_BLOCK (bv, block_index);
+      block = bv->block (block_index);
       result.symbol = block_lookup_symbol_primary (block, name, domain);
       result.block = block;
       if (result.symbol == NULL)
@@ -2455,7 +2455,7 @@ lookup_symbol_via_quick_fns (struct objfile *objfile,
     }
 
   bv = cust->blockvector ();
-  block = BLOCKVECTOR_BLOCK (bv, block_index);
+  block = bv->block (block_index);
   result.symbol = block_lookup_symbol (block, name,
 				       symbol_name_match_type::FULL, domain);
   if (result.symbol == NULL)
@@ -2805,7 +2805,7 @@ basic_lookup_transparent_type_quick (struct objfile *objfile,
     return NULL;
 
   bv = cust->blockvector ();
-  block = BLOCKVECTOR_BLOCK (bv, block_index);
+  block = bv->block (block_index);
   sym = block_find_symbol (block, name, STRUCT_DOMAIN,
 			   block_find_non_opaque_type, NULL);
   if (sym == NULL)
@@ -2830,7 +2830,7 @@ basic_lookup_transparent_type_1 (struct objfile *objfile,
   for (compunit_symtab *cust : objfile->compunits ())
     {
       bv = cust->blockvector ();
-      block = BLOCKVECTOR_BLOCK (bv, block_index);
+      block = bv->block (block_index);
       sym = block_find_symbol (block, name, STRUCT_DOMAIN,
 			       block_find_non_opaque_type, NULL);
       if (sym != NULL)
@@ -2976,7 +2976,7 @@ find_pc_sect_compunit_symtab (CORE_ADDR pc, struct obj_section *section)
 	{
 	  const struct blockvector *bv = cust->blockvector ();
 	  const struct block *global_block
-	    = BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK);
+	    = bv->block (GLOBAL_BLOCK);
 	  CORE_ADDR start = BLOCK_START (global_block);
 	  CORE_ADDR end = BLOCK_END (global_block);
 	  bool in_range_p = start <= pc && pc < end;
@@ -3025,7 +3025,7 @@ find_pc_sect_compunit_symtab (CORE_ADDR pc, struct obj_section *section)
 		   b_index <= STATIC_BLOCK && sym == NULL;
 		   ++b_index)
 		{
-		  const struct block *b = BLOCKVECTOR_BLOCK (bv, b_index);
+		  const struct block *b = bv->block (b_index);
 		  ALL_BLOCK_SYMBOLS (b, iter, sym)
 		    {
 		      fixup_symbol_section (sym, obj_file);
@@ -3084,7 +3084,7 @@ find_symbol_at_address (CORE_ADDR address)
 
       for (int i = GLOBAL_BLOCK; i <= STATIC_BLOCK; ++i)
 	{
-	  const struct block *b = BLOCKVECTOR_BLOCK (bv, i);
+	  const struct block *b = bv->block (i);
 	  struct block_iterator iter;
 	  struct symbol *sym;
 
@@ -3401,7 +3401,7 @@ find_pc_sect_line (CORE_ADDR pc, struct obj_section *section, int notcurrent)
       else if (alt)
 	val.end = alt->pc;
       else
-	val.end = BLOCK_END (BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK));
+	val.end = BLOCK_END (bv->block (GLOBAL_BLOCK));
     }
   val.section = section;
   return val;
@@ -4865,7 +4865,7 @@ global_symbol_searcher::add_matching_symbols
 	{
 	  struct block_iterator iter;
 	  struct symbol *sym;
-	  const struct block *b = BLOCKVECTOR_BLOCK (bv, block);
+	  const struct block *b = bv->block (block);
 
 	  ALL_BLOCK_SYMBOLS (b, iter, sym)
 	    {
@@ -5839,7 +5839,7 @@ add_symtab_completions (struct compunit_symtab *cust,
   for (i = GLOBAL_BLOCK; i <= STATIC_BLOCK; i++)
     {
       QUIT;
-      b = BLOCKVECTOR_BLOCK (cust->blockvector (), i);
+      b = cust->blockvector ()->block (i);
       ALL_BLOCK_SYMBOLS (b, iter, sym)
 	{
 	  if (completion_skip_symbol (mode, sym))

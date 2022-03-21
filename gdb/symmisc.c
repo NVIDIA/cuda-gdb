@@ -282,7 +282,7 @@ dump_symtab_1 (struct symtab *symtab, struct ui_file *outfile)
       len = bv->nblocks ();
       for (i = 0; i < len; i++)
 	{
-	  b = BLOCKVECTOR_BLOCK (bv, i);
+	  b = bv->block (i);
 	  depth = block_depth (b) * 2;
 	  gdb_printf (outfile, "%*sblock #%03d, object at %s",
 		      depth, "", i,

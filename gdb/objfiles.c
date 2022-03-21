@@ -679,7 +679,7 @@ objfile_relocate1 (struct objfile *objfile,
 	    struct symbol *sym;
 	    struct mdict_iterator miter;
 
-	    b = BLOCKVECTOR_BLOCK (bv, i);
+	    b = bv->block (i);
 	    BLOCK_START (b) += delta[block_line_section];
 	    BLOCK_END (b) += delta[block_line_section];
 

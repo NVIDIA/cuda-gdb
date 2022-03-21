@@ -154,7 +154,7 @@ find_block_in_blockvector (const struct blockvector *bl, CORE_ADDR pc)
   while (top - bot > 1)
     {
       half = (top - bot + 1) >> 1;
-      b = BLOCKVECTOR_BLOCK (bl, bot + half);
+      b = bl->block (bot + half);
       if (BLOCK_START (b) <= pc)
 	bot += half;
       else
@@ -165,7 +165,7 @@ find_block_in_blockvector (const struct blockvector *bl, CORE_ADDR pc)
 
   while (bot >= STATIC_BLOCK)
     {
-      b = BLOCKVECTOR_BLOCK (bl, bot);
+      b = bl->block (bot);
       if (!(BLOCK_START (b) <= pc))
 	return NULL;
       if (BLOCK_END (b) > pc)
@@ -543,8 +543,7 @@ block_iterator_step (struct block_iterator *iterator, int first)
 	  if (cust == NULL)
 	    return  NULL;
 
-	  block = BLOCKVECTOR_BLOCK (cust->blockvector (),
-				     iterator->which);
+	  block = cust->blockvector ()->block (iterator->which);
 	  sym = mdict_iterator_first (BLOCK_MULTIDICT (block),
 				      &iterator->mdict_iter);
 	}
@@ -612,8 +611,7 @@ block_iter_match_step (struct block_iterator *iterator,
 	  if (cust == NULL)
 	    return  NULL;
 
-	  block = BLOCKVECTOR_BLOCK (cust->blockvector (),
-				     iterator->which);
+	  block = cust->blockvector ()->block (iterator->which);
 	  sym = mdict_iter_match_first (BLOCK_MULTIDICT (block), name,
 					&iterator->mdict_iter);
 	}
@@ -893,3 +891,71 @@ make_blockranges (struct objfile *objfile,
   return blr;
 }
 
+static bool
+block_ordering_predicate(struct block *b1, struct block *b2)
+{
+  CORE_ADDR start1 = BLOCK_START (b1);
+  CORE_ADDR start2 = BLOCK_START (b2);
+	  
+  if (start1 != start2)
+    return start1 < start2;
+  return (BLOCK_END (b2)) < (BLOCK_END (b1));
+}
+
+void 
+blockvector::add_block (struct block *block)
+{  
+  gdb_assert (nblocks() >= FIRST_LOCAL_BLOCK);
+
+  auto global_block = this->block (GLOBAL_BLOCK);
+  auto static_block = this->block (STATIC_BLOCK);	
+
+  if (nblocks() <= FIRST_LOCAL_BLOCK)
+    {
+      /* No blocks (except global and static block).  */
+      m_blocks.push_back (block);
+      BLOCK_START (global_block) = BLOCK_START (block); 
+      BLOCK_START (static_block) = BLOCK_START (block);
+      BLOCK_END (global_block) = BLOCK_END (block);
+      BLOCK_END (static_block) = BLOCK_END (block);
+    }
+  else
+    {
+      /* Symtab already contains some blocks.  Insert new block
+         to a correct place and update global and static block 
+	 start and end address.  */
+      auto insert_before = std::upper_bound(m_blocks.begin(), m_blocks.end(), 
+      					    block, 
+					    block_ordering_predicate);
+      m_blocks.insert(insert_before, block);
+      if (BLOCK_START (global_block) > BLOCK_START (block))
+        {
+	  BLOCK_START (global_block) = BLOCK_START (block);
+	  BLOCK_START (static_block) = BLOCK_START (block);
+	}
+      if (BLOCK_END (global_block) < BLOCK_END (block))
+        {
+	  BLOCK_END (global_block) = BLOCK_END (block);
+	  BLOCK_END (static_block) = BLOCK_END (block);
+	}
+    }
+}
+
+void
+blockvector::sort ()
+{
+  if (nblocks() > FIRST_LOCAL_BLOCK)
+    {      
+      std::sort (&m_blocks.data()[FIRST_LOCAL_BLOCK],
+	         &m_blocks.data()[nblocks()],
+	         block_ordering_predicate);
+    }
+}
+
+/* See block.h.  */
+
+struct blockvector *
+blockvector::make(struct obstack *obstack, int nblocks)
+{
+  return new (obstack) blockvector(nblocks, obstack);
+}

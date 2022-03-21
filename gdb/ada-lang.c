@@ -4709,10 +4709,8 @@ cache_symbol (const char *name, domain_enum domain, struct symbol *sym,
      the symbol is local or not, we check the block where we found it
      against the global and static blocks of its associated symtab.  */
   if (sym
-      && BLOCKVECTOR_BLOCK (symbol_symtab (sym)->blockvector (),
-			    GLOBAL_BLOCK) != block
-      && BLOCKVECTOR_BLOCK (symbol_symtab (sym)->blockvector (),
-			    STATIC_BLOCK) != block)
+      && symbol_symtab (sym)->blockvector ()-> block (GLOBAL_BLOCK) != block
+      && symbol_symtab (sym)->blockvector ()-> block (STATIC_BLOCK) != block)
     return;
 
   h = msymbol_hash (name) % HASH_SIZE;
@@ -5560,7 +5558,7 @@ map_matching_symbols (struct objfile *objfile,
   for (compunit_symtab *symtab : objfile->compunits ())
     {
       const struct block *block
-	= BLOCKVECTOR_BLOCK (symtab->blockvector (), block_kind);
+	= symtab->blockvector ()->block (block_kind);
       if (!iterate_over_symbols_terminated (block, lookup_name,
 					    domain, data))
 	break;
@@ -5589,7 +5587,7 @@ add_nonlocal_symbols (std::vector<struct block_symbol> &result,
       for (compunit_symtab *cu : objfile->compunits ())
 	{
 	  const struct block *global_block
-	    = BLOCKVECTOR_BLOCK (cu->blockvector (), GLOBAL_BLOCK);
+	    = cu->blockvector ()->block (GLOBAL_BLOCK);
 
 	  if (ada_add_block_renamings (result, global_block, lookup_name,
 				       domain))
@@ -13096,7 +13094,7 @@ ada_add_global_exceptions (compiled_regex *preg,
 
 	  for (i = GLOBAL_BLOCK; i <= STATIC_BLOCK; i++)
 	    {
-	      const struct block *b = BLOCKVECTOR_BLOCK (bv, i);
+	      const struct block *b = bv->block (i);
 	      struct block_iterator iter;
 	      struct symbol *sym;
 
@@ -13684,7 +13682,7 @@ public:
 	for (compunit_symtab *s : objfile->compunits ())
 	  {
 	    QUIT;
-	    b = BLOCKVECTOR_BLOCK (s->blockvector (), GLOBAL_BLOCK);
+	    b = s->blockvector ()->block (GLOBAL_BLOCK);
 	    ALL_BLOCK_SYMBOLS (b, iter, sym)
 	      {
 		if (completion_skip_symbol (mode, sym))
@@ -13703,7 +13701,7 @@ public:
 	for (compunit_symtab *s : objfile->compunits ())
 	  {
 	    QUIT;
-	    b = BLOCKVECTOR_BLOCK (s->blockvector (), STATIC_BLOCK);
+	    b = s->blockvector ()->block (STATIC_BLOCK);
 	    /* Don't do this block twice.  */
 	    if (b == surrounding_static_block)
 	      continue;

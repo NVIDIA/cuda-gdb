@@ -211,6 +211,20 @@ struct blockvector
     m_map = map;
   }
 
+  struct block *block(int idx) const
+  {
+    gdb_assert (idx < m_nblocks);
+    return m_blocks[idx];
+  }
+
+  void set_block(int idx, struct block *block)
+  {
+    gdb_assert (idx < m_nblocks);
+    m_blocks[idx] = block;
+  }
+
+  void sort ();
+
  private:
 
   /* Number of blocks in the list.  */
@@ -219,14 +233,11 @@ struct blockvector
      This pointer is zero if the blocks' start and end addresses are
      enough.  */
   struct addrmap *m_map;
-
-public:
-
   /* The blocks themselves.  */
-  struct block *block[1];
+  struct block *m_blocks[1];
 };
 
-#define BLOCKVECTOR_BLOCK(blocklist,n) (blocklist)->block[n]
+#define BLOCKVECTOR_BLOCK(blocklist,n) (blocklist)->block (n)
 
 /* Return the objfile of BLOCK, which must be non-NULL.  */
 
