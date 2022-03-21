@@ -670,8 +670,8 @@ objfile_relocate1 (struct objfile *objfile,
 	const struct blockvector *bv = cust->blockvector ();
 	int block_line_section = cust->block_line_section ();
 
-	if (BLOCKVECTOR_MAP (bv))
-	  addrmap_relocate (BLOCKVECTOR_MAP (bv), delta[block_line_section]);
+	if (bv->map ())
+	  addrmap_relocate (bv->map (), delta[block_line_section]);
 
 	for (int i = 0; i < bv->nblocks (); ++i)
 	  {

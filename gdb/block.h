@@ -201,22 +201,32 @@ struct blockvector
     m_nblocks = nblocks;
   }
 
+  struct addrmap *map () const
+  {
+    return m_map;
+  }
+
+  void set_map (struct addrmap *map)
+  {
+    m_map = map;
+  }
+
  private:
 
   /* Number of blocks in the list.  */
   int m_nblocks;
-
- public:
   /* An address map mapping addresses to blocks in this blockvector.
      This pointer is zero if the blocks' start and end addresses are
      enough.  */
-  struct addrmap *map;
+  struct addrmap *m_map;
+
+public:
+
   /* The blocks themselves.  */
   struct block *block[1];
 };
 
 #define BLOCKVECTOR_BLOCK(blocklist,n) (blocklist)->block[n]
-#define BLOCKVECTOR_MAP(blocklist) ((blocklist)->map)
 
 /* Return the objfile of BLOCK, which must be non-NULL.  */
 
