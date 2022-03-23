@@ -521,7 +521,6 @@ static void
 finalize_symtab (struct gdb_symtab *stab, struct objfile *objfile)
 {
   struct compunit_symtab *cust;
-  size_t blockvector_size;
   CORE_ADDR begin, end;
   struct blockvector *bv;
 
@@ -554,18 +553,13 @@ finalize_symtab (struct gdb_symtab *stab, struct objfile *objfile)
       memcpy (filetab->linetable (), stab->linetable.get (), size);
     }
 
-  blockvector_size = (sizeof (struct blockvector)
-		      + (actual_nblocks - 1) * sizeof (struct block *));
-  bv = (struct blockvector *) obstack_alloc (&objfile->objfile_obstack,
-					     blockvector_size);
+  bv = allocate_blockvector(&objfile->objfile_obstack, actual_nblocks);
   cust->set_blockvector (bv);
 
   /* At the end of this function, (begin, end) will contain the PC range this
      entire blockvector spans.  */
-  bv->set_map (nullptr);
   begin = stab->blocks.front ().begin;
   end = stab->blocks.front ().end;
-  bv->set_nblocks (actual_nblocks);
 
   /* First run over all the gdb_block objects, creating a real block
      object for each.  Simultaneously, keep setting the real_block

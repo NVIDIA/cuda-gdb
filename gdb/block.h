@@ -189,16 +189,16 @@ struct global_block
 				 ? BLOCK_START (bl) \
 				 : BLOCK_RANGE_START (bl,0))
 
-struct blockvector
+struct blockvector : public allocate_on_obstack
 {
+  blockvector (struct obstack *obstack, int nblocks)
+    : m_map (nullptr),
+      m_blocks (nblocks, nullptr, obstack_allocator<struct block *> (obstack))
+  {}
+
   int nblocks () const
   {
-    return m_nblocks;
-  }
-
-  void set_nblocks (int nblocks)
-  {
-    m_nblocks = nblocks;
+    return m_blocks.size ();
   }
 
   struct addrmap *map () const
@@ -213,31 +213,32 @@ struct blockvector
 
   struct block *block(int idx) const
   {
-    gdb_assert (idx < m_nblocks);
-    return m_blocks[idx];
+    return m_blocks.at(idx);
   }
 
   void set_block(int idx, struct block *block)
   {
-    gdb_assert (idx < m_nblocks);
-    m_blocks[idx] = block;
+    m_blocks.at(idx) = block;
   }
+
+  /* Add BLOCK, making sure blocks are ordered by code-addresses
+     as required. Update global and static block start and end 
+     adresses accordingly.  */
+  void add_block(struct block *block);
 
   void sort ();
 
  private:
-
-  /* Number of blocks in the list.  */
-  int m_nblocks;
   /* An address map mapping addresses to blocks in this blockvector.
      This pointer is zero if the blocks' start and end addresses are
      enough.  */
   struct addrmap *m_map;
   /* The blocks themselves.  */
-  struct block *m_blocks[1];
+  std::vector<struct block *, obstack_allocator<struct block *>> m_blocks;
 };
 
-#define BLOCKVECTOR_BLOCK(blocklist,n) (blocklist)->block (n)
+/* Allocate new blockvector with space for NBLOCKS blocks.  */
+struct blockvector *allocate_blockvector(struct obstack *obstack, int nblocks);
 
 /* Return the objfile of BLOCK, which must be non-NULL.  */
 

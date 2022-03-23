@@ -955,7 +955,7 @@ blockvector::sort ()
 /* See block.h.  */
 
 struct blockvector *
-blockvector::make(struct obstack *obstack, int nblocks)
+allocate_blockvector(struct obstack *obstack, int nblocks)
 {
-  return new (obstack) blockvector(nblocks, obstack);
+  return new (obstack) blockvector(obstack, nblocks);
 }
