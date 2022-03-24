@@ -204,6 +204,63 @@ stpy_static_block (PyObject *self, PyObject *args)
   return block_to_block_object (block, symtab->objfile ());
 }
 
+/* Implementation of gdb.Symtab.add_block (self, FILENAME, START, END) -> gdb.Block
+   Add a new block into the symtab.  Throws error if symtab is not for dynamic
+   objfile.  */
+
+static PyObject *
+stpy_add_block (PyObject *self, PyObject *args, PyObject *kw)
+{
+  struct symtab *symtab = NULL;
+  
+  STPY_REQUIRE_VALID (self, symtab);
+
+  static const char *keywords[] = { "filename", "start", "end", NULL };
+  const char *name;
+  uint64_t start = 0;
+  uint64_t end = 0;
+   
+  if (!gdb_PyArg_ParseTupleAndKeywords (args, kw, "sKK",
+					keywords, &name, &start, &end))
+    return nullptr;
+
+  if (!symtab->objfile ()->is_dynamic ())
+    {
+      PyErr_Format (PyExc_ValueError, 
+                    _("Symtab is not for a dynamic Objfile"));
+      return nullptr;
+    }
+
+  auto obstack = &(symtab->objfile ()->objfile_obstack);
+  auto block = allocate_block (obstack);
+  
+  BLOCK_MULTIDICT (block) = mdict_create_linear (obstack, NULL);      
+  BLOCK_START (block) = (CORE_ADDR) start;
+  BLOCK_END (block) = (CORE_ADDR) end;
+
+  auto block_type = arch_type (symtab->objfile ()->arch (),
+			       TYPE_CODE_VOID,
+			       TARGET_CHAR_BIT,
+			       "void");
+
+  auto block_symbol = new (obstack) symbol ();
+  block_symbol->set_domain (VAR_DOMAIN);
+  block_symbol->set_aclass_index (LOC_BLOCK);
+  block_symbol->set_type (lookup_function_type (block_type));
+  block_symbol->value.block = block;
+  block_symbol->owner.symtab = symtab;
+  block_symbol->m_name = obstack_strdup (obstack, name);
+
+  auto bv = const_cast<struct blockvector *> (symtab->blockvector ());
+  BLOCK_FUNCTION (block) = block_symbol;
+  BLOCK_SUPERBLOCK (block) = bv->block (GLOBAL_BLOCK);
+  bv->add_block (block);
+  mdict_add_symbol (BLOCK_MULTIDICT (bv->block (GLOBAL_BLOCK)), block_symbol);
+
+  return block_to_block_object(block, symtab->objfile ());
+}
+
+
 /* Implementation of gdb.Symtab.linetable (self) -> gdb.LineTable.
    Returns a gdb.LineTable object corresponding to this symbol
    table.  */
@@ -646,6 +703,10 @@ Return the static block of the symbol table." },
     { "linetable", stpy_get_linetable, METH_NOARGS,
     "linetable () -> gdb.LineTable.\n\
 Return the LineTable associated with this symbol table" },
+  { "add_block", (PyCFunction) stpy_add_block,
+    METH_VARARGS | METH_KEYWORDS,
+    "add_block ( name , start, end) -> gdb.Block.\n\
+Add new block to symtab and return it." },
   {NULL}  /* Sentinel */
 };
 
