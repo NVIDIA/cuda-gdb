@@ -271,6 +271,16 @@ proc jit_reader_test {} {
 		 "#1 ${any} in main ${any}" \
 		]
     }
+
+    # check that the DWARF unwinder does not crash in presence of
+    # JIT objfiles.
+    gdb_test "fin" \
+	[multi_line \
+		 "Run till exit from ${any} jit_function_stack_mangle ${any}" \
+		 "main ${any} at ${any}.*" \
+		]
+    gdb_test "bt" "#0  main ${any} at ${any}"
+    gdb_test "next"
 }
 
 jit_reader_test
