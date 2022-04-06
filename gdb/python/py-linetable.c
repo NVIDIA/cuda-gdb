@@ -22,10 +22,8 @@
 
 struct linetable_entry_object {
   PyObject_HEAD
-  /* The line table source line.  */
-  int line;
-  /* The pc associated with the source line.  */
-  CORE_ADDR pc;
+  /* The line table entry.  */
+  struct linetable_entry entry;
 };
 
 extern PyTypeObject linetable_entry_object_type
@@ -107,8 +105,8 @@ build_linetable_entry (int line, CORE_ADDR address)
 		      &linetable_entry_object_type);
   if (obj != NULL)
     {
-      obj->line = line;
-      obj->pc = address;
+      obj->entry.line = line;
+      obj->entry.pc = address;
     }
 
   return (PyObject *) obj;
@@ -325,7 +323,7 @@ ltpy_entry_get_line (PyObject *self, void *closure)
 {
   linetable_entry_object *obj = (linetable_entry_object *) self;
 
-  return gdb_py_object_from_longest (obj->line).release ();
+  return gdb_py_object_from_longest (obj->entry.line).release ();
 }
 
 /* Implementation of gdb.LineTableEntry.pc (self) -> Long.  Returns a
@@ -336,7 +334,7 @@ ltpy_entry_get_pc (PyObject *self, void *closure)
 {
   linetable_entry_object *obj = (linetable_entry_object *) self;
 
-  return gdb_py_object_from_ulongest (obj->pc).release ();
+  return gdb_py_object_from_ulongest (obj->entry.pc).release ();
 }
 
 /* LineTable iterator functions.  */
