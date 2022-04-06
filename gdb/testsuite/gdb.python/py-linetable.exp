@@ -74,3 +74,12 @@ gdb_test "python print(lt.has_line(44))" \
 gdb_test "python print(lt.has_line(10))" \
     "False.*" \
     "test has_pcs at line 10"
+
+# Test gdb.LineTableEntry.__init__ ()
+gdb_test "python print( gdb.LineTableEntry(10, 0xcafe0000).line)" \
+    "10" \
+    "test new LineTableEntry line"
+
+gdb_test "python print( gdb.LineTableEntry(10, 123456).pc)" \
+    "123456" \
+    "test new LineTableEntry pc"

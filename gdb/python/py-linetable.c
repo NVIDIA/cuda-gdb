@@ -339,7 +339,7 @@ ltpy_entry_get_pc (PyObject *self, void *closure)
   return gdb_py_object_from_ulongest (obj->entry.pc).release ();
 }
 
-/* Implementation of gdb.LineTableEntry.is_stmt (self) -> bool.  Returns 
+/* Implementation of gdb.LineTableEntry.is_stmt (self) -> bool.  Returns
    True if associated PC is a good location to place a breakpoint for
    associatated LINE.  */
 
@@ -354,8 +354,8 @@ ltpy_entry_get_is_stmt (PyObject *self, void *closure)
     Py_RETURN_FALSE;
 }
 
-/* Implementation of gdb.LineTableEntry.prologue_end (self) -> bool.  Returns 
-   True if associated PC is a good location to place a breakpoint after a 
+/* Implementation of gdb.LineTableEntry.prologue_end (self) -> bool.  Returns
+   True if associated PC is a good location to place a breakpoint after a
    function prologue.  */
 
 static PyObject *
@@ -367,6 +367,33 @@ ltpy_entry_get_prologue_end (PyObject *self, void *closure)
     Py_RETURN_TRUE;
   else
     Py_RETURN_FALSE;
+}
+
+/* Object initializer; creates new linetable entry.
+
+   Use: __init__(LINE, PC, IS_STMT, PROLOGUE_END).  */
+
+static int
+ltpy_entry_init (PyObject *zelf, PyObject *args, PyObject *kw)
+{
+  linetable_entry_object *self = (linetable_entry_object *) zelf;
+
+   static const char *keywords[] = { "line", "pc", "is_stmt", "prologue_end", NULL };
+   unsigned is_stmt = 0;
+   bool prologue_end = false;
+
+   if (!gdb_PyArg_ParseTupleAndKeywords (args, kw, "ik|pp",
+					keywords,
+					&(self->entry.line),
+					&(self->entry.pc),
+					&is_stmt,
+					&prologue_end))
+    return -1;
+
+   self->entry.is_stmt = is_stmt;
+   self->entry.prologue_end = prologue_end;
+
+   return 0;
 }
 
 /* LineTable iterator functions.  */
@@ -621,6 +648,7 @@ PyTypeObject linetable_entry_object_type = {
   0,				  /* tp_descr_get */
   0,				  /* tp_descr_set */
   0,				  /* tp_dictoffset */
-  0,	                          /* tp_init */
+  ltpy_entry_init,		  /* tp_init */
   0,				  /* tp_alloc */
+  PyType_GenericNew,		  /* tp_new */  
 };
