@@ -397,6 +397,15 @@ ltpy_entry_init (PyObject *zelf, PyObject *args, PyObject *kw)
    return 0;
 }
 
+/* Return linetable entry wrapped by this object.  */
+struct linetable_entry *
+linetable_entry_object_to_linetable_entry (PyObject *obj)
+{
+  if (! PyObject_TypeCheck (obj, &linetable_entry_object_type))
+    return nullptr;
+  return &(((linetable_entry_object *) obj)->entry);
+}
+
 /* LineTable iterator functions.  */
 
 /* Return a new line table iterator.  */

@@ -275,6 +275,76 @@ stpy_get_linetable (PyObject *self, PyObject *args)
   return symtab_to_linetable_object (self);
 }
 
+static bool
+linetable_entry_ordering_predicate(
+	struct linetable_entry &e1, struct linetable_entry &e2)
+{
+  return e1.pc < e2.pc;
+}
+
+
+/* Implementation of gdb.Symtab.set_linetable (self, List[gdb.LineTableEntry]) -> None.
+   Builds a linetable from list of linetable entries and install it
+   into this symbol table.
+   
+   Use: set_linetable(ENTRIES).  */
+   
+static PyObject *
+stpy_set_linetable (PyObject *self, PyObject *args, PyObject *kw)
+{
+  struct symtab *symtab = NULL;
+  
+  STPY_REQUIRE_VALID (self, symtab);
+
+  if (!symtab->objfile ()->is_dynamic ())
+    {
+      PyErr_Format (PyExc_ValueError, 
+                    _("Symtab is not for a dynamic Objfile"));
+      return nullptr;
+    }
+
+  static const char *keywords[] = { "entries", NULL };
+  PyObject *entries;
+   
+  if (!gdb_PyArg_ParseTupleAndKeywords (args, kw, "O",
+					keywords, &entries))
+    return nullptr;
+
+  if (!PyList_Check (entries))
+    {
+      PyErr_Format (PyExc_ValueError, 
+      		    _("Invalid entries parameter (not an Objfile or no longer valid)"));
+      return nullptr;
+    }
+
+  auto nentries = PyList_Size (entries);
+  auto linetable_size = sizeof (struct linetable) + 
+			  (nentries - 1) * sizeof (struct linetable_entry);
+  auto linetable = (struct linetable *)obstack_alloc (
+	  				&(symtab->objfile ()->objfile_obstack), 
+					linetable_size);
+
+  linetable->nitems = nentries;
+  for (int i = 0; i < nentries; i++)
+    {
+      auto entry = linetable_entry_object_to_linetable_entry
+      			(PyList_GetItem(entries, i));
+      if (entry == nullptr)
+	{
+	  PyErr_Format (PyExc_ValueError, 
+      		       _("Invalid entry at %d (not a LineTableEntry)"), i);
+	  return nullptr;
+	}
+      linetable->item[i] = *entry;
+    }
+  /* Now sort the entries in increasing PC order.  */
+  std::sort (&(linetable->item[0]), &(linetable->item[nentries-1]), linetable_entry_ordering_predicate);
+
+  symtab->set_linetable (linetable);
+
+  Py_RETURN_NONE;
+}
+
 /* Object initializer; creates new symtab in OBJFILE. 
 
    Use: __init__(OBJFILE, NAME).  */
@@ -707,6 +777,10 @@ Return the LineTable associated with this symbol table" },
     METH_VARARGS | METH_KEYWORDS,
     "add_block ( name , start, end) -> gdb.Block.\n\
 Add new block to symtab and return it." },
+  { "set_linetable", (PyCFunction) stpy_set_linetable,
+    METH_VARARGS | METH_KEYWORDS,
+    "set_linetable (entries) -> None.\n\
+Build and set the LineTable for this symbol table." },
   {NULL}  /* Sentinel */
 };
 

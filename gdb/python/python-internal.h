@@ -465,6 +465,7 @@ struct symtab_and_line *sal_object_to_symtab_and_line (PyObject *obj);
 struct frame_info *frame_object_to_frame_info (PyObject *frame_obj);
 struct gdbarch *arch_object_to_gdbarch (PyObject *obj);
 struct objfile *objfile_object_to_objfile (PyObject *obj);
+struct linetable_entry *linetable_entry_object_to_linetable_entry (PyObject *obj);
 
 /* Convert Python object OBJ to a program_space pointer.  OBJ must be a
    gdb.Progspace reference.  Return nullptr if the gdb.Progspace is not
