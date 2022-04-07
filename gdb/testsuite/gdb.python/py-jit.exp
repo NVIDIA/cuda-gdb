@@ -1,0 +1,93 @@
+# Copyright (C) 2010-2022 Free Software Foundation, Inc.
+
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# This file is part of the GDB testsuite.  It test the Python API to
+# create dynamic (JIT) symbols. 
+
+load_lib gdb-python.exp
+
+standard_testfile
+
+if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile}] } {
+    return -1
+}
+
+if ![runto_main] {
+    return 0
+}
+
+if { [skip_python_tests] } { continue }
+
+set remote_python_file [gdb_remote_download host \
+                                ${srcdir}/${subdir}/${testfile}.py]
+gdb_test_no_output "source ${remote_python_file}" "load python file"
+
+gdb_breakpoint [gdb_get_line_number "breakpoint 1 line" ${testfile}.c]
+gdb_run_cmd
+
+gdb_interact
+
+# 
+# Test creating objfile dynamically from Python
+#
+gdb_py_test_silent_cmd "python objfile = gdb.Objfile(\"jit\")" \
+	"create objfile" 1
+
+gdb_test "python print(objfile)" \
+	"<gdb.Objfile filename=jit>" \
+	"print dynamic objfile"
+
+gdb_test "python print (objfile.is_dynamic)" "True" \
+  "Check is_dynamic() returns True for Python-created objfile"
+
+gdb_py_test_silent_cmd "python symtab = gdb.Symtab(objfile, \"jit.st\")" \
+	"create symtab" 1
+
+gdb_test "python print(symtab)" \
+	"jit.st" \
+	"test str(gdb.Symtab)"
+
+gdb_test "python print(symtab.filename)" \
+	"jit.st" \
+	"test gdb.Symtab.filename"
+
+gdb_test "python print(symtab.fullname())" \
+	"jit.st" \
+	"test gdb.Symtab.fullname()"	
+
+gdb_test "python print(symtab.objfile == objfile)" \
+	"True" \
+	"test gdb.Symtab.objfile"
+
+gdb_test "python print(symtab.global_block().start)" \
+	"0" \
+	"test gdb.Symtab.global_block().start"
+
+gdb_test "python print(symtab.global_block().end)" \
+	"0" \
+	"test gdb.Symtab.global_block().end"
+
+gdb_py_test_silent_cmd "python block = symtab.add_block('jit_func_1', 0xcafe0000, 0xcafe00ff)" \
+	"test symtab.add_block()" 1
+
+gdb_test "python print(hex(symtab.global_block().start))" \
+	"0xcafe0000" \
+	"test gdb.Symtab.global_block().start after adding new block"
+
+gdb_test "python print(hex(symtab.global_block().end))" \
+	"0xcafe00ff" \
+	"test gdb.Symtab.global_block().end after adding new block"	
+
+
