@@ -246,8 +246,10 @@ objfpy_init (PyObject *zelf, PyObject *args, PyObject *kw)
   objfile = objfile::make (nullptr, name, OBJF_NOT_FILENAME | OBJF_READNOW);
   objfile->per_bfd->gdbarch = target_gdbarch ();
   
-  self->objfile = objfile;  
-  set_objfile_data (objfile, objfpy_objfile_data_key, gdbpy_ref<objfile_object>::new_reference (self).get ());
+  self->objfile = objfile;
+  set_objfile_data (objfile, objfpy_objfile_data_key, self);
+  /* Increment refcount on self as it is now referenced from objfile!  */
+  Py_INCREF (self);
   
   return 0;
 }
