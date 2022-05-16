@@ -623,6 +623,8 @@ execute_command (const char *p, int from_tty)
 	    }
 	}
 
+      std::string c_name(c->name);
+
       /* If this command has been pre-hooked, run the hook first.  */
       execute_cmd_pre_hook (c);
 
@@ -662,7 +664,9 @@ execute_command (const char *p, int from_tty)
       maybe_wait_sync_command_done (was_sync);
 
       /* If this command has been post-hooked, run the hook last.  */
-      execute_cmd_post_hook (c);
+      c = lookup_cmd_exact (c_name.c_str (), cmdlist);
+      if (c != nullptr)
+	execute_cmd_post_hook (c);
 
       if (repeat_arguments != NULL && cmd_start == saved_command_line)
 	{
