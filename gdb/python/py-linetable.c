@@ -379,8 +379,9 @@ ltpy_entry_init (PyObject *zelf, PyObject *args, PyObject *kw)
   linetable_entry_object *self = (linetable_entry_object *) zelf;
 
    static const char *keywords[] = { "line", "pc", "is_stmt", "prologue_end", NULL };
-   unsigned is_stmt = 0;
-   bool prologue_end = false;
+
+   int is_stmt = 0;
+   int prologue_end = 0;
 
    if (!gdb_PyArg_ParseTupleAndKeywords (args, kw, "ik|pp",
 					keywords,
@@ -391,7 +392,7 @@ ltpy_entry_init (PyObject *zelf, PyObject *args, PyObject *kw)
     return -1;
 
    self->entry.is_stmt = is_stmt;
-   self->entry.prologue_end = prologue_end;
+   self->entry.prologue_end = prologue_end == 1 ? true : false;
 
    return 0;
 }
