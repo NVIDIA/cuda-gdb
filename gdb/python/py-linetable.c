@@ -97,7 +97,7 @@ symtab_to_linetable_object (PyObject *symtab)
    and an address.  */
 
 static PyObject *
-build_linetable_entry (int line, CORE_ADDR address)
+build_linetable_entry (int line, CORE_ADDR address, unsigned int is_stmt = 0, bool prologue_end = false)
 {
   linetable_entry_object *obj;
 
@@ -107,6 +107,8 @@ build_linetable_entry (int line, CORE_ADDR address)
     {
       obj->entry.line = line;
       obj->entry.pc = address;
+      obj->entry.is_stmt = is_stmt;
+      obj->entry.prologue_end = prologue_end;
     }
 
   return (PyObject *) obj;
@@ -337,6 +339,36 @@ ltpy_entry_get_pc (PyObject *self, void *closure)
   return gdb_py_object_from_ulongest (obj->entry.pc).release ();
 }
 
+/* Implementation of gdb.LineTableEntry.is_stmt (self) -> bool.  Returns 
+   True if associated PC is a good location to place a breakpoint for
+   associatated LINE.  */
+
+static PyObject *
+ltpy_entry_get_is_stmt (PyObject *self, void *closure)
+{
+  linetable_entry_object *obj = (linetable_entry_object *) self;
+
+  if (obj->entry.is_stmt != 0)
+    Py_RETURN_TRUE;
+  else
+    Py_RETURN_FALSE;
+}
+
+/* Implementation of gdb.LineTableEntry.prologue_end (self) -> bool.  Returns 
+   True if associated PC is a good location to place a breakpoint after a 
+   function prologue.  */
+
+static PyObject *
+ltpy_entry_get_prologue_end (PyObject *self, void *closure)
+{
+  linetable_entry_object *obj = (linetable_entry_object *) self;
+
+  if (obj->entry.prologue_end)
+    Py_RETURN_TRUE;
+  else
+    Py_RETURN_FALSE;
+}
+
 /* LineTable iterator functions.  */
 
 /* Return a new line table iterator.  */
@@ -420,7 +452,7 @@ ltpy_iternext (PyObject *self)
       item = &(symtab->linetable ()->item[iter_obj->current_index]);
     }
 
-  obj = build_linetable_entry (item->line, item->pc);
+  obj = build_linetable_entry (item->line, item->pc, item->is_stmt, item->prologue_end);
   iter_obj->current_index++;
 
   return obj;
@@ -546,6 +578,10 @@ static gdb_PyGetSetDef linetable_entry_object_getset[] = {
     "The line number in the source file.", NULL },
   { "pc", ltpy_entry_get_pc, NULL,
     "The memory address for this line number.", NULL },
+  { "is_stmt", ltpy_entry_get_is_stmt, NULL,
+    "Whether this is a good location to place a breakpoint for associated LINE.", NULL },
+  { "prologue_end", ltpy_entry_get_prologue_end, NULL,
+    "Whether this is a good location to place a breakpoint after method prologue", NULL },
   { NULL }  /* Sentinel */
 };
 
