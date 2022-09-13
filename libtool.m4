@@ -3231,15 +3231,18 @@ AC_CACHE_CHECK([for BSD- or MS-compatible name lister (nm)], lt_cv_path_NM,
      tmp_nm_to_nm="`$ECHO "$tmp_nm" | sed 's, -.*$,,'`"
      if test -f "$tmp_nm_to_nm" || test -f "$tmp_nm_to_nm$ac_exeext" ; then
        # Check to see if the nm accepts a BSD-compat flag.
-       # Adding the `sed 1q' prevents false positives on HP-UX, which says:
+       # We discard lines that mention 'unknown' or 'invalid', hopefully
+       # placating systems like Darwin and HP-UX, which mention the name of nm
+       # in error output.
        #   nm: unknown option "B" ignored
-       case `"$tmp_nm" -B "$tmp_nm_to_nm" 2>&1 | grep -v '^ *$' | sed '1q'` in
-       *$tmp_nm*) lt_cv_path_NM="$tmp_nm -B"
+       case `"$tmp_nm" -B "$tmp_nm_to_nm" 2>&1 | $GREP -v '^ *$' | $GREP -v 'nknown ' | $GREP -v 'nvalid ' | sed '1q'` in
+       *$tmp_nm*|*\ \ \ [[A-Za-z]]\ *|*[[0-9a-f]][[0-9a-f]][[0-9a-f]]\ [[A-Za-z]]\ *)
+	 lt_cv_path_NM="$tmp_nm -B"
 	 break
 	 ;;
        *)
-	 case `"$tmp_nm" -p "$tmp_nm_to_nm" 2>&1 | grep -v '^ *$' | sed '1q'` in
-	 *$tmp_nm*)
+	 case `"$tmp_nm" -p "$tmp_nm_to_nm" 2>&1 | $GREP -v '^ *$' | $GREP -v 'nknown ' | $GREP -v 'nvalid ' | sed '1q'` in
+	 *$tmp_nm*|*\ \ \ [[A-Za-z]]\ *|*[[0-9a-f]][[0-9a-f]][[0-9a-f]]\ [[A-Za-z]]\ *)
 	   lt_cv_path_NM="$tmp_nm -p"
 	   break
 	   ;;
