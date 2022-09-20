@@ -5420,17 +5420,17 @@ else
      tmp_nm_to_nm="`$ECHO "$tmp_nm" | sed 's, -.*$,,'`"
      if test -f "$tmp_nm_to_nm" || test -f "$tmp_nm_to_nm$ac_exeext" ; then
        # Check to see if the nm accepts a BSD-compat flag.
-       # We discard lines that mention 'unknown' or 'invalid', hopefully
+       # We discard lines that mention 'unknown', 'invalid', or 'usage', hopefully
        # placating systems like Darwin and HP-UX, which mention the name of nm
        # in error output.
        #   nm: unknown option "B" ignored
-       case `"$tmp_nm" -B "$tmp_nm_to_nm" 2>&1 | $GREP -v '^ *$' | $GREP -v 'nknown ' | $GREP -v 'nvalid ' | sed '1q'` in
+       case `"$tmp_nm" -B "$tmp_nm_to_nm" 2>&1 | $GREP -v '^ *$' | $GREP -v 'nknown ' | $GREP -v 'nvalid ' | $GREP -v 'sage: ' | sed '1q'` in
        *$tmp_nm*|*\ \ \ [A-Za-z]\ *|*[0-9a-f][0-9a-f][0-9a-f]\ [A-Za-z]\ *)
 	 lt_cv_path_NM="$tmp_nm -B"
 	 break
 	 ;;
        *)
-	 case `"$tmp_nm" -p "$tmp_nm_to_nm" 2>&1 | $GREP -v '^ *$' | $GREP -v 'nknown ' | $GREP -v 'nvalid ' | sed '1q'` in
+	 case `"$tmp_nm" -p "$tmp_nm_to_nm" 2>&1 | $GREP -v '^ *$' | $GREP -v 'nknown ' | $GREP -v 'nvalid ' | $GREP -v 'sage: ' | sed '1q'` in
 	 *$tmp_nm*|*\ \ \ [A-Za-z]\ *|*[0-9a-f][0-9a-f][0-9a-f]\ [A-Za-z]\ *)
 	   lt_cv_path_NM="$tmp_nm -p"
 	   break
