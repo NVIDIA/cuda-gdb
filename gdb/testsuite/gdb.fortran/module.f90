@@ -40,13 +40,13 @@ end module moduse
         subroutine sub1
         use mod1
         if (var_i .ne. 1) call abort
-        var_i = var_i                         ! i-is-1
+        var_i = var_i * var_i                         ! i-is-1
         end
 
         subroutine sub2
         use mod2
         if (var_i .ne. 2) call abort
-        var_i = var_i                         ! i-is-2
+        var_i = var_i * var_i                         ! i-is-2
         end
 
         subroutine sub3
@@ -68,5 +68,6 @@ end module moduse
         if (var_i .ne. 14) call abort
         if (var_x .ne. 30) call abort
         if (var_z .ne. 31) call abort
-        var_b = var_b                         ! a-b-c-d
+        var_b = var_b * var_b                     ! a-b-c-d
+        write (*,*) var_b
 end

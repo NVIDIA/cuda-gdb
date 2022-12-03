@@ -36,7 +36,7 @@ static struct gdbarch_data *arch_object_data = NULL;
     arch = arch_object_to_gdbarch (arch_obj);			\
     if (arch == NULL)						\
       {								\
-	PyErr_SetString (PyExc_RuntimeError,			\
+	PyErr_SetString (gdbpyExc_RuntimeError,			\
 			 _("Architecture is invalid."));	\
 	return NULL;						\
       }								\
@@ -137,17 +137,17 @@ archpy_disassemble (PyObject *self, PyObject *args, PyObject *kw)
 	 GDB, for Python 3.x, we #ifdef PyInt = PyLong.  This check has
 	 to be done first to ensure we do not lose information in the
 	 conversion process.  */
-      if (PyLong_Check (end_obj))
+      if (gdbpy_LongCheck (end_obj))
         end = PyLong_AsUnsignedLongLong (end_obj);
 #if PY_MAJOR_VERSION == 2
-      else if (PyInt_Check (end_obj))
+      else if (gdbpy_IntCheck (end_obj))
         /* If the end_pc value is specified without a trailing 'L', end_obj will
            be an integer and not a long integer.  */
         end = PyInt_AsLong (end_obj);
 #endif
       else
         {
-          PyErr_SetString (PyExc_TypeError,
+          PyErr_SetString (gdbpyExc_TypeError,
                            _("Argument 'end_pc' should be a (long) integer."));
 
           return NULL;
@@ -155,7 +155,7 @@ archpy_disassemble (PyObject *self, PyObject *args, PyObject *kw)
 
       if (end < start)
         {
-          PyErr_SetString (PyExc_ValueError,
+          PyErr_SetString (gdbpyExc_ValueError,
                            _("Argument 'end_pc' should be greater than or "
                              "equal to the argument 'start_pc'."));
 
@@ -167,7 +167,7 @@ archpy_disassemble (PyObject *self, PyObject *args, PyObject *kw)
       count = PyInt_AsLong (count_obj);
       if (PyErr_Occurred () || count < 0)
         {
-          PyErr_SetString (PyExc_TypeError,
+          PyErr_SetString (gdbpyExc_TypeError,
                            _("Argument 'count' should be an non-negative "
                              "integer."));
 
@@ -239,7 +239,7 @@ archpy_registers (PyObject *self, PyObject *args, PyObject *kw)
 
   /* Parse method arguments.  */
   if (!gdb_PyArg_ParseTupleAndKeywords (args, kw, "|s", keywords,
-					&group_name))
+                                        &group_name))
     return NULL;
 
   /* Extract the gdbarch from the self object.  */

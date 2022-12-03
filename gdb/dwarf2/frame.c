@@ -19,6 +19,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "dwarf2/expr.h"
 #include "dwarf2.h"
@@ -138,11 +142,17 @@ struct comp_unit
 {
   comp_unit (struct objfile *objf)
     : abfd (objf->obfd)
+#ifdef NVIDIA_CUDA_GDB
+      , objfile (objf)
+#endif
   {
   }
 
   /* Keep the bfd convenient.  */
   bfd *abfd;
+#ifdef NVIDIA_CUDA_GDB
+  struct objfile *objfile;
+#endif
 
   /* Pointer to the .debug_frame section loaded into memory.  */
   const gdb_byte *dwarf_frame_buffer = nullptr;
@@ -195,8 +205,13 @@ dwarf2_frame_state::dwarf2_frame_state (CORE_ADDR pc_, struct dwarf2_cie *cie)
 
 /* Helper functions for execute_stack_op.  */
 
+#ifdef NVIDIA_CUDA_GDB
+static CORE_ADDR
+read_addr_from_reg (struct frame_info *this_frame, reg_t reg)
+#else
 static CORE_ADDR
 read_addr_from_reg (struct frame_info *this_frame, int reg)
+#endif
 {
   struct gdbarch *gdbarch = get_frame_arch (this_frame);
   int regnum = dwarf_reg_to_regnum_or_error (gdbarch, reg);
@@ -245,12 +260,20 @@ public:
 
   struct frame_info *this_frame;
 
+#ifdef NVIDIA_CUDA_GDB
+  CORE_ADDR read_addr_from_reg (reg_t reg) override
+#else
   CORE_ADDR read_addr_from_reg (int reg) override
+#endif
   {
     return ::read_addr_from_reg (this_frame, reg);
   }
 
+#ifdef NVIDIA_CUDA_GDB
+  struct value *get_reg_value (struct type *type, reg_t reg) override
+#else
   struct value *get_reg_value (struct type *type, int reg) override
+#endif
   {
     struct gdbarch *gdbarch = get_frame_arch (this_frame);
     int regnum = dwarf_reg_to_regnum_or_error (gdbarch, reg);
@@ -558,6 +581,9 @@ bad CFI data; mismatched DW_CFA_restore_state at %s"),
 
 	    case DW_CFA_val_expression:
 	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &reg);
+#ifdef NVIDIA_CUDA_GDB
+	      reg = dwarf2_frame_adjust_regnum (gdbarch, reg, eh_frame_p);
+#endif
 	      fs->regs.alloc_regs (reg + 1);
 	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &utmp);
 	      fs->regs.reg[reg].loc.exp.start = insn_ptr;
@@ -1377,7 +1403,12 @@ dwarf2_frame_sniffer (const struct frame_unwind *self,
   return 1;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - frames */
+const struct frame_unwind dwarf2_frame_unwind =
+#else
 static const struct frame_unwind dwarf2_frame_unwind =
+#endif
 {
   NORMAL_FRAME,
   dwarf2_frame_unwind_stop_reason,
@@ -1457,8 +1488,24 @@ dwarf2_frame_cfa (struct frame_info *this_frame)
     throw_error (NOT_AVAILABLE_ERROR,
 		 _("cfa not available for record btrace target"));
 
+#ifdef NVIDIA_CUDA_GDB
+  while (get_frame_type (this_frame) == INLINE_FRAME) 
+    { 
+      struct frame_info *prev_frame = get_prev_frame (this_frame); 
+      if (!prev_frame) 
+	break; 
+      this_frame = prev_frame; 
+    } 
+  /* Old note from NVIDIA.  This may no longer be valid since the original
+     restriction was removed.  */
+  /* CUDA - DW_OP_call_frame_cfa */
+  /* If we want the CUDA unwinder to be used in conjunction with the DWARF
+     unwinder (to process the DW_OP_call_frame_cfa operation used with the
+     DW_AT_frame_base)))))))), this restriction must be lifted. */
+#else
   while (get_frame_type (this_frame) == INLINE_FRAME)
     this_frame = get_prev_frame (this_frame);
+#endif
   if (get_frame_unwind_stop_reason (this_frame) == UNWIND_UNAVAILABLE)
     throw_error (NOT_AVAILABLE_ERROR,
                 _("can't compute CFA for this frame: "
@@ -1639,7 +1686,12 @@ static comp_unit *
 find_comp_unit (struct objfile *objfile)
 {
   bfd *abfd = objfile->obfd;
+/* CUDA - bugfix */
+#ifdef NVIDIA_CUDA_GDB
+  if (abfd && gdb_bfd_requires_relocations (abfd))
+#else
   if (gdb_bfd_requires_relocations (abfd))
+#endif
     return dwarf2_frame_bfd_data.get (abfd);
   return dwarf2_frame_objfile_data.get (objfile);
 }
@@ -1651,7 +1703,12 @@ static void
 set_comp_unit (struct objfile *objfile, struct comp_unit *unit)
 {
   bfd *abfd = objfile->obfd;
+/* CUDA - bugfix */
+#ifdef NVIDIA_CUDA_GDB
+  if (abfd && gdb_bfd_requires_relocations (abfd))
+#else
   if (gdb_bfd_requires_relocations (abfd))
+#endif
     return dwarf2_frame_bfd_data.set (abfd, unit);
   return dwarf2_frame_objfile_data.set (objfile, unit);
 }
@@ -1724,6 +1781,18 @@ enum eh_frame_type
   EH_CIE_OR_FDE_TYPE_ID = EH_CIE_TYPE_ID | EH_FDE_TYPE_ID
 };
 
+#ifdef NVIDIA_CUDA_GDB
+static const gdb_byte *decode_frame_entry (struct gdbarch *gdbarch,
+					   struct comp_unit *unit,
+					   const gdb_byte *start,
+					   int eh_frame_p,
+					   dwarf2_cie_table &cie_table,
+					   dwarf2_fde_table *fde_table, 
+					   enum eh_frame_type entry_type,
+					   int cie_expected);
+/* CUDA - addr_size */
+int cuda_dwarf2_addr_size (struct objfile *objfile); 
+#else
 static const gdb_byte *decode_frame_entry (struct gdbarch *gdbarch,
 					   struct comp_unit *unit,
 					   const gdb_byte *start,
@@ -1731,10 +1800,21 @@ static const gdb_byte *decode_frame_entry (struct gdbarch *gdbarch,
 					   dwarf2_cie_table &cie_table,
 					   dwarf2_fde_table *fde_table,
 					   enum eh_frame_type entry_type);
+#endif
 
 /* Decode the next CIE or FDE, entry_type specifies the expected type.
    Return NULL if invalid input, otherwise the next byte to be processed.  */
 
+#ifdef NVIDIA_CUDA_GDB
+static const gdb_byte * 
+decode_frame_entry_1 (struct gdbarch *gdbarch,
+		      struct comp_unit *unit, const gdb_byte *start, 
+		      int eh_frame_p, 
+                      dwarf2_cie_table &cie_table, 
+                      dwarf2_fde_table *fde_table, 
+                      enum eh_frame_type entry_type, 
+                      int cie_expected /* CUDA - bug fix */) 
+#else
 static const gdb_byte *
 decode_frame_entry_1 (struct gdbarch *gdbarch,
 		      struct comp_unit *unit, const gdb_byte *start,
@@ -1742,6 +1822,7 @@ decode_frame_entry_1 (struct gdbarch *gdbarch,
                       dwarf2_cie_table &cie_table,
                       dwarf2_fde_table *fde_table,
                       enum eh_frame_type entry_type)
+#endif
 {
   const gdb_byte *buf, *end;
   ULONGEST length;
@@ -1786,6 +1867,13 @@ decode_frame_entry_1 (struct gdbarch *gdbarch,
       buf += 4;
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - bug fix */
+  /* return NULL instead entering an infinite loop when the CIE id cannot be
+     found. Did not rootcause the issue. */
+  if (cie_expected && cie_pointer != cie_id) 
+    return NULL; 
+#endif
   if (cie_pointer == cie_id)
     {
       /* This is a CIE.  */
@@ -1873,6 +1961,12 @@ decode_frame_entry_1 (struct gdbarch *gdbarch,
       if (buf == NULL)
 	return NULL;
       cie->data_alignment_factor = sleb128;
+
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - addr_size */
+      if (cie->version < 4 && unit->objfile->cuda_objfile)
+        cie->ptr_size = cie->addr_size = cuda_dwarf2_addr_size (unit->objfile);
+#endif
 
       if (cie_version == 1)
 	{
@@ -1987,14 +2081,27 @@ decode_frame_entry_1 (struct gdbarch *gdbarch,
       fde->cie = find_cie (cie_table, cie_pointer);
       if (fde->cie == NULL)
 	{
+#ifdef NVIDIA_CUDA_GDB
+	  decode_frame_entry (gdbarch, unit, unit->dwarf_frame_buffer + cie_pointer, 
+			      eh_frame_p, cie_table, fde_table, 
+			      EH_CIE_TYPE_ID, 1); 
+#else
 	  decode_frame_entry (gdbarch, unit,
 			      unit->dwarf_frame_buffer + cie_pointer,
 			      eh_frame_p, cie_table, fde_table,
 			      EH_CIE_TYPE_ID);
+#endif
 	  fde->cie = find_cie (cie_table, cie_pointer);
 	}
 
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - bug fix */
+      /* return NULL instead of asserting. Did not rootcause the issue. */
+      if (fde->cie == NULL)
+        return NULL;
+#else
       gdb_assert (fde->cie != NULL);
+#endif
 
       addr = read_encoded_value (unit, fde->cie->encoding, fde->cie->ptr_size,
 				 buf, &bytes_read, 0);
@@ -2038,6 +2145,16 @@ decode_frame_entry_1 (struct gdbarch *gdbarch,
 /* Read a CIE or FDE in BUF and decode it. Entry_type specifies whether we
    expect an FDE or a CIE.  */
 
+#ifdef NVIDIA_CUDA_GDB
+static const gdb_byte * 
+decode_frame_entry (struct gdbarch *gdbarch,
+		    struct comp_unit *unit, const gdb_byte *start, 
+		    int eh_frame_p, 
+                    dwarf2_cie_table &cie_table, 
+                    dwarf2_fde_table *fde_table, 
+                    enum eh_frame_type entry_type, 
+                    int cie_expected /* CUDA - bug fix */) 
+#else
 static const gdb_byte *
 decode_frame_entry (struct gdbarch *gdbarch,
 		    struct comp_unit *unit, const gdb_byte *start,
@@ -2045,6 +2162,7 @@ decode_frame_entry (struct gdbarch *gdbarch,
 		    dwarf2_cie_table &cie_table,
                     dwarf2_fde_table *fde_table,
                     enum eh_frame_type entry_type)
+#endif
 {
   enum { NONE, ALIGN4, ALIGN8, FAIL } workaround = NONE;
   const gdb_byte *ret;
@@ -2052,8 +2170,13 @@ decode_frame_entry (struct gdbarch *gdbarch,
 
   while (1)
     {
+#ifdef NVIDIA_CUDA_GDB
+      ret = decode_frame_entry_1 (gdbarch, unit, start, eh_frame_p, 
+				  cie_table, fde_table, entry_type, cie_expected); 
+#else
       ret = decode_frame_entry_1 (gdbarch, unit, start, eh_frame_p,
 				  cie_table, fde_table, entry_type);
+#endif
       if (ret != NULL)
 	break;
 
@@ -2193,10 +2316,17 @@ dwarf2_build_frame_info (struct objfile *objfile)
 	    {
 	      frame_ptr = unit->dwarf_frame_buffer;
 	      while (frame_ptr < unit->dwarf_frame_buffer + unit->dwarf_frame_size)
+#ifdef NVIDIA_CUDA_GDB
+		frame_ptr = decode_frame_entry (gdbarch, unit.get (), 
+						frame_ptr, 1, 
+						cie_table, &fde_table, 
+						EH_CIE_OR_FDE_TYPE_ID, 0); 
+#else
 		frame_ptr = decode_frame_entry (gdbarch, unit.get (),
 						frame_ptr, 1,
 						cie_table, &fde_table,
 						EH_CIE_OR_FDE_TYPE_ID);
+#endif
 	    }
 
 	  catch (const gdb_exception_error &e)
@@ -2224,9 +2354,16 @@ dwarf2_build_frame_info (struct objfile *objfile)
 	{
 	  frame_ptr = unit->dwarf_frame_buffer;
 	  while (frame_ptr < unit->dwarf_frame_buffer + unit->dwarf_frame_size)
+#ifdef NVIDIA_CUDA_GDB
+	    frame_ptr = decode_frame_entry (gdbarch, unit.get (),
+			    		    frame_ptr, 0, 
+					    cie_table, &fde_table, 
+					    EH_CIE_OR_FDE_TYPE_ID, 0); 
+#else
 	    frame_ptr = decode_frame_entry (gdbarch, unit.get (), frame_ptr, 0,
 					    cie_table, &fde_table,
 					    EH_CIE_OR_FDE_TYPE_ID);
+#endif
 	}
       catch (const gdb_exception_error &e)
 	{

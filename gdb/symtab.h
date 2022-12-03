@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #if !defined (SYMTAB_H)
 #define SYMTAB_H 1
 
@@ -578,6 +582,14 @@ extern CORE_ADDR get_symbol_address (const struct symbol *sym);
 
 extern char *symbol_find_demangled_name (struct general_symbol_info *gsymbol,
 					 const char *mangled);
+#ifdef NVIDIA_CUDA_GDB
+/* Macro that tests a symbol for a match against a specified name
+   string.  It tests against SYMBOL_NATURAL_NAME, and it ignores
+   whitespace and trailing parentheses.  (See strcmp_iw for details
+   about its behavior.)  */
+#define SYMBOL_MATCHES_NATURAL_NAME(symbol, name)			\
+  (strcmp_iw (symbol->natural_name (), (name)) == 0)
+#endif
 
 /* Return true if NAME matches the "search" name of SYMBOL, according
    to the symbol's language.  */
@@ -712,6 +724,7 @@ struct minimal_symbol : public general_symbol_info
 
   /* Minimal symbols are stored in two different hash tables.  This is
      the `next' pointer for the demangled hash table.  */
+  /* CUDA - Minimal symbols are stored in three different hash tables. */
 
   struct minimal_symbol *demangled_hash_next;
 
@@ -722,6 +735,10 @@ struct minimal_symbol : public general_symbol_info
   /* True if MSYMBOL is of some text type.  */
 
   bool text_p () const;
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - This is the `next' pointer for the lowercase hash table.  */
+  struct minimal_symbol *lowercase_hash_next;
+#endif
 };
 
 /* Return the address of MINSYM, which comes from OBJF.  The
@@ -1298,6 +1315,15 @@ struct rust_vtable_symbol : public symbol
   struct type *concrete_type = nullptr;
 };
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA debug_line extension information */
+struct cuda_debug_inline_info
+{
+  int line;
+  const char *filename;
+  const char *function;
+};
+#endif
 
 /* Each item represents a line-->pc (or the reverse) mapping.  This is
    somewhat more wasteful of space than one might wish, but since only
@@ -1314,6 +1340,9 @@ struct linetable_entry
 
   /* The address for this entry.  */
   CORE_ADDR pc;
+#ifdef NVIDIA_CUDA_GDB
+  struct cuda_debug_inline_info *inline_info;
+#endif
 };
 
 /* The order of entries in the linetable is significant.  They should
@@ -1916,6 +1945,11 @@ extern struct symtab_and_line find_pc_line (CORE_ADDR, int);
 extern struct symtab_and_line find_pc_sect_line (CORE_ADDR,
 						 struct obj_section *, int);
 
+#ifdef NVIDIA_CUDA_GDB
+extern struct symtab_and_line find_pc_sect_line (CORE_ADDR,
+						 struct obj_section *, int,
+						 struct cuda_debug_inline_info **inline_info);
+#endif
 /* Wrapper around find_pc_line to just return the symtab.  */
 
 extern struct symtab *find_pc_line_symtab (CORE_ADDR);
@@ -1927,6 +1961,10 @@ extern bool find_line_pc (struct symtab *, int, CORE_ADDR *);
 extern bool find_line_pc_range (struct symtab_and_line, CORE_ADDR *,
 				CORE_ADDR *);
 
+#ifdef NVIDIA_CUDA_GDB
+extern bool find_line_pc_range (struct symtab_and_line, CORE_ADDR *,
+				CORE_ADDR *, struct cuda_debug_inline_info **inline_info);
+#endif
 extern void resolve_sal_pc (struct symtab_and_line *);
 
 /* solib.c */

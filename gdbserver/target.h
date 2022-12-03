@@ -18,6 +18,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef GDBSERVER_TARGET_H
 #define GDBSERVER_TARGET_H
 
@@ -499,6 +503,10 @@ public:
 
   /* Return tdesc index for IPA.  */
   virtual int get_ipa_tdesc_idx ();
+
+#ifdef NVIDIA_CUDA_GDB
+  virtual void unexpected_stop ();
+#endif
 };
 
 extern process_stratum_target *the_target;

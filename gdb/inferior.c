@@ -290,7 +290,12 @@ find_inferior_pid (process_stratum_target *targ, int pid)
   /* Looking for inferior pid == 0 is always wrong, and indicative of
      a bug somewhere else.  There may be more than one with pid == 0,
      for instance.  */
+  /* CUDA
+   * When restoring cuda focus without any inferior present, we end up
+   * looking for PID 0, do not assert here, let it return NULL. */
+#ifndef NVIDIA_CUDA_GDB
   gdb_assert (pid != 0);
+#endif
 
   for (inferior *inf : all_inferiors (targ))
     if (inf->pid == pid)

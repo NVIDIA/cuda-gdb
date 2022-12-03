@@ -1,3 +1,199 @@
+2020-11-19  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* Makefile.in (HFILES_NO_SRCDIR): Add f-array-walker.h.
+	* NEWS: Mention new options.
+	* f-array-walker.h: New file.
+	* f-lang.c: Include 'gdbcmd.h' and 'f-array-walker.h'.
+	(repack_array_slices): New static global.
+	(show_repack_array_slices): New function.
+	(fortran_array_slicing_debug): New static global.
+	(show_fortran_array_slicing_debug): New function.
+	(value_f90_subarray): Delete.
+	(skip_undetermined_arglist): Delete.
+	(class fortran_array_repacker_base_impl): New class.
+	(class fortran_lazy_array_repacker_impl): New class.
+	(class fortran_array_repacker_impl): New class.
+	(fortran_value_subarray): Complete rewrite.
+	(set_fortran_list): New static global.
+	(show_fortran_list): Likewise.
+	(_initialize_f_language): Register new commands.
+	(fortran_adjust_dynamic_array_base_address_hack): New function.
+	* f-lang.h (fortran_adjust_dynamic_array_base_address_hack):
+	Declare.
+	* f-valprint.c: Include 'f-array-walker.h'.
+	(class fortran_array_printer_impl): New class.
+	(f77_print_array_1): Delete.
+	(f77_print_array): Delete.
+	(fortran_print_array): New.
+	(f_value_print_inner): Update to call fortran_print_array.
+	* gdbtypes.c: Include 'f-lang.h'.
+	(resolve_dynamic_type_internal): Call
+	fortran_adjust_dynamic_array_base_address_hack.
+
+2020-10-22  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* expprint.c (dump_subexp_body_standard): Print RANGE_HAS_STRIDE.
+	* expression.h (enum range_type): Add RANGE_HAS_STRIDE.
+	* f-exp.y (arglist): Allow for a series of subranges.
+	(subrange): Add cases for subranges with strides.
+	* f-lang.c (value_f90_subarray): Catch use of array strides and
+	throw an error.
+	* parse.c (operator_length_standard): Handle RANGE_HAS_STRIDE.
+
+2020-10-22  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* expprint.c (print_subexp_standard): Update to reflect changes to
+	enum range_type.
+	(dump_subexp_body_standard): Likewise.
+	* expression.h (enum range_type): Convert to a bit field enum, and
+	make the enum unsigned.
+	* f-exp.y (subrange): Update to reflect changes to enum
+	range_type.
+	* f-lang.c (value_f90_subarray): Likewise.
+	* parse.c (operator_length_standard): Likewise.
+	* rust-exp.y (rust_parser::convert_ast_to_expression): Likewise.
+	* rust-lang.c (rust_range): Likewise.
+	(rust_compute_range): Likewise.
+	(rust_subscript): Likewise.
+
+2020-09-19  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* f-valprint.c (f77_print_array_1): Adjust printing of whitespace
+	for arrays.
+
+2020-09-19  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* eval.c: Remove 'f-lang.h' include.
+	(value_f90_subarray): Moved to f-lang.c.
+	(eval_call): Renamed to...
+	(evaluate_subexp_do_call): ...this, is no longer static, header
+	comment moved into header file.
+	(evaluate_funcall): Update call to eval_call.
+	(skip_undetermined_arglist): Moved to f-lang.c.
+	(fortran_value_subarray): Likewise.
+	(evaluate_subexp_standard): OP_F77_UNDETERMINED_ARGLIST handling
+	moved to evaluate_subexp_f.
+	(calc_f77_array_dims): Moved to f-lang.c
+	* expprint.c (print_subexp_funcall): New function.
+	(print_subexp_standard): OP_F77_UNDETERMINED_ARGLIST handling
+	moved to print_subexp_f, OP_FUNCALL uses new function.
+	(dump_subexp_body_funcall): New function.
+	(dump_subexp_body_standard): OP_F77_UNDETERMINED_ARGLIST handling
+	moved to dump_subexp_f, OP_FUNCALL uses new function.
+	* expression.h (evaluate_subexp_do_call): Declare.
+	* f-lang.c (value_f90_subarray): Moved from eval.c.
+	(skip_undetermined_arglist): Likewise.
+	(calc_f77_array_dims): Likewise.
+	(fortran_value_subarray): Likewise.
+	(evaluate_subexp_f): Add OP_F77_UNDETERMINED_ARGLIST support.
+	(operator_length_f): Likewise.
+	(print_subexp_f): Likewise.
+	(dump_subexp_body_f): Likewise.
+	* fortran-operator.def (OP_F77_UNDETERMINED_ARGLIST): Move
+	declaration of this operation to here.
+	* parse.c (operator_length_standard): OP_F77_UNDETERMINED_ARGLIST
+	support moved to operator_length_f.
+	* parser-defs.h (dump_subexp_body_funcall): Declare.
+	(print_subexp_funcall): Declare.
+	* std-operator.def (OP_F77_UNDETERMINED_ARGLIST): Moved to
+	fortran-operator.def.
+
+2020-09-19  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* eval.c (fortran_value_subarray): New function, content is taken
+	from...
+	(evaluate_subexp_standard): ...here, in two places.  Now arrays
+	and strings both call the new function.
+	(calc_f77_array_dims): Add header comment, handle strings.
+
+2020-09-14  Pedro Alves  <pedro@palves.net>
+
+	* Makefile.in (SELFTESTS_SRCS): Add
+	unittests/enum-flags-selftests.c.
+	* btrace.c (ftrace_update_caller, ftrace_fixup_calle): Use
+	btrace_function_flags instead of enum btrace_function_flag.
+	* compile/compile-c-types.c (convert_qualified): Use
+	enum_flags::raw.
+	* compile/compile-cplus-symbols.c (convert_one_symbol)
+	(convert_symbol_bmsym):
+	* compile/compile-cplus-types.c (compile_cplus_convert_method)
+	(compile_cplus_convert_struct_or_union_methods)
+	(compile_cplus_instance::convert_qualified_base):
+	* go-exp.y (parse_string_or_char): Add cast to int.
+	* unittests/enum-flags-selftests.c: New file.
+	* record-btrace.c (btrace_thread_flag_to_str): Change parameter's
+	type to btrace_thread_flags from btrace_thread_flag.
+	(record_btrace_cancel_resume, record_btrace_step_thread): Change
+	local's type to btrace_thread_flags from btrace_thread_flag.  Add
+	cast in DEBUG call.
+
+2020-09-14  Pedro Alves  <pedro@palves.net>
+
+	* c-typeprint.c (c_type_print_modifier): Adjust to rename.
+	* gdbtypes.c (address_space_name_to_int): Rename to ...
+	(address_space_name_to_type_instance_flags): ... this.
+	(address_space_int_to_name): Rename to ...
+	(address_space_type_instance_flags_to_name): ... this.
+	* gdbtypes.h (address_space_name_to_int): Rename to ...
+	(address_space_name_to_type_instance_flags): ... this.
+	(address_space_int_to_name): Rename to ...
+	(address_space_type_instance_flags_to_name): ... this.
+	* type-stack.c (type_stack::insert): Adjust to rename.
+	* type-stack.h (type_stack::insert): Likewise.
+
+2020-09-14  Pedro Alves  <pedro@palves.net>
+	    Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* avr-tdep.c (avr_address_class_type_flags): Return
+	type_instance_flags.
+	(avr_address_class_type_flags_to_name): Take a
+	type_instance_flags.
+	(avr_address_class_name_to_type_flags): Return bool and take a
+	type_instance_flags.
+	* d-lang.c (build_d_types): Use type::set_instance_flags.
+	* ft32-tdep.c (ft32_address_class_type_flags): Return
+	type_instance_flags.
+	(ft32_address_class_type_flags_to_name): Take a
+	type_instance_flags.
+	(ft32_address_class_name_to_type_flags): Return bool and take a
+	type_instance_flags.
+	(ft32_gdbarch_init): Use type::set_instance_flags.
+	* eval.c (fake_method::fake_method): Use type::set_instance_flags.
+	* gdbarch.h, gdbarch.c: Regenerate.
+	* gdbarch.sh (address_class_type_flags): Use type_instance_flags.
+	(address_class_name_to_type_flags): Use type_instance_flags and
+	bool.
+	* gdbtypes.c (address_space_name_to_int)
+	(address_space_int_to_name, make_qualified_type): Use
+	type_instance_flags.
+	(make_qualified_type): Use type_instance_flags and
+	type::set_instance_flags.
+	(make_type_with_address_space, make_cv_type, make_vector_type)
+	(check_typedef): Use type_instance_flags.
+	(recursive_dump_type): Cast type_instance_flags to unsigned for
+	printing.
+	(copy_type_recursive): Use type::set_instance_flags.
+	(gdbtypes_post_init): Use type::set_instance_flags.
+	* gdbtypes.h (struct type) <instance_flags>: Rename to ...
+	<m_instance_flags>: ... this.
+	<instance_flags, set_instance_flags>: New methods.
+	(TYPE_INSTANCE_FLAGS): Use the instance_flags method.
+	(SET_TYPE_INSTANCE_FLAGS): New.
+	(address_space_name_to_int, address_space_int_to_name)
+	(make_type_with_address_space): Pass flags using
+	type_instance_flags instead of int.
+	* stabsread.c (cleanup_undefined_types_noname): Use
+	type::set_instance_flags.
+	* s390-tdep.c (s390_address_class_type_flags): Return
+	type_instance_flags.
+	(s390_address_class_type_flags_to_name): Take a
+	type_instance_flags.
+	(s390_address_class_name_to_type_flags): Return bool and take a
+	type_instance_flags.
+	* type-stack.c (type_stack::follow_types): Use
+	type_instance_flags.
+	* dwarf2/read.c (read_tag_pointer_type): Use type_instance_flags.
+
 2021-04-25  Joel Brobecker  <brobecker@adacore.com>
 
 	* version.in: Set GDB version number to 10.2.

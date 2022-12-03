@@ -20,6 +20,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* This file was created with the aid of ``gdbarch.sh''.  */
 
 
@@ -2232,8 +2236,13 @@ set_gdbarch_fp0_regnum (struct gdbarch *gdbarch,
   gdbarch->fp0_regnum = fp0_regnum;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+int
+gdbarch_stab_reg_to_regnum (struct gdbarch *gdbarch, reg_t stab_regnr)
+#else
 int
 gdbarch_stab_reg_to_regnum (struct gdbarch *gdbarch, int stab_regnr)
+#endif
 {
   gdb_assert (gdbarch != NULL);
   gdb_assert (gdbarch->stab_reg_to_regnum != NULL);
@@ -2249,8 +2258,13 @@ set_gdbarch_stab_reg_to_regnum (struct gdbarch *gdbarch,
   gdbarch->stab_reg_to_regnum = stab_reg_to_regnum;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+int
+gdbarch_ecoff_reg_to_regnum (struct gdbarch *gdbarch, reg_t ecoff_regnr)
+#else
 int
 gdbarch_ecoff_reg_to_regnum (struct gdbarch *gdbarch, int ecoff_regnr)
+#endif
 {
   gdb_assert (gdbarch != NULL);
   gdb_assert (gdbarch->ecoff_reg_to_regnum != NULL);
@@ -2266,8 +2280,13 @@ set_gdbarch_ecoff_reg_to_regnum (struct gdbarch *gdbarch,
   gdbarch->ecoff_reg_to_regnum = ecoff_reg_to_regnum;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+int
+gdbarch_sdb_reg_to_regnum (struct gdbarch *gdbarch, reg_t sdb_regnr)
+#else
 int
 gdbarch_sdb_reg_to_regnum (struct gdbarch *gdbarch, int sdb_regnr)
+#endif
 {
   gdb_assert (gdbarch != NULL);
   gdb_assert (gdbarch->sdb_reg_to_regnum != NULL);
@@ -2283,8 +2302,13 @@ set_gdbarch_sdb_reg_to_regnum (struct gdbarch *gdbarch,
   gdbarch->sdb_reg_to_regnum = sdb_reg_to_regnum;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+int
+gdbarch_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, reg_t dwarf2_regnr)
+#else
 int
 gdbarch_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int dwarf2_regnr)
+#endif
 {
   gdb_assert (gdbarch != NULL);
   gdb_assert (gdbarch->dwarf2_reg_to_regnum != NULL);
@@ -3546,7 +3570,7 @@ gdbarch_address_class_type_flags_p (struct gdbarch *gdbarch)
   return gdbarch->address_class_type_flags != NULL;
 }
 
-int
+type_instance_flags
 gdbarch_address_class_type_flags (struct gdbarch *gdbarch, int byte_size, int dwarf2_addr_class)
 {
   gdb_assert (gdbarch != NULL);
@@ -3571,7 +3595,7 @@ gdbarch_address_class_type_flags_to_name_p (struct gdbarch *gdbarch)
 }
 
 const char *
-gdbarch_address_class_type_flags_to_name (struct gdbarch *gdbarch, int type_flags)
+gdbarch_address_class_type_flags_to_name (struct gdbarch *gdbarch, type_instance_flags type_flags)
 {
   gdb_assert (gdbarch != NULL);
   gdb_assert (gdbarch->address_class_type_flags_to_name != NULL);
@@ -3611,8 +3635,8 @@ gdbarch_address_class_name_to_type_flags_p (struct gdbarch *gdbarch)
   return gdbarch->address_class_name_to_type_flags != NULL;
 }
 
-int
-gdbarch_address_class_name_to_type_flags (struct gdbarch *gdbarch, const char *name, int *type_flags_ptr)
+bool
+gdbarch_address_class_name_to_type_flags (struct gdbarch *gdbarch, const char *name, type_instance_flags *type_flags_ptr)
 {
   gdb_assert (gdbarch != NULL);
   gdb_assert (gdbarch->address_class_name_to_type_flags != NULL);
@@ -5387,11 +5411,14 @@ gdbarch_register (enum bfd_architecture bfd_architecture,
        (*curr) != NULL;
        curr = &(*curr)->next)
     {
+/* CUDA - BFD architecture */
+#ifndef NVIDIA_CUDA_GDB
       if (bfd_architecture == (*curr)->bfd_architecture)
 	internal_error (__FILE__, __LINE__,
                         _("gdbarch: Duplicate registration "
 			  "of architecture (%s)"),
 	                bfd_arch_info->printable_name);
+#endif
     }
   /* log it */
   if (gdbarch_debug)

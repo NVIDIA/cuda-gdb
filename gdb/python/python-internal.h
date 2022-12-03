@@ -96,7 +96,7 @@
 #define Py_TPFLAGS_CHECKTYPES 0
 
 #define PyInt_Check PyLong_Check
-#define PyInt_FromLong PyLong_FromLong
+#define PyInt_FromLong gdbpy_PyLong_FromLongLong
 #define PyInt_FromSsize_t PyLong_FromSsize_t
 #define PyInt_AsLong PyLong_AsLong
 #define PyInt_AsSsize_t PyLong_AsSsize_t
@@ -188,6 +188,135 @@ gdb_PyObject_CallMethod (PyObject *o, const char *method, const char *format,
 #undef PyObject_CallMethod
 #define PyObject_CallMethod gdb_PyObject_CallMethod
 
+/* CUDA-specific defines.  */
+
+extern int (*gdbpy_Arg_UnpackTuple) (PyObject *, const char *, Py_ssize_t, Py_ssize_t, ...);
+extern PyObject * (*_gdbpy_BuildValue_SizeT) (const char *, ...);
+extern PyObject * (*gdbpy_ErrFormat)(PyObject *, const char *, ...);
+extern PyObject * (*gdbpy_PySys_GetObject)(const char *);
+extern PyObject * (*gdbpy_PyObject_CallFunctionObjArgs) (PyObject *,...);
+extern PyObject * (*gdbpy_PyObject_CallMethodObjArgs) (PyObject *, PyObject *,...);
+extern PyObject * (*gdbpy_PyObject_CallMethod)(PyObject *o, const char *m, const char *format, ...);
+extern PyObject * (*gdbpy_PyErr_NewException) (const char *name, PyObject *base, PyObject *dict);
+
+extern int (*gdbpy_PyArg_ParseTuple) (PyObject *, const char *, ...);
+extern int (*gdbpy_PyObject_GetBuffer) (PyObject *, Py_buffer *, int);
+extern Py_ssize_t (*gdbpy_PyObject_Length)(PyObject *o);
+extern int (*gdbpy_PyArg_ParseTupleAndKeywords) (PyObject *obj, PyObject *, const char *, char **, ...);
+extern int (*gdbpy_PyArg_VaParseTupleAndKeywords) (PyObject *obj, PyObject *, const char *, char **, ...);
+extern PyObject * (*gdbpy_BuildValue) (const char *, ...);
+extern PyObject * (*gdbpy_StringFromFormat) (const char *, ...);
+extern PyObject * (*gdbpy_PySequence_Concat) (PyObject *o1, PyObject *o2);
+extern Py_ssize_t (*gdbpy_PyInt_AsSize_t) (PyObject *);
+extern PyObject * (*gdbpy_PyInt_FromSize_t) (size_t size);
+extern PyObject * (*gdbpy_PyInt_FromLong) (long val);
+extern PY_LONG_LONG (*gdbpy_Long_AsLong) (PyObject *);
+extern int (*gdbpy_Dict_SetItem) (PyObject *mp, PyObject *key, PyObject *item);
+extern PyObject * (*gdbpy_Dict_Keys) (PyObject *mp);
+extern void (*gdbpy_Err_SetNone) (PyObject *);
+extern int (*gdbpy_PyObject__IsInstance) (PyObject *object, PyObject *typeorclass);
+extern PyObject * (*gdbpy_PyString_FromStringAndSize) (const char *str, Py_ssize_t size);
+extern PyObject * (*gdbpy_PyBytes_FromStringAndSize) (const char *str, Py_ssize_t size);
+extern PyObject * (*gdbpy_PyBuffer_FromObject) (PyObject *base, Py_ssize_t offset, Py_ssize_t size);
+extern void (*gdbpy_PyBuffer_Release) (Py_buffer *buf);
+extern int (*gdbpy_PyErr_GivenExceptionMatches) (PyObject *, PyObject *);
+#ifdef IS_PY3K
+extern int (*gdbpy_PyBuffer_FillInfo) (Py_buffer *view, PyObject *exporter, void *buf, Py_ssize_t len, int readonly, int flags);
+extern void (*gdbpy_SetProgramName) (wchar_t *);
+#else
+extern void (*gdbpy_SetProgramName) (char *);
+#endif
+
+#ifdef HAVE_LONG_LONG
+
+extern PyObject * (*gdbpy_PyLong_FromLongLong) (long long val);
+extern PyObject * (*gdbpy_PyLong_FromUnsignedLongLong) (unsigned long long val);
+extern unsigned long long (*gdbpy_PyLong_AsUnsignedLongLong) (PyObject *obj);
+
+#else /* HAVE_LONG_LONG */
+
+extern PyObject * (*gdbpy_PyLong_FromLongLong) (long val);
+extern PyObject * (*gdbpy_PyLong_FromUnsignedLongLong) (unsigned long val);
+extern unsigned long (*gdbpy_PyLong_AsUnsignedLongLong) (PyObject *obj);
+
+#endif /* HAVE_LONG_LONG */
+
+#if defined (IS_PY3K)
+extern int (*gdbpy_PySlice_GetIndicesEx) (PyObject *slice, Py_ssize_t length, Py_ssize_t *start, Py_ssize_t *stop, Py_ssize_t *step, Py_ssize_t *slicelength);
+#else
+extern int (*gdbpy_PySlice_GetIndicesEx) (PySliceObject *slice, Py_ssize_t length, Py_ssize_t *start, Py_ssize_t *stop, Py_ssize_t *step, Py_ssize_t *slicelength);
+#endif
+
+extern int (*gdbpy_PySlice_Check) (PyObject *);
+
+/* Added for dynamic python library loading support */
+#define gdbpy_False gdbpy_Zero
+extern PyObject *gdbpy_None;
+extern PyObject *gdbpy_True;
+extern PyObject *gdbpy_Zero;
+extern PyObject *gdbpy_NotImplemented;
+extern PyTypeObject *gdbpy_FloatType;
+extern PyTypeObject *gdbpy_BoolType;
+extern PyTypeObject *gdbpy_IntType;
+extern PyTypeObject *gdbpy_LongType;
+extern PyTypeObject *gdbpy_SliceType;
+extern PyTypeObject *gdbpy_StringType;
+extern PyTypeObject *gdbpy_ListType;
+extern PyTypeObject *gdbpy_TupleType;
+extern PyTypeObject *gdbpy_UnicodeType;
+
+extern PyObject **pgdbpyExc_AttributeError;
+extern PyObject **pgdbpyExc_IndexError;
+extern PyObject **pgdbpyExc_IOError;
+extern PyObject **pgdbpyExc_KeyError;
+extern PyObject **pgdbpyExc_KeyboardInterrupt;
+extern PyObject **pgdbpyExc_MemoryError;
+extern PyObject **pgdbpyExc_NotImplementedError;
+extern PyObject **pgdbpyExc_OverflowError;
+extern PyObject **pgdbpyExc_RuntimeError;
+extern PyObject **pgdbpyExc_StopIteration;
+extern PyObject **pgdbpyExc_SystemError;
+extern PyObject **pgdbpyExc_TypeError;
+extern PyObject **pgdbpyExc_ValueError;
+extern PyObject **pgdbpyExc_NameError;
+extern PyThreadState **pgdbpy_OSReadlineTState;
+
+extern char * (**pgdbpyOS_ReadlineFunctionPointer) (FILE *, FILE *,
+#if PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION >= 4
+                        const char *);
+#else
+                        char *);
+#endif
+
+#define gdbpyExc_AttributeError (*pgdbpyExc_AttributeError)
+#define gdbpyExc_IOError (*pgdbpyExc_IOError)
+#define gdbpyExc_KeyError (*pgdbpyExc_KeyError)
+#define gdbpyExc_KeyboardInterrupt (*pgdbpyExc_KeyboardInterrupt)
+#define gdbpyExc_MemoryError (*pgdbpyExc_MemoryError)
+#define gdbpyExc_NotImplementedError (*pgdbpyExc_NotImplementedError)
+#define gdbpyExc_OverflowError (*pgdbpyExc_OverflowError)
+#define gdbpyExc_RuntimeError (*pgdbpyExc_RuntimeError)
+#define gdbpyOS_ReadlineFunctionPointer (*pgdbpyOS_ReadlineFunctionPointer)
+#define gdbpyExc_StopIteration (*pgdbpyExc_StopIteration)
+#define gdbpyExc_SystemError (*pgdbpyExc_SystemError)
+#define gdbpyExc_TypeError (*pgdbpyExc_TypeError)
+#define gdbpyExc_ValueError (*pgdbpyExc_ValueError)
+#define gdbpyExc_NameError (*pgdbpyExc_NameError)
+#define gdbpy_OSReadlineTState (*pgdbpy_OSReadlineTState)
+#define gdbpy_IntCheck(op) PyObject_TypeCheck(op, gdbpy_IntType)
+#define gdbpy_LongCheck(op) PyObject_TypeCheck(op, gdbpy_LongType)
+#define gdbpy_TupleCheck(op) PyObject_TypeCheck(op, gdbpy_TupleType)
+#define gdbpy_StringCheck(op) PyObject_TypeCheck(op, gdbpy_StringType)
+#define gdbpy_UnicodeCheck(op) PyObject_TypeCheck(op, gdbpy_UnicodeType)
+#define gdbpy_ListCheck(op) PyObject_TypeCheck(op, gdbpy_ListType)
+
+/* Macro for returning standard types from a function */
+#define GDB_PY_RETURN_NONE  return Py_INCREF(gdbpy_None), gdbpy_None
+#define GDB_PY_RETURN_TRUE  return Py_INCREF(gdbpy_True), gdbpy_True
+#define GDB_PY_RETURN_FALSE return Py_INCREF(gdbpy_Zero), gdbpy_Zero
+
+/* CUDA-specific defines - end. */
+
 /* The 'name' parameter of PyErr_NewException was missing the 'const'
    qualifier in Python <= 3.4.  Hence, we wrap it in a function to
    avoid errors when compiled with -Werror.  */
@@ -195,7 +324,7 @@ gdb_PyObject_CallMethod (PyObject *o, const char *method, const char *format,
 static inline PyObject*
 gdb_PyErr_NewException (const char *name, PyObject *base, PyObject *dict)
 {
-  return PyErr_NewException (const_cast<char *> (name), base, dict);
+  return gdbpy_PyErr_NewException (const_cast<char *> (name), base, dict);
 }
 
 #define PyErr_NewException gdb_PyErr_NewException
@@ -207,7 +336,7 @@ gdb_PyErr_NewException (const char *name, PyObject *base, PyObject *dict)
 static inline PyObject *
 gdb_PySys_GetObject (const char *name)
 {
-  return PySys_GetObject (const_cast<char *> (name));
+  return gdbpy_PySys_GetObject (const_cast<char *> (name));
 }
 
 #define PySys_GetObject gdb_PySys_GetObject
@@ -222,10 +351,12 @@ gdb_PySys_GetObject (const char *name)
 # define GDB_PYSYS_SETPATH_CHAR char
 #endif
 
+extern void (*gdbpy_PySys_SetPath) (GDB_PYSYS_SETPATH_CHAR *path);
+
 static inline void
 gdb_PySys_SetPath (const GDB_PYSYS_SETPATH_CHAR *path)
 {
-  PySys_SetPath (const_cast<GDB_PYSYS_SETPATH_CHAR *> (path));
+  gdbpy_PySys_SetPath (const_cast<GDB_PYSYS_SETPATH_CHAR *> (path));
 }
 
 #define PySys_SetPath gdb_PySys_SetPath
@@ -280,7 +411,7 @@ gdb_PyArg_ParseTupleAndKeywords (PyObject *args, PyObject *kw,
   int res;
 
   va_start (ap, keywords);
-  res = PyArg_VaParseTupleAndKeywords (args, kw, format,
+  res = gdbpy_PyArg_VaParseTupleAndKeywords (args, kw, format,
 				       const_cast<char **> (keywords),
 				       ap);
   va_end (ap);
@@ -344,7 +475,7 @@ typedef struct gdbpy_breakpoint_object
 #define BPPY_REQUIRE_VALID(Breakpoint)                                  \
     do {                                                                \
       if ((Breakpoint)->bp == NULL)                                     \
-        return PyErr_Format (PyExc_RuntimeError,                        \
+        return gdbpy_ErrFormat (gdbpyExc_RuntimeError,                  \
                              _("Breakpoint %d is invalid."),            \
                              (Breakpoint)->number);                     \
     } while (0)
@@ -355,7 +486,7 @@ typedef struct gdbpy_breakpoint_object
     do {                                                                \
       if ((Breakpoint)->bp == NULL)                                     \
         {                                                               \
-          PyErr_Format (PyExc_RuntimeError, _("Breakpoint %d is invalid."), \
+          gdbpy_ErrFormat (gdbpyExc_RuntimeError, _("Breakpoint %d is invalid."), \
                         (Breakpoint)->number);                          \
           return -1;                                                    \
         }                                                               \
@@ -769,7 +900,7 @@ struct Py_buffer_deleter
 {
   void operator() (Py_buffer *b) const
   {
-    PyBuffer_Release (b);
+    gdbpy_PyBuffer_Release (b);
   }
 };
 

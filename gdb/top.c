@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "gdbcmd.h"
 #include "cli/cli-cmds.h"
@@ -56,6 +60,10 @@
 #include "gdbarch.h"
 #include "gdbsupport/pathstuff.h"
 #include "cli/cli-style.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-gdb.h"
+#include "cuda/cuda-exceptions.h"
+#endif
 
 /* readline include files.  */
 #include "readline/readline.h"
@@ -1393,6 +1401,10 @@ command_line_input (const char *prompt_arg, const char *annotation_suffix)
 void
 print_gdb_version (struct ui_file *stream, bool interactive)
 {
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - version information */
+  cuda_print_message_nvidia_version (stream);
+#endif
   /* From GNU coding standards, first line is meant to be easy for a
      program to parse, and is just canonical program name and version
      number, which starts after last space.  */
@@ -1675,7 +1687,13 @@ kill_or_detach (inferior *inf, int from_tty)
   if (inf->pid == 0)
     return;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - any_thread_of_inferior() asserts that there is a thread,
+     only look for live ones. */
+  thread_info *thread = any_live_thread_of_inferior (inf);
+#else
   thread_info *thread = any_thread_of_inferior (inf);
+#endif
   if (thread != NULL)
     {
       switch_to_thread (thread);
@@ -1770,6 +1788,16 @@ quit_force (int *exit_arg, int from_tty)
   else if (return_child_result)
     exit_code = return_child_result_value;
 
+#ifdef NVIDIA_CUDA_GDB
+  if (cuda_exception_is_valid (cuda_exception))
+    {
+      cuda_cleanup();
+      cuda_exception_reset (cuda_exception);
+
+      if (target_has_execution)
+        target_kill ();
+    }
+#endif
   /* We want to handle any quit errors and exit regardless.  */
 
   /* Get out of tfind mode, and kill or detach all inferiors.  */

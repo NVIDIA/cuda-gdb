@@ -60,11 +60,14 @@ BUGS
 # endif /* PAGESIZE */
 #endif /* GNU_OUR_PAGESIZE */
 
+/* CUDA - getpagesize() is part of Bionic */
+#ifndef __ANDROID__
 int
 getpagesize (void)
 {
   return (GNU_OUR_PAGESIZE);
 }
+#endif
 
 #else /* VMS */
 

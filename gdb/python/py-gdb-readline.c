@@ -22,7 +22,7 @@
 #include "top.h"
 #include "cli/cli-utils.h"
 
-/* Readline function suitable for PyOS_ReadlineFunctionPointer, which
+/* Readline function suitable for gdbpyOS_ReadlineFunctionPointer, which
    is used for Python's interactive parser and raw_input.  In both
    cases, sys_stdin and sys_stdout are always stdin and stdout
    respectively, as far as I can tell; they are ignored and
@@ -55,7 +55,7 @@ gdbpy_readline_wrapper (FILE *sys_stdin, FILE *sys_stdout,
 	 with the original value saved in the following undocumented
 	 variable (see Python's Parser/myreadline.c and
 	 Modules/readline.c).  */
-      PyEval_RestoreThread (_PyOS_ReadlineTState);
+      PyEval_RestoreThread (gdbpy_OSReadlineTState);
       gdbpy_convert_exception (except);
       PyEval_SaveThread ();
       return NULL;
@@ -108,6 +108,6 @@ class GdbRemoveReadlineFinder:\n\
 \n\
 sys.meta_path.append(GdbRemoveReadlineFinder())\n\
 ") == 0)
-    PyOS_ReadlineFunctionPointer = gdbpy_readline_wrapper;
+    gdbpyOS_ReadlineFunctionPointer = gdbpy_readline_wrapper;
 }
 

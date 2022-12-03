@@ -18,6 +18,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef GDBTHREAD_H
 #define GDBTHREAD_H
 
@@ -32,6 +36,11 @@ struct symtab;
 #include "gdbsupport/refcounted-object.h"
 #include "gdbsupport/common-gdbthread.h"
 #include "gdbsupport/forward-scope-exit.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-coords.h"
+/* Serial command to request all threads to stop when the target is running. */
+#define SERIAL_REMOTE_STOP_CMD  "\x04"
+#endif
 
 struct inferior;
 struct process_stratum_target;
@@ -388,6 +397,12 @@ public:
      fields point to self.  */
   struct thread_info *step_over_prev = NULL;
   struct thread_info *step_over_next = NULL;
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Used when we need to update the cuda coordinates during
+   * cuda_wait (). Handled during context_switch (). */
+  bool need_cuda_context_switch = false;
+  cuda_coords_t new_cuda_coords = CUDA_INVALID_COORDS;
+#endif
 };
 
 /* A gdb::ref_ptr pointer to a thread_info.  */
@@ -577,6 +592,11 @@ extern void switch_to_thread (struct thread_info *thr);
 /* Switch context to no thread selected.  */
 extern void switch_to_no_thread ();
 
+#ifdef NVIDIA_CUDA_GDB
+/* Switch from one thread to another.  Also sets the STOP_PC.
+   Do not invalidate the CUDA device context.  */
+extern void switch_to_thread_keep_cuda_focus (struct thread_info *);
+#endif
 /* Switch from one thread to another.  Does not read registers.  */
 extern void switch_to_thread_no_regs (struct thread_info *thread);
 
@@ -662,6 +682,11 @@ public:
 
   /* Cancel restoring on scope exit.  */
   void dont_restore () { m_dont_restore = true; }
+#ifdef NVIDIA_CUDA_GDB
+  /* Set to avoid switch_to_cuda_thread which can only
+   * be called when the device is suspended. */
+  void cuda_lightweight_restore () { m_cuda_lightweight_restore = true; }
+#endif
 
 private:
   void restore ();
@@ -673,6 +698,10 @@ private:
   frame_id m_selected_frame_id;
   int m_selected_frame_level;
   bool m_was_stopped;
+#ifdef NVIDIA_CUDA_GDB
+  cuda_coords_t m_cuda_coords;
+  bool m_cuda_lightweight_restore = false;
+#endif
 };
 
 /* Returns a pointer into the thread_info corresponding to

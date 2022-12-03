@@ -78,7 +78,7 @@ btrace_insn_from_recpy_insn (const PyObject * const pyobject)
 
   if (Py_TYPE (pyobject) != &recpy_insn_type)
     {
-      PyErr_Format (gdbpy_gdb_error, _("Must be gdb.RecordInstruction"));
+      gdbpy_ErrFormat (gdbpy_gdb_error, _("Must be gdb.RecordInstruction"));
       return NULL;
     }
 
@@ -87,20 +87,20 @@ btrace_insn_from_recpy_insn (const PyObject * const pyobject)
 
   if (tinfo == NULL || btrace_is_empty (tinfo))
     {
-      PyErr_Format (gdbpy_gdb_error, _("No such instruction."));
+      gdbpy_ErrFormat (gdbpy_gdb_error, _("No such instruction."));
       return NULL;
     }
 
   if (btrace_find_insn_by_number (&iter, &tinfo->btrace, obj->number) == 0)
     {
-      PyErr_Format (gdbpy_gdb_error, _("No such instruction."));
+      gdbpy_ErrFormat (gdbpy_gdb_error, _("No such instruction."));
       return NULL;
     }
 
   insn = btrace_insn_get (&iter);
   if (insn == NULL)
     {
-      PyErr_Format (gdbpy_gdb_error, _("Not a valid instruction."));
+      gdbpy_ErrFormat (gdbpy_gdb_error, _("Not a valid instruction."));
       return NULL;
     }
 
@@ -121,7 +121,7 @@ btrace_func_from_recpy_func (const PyObject * const pyobject)
 
   if (Py_TYPE (pyobject) != &recpy_func_type)
     {
-      PyErr_Format (gdbpy_gdb_error, _("Must be gdb.RecordFunctionSegment"));
+      gdbpy_ErrFormat (gdbpy_gdb_error, _("Must be gdb.RecordFunctionSegment"));
       return NULL;
     }
 
@@ -130,20 +130,20 @@ btrace_func_from_recpy_func (const PyObject * const pyobject)
 
   if (tinfo == NULL || btrace_is_empty (tinfo))
     {
-      PyErr_Format (gdbpy_gdb_error, _("No such function segment."));
+      gdbpy_ErrFormat (gdbpy_gdb_error, _("No such function segment."));
       return NULL;
     }
 
   if (btrace_find_call_by_number (&iter, &tinfo->btrace, obj->number) == 0)
     {
-      PyErr_Format (gdbpy_gdb_error, _("No such function segment."));
+      gdbpy_ErrFormat (gdbpy_gdb_error, _("No such function segment."));
       return NULL;
     }
 
   func = btrace_call_get (&iter);
   if (func == NULL)
     {
-      PyErr_Format (gdbpy_gdb_error, _("Not a valid function segment."));
+      gdbpy_ErrFormat (gdbpy_gdb_error, _("Not a valid function segment."));
       return NULL;
     }
 
@@ -261,9 +261,9 @@ recpy_bt_insn_is_speculative (PyObject *self, void *closure)
     return NULL;
 
   if (insn->flags & BTRACE_INSN_FLAG_SPECULATIVE)
-    Py_RETURN_TRUE;
+    GDB_PY_RETURN_TRUE;
   else
-    Py_RETURN_FALSE;
+    GDB_PY_RETURN_FALSE;
 }
 
 /* Implementation of RecordInstruction.data [buffer] for btrace.
@@ -289,7 +289,7 @@ recpy_bt_insn_data (PyObject *self, void *closure)
       GDB_PY_HANDLE_EXCEPTION (except);
     }
 
-  object = PyBytes_FromStringAndSize ((const char *) buffer.data (),
+  object = gdbpy_PyBytes_FromStringAndSize ((const char *) buffer.data (),
 				      insn->size);
 
   if (object == NULL)
@@ -298,7 +298,7 @@ recpy_bt_insn_data (PyObject *self, void *closure)
 #ifdef IS_PY3K
   return PyMemoryView_FromObject (object);
 #else
-  return PyBuffer_FromObject (object, 0, Py_END_OF_BUFFER);
+  return gdbpy_PyBuffer_FromObject (object, 0, Py_END_OF_BUFFER);
 #endif
 
 }
@@ -357,7 +357,7 @@ recpy_bt_func_symbol (PyObject *self, void *closure)
     return NULL;
 
   if (func->sym == NULL)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   return symbol_to_symbol_object (func->sym);
 }
@@ -397,7 +397,7 @@ recpy_bt_func_up (PyObject *self, void *closure)
     return NULL;
 
   if (func->up == 0)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   return recpy_func_new (((recpy_element_object *) self)->thread,
 			 RECORD_METHOD_BTRACE, func->up);
@@ -415,7 +415,7 @@ recpy_bt_func_prev (PyObject *self, void *closure)
     return NULL;
 
   if (func->prev == 0)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   return recpy_func_new (((recpy_element_object *) self)->thread,
 			 RECORD_METHOD_BTRACE, func->prev);
@@ -433,7 +433,7 @@ recpy_bt_func_next (PyObject *self, void *closure)
     return NULL;
 
   if (func->next == 0)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   return recpy_func_new (((recpy_element_object *) self)->thread,
 			 RECORD_METHOD_BTRACE, func->next);
@@ -465,8 +465,8 @@ btpy_list_item (PyObject *self, Py_ssize_t index)
   Py_ssize_t number;
 
   if (index < 0 || index >= btpy_list_length (self))
-    return PyErr_Format (PyExc_IndexError, _("Index out of range: %zd."),
-			 index);
+    return gdbpy_ErrFormat (*pgdbpyExc_IndexError, _("Index out of range: %zd."),
+			    index);
 
   number = obj->first + (obj->step * index);
 
@@ -487,7 +487,7 @@ btpy_list_slice (PyObject *self, PyObject *value)
 
   if (PyInt_Check (value))
     {
-      Py_ssize_t index = PyInt_AsSsize_t (value);
+      Py_ssize_t index = gdbpy_PyInt_AsSize_t (value);
 
       /* Emulate Python behavior for negative indices.  */
       if (index < 0)
@@ -496,11 +496,11 @@ btpy_list_slice (PyObject *self, PyObject *value)
       return btpy_list_item (self, index);
     }
 
-  if (!PySlice_Check (value))
-    return PyErr_Format (PyExc_TypeError, _("Index must be int or slice."));
+  if (!gdbpy_PySlice_Check (value))
+    return gdbpy_ErrFormat (*pgdbpyExc_TypeError, _("Index must be int or slice."));
 
-  if (0 != PySlice_GetIndicesEx (BTPY_PYSLICE (value), length, &start, &stop,
-				 &step, &slicelength))
+  if (0 != gdbpy_PySlice_GetIndicesEx (BTPY_PYSLICE (value), length, &start, &stop,
+				       &step, &slicelength))
     return NULL;
 
   return btpy_list_new (obj->thread, obj->first + obj->step * start,
@@ -554,7 +554,7 @@ btpy_list_index (PyObject *self, PyObject *value)
   const LONGEST index = btpy_list_position (self, value);
 
   if (index < 0)
-    return PyErr_Format (PyExc_ValueError, _("Not in list."));
+    return gdbpy_ErrFormat (*pgdbpyExc_ValueError, _("Not in list."));
 
   return gdb_py_long_from_longest (index);
 }
@@ -580,8 +580,8 @@ btpy_list_richcompare (PyObject *self, PyObject *other, int op)
 
   if (Py_TYPE (self) != Py_TYPE (other))
     {
-      Py_INCREF (Py_NotImplemented);
-      return Py_NotImplemented;
+      Py_INCREF (gdbpy_NotImplemented);
+      return gdbpy_NotImplemented;
     }
 
   switch (op)
@@ -592,9 +592,9 @@ btpy_list_richcompare (PyObject *self, PyObject *other, int op)
 	  && obj1->first == obj2->first
 	  && obj1->last == obj2->last
 	  && obj1->step == obj2->step)
-	Py_RETURN_TRUE;
+	GDB_PY_RETURN_TRUE;
       else
-	Py_RETURN_FALSE;
+	GDB_PY_RETURN_FALSE;
 
     case Py_NE:
       if (obj1->thread != obj2->thread
@@ -602,16 +602,16 @@ btpy_list_richcompare (PyObject *self, PyObject *other, int op)
 	  || obj1->first != obj2->first
 	  || obj1->last != obj2->last
 	  || obj1->step != obj2->step)
-	Py_RETURN_TRUE;
+	GDB_PY_RETURN_TRUE;
       else
-	Py_RETURN_FALSE;
+	GDB_PY_RETURN_FALSE;
 
     default:
       break;
   }
 
-  Py_INCREF (Py_NotImplemented);
-  return Py_NotImplemented;
+  Py_INCREF (gdbpy_NotImplemented);
+  return gdbpy_NotImplemented;
 }
 
 /* Implementation of
@@ -634,12 +634,12 @@ recpy_bt_format (PyObject *self, void *closure)
   const struct btrace_config * config;
 
   if (tinfo == NULL)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   config = btrace_conf (&tinfo->btrace);
 
   if (config == NULL)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   return PyString_FromString (btrace_format_short_string (config->format));
 }
@@ -654,10 +654,10 @@ recpy_bt_replay_position (PyObject *self, void *closure)
   thread_info * tinfo = record->thread;
 
   if (tinfo == NULL)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   if (tinfo->btrace.replay == NULL)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   return btpy_insn_or_gap_new (tinfo,
 			       btrace_insn_number (tinfo->btrace.replay));
@@ -674,12 +674,12 @@ recpy_bt_begin (PyObject *self, void *closure)
   struct btrace_insn_iterator iterator;
 
   if (tinfo == NULL)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   btrace_fetch (tinfo, record_btrace_get_cpu ());
 
   if (btrace_is_empty (tinfo))
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   btrace_insn_begin (&iterator, &tinfo->btrace);
   return btpy_insn_or_gap_new (tinfo, btrace_insn_number (&iterator));
@@ -696,12 +696,12 @@ recpy_bt_end (PyObject *self, void *closure)
   struct btrace_insn_iterator iterator;
 
   if (tinfo == NULL)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   btrace_fetch (tinfo, record_btrace_get_cpu ());
 
   if (btrace_is_empty (tinfo))
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   btrace_insn_end (&iterator, &tinfo->btrace);
   return btpy_insn_or_gap_new (tinfo, btrace_insn_number (&iterator));
@@ -720,12 +720,12 @@ recpy_bt_instruction_history (PyObject *self, void *closure)
   unsigned long last = 0;
 
    if (tinfo == NULL)
-     Py_RETURN_NONE;
+     GDB_PY_RETURN_NONE;
 
    btrace_fetch (tinfo, record_btrace_get_cpu ());
 
    if (btrace_is_empty (tinfo))
-     Py_RETURN_NONE;
+     GDB_PY_RETURN_NONE;
 
    btrace_insn_begin (&iterator, &tinfo->btrace);
    first = btrace_insn_number (&iterator);
@@ -749,12 +749,12 @@ recpy_bt_function_call_history (PyObject *self, void *closure)
   unsigned long last = 0;
 
   if (tinfo == NULL)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   btrace_fetch (tinfo, record_btrace_get_cpu ());
 
   if (btrace_is_empty (tinfo))
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   btrace_call_begin (&iterator, &tinfo->btrace);
   first = btrace_call_number (&iterator);
@@ -776,13 +776,13 @@ recpy_bt_goto (PyObject *self, PyObject *args)
   PyObject *parse_obj;
 
   if (tinfo == NULL || btrace_is_empty (tinfo))
-	return PyErr_Format (gdbpy_gdb_error, _("Empty branch trace."));
+	return gdbpy_ErrFormat (gdbpy_gdb_error, _("Empty branch trace."));
 
-  if (!PyArg_ParseTuple (args, "O", &parse_obj))
+  if (!gdbpy_PyArg_ParseTuple (args, "O", &parse_obj))
     return NULL;
 
   if (Py_TYPE (parse_obj) != &recpy_insn_type)
-    return PyErr_Format (PyExc_TypeError, _("Argument must be instruction."));
+    return gdbpy_ErrFormat (*pgdbpyExc_TypeError, _("Argument must be instruction."));
   obj = (const recpy_element_object *) parse_obj;
 
   try
@@ -801,7 +801,7 @@ recpy_bt_goto (PyObject *self, PyObject *args)
       GDB_PY_HANDLE_EXCEPTION (except);
     }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* BtraceList methods.  */

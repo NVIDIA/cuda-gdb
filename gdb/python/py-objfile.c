@@ -62,7 +62,7 @@ static const struct objfile_data *objfpy_objfile_data_key;
   do {								\
     if (!(obj)->objfile)					\
       {								\
-	PyErr_SetString (PyExc_RuntimeError,			\
+	PyErr_SetString (gdbpyExc_RuntimeError,			\
 			 _("Objfile no longer exists."));	\
 	return NULL;						\
       }								\
@@ -80,7 +80,7 @@ objfpy_get_filename (PyObject *self, void *closure)
   if (obj->objfile)
     return (host_string_to_python_string (objfile_name (obj->objfile))
 	    .release ());
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* An Objfile method which returns the objfile's file name, as specified
@@ -98,7 +98,7 @@ objfpy_get_username (PyObject *self, void *closure)
       return host_string_to_python_string (username).release ();
     }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* If SELF is a separate debug-info file, return the "backlink" field.
@@ -116,7 +116,7 @@ objfpy_get_owner (PyObject *self, void *closure)
   owner = objfile->separate_debug_objfile_backlink;
   if (owner != NULL)
     return objfile_to_objfile_object (owner).release ();
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* An Objfile method which returns the objfile's build id, or None.  */
@@ -146,7 +146,7 @@ objfpy_get_build_id (PyObject *self, void *closure)
       return host_string_to_python_string (hex_form.c_str ()).release ();
     }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* An Objfile method which returns the objfile's progspace, or None.  */
@@ -159,7 +159,7 @@ objfpy_get_progspace (PyObject *self, void *closure)
   if (obj->objfile)
     return pspace_to_pspace_object (obj->objfile->pspace).release ();
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 static void
@@ -241,14 +241,14 @@ objfpy_set_printers (PyObject *o, PyObject *value, void *ignore)
 
   if (! value)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Cannot delete the pretty_printers attribute."));
       return -1;
     }
 
-  if (! PyList_Check (value))
+  if (! gdbpy_ListCheck (value))
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("The pretty_printers attribute must be a list."));
       return -1;
     }
@@ -280,14 +280,14 @@ objfpy_set_frame_filters (PyObject *o, PyObject *filters, void *ignore)
 
   if (! filters)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Cannot delete the frame filters attribute."));
       return -1;
     }
 
   if (! PyDict_Check (filters))
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("The frame_filters attribute must be a dictionary."));
       return -1;
     }
@@ -320,14 +320,14 @@ objfpy_set_frame_unwinders (PyObject *o, PyObject *unwinders, void *ignore)
 
   if (!unwinders)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Cannot delete the frame unwinders attribute."));
       return -1;
     }
 
-  if (!PyList_Check (unwinders))
+  if (!gdbpy_ListCheck (unwinders))
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("The frame_unwinders attribute must be a list."));
       return -1;
     }
@@ -371,14 +371,14 @@ objfpy_set_type_printers (PyObject *o, PyObject *value, void *ignore)
 
   if (! value)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Cannot delete the type_printers attribute."));
       return -1;
     }
 
-  if (! PyList_Check (value))
+  if (! gdbpy_ListCheck (value))
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("The type_printers attribute must be a list."));
       return -1;
     }
@@ -400,9 +400,9 @@ objfpy_is_valid (PyObject *self, PyObject *args)
   objfile_object *obj = (objfile_object *) self;
 
   if (! obj->objfile)
-    Py_RETURN_FALSE;
+    GDB_PY_RETURN_FALSE;
 
-  Py_RETURN_TRUE;
+  GDB_PY_RETURN_TRUE;
 }
 
 /* Implementation of gdb.Objfile.add_separate_debug_file (self, string). */
@@ -430,7 +430,7 @@ objfpy_add_separate_debug_file (PyObject *self, PyObject *args, PyObject *kw)
       GDB_PY_HANDLE_EXCEPTION (except);
     }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Implementation of
@@ -455,7 +455,7 @@ objfpy_lookup_global_symbol (PyObject *self, PyObject *args, PyObject *kw)
       struct symbol *sym = lookup_global_symbol_from_objfile
         (obj->objfile, GLOBAL_BLOCK, symbol_name, (domain_enum) domain).symbol;
       if (sym == nullptr)
-	Py_RETURN_NONE;
+	GDB_PY_RETURN_NONE;
 
       return symbol_to_symbol_object (sym);
     }
@@ -464,7 +464,7 @@ objfpy_lookup_global_symbol (PyObject *self, PyObject *args, PyObject *kw)
       GDB_PY_HANDLE_EXCEPTION (except);
     }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Implementation of
@@ -489,7 +489,7 @@ objfpy_lookup_static_symbol (PyObject *self, PyObject *args, PyObject *kw)
       struct symbol *sym = lookup_global_symbol_from_objfile
         (obj->objfile, STATIC_BLOCK, symbol_name, (domain_enum) domain).symbol;
       if (sym == nullptr)
-	Py_RETURN_NONE;
+	GDB_PY_RETURN_NONE;
 
       return symbol_to_symbol_object (sym);
     }
@@ -498,7 +498,7 @@ objfpy_lookup_static_symbol (PyObject *self, PyObject *args, PyObject *kw)
       GDB_PY_HANDLE_EXCEPTION (except);
     }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Implement repr() for gdb.Objfile.  */
@@ -512,7 +512,7 @@ objfpy_repr (PyObject *self_)
   if (obj == nullptr)
     return PyString_FromString ("<gdb.Objfile (invalid)>");
 
-  return PyString_FromFormat ("<gdb.Objfile filename=%s>",
+  return gdbpy_StringFromFormat ("<gdb.Objfile filename=%s>",
 			      objfile_filename (obj));
 }
 
@@ -622,7 +622,7 @@ gdbpy_lookup_objfile (PyObject *self, PyObject *args, PyObject *kw)
   struct objfile *objfile;
 
   if (!gdb_PyArg_ParseTupleAndKeywords (args, kw, "s|O!", keywords,
-					&name, &PyBool_Type, &by_build_id_obj))
+					&name, gdbpy_BoolType, &by_build_id_obj))
     return NULL;
 
   by_build_id = 0;
@@ -639,7 +639,7 @@ gdbpy_lookup_objfile (PyObject *self, PyObject *args, PyObject *kw)
     {
       if (!objfpy_build_id_ok (name))
 	{
-	  PyErr_SetString (PyExc_TypeError, _("Not a valid build id."));
+	  PyErr_SetString (gdbpyExc_TypeError, _("Not a valid build id."));
 	  return NULL;
 	}
       objfile = objfpy_lookup_objfile_by_build_id (name);
@@ -650,7 +650,7 @@ gdbpy_lookup_objfile (PyObject *self, PyObject *args, PyObject *kw)
   if (objfile != NULL)
     return objfile_to_objfile_object (objfile).release ();
 
-  PyErr_SetString (PyExc_ValueError, _("Objfile not found."));
+  PyErr_SetString (gdbpyExc_ValueError, _("Objfile not found."));
   return NULL;
 }
 

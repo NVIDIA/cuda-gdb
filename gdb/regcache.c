@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "inferior.h"
 #include "gdbthread.h"
@@ -221,6 +225,14 @@ reg_buffer::arch () const
   return m_descr->gdbarch;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* Return REGCACHE's architecture.  */
+struct gdbarch *
+get_regcache_arch (const regcache *regcache)
+{
+  return regcache->arch ();
+}
+#endif
 /* Return  a pointer to register REGNUM's buffer cache.  */
 
 gdb_byte *

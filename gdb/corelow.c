@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "arch-utils.h"
 #include <signal.h>
@@ -49,6 +53,11 @@
 #include <unordered_map>
 #include <unordered_set>
 #include "gdbcmd.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-tdep.h"
+#include "cuda/cuda-corelow.h"
+#include "cuda/cuda-linux-nat.h"
+#endif
 
 #ifndef O_LARGEFILE
 #define O_LARGEFILE 0
@@ -63,7 +72,11 @@ static const target_info core_target_info = {
 Specify the filename of the core file.")
 };
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+class core_target : public process_stratum_target
+#else
 class core_target final : public process_stratum_target
+#endif
 {
 public:
   core_target ();
@@ -99,6 +112,10 @@ public:
 
   bool info_proc (const char *, enum info_proc_what) override;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - thread architecture override */
+  struct gdbarch *thread_architecture (ptid_t) override;
+#endif
   /* A few helpers.  */
 
   /* Getter, see variable definition.  */
@@ -313,6 +330,10 @@ core_target::close ()
       current_program_space->cbfd.reset (nullptr);
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* cuda_core_free() is always safe to call*/
+  cuda_core_free ();
+#endif
   /* Core targets are heap-allocated (see core_target_open), so here
      we delete ourselves.  */
   delete this;
@@ -433,9 +454,30 @@ core_target_open (const char *arg, int from_tty)
 	error (_("No core file specified."));
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* Parse filenames. Spaces in filenames are not supported */
+  char *fname = strtok ((char *) arg, " ");
+  char *cname = strtok (NULL, " ");
+
+  if (strtok (NULL, " ") != NULL)
+    error (_("invalid args"));
+
+  /* CPU corefile name is required, GPU corefile name is optional */
+  if (!fname)
+    error (_("No core file specified."));
+
+  gdb::unique_xmalloc_ptr<char> filename (tilde_expand (fname));
+  if (filename.get () && !IS_ABSOLUTE_PATH (filename.get ()))
+    filename = gdb_abspath (filename.get ());
+
+  gdb::unique_xmalloc_ptr<char> cudacorename (cname ? tilde_expand (cname) : NULL);
+  if (cudacorename.get () && !IS_ABSOLUTE_PATH (cudacorename.get ()))
+    cudacorename = gdb_abspath (cudacorename.get ());
+#else
   gdb::unique_xmalloc_ptr<char> filename (tilde_expand (arg));
   if (!IS_ABSOLUTE_PATH (filename.get ()))
     filename = gdb_abspath (filename.get ());
+#endif
 
   flags = O_BINARY | O_LARGEFILE;
   if (write_files)
@@ -478,6 +520,10 @@ core_target_open (const char *arg, int from_tty)
   if (!exec_bfd)
     set_gdbarch_from_file (core_bfd);
 
+#ifdef NVIDIA_CUDA_GDB
+  if (cudacorename.get () && (strlen(cudacorename.get ()) > 0))
+    cuda_core_load_api (cudacorename.get ());
+#endif
   push_target (std::move (target_holder));
 
   switch_to_no_thread ();
@@ -570,11 +616,20 @@ core_target_open (const char *arg, int from_tty)
 			       siggy);
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  if (cudacorename.get ())
+    cuda_core_initialize_events_exceptions ();
+#endif
   /* Fetch all registers from core file.  */
   target_fetch_registers (get_current_regcache (), -1);
 
   /* Now, set up the frame cache, and print the top of stack.  */
   reinit_frame_cache ();
+
+#ifdef NVIDIA_CUDA_GDB
+  if (cudacorename.get () && cuda_focus_is_device ())
+    cuda_print_message_focus (false);
+#endif
   print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC, 1);
 
   /* Current thread should be NUM 1 but the user does not know that.
@@ -722,6 +777,13 @@ get_core_registers_cb (const char *sect_name, int supply_size, int collect_size,
 void
 core_target::fetch_registers (struct regcache *regcache, int regno)
 {
+#ifdef NVIDIA_CUDA_GDB
+  if (cuda_focus_is_device ())
+    {
+      cuda_core_fetch_registers (regcache, regno);
+      return;
+    }
+#endif
   if (!(m_core_gdbarch != nullptr
 	&& gdbarch_iterate_over_regset_sections_p (m_core_gdbarch)))
     {
@@ -1180,6 +1242,18 @@ maintenance_print_core_file_backed_mappings (const char *args, int from_tty)
     targ->info_proc_mappings (targ->core_gdbarch ());
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - thread architecture override */
+struct gdbarch *
+core_target::thread_architecture (ptid_t)
+{
+  /* A copy of cuda_nat_linux<BaseTarget>::thread_architecture */
+  if (cuda_focus_is_device ())
+    return cuda_get_gdbarch ();
+  else
+    return target_gdbarch ();
+}
+#endif
 void _initialize_corelow ();
 void
 _initialize_corelow ()

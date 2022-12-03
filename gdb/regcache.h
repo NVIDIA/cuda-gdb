@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef REGCACHE_H
 #define REGCACHE_H
 
@@ -30,6 +34,9 @@ struct address_space;
 class thread_info;
 struct process_stratum_target;
 
+#ifdef NVIDIA_CUDA_GDB
+extern struct gdbarch *get_regcache_arch (const regcache *regcache);
+#endif
 extern struct regcache *get_current_regcache (void);
 extern struct regcache *get_thread_regcache (process_stratum_target *target,
 					     ptid_t ptid);

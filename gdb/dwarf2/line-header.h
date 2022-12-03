@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef DWARF2_LINE_HEADER_H
 #define DWARF2_LINE_HEADER_H
 
@@ -174,6 +178,14 @@ struct line_header
      allocated using xmalloc; the caller is responsible for freeing
      it.  */
   gdb::unique_xmalloc_ptr<char> file_file_name (int file) const;
+
+#ifdef NVIDIA_CUDA_GDB
+  /* Offset of CUDA .debug_line inline function information into
+     debug_str */
+  uint32_t debug_str_offset {};
+  const char *debug_str_base {};
+#endif
+
 
  private:
   /* The include_directories table.  Note these are observing

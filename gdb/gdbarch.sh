@@ -19,6 +19,10 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+# NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+# Modified from the original GDB file referenced above by the CUDA-GDB
+# team at NVIDIA <cudatools@nvidia.com>.
+
 # Make certain that the script is not running in an internationalized
 # environment.
 LANG=C ; export LANG
@@ -517,6 +521,9 @@ m;int;return_in_first_hidden_param_p;struct type *type;type;;default_return_in_f
 
 m;CORE_ADDR;skip_prologue;CORE_ADDR ip;ip;0;0
 M;CORE_ADDR;skip_main_prologue;CORE_ADDR ip;ip
+# CUDA
+M:CORE_ADDR:skip_entrypoint:CORE_ADDR ip:ip
+# END CUDA
 # On some platforms, a single function may provide multiple entry points,
 # e.g. one that is used for function-pointer calls and a different one
 # that is used for direct function calls.
@@ -691,16 +698,16 @@ v;int;cannot_step_breakpoint;;;0;0;;0
 # See comment in target.h about continuable, steppable and
 # non-steppable watchpoints.
 v;int;have_nonsteppable_watchpoint;;;0;0;;0
-F;int;address_class_type_flags;int byte_size, int dwarf2_addr_class;byte_size, dwarf2_addr_class
-M;const char *;address_class_type_flags_to_name;int type_flags;type_flags
+F;type_instance_flags;address_class_type_flags;int byte_size, int dwarf2_addr_class;byte_size, dwarf2_addr_class
+M;const char *;address_class_type_flags_to_name;type_instance_flags type_flags;type_flags
 # Execute vendor-specific DWARF Call Frame Instruction.  OP is the instruction.
 # FS are passed from the generic execute_cfa_program function.
 m;bool;execute_dwarf_cfa_vendor_op;gdb_byte op, struct dwarf2_frame_state *fs;op, fs;;default_execute_dwarf_cfa_vendor_op;;0
 
 # Return the appropriate type_flags for the supplied address class.
-# This function should return 1 if the address class was recognized and
-# type_flags was set, zero otherwise.
-M;int;address_class_name_to_type_flags;const char *name, int *type_flags_ptr;name, type_flags_ptr
+# This function should return true if the address class was recognized and
+# type_flags was set, false otherwise.
+M;bool;address_class_name_to_type_flags;const char *name, type_instance_flags *type_flags_ptr;name, type_flags_ptr
 # Is a register in a group
 m;int;register_reggroup_p;int regnum, struct reggroup *reggroup;regnum, reggroup;;default_register_reggroup_p;;0
 # Fetch the pointer to the ith function argument.

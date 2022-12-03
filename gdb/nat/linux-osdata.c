@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "gdbsupport/common-defs.h"
 #include "linux-osdata.h"
 
@@ -268,8 +272,20 @@ get_cores_used_by_process (PID_T pid, int *cores, const int num_cores)
 	  core = linux_common_core_of_thread (ptid_t ((pid_t) pid,
 						      (pid_t) tid, 0));
 
+#ifdef NVIDIA_CUDA_GDB
+	  if (core >= 0)
+	    { 
+	      if (core >= num_cores)
+		{
+	          printf ("Warning: Adjusting return value of linux_common_core_of_thread (pid=%lu, tid=%lu).\n"
+                          "         core = %d >= num_cores = %d!\n",
+	                  (unsigned long)pid, (unsigned long)tid, core, num_cores);
+	          core = num_cores-1;
+		}
+#else
 	  if (core >= 0 && core < num_cores)
 	    {
+#endif
 	      ++cores[core];
 	      ++task_count;
 	    }
@@ -291,7 +307,12 @@ linux_xfer_osdata_processes (struct buffer *buffer)
   dirp = opendir ("/proc");
   if (dirp)
     {
+#if defined(NVIDIA_CUDA_GDB) && defined(__arm__)
+      /* On ARM, count both online and offline CPUs */
+      const int num_cores = sysconf (_SC_NPROCESSORS_CONF);
+#else
       const int num_cores = sysconf (_SC_NPROCESSORS_ONLN);
+#endif
       struct dirent *dp;
 
       while ((dp = readdir (dirp)) != NULL)

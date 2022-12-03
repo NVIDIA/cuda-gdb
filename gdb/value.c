@@ -1,5 +1,8 @@
 /* Low level packing and unpacking of values for GDB, the GNU Debugger.
 
+   Modified by Arm.
+
+   Copyright (C) 1995-2021 Arm Limited (or its affiliates). All rights reserved.
    Copyright (C) 1986-2021 Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -16,6 +19,10 @@
 
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
 
 #include "defs.h"
 #include "arch-utils.h"
@@ -44,6 +51,10 @@
 #include "gdbsupport/selftest.h"
 #include "gdbsupport/array-view.h"
 #include "cli/cli-style.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "f-lang.h"
+#include "valprint.h"
+#endif
 
 /* Definition of a user function.  */
 struct internal_function
@@ -173,6 +184,20 @@ static struct cmd_list_element *functionlist;
 
 struct value
 {
+#ifdef NVIDIA_CUDA_GDB
+  explicit value (struct type *type_)
+    : modifiable (1),
+      repeated (0),
+      lazy (1),
+      initialized (1),
+      stack (0),
+      cached (0),
+      extrapolated (0),
+      type (type_),
+      enclosing_type (type_)
+  {
+  }
+#else
   explicit value (struct type *type_)
     : modifiable (1),
       lazy (1),
@@ -182,6 +207,7 @@ struct value
       enclosing_type (type_)
   {
   }
+#endif
 
   ~value ()
   {
@@ -205,6 +231,11 @@ struct value
   /* Is it modifiable?  Only relevant if lval != not_lval.  */
   unsigned int modifiable : 1;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* Did the user ask for an explicit number of repeats of this value?
+     (If so don't limit it to print_max elements when printing.)  */
+  unsigned int repeated : 1;
+#endif
   /* If zero, contents of this value are in the contents field.  If
      nonzero, contents are in inferior.  If the lval field is lval_memory,
      the contents are in inferior memory at location.address plus offset.
@@ -228,6 +259,14 @@ struct value
      used instead of read_memory to enable extra caching.  */
   unsigned int stack : 1;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - register cache */
+  /* If nonzero, this value was recovered from CUDA PTX cache */
+  unsigned int cached : 1;
+  /* CUDA - regmap extrapolation */
+  /* If nonzero, this value has been extrapolated */
+  unsigned int extrapolated : 1;
+#endif
   /* Location of value (if lval).  */
   union
   {
@@ -277,6 +316,10 @@ struct value
      big-endian targets, it is the position of the MSB.  */
   LONGEST bitpos = 0;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* Length of contents above.  */
+  unsigned length;
+#endif
   /* The number of references to this value.  When a value is created,
      the value chain holds a reference, so REFERENCE_COUNT is 1.  If
      release_value is called, this value is removed from the chain but
@@ -430,6 +473,48 @@ value_entirely_covered_by_range_vector (struct value *value,
   return 0;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+#define TYPE_CODE_IS_ARRAY_LIKE(x) ((x->code () == TYPE_CODE_ARRAY) || (x->code () == TYPE_CODE_STRING))
+static LONGEST
+get_limited_length (const struct type *type)
+{
+  struct type *base;
+  struct value_print_options opts;
+
+  gdb_assert(type);
+  get_user_print_options (&opts);
+
+  /* PGI Hack: For pgi produced types in some cases trying to run the below
+     code crashes GDB.  For now, work around this by avoiding the code
+     below.  See gdb.fortran/pointers-to-vla.exp for an example of a test
+     that shows this failure.  */
+  if (opts.print_max <= 0
+      || (is_producer_pgif (type)))
+    return TYPE_LENGTH (type);
+
+  if (type->code () != TYPE_CODE_ARRAY
+      && type->code () != TYPE_CODE_STRING)
+    return TYPE_LENGTH (type);
+
+  base = TYPE_TARGET_TYPE (type);
+
+  for(base = TYPE_TARGET_TYPE (type); base && TYPE_CODE_IS_ARRAY_LIKE (base);
+      base = TYPE_TARGET_TYPE (base))
+    { /* iterate down until we get to the element type (a non-array type) */
+    }
+
+  if(base)
+    {
+      LONGEST length = opts.print_max * TYPE_LENGTH (base);
+      return length > TYPE_LENGTH (type) ? TYPE_LENGTH (type) : length;
+    }
+  else
+    {
+      return TYPE_LENGTH (type);
+    }
+}
+#endif
+
 int
 value_entirely_unavailable (struct value *value)
 {
@@ -442,6 +527,30 @@ value_entirely_optimized_out (struct value *value)
   return value_entirely_covered_by_range_vector (value, value->optimized_out);
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - register cache */
+int
+value_cached (const struct value *value)
+{
+  return value->cached;
+}
+void
+set_value_cached (struct value *value, int val)
+{
+  value->cached = val;
+}
+/* CUDA - regmap extrapolation */
+int
+value_extrapolated (const struct value *value)
+{
+  return value->extrapolated;
+}
+void
+set_value_extrapolated (struct value *value, int val)
+{
+  value->extrapolated = val;
+}
+#endif
 /* Insert into the vector pointed to by VECTORP the bit range starting of
    OFFSET bits, and extending for the next LENGTH bits.  */
 
@@ -997,7 +1106,7 @@ show_max_value_size (struct ui_file *file, int from_tty,
 static void
 check_type_length_before_alloc (const struct type *type)
 {
-  ULONGEST length = TYPE_LENGTH (type);
+  ULONGEST length = get_limited_length (type);
 
   if (max_value_size > -1 && length > max_value_size)
     {
@@ -1011,7 +1120,36 @@ check_type_length_before_alloc (const struct type *type)
 }
 
 /* Allocate the contents of VAL if it has not been allocated yet.  */
-
+#ifdef NVIDIA_CUDA_GDB
+static void
+allocate_value_contents (struct value *val)
+{
+  /* Re-allocate if the size of the value is less than the size of the type.
+     This can happen when there is an array under the influence of "set print
+     elements" i.e. we only have a prefix of the array from a prior call to
+     the _limited counterpart of this function.  */
+  if (!val->contents || val->length < TYPE_LENGTH (val->enclosing_type))
+    {
+      check_type_length_before_alloc (val->enclosing_type);
+      val->length = TYPE_LENGTH (val->enclosing_type);
+      val->contents.reset
+        ((gdb_byte *) xzalloc (TYPE_LENGTH (val->enclosing_type)));
+    }
+}
+/* Allocate the contents of VAL (limited by get_limited_length) if it has
+   not been allocated yet.  */
+void
+allocate_value_contents_limited (struct value *val)
+{
+  if (!val->contents)
+    {    
+      check_type_length_before_alloc (val->enclosing_type);
+      val->length = get_limited_length (val->enclosing_type);
+      val->contents.reset
+        ((gdb_byte *) xzalloc (val->length));
+    }
+}
+#else
 static void
 allocate_value_contents (struct value *val)
 {
@@ -1022,6 +1160,7 @@ allocate_value_contents (struct value *val)
 	((gdb_byte *) xzalloc (TYPE_LENGTH (val->enclosing_type)));
     }
 }
+#endif
 
 /* Allocate a  value  and its contents for type TYPE.  */
 
@@ -1047,7 +1186,16 @@ allocate_repeat_value (struct type *type, int count)
   struct type *array_type
     = lookup_array_range_type (type, low_bound, count + low_bound - 1);
 
+#ifdef NVIDIA_CUDA_GDB
+  struct value *val;
+  val = allocate_value (array_type);
+  /* CUDA - memory segments */
+  auto flags = TYPE_INSTANCE_FLAGS (val->type) | TYPE_INSTANCE_FLAGS (type);
+  val->type->set_instance_flags (flags);
+  return val;
+#else
   return allocate_value (array_type);
+#endif
 }
 
 struct value *
@@ -1142,16 +1290,50 @@ value_contents_raw (struct value *value)
   struct gdbarch *arch = get_value_arch (value);
   int unit_size = gdbarch_addressable_memory_unit_size (arch);
 
+#ifdef NVIDIA_CUDA_GDB
+  allocate_value_contents_limited (value);
+#else
   allocate_value_contents (value);
+#endif
   return value->contents.get () + value->embedded_offset * unit_size;
 }
 
 gdb_byte *
 value_contents_all_raw (struct value *value)
 {
+#ifdef NVIDIA_CUDA_GDB
+  allocate_value_contents_limited (value);
+#else
+  allocate_value_contents (value);
+#endif
+  return value->contents.get ();
+}
+#ifdef NVIDIA_CUDA_GDB
+gdb_byte *
+value_contents_all_raw_unlimted (struct value *value)
+{
   allocate_value_contents (value);
   return value->contents.get ();
 }
+void
+value_contents_ensure_unlimited (struct value* val) 
+{
+    struct type* type = check_typedef (value_type (val));
+    if (value_length (val) < TYPE_LENGTH (type))
+    {    
+        /* Allocate the value here as calling VALUE_CONTENTS_ALL_RAW will
+           call ALLOCATE_VALUE_CONTENTS_LIMITED, which may not be big
+           enough to hold TYPE_LENGTH (TYPE) bytes.  */
+        allocate_value_contents (val);
+
+        gdb_assert (TYPE_LENGTH (type) <= TYPE_LENGTH (val->enclosing_type));
+
+        read_memory (value_address (val),
+                     value_contents_all_raw_unlimted (val),
+                     TYPE_LENGTH (type));
+    }    
+}
+#endif
 
 struct type *
 value_enclosing_type (const struct value *value)
@@ -1324,9 +1506,16 @@ value_contents_copy_raw (struct value *dst, LONGEST dst_offset,
 					     TARGET_CHAR_BIT * length));
 
   /* Copy the data.  */
+#ifdef NVIDIA_CUDA_GDB
+  auto dstloc = value_contents_all_raw (dst) + dst_offset * unit_size;
+  auto srcloc = value_contents_all_raw (src) + src_offset * unit_size;
+  length = std::min (value_length(dst), value_length(src));
+  memcpy (dstloc, srcloc, length * unit_size);
+#else
   memcpy (value_contents_all_raw (dst) + dst_offset * unit_size,
 	  value_contents_all_raw (src) + src_offset * unit_size,
 	  length * unit_size);
+#endif
 
   /* Copy the meta-data, adjusted.  */
   src_bit_offset = src_offset * unit_size * HOST_CHAR_BIT;
@@ -1673,10 +1862,21 @@ value_copy (struct value *arg)
   struct type *encl_type = value_enclosing_type (arg);
   struct value *val;
 
+#ifdef NVIDIA_CUDA_GDB
+  val = allocate_value_lazy (encl_type);
+  if (!value_lazy (val))
+    {
+      auto valueloc = value_contents_all_raw (val);
+      auto argloc = value_contents_all_raw (arg);
+      memcpy (valueloc, argloc,
+	      TYPE_LENGTH (value_enclosing_type (arg)));
+    }
+#else
   if (value_lazy (arg))
     val = allocate_value_lazy (encl_type);
   else
     val = allocate_value (encl_type);
+#endif
   val->type = arg->type;
   VALUE_LVAL (val) = VALUE_LVAL (arg);
   val->location = arg->location;
@@ -1684,13 +1884,21 @@ value_copy (struct value *arg)
   val->bitpos = arg->bitpos;
   val->bitsize = arg->bitsize;
   val->lazy = arg->lazy;
+#ifdef NVIDIA_CUDA_GDB
+  val->stack = arg->stack; /* CUDA - cuda_read_memory relies on this */
+  val->repeated = arg->repeated;
+#endif
   val->embedded_offset = value_embedded_offset (arg);
   val->pointed_to_offset = arg->pointed_to_offset;
   val->modifiable = arg->modifiable;
   if (!value_lazy (val))
     {
+#ifdef NVIDIA_CUDA_GDB
+      value_copy_contents_all_raw (val, arg);
+#else
       memcpy (value_contents_all_raw (val), value_contents_all_raw (arg),
 	      TYPE_LENGTH (value_enclosing_type (arg)));
+#endif
 
     }
   val->unavailable = arg->unavailable;
@@ -1786,7 +1994,14 @@ set_value_component_location (struct value *component,
   type = value_type (whole);
   if (NULL != TYPE_DATA_LOCATION (type)
       && TYPE_DATA_LOCATION_KIND (type) == PROP_CONST)
+#ifdef NVIDIA_CUDA_GDB
+    {
+      set_value_address (component, TYPE_DATA_LOCATION_ADDR (type));
+      component->offset = 0;
+    }
+#else
     set_value_address (component, TYPE_DATA_LOCATION_ADDR (type));
+#endif
 }
 
 /* Access to the value history.  */
@@ -2245,8 +2460,13 @@ set_internalvar_component (struct internalvar *var,
 	modify_field (value_type (var->u.value), addr + offset,
 		      value_as_long (newval), bitpos, bitsize);
       else
+#ifdef NVIDIA_CUDA_GDB
+	memcpy (addr + offset * unit_size, value_contents (newval),
+		value_length (newval));
+#else
 	memcpy (addr + offset * unit_size, value_contents (newval),
 		TYPE_LENGTH (value_type (newval)));
+#endif
       break;
 
     default:
@@ -2737,7 +2957,15 @@ value_as_address (struct value *val)
     return gdbarch_integer_to_address (gdbarch, value_type (val),
 				       value_contents (val));
 
+#ifdef NVIDIA_CUDA_GDB
+  int old_print_max = user_print_options.print_max;
+  user_print_options.print_max = 16;
+  CORE_ADDR r = unpack_long (value_type (val), value_contents (val));
+  user_print_options.print_max = old_print_max;
+  return r;
+#else
   return unpack_long (value_type (val), value_contents (val));
+#endif
 #endif
 }
 
@@ -2894,6 +3122,9 @@ set_value_enclosing_type (struct value *val, struct type *new_encl_type)
   if (TYPE_LENGTH (new_encl_type) > TYPE_LENGTH (value_enclosing_type (val)))
     {
       check_type_length_before_alloc (new_encl_type);
+#ifdef NVIDIA_CUDA_GDB
+      val->length = TYPE_LENGTH (new_encl_type);
+#endif
       val->contents
 	.reset ((gdb_byte *) xrealloc (val->contents.release (),
 				       TYPE_LENGTH (new_encl_type)));
@@ -2983,8 +3214,12 @@ value_primitive_field (struct value *arg1, LONGEST offset,
       else
 	{
 	  v = allocate_value (value_enclosing_type (arg1));
+#ifdef NVIDIA_CUDA_GDB
+	  value_copy_contents_all_raw (v, arg1);
+#else
 	  value_contents_copy_raw (v, 0, arg1, 0,
 				   TYPE_LENGTH (value_enclosing_type (arg1)));
+#endif
 	}
       v->type = type;
       v->offset = value_offset (arg1);
@@ -3024,6 +3259,10 @@ value_primitive_field (struct value *arg1, LONGEST offset,
 		   + value_embedded_offset (arg1));
     }
   set_value_component_location (v, arg1);
+#ifdef NVIDIA_CUDA_GDB
+  if (current_language->la_language == language_fortran)
+    return f_follow_pointers (v);
+#endif
   return v;
 }
 
@@ -3229,8 +3468,13 @@ unpack_value_bitfield (struct value *dest_val,
 
       num = unpack_bits_as_long (field_type, valaddr + embedded_offset,
 				 bitpos, bitsize);
+#ifdef NVIDIA_CUDA_GDB
+      store_signed_integer (value_contents_raw (dest_val),
+			    value_length (dest_val), byte_order, num);
+#else
       store_signed_integer (value_contents_raw (dest_val),
 			    TYPE_LENGTH (field_type), byte_order, num);
+#endif
     }
 
   /* Now copy the optimized out / unavailability ranges to the right
@@ -3483,10 +3727,18 @@ value_from_contents_and_address_unresolved (struct type *type,
    ADDRESS.  The type of the created value may differ from the passed
    type TYPE.  Make sure to retrieve values new type after this call.  */
 
+#ifdef NVIDIA_CUDA_GDB
+struct value *
+value_from_contents_and_address (struct type *type,
+				 const gdb_byte *valaddr,
+				 unsigned length,
+				 CORE_ADDR address)
+#else
 struct value *
 value_from_contents_and_address (struct type *type,
 				 const gdb_byte *valaddr,
 				 CORE_ADDR address)
+#endif
 {
   gdb::array_view<const gdb_byte> view;
   if (valaddr != nullptr)
@@ -3495,10 +3747,26 @@ value_from_contents_and_address (struct type *type,
   struct type *resolved_type_no_typedef = check_typedef (resolved_type);
   struct value *v;
 
+#ifdef NVIDIA_CUDA_GDB
+  if (valaddr == NULL)
+    {
+      if (TYPE_INSTANCE_FLAGS (type))
+        v = allocate_value_lazy (type);
+      else
+        v = allocate_value_lazy (resolved_type);
+    }
+  else
+    {
+      v = value_from_contents (resolved_type, valaddr);
+      v->length = std::min (TYPE_LENGTH (type), (ULONGEST)length);
+      memcpy (value_contents_raw (v), valaddr, value_length (v));
+    }
+#else
   if (valaddr == NULL)
     v = allocate_value_lazy (resolved_type);
   else
     v = value_from_contents (resolved_type, valaddr);
+#endif
   if (TYPE_DATA_LOCATION (resolved_type_no_typedef) != NULL
       && TYPE_DATA_LOCATION_KIND (resolved_type_no_typedef) == PROP_CONST)
     address = TYPE_DATA_LOCATION_ADDR (resolved_type_no_typedef);
@@ -3516,7 +3784,11 @@ value_from_contents (struct type *type, const gdb_byte *contents)
   struct value *result;
 
   result = allocate_value (type);
+#ifdef NVIDIA_CUDA_GDB
+  memcpy (value_contents_raw (result), contents, value_length (result));
+#else
   memcpy (value_contents_raw (result), contents, TYPE_LENGTH (type));
+#endif
   return result;
 }
 
@@ -3771,7 +4043,30 @@ value_fetch_lazy_bitfield (struct value *val)
 }
 
 /* Helper for value_fetch_lazy when the value is in memory.  */
+#ifdef NVIDIA_CUDA_GDB
+static void
+value_fetch_lazy_memory (struct value *val)
+{
+  CORE_ADDR addr;
+  struct type *type = check_typedef (value_enclosing_type (val));
+  int length = TYPE_LENGTH (type);
 
+  if (TYPE_DATA_LOCATION (type) != NULL
+      && TYPE_DATA_LOCATION_KIND (type) == PROP_CONST)
+    addr = TYPE_DATA_LOCATION_ADDR (type);
+  else
+    addr = value_address (val);
+
+  if (length && (addr
+                 || current_language->la_language != language_fortran
+                 || type->code () != TYPE_CODE_ARRAY))
+    {
+      read_value_memory (val, 0, value_stack (val),
+                         addr, value_contents_all_raw (val),
+                         get_limited_length (type));
+    }
+}
+#else
 static void
 value_fetch_lazy_memory (struct value *val)
 {
@@ -3785,6 +4080,7 @@ value_fetch_lazy_memory (struct value *val)
 			 addr, value_contents_all_raw (val),
 			 type_length_units (type));
 }
+#endif
 
 /* Helper for value_fetch_lazy when the value is in a register.  */
 
@@ -3814,8 +4110,10 @@ value_fetch_lazy_register (struct value *val)
 	 (e.g. float or int from a double register).  Lazy
 	 register values should have the register's natural type,
 	 so they do not apply.  */
+#ifndef NVIDIA_CUDA_GDB
       gdb_assert (!gdbarch_convert_register_p (get_frame_arch (next_frame),
 					       regnum, type));
+#endif
 
       /* FRAME was obtained, above, via VALUE_NEXT_FRAME_ID.
 	 Since a "->next" operation was performed when setting
@@ -3918,7 +4216,11 @@ void
 value_fetch_lazy (struct value *val)
 {
   gdb_assert (value_lazy (val));
+#ifdef NVIDIA_CUDA_GDB
+  allocate_value_contents_limited (val);
+#else
   allocate_value_contents (val);
+#endif
   /* A value is either lazy, or fully fetched.  The
      availability/validity is only established as we try to fetch a
      value.  */
@@ -3933,6 +4235,22 @@ value_fetch_lazy (struct value *val)
   else if (VALUE_LVAL (val) == lval_computed
 	   && value_computed_funcs (val)->read != NULL)
     value_computed_funcs (val)->read (val);
+#ifdef NVIDIA_CUDA_GDB
+  else if (VALUE_LVAL (val) == lval_internalvar_component)
+    {
+      struct internalvar *var;
+      struct value *src_val;
+
+      var = val->location.internalvar;
+      /* No other type of internalvar makes sense here.  */
+      gdb_assert (var->kind == INTERNALVAR_VALUE);
+      src_val = var->u.value;
+      if (VALUE_LVAL (src_val) == lval_memory)
+        value_fetch_lazy_memory (val);
+      else
+        internal_error (__FILE__, __LINE__, _("Unexpected lazy value type."));
+    }
+#endif
   else
     internal_error (__FILE__, __LINE__, _("Unexpected lazy value type."));
 
@@ -4135,6 +4453,42 @@ test_insert_into_bit_range_vector ()
 } /* namespace selftests */
 #endif /* GDB_SELF_TEST */
 
+#ifdef NVIDIA_CUDA_GDB
+void
+set_value_repeated (struct value *value,
+		    int repeated)
+{
+  value->repeated = repeated;
+}
+int
+value_repeated (const struct value *value)
+{
+  return value->repeated;
+}
+unsigned
+value_length (const struct value *value)
+{
+  if (value->contents)
+    return value->length;
+  return TYPE_LENGTH (value->enclosing_type);
+}
+void
+value_copy_contents (struct value *to, struct value *from)
+{
+  auto toloc = value_contents_raw (to);
+  auto fromloc = value_contents (from);
+  memcpy (toloc, fromloc,
+	  std::min (value_length (from), value_length (to)));
+}
+void
+value_copy_contents_all_raw (struct value *to, struct value *from)
+{
+  auto toloc = value_contents_all_raw (to);
+  auto fromloc = value_contents_all_raw (from);
+  memcpy (toloc, fromloc,
+	  std::min (value_length (from), value_length (to)));
+}
+#endif
 void _initialize_values ();
 void
 _initialize_values ()

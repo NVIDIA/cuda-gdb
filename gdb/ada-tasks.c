@@ -15,6 +15,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "observable.h"
 #include "gdbcmd.h"
@@ -632,8 +636,15 @@ read_atcb (CORE_ADDR task_id, struct ada_task_info *task_info)
 	error (_("%s. Aborting"), err_msg);
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  tcb_value = value_from_contents_and_address (pspace_data->atcb_type,
+					       NULL,
+					       TYPE_LENGTH (pspace_data->atcb_type),
+					       task_id);
+#else
   tcb_value = value_from_contents_and_address (pspace_data->atcb_type,
 					       NULL, task_id);
+#endif
   common_value = value_field (tcb_value, pspace_data->atcb_fieldno.common);
 
   /* Fill in the task_id.  */
@@ -760,8 +771,15 @@ read_atcb (CORE_ADDR task_id, struct ada_task_info *task_info)
       if (call != 0)
         {
           call_val =
+#ifdef NVIDIA_CUDA_GDB
+            value_from_contents_and_address (pspace_data->atcb_call_type,
+					     NULL,
+					     TYPE_LENGTH (pspace_data->atcb_call_type),
+					     call);
+#else
             value_from_contents_and_address (pspace_data->atcb_call_type,
 					     NULL, call);
+#endif
           task_info->caller_task =
             value_as_address
 	      (value_field (call_val, pspace_data->atcb_fieldno.call_self));
@@ -848,8 +866,15 @@ read_known_tasks_list (struct ada_tasks_inferior_data *data)
       add_ada_task (task_id, current_inferior ());
 
       /* Read the chain.  */
+#ifdef NVIDIA_CUDA_GDB
+      tcb_value = value_from_contents_and_address (pspace_data->atcb_type,
+						   NULL,
+						   TYPE_LENGTH (pspace_data->atcb_type),
+						   task_id);
+#else
       tcb_value = value_from_contents_and_address (pspace_data->atcb_type,
 						   NULL, task_id);
+#endif
       common_value = value_field (tcb_value, pspace_data->atcb_fieldno.common);
       task_id = value_as_address
 		  (value_field (common_value,

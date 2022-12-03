@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -51,6 +55,25 @@ print_subexp (struct expression *exp, int *pos,
 	      struct ui_file *stream, enum precedence prec)
 {
   exp->language_defn->la_exp_desc->print_subexp (exp, pos, stream, prec);
+}
+
+/* See parser-defs.h.  */
+
+void
+print_subexp_funcall (struct expression *exp, int *pos,
+		      struct ui_file *stream)
+{
+  (*pos) += 2;
+  unsigned nargs = longest_to_int (exp->elts[*pos].longconst);
+  print_subexp (exp, pos, stream, PREC_SUFFIX);
+  fputs_filtered (" (", stream);
+  for (unsigned tem = 0; tem < nargs; tem++)
+    {
+      if (tem != 0)
+	fputs_filtered (", ", stream);
+      print_subexp (exp, pos, stream, PREC_ABOVE_COMMA);
+    }
+  fputs_filtered (")", stream);
 }
 
 /* Standard implementation of print_subexp for use in language_defn
@@ -187,18 +210,7 @@ print_subexp_standard (struct expression *exp, int *pos,
       return;
 
     case OP_FUNCALL:
-    case OP_F77_UNDETERMINED_ARGLIST:
-      (*pos) += 2;
-      nargs = longest_to_int (exp->elts[pc + 1].longconst);
-      print_subexp (exp, pos, stream, PREC_SUFFIX);
-      fputs_filtered (" (", stream);
-      for (tem = 0; tem < nargs; tem++)
-	{
-	  if (tem != 0)
-	    fputs_filtered (", ", stream);
-	  print_subexp (exp, pos, stream, PREC_ABOVE_COMMA);
-	}
-      fputs_filtered (")", stream);
+      print_subexp_funcall (exp, pos, stream);
       return;
 
     case OP_NAME:
@@ -576,17 +588,13 @@ print_subexp_standard (struct expression *exp, int *pos,
 	  longest_to_int (exp->elts[pc + 1].longconst);
 	*pos += 2;
 
-	if (range_type == NONE_BOUND_DEFAULT_EXCLUSIVE
-	    || range_type == LOW_BOUND_DEFAULT_EXCLUSIVE)
+	if (range_type & RANGE_HIGH_BOUND_EXCLUSIVE)
 	  fputs_filtered ("EXCLUSIVE_", stream);
 	fputs_filtered ("RANGE(", stream);
-	if (range_type == HIGH_BOUND_DEFAULT
-	    || range_type == NONE_BOUND_DEFAULT
-	    || range_type == NONE_BOUND_DEFAULT_EXCLUSIVE)
+	if (!(range_type & RANGE_LOW_BOUND_DEFAULT))
 	  print_subexp (exp, pos, stream, PREC_ABOVE_COMMA);
 	fputs_filtered ("..", stream);
-	if (range_type == LOW_BOUND_DEFAULT
-	    || range_type == NONE_BOUND_DEFAULT)
+	if (!(range_type & RANGE_HIGH_BOUND_DEFAULT))
 	  print_subexp (exp, pos, stream, PREC_ABOVE_COMMA);
 	fputs_filtered (")", stream);
 	return;
@@ -796,6 +804,22 @@ dump_subexp_body (struct expression *exp, struct ui_file *stream, int elt)
   return exp->language_defn->la_exp_desc->dump_subexp_body (exp, stream, elt);
 }
 
+/* See parser-defs.h.  */
+
+int
+dump_subexp_body_funcall (struct expression *exp,
+			  struct ui_file *stream, int elt)
+{
+  int nargs = longest_to_int (exp->elts[elt].longconst);
+  fprintf_filtered (stream, "Number of args: %d", nargs);
+  elt += 2;
+
+  for (int i = 1; i <= nargs + 1; i++)
+    elt = dump_subexp (exp, stream, elt);
+
+  return elt;
+}
+
 /* Default value for subexp_body in exp_descriptor vector.  */
 
 int
@@ -843,6 +867,9 @@ dump_subexp_body_standard (struct expression *exp,
     case BINOP_END:
     case STRUCTOP_MEMBER:
     case STRUCTOP_MPTR:
+#ifdef NVIDIA_CUDA_GDB
+    case BINOP_FMOD:
+#endif
       elt = dump_subexp (exp, stream, elt);
       /* FALL THROUGH */
     case UNOP_NEG:
@@ -867,6 +894,19 @@ dump_subexp_body_standard (struct expression *exp,
     case UNOP_MIN:
     case UNOP_ODD:
     case UNOP_TRUNC:
+#ifdef NVIDIA_CUDA_GDB
+    case UNOP_ISNAN:
+    case UNOP_ISINF:
+    case UNOP_CREAL:
+    case UNOP_CIMAG:
+    case UNOP_FABS:
+    case UNOP_CEIL:
+    case UNOP_FLOOR:
+    case UNOP_IEEE_IS_NAN:
+    case UNOP_IEEE_IS_INF:
+    case UNOP_IEEE_IS_FINITE:
+    case UNOP_IEEE_IS_NORMAL:
+#endif
       elt = dump_subexp (exp, stream, elt);
       break;
     case OP_LONG:
@@ -931,18 +971,7 @@ dump_subexp_body_standard (struct expression *exp,
       elt += 2;
       break;
     case OP_FUNCALL:
-    case OP_F77_UNDETERMINED_ARGLIST:
-      {
-	int i, nargs;
-
-	nargs = longest_to_int (exp->elts[elt].longconst);
-
-	fprintf_filtered (stream, "Number of args: %d", nargs);
-	elt += 2;
-
-	for (i = 1; i <= nargs + 1; i++)
-	  elt = dump_subexp (exp, stream, elt);
-      }
+      elt = dump_subexp_body_funcall (exp, stream, elt);
       break;
     case OP_ARRAY:
       {
@@ -1101,36 +1130,23 @@ dump_subexp_body_standard (struct expression *exp,
 	  longest_to_int (exp->elts[elt].longconst);
 	elt += 2;
 
-	switch (range_type)
-	  {
-	  case BOTH_BOUND_DEFAULT:
-	    fputs_filtered ("Range '..'", stream);
-	    break;
-	  case LOW_BOUND_DEFAULT:
-	    fputs_filtered ("Range '..EXP'", stream);
-	    break;
-	  case LOW_BOUND_DEFAULT_EXCLUSIVE:
-	    fputs_filtered ("ExclusiveRange '..EXP'", stream);
-	    break;
-	  case HIGH_BOUND_DEFAULT:
-	    fputs_filtered ("Range 'EXP..'", stream);
-	    break;
-	  case NONE_BOUND_DEFAULT:
-	    fputs_filtered ("Range 'EXP..EXP'", stream);
-	    break;
-	  case NONE_BOUND_DEFAULT_EXCLUSIVE:
-	    fputs_filtered ("ExclusiveRange 'EXP..EXP'", stream);
-	    break;
-	  default:
-	    fputs_filtered ("Invalid Range!", stream);
-	    break;
-	  }
+	if (range_type & RANGE_HIGH_BOUND_EXCLUSIVE)
+	  fputs_filtered ("Exclusive", stream);
+	fputs_filtered ("Range '", stream);
+	if (!(range_type & RANGE_LOW_BOUND_DEFAULT))
+	  fputs_filtered ("EXP", stream);
+	fputs_filtered ("..", stream);
+	if (!(range_type & RANGE_HIGH_BOUND_DEFAULT))
+	  fputs_filtered ("EXP", stream);
+	if (range_type & RANGE_HAS_STRIDE)
+	  fputs_filtered (":EXP", stream);
+	fputs_filtered ("'", stream);
 
-	if (range_type == HIGH_BOUND_DEFAULT
-	    || range_type == NONE_BOUND_DEFAULT)
+	if (!(range_type & RANGE_LOW_BOUND_DEFAULT))
 	  elt = dump_subexp (exp, stream, elt);
-	if (range_type == LOW_BOUND_DEFAULT
-	    || range_type == NONE_BOUND_DEFAULT)
+	if (!(range_type & RANGE_HIGH_BOUND_DEFAULT))
+	  elt = dump_subexp (exp, stream, elt);
+	if (range_type & RANGE_HAS_STRIDE)
 	  elt = dump_subexp (exp, stream, elt);
       }
       break;

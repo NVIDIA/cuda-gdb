@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -800,6 +804,17 @@ const struct op_print c_op_print_tab[] =
   {"alignof ", UNOP_ALIGNOF, PREC_PREFIX, 0},
   {"++", UNOP_PREINCREMENT, PREC_PREFIX, 0},
   {"--", UNOP_PREDECREMENT, PREC_PREFIX, 0},
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - ieee extensions */
+  {"isnan", UNOP_ISNAN, PREC_BUILTIN_FUNCTION, 0},
+  {"isinf", UNOP_ISINF, PREC_BUILTIN_FUNCTION, 0},
+  {"creal", UNOP_CREAL, PREC_BUILTIN_FUNCTION, 0},
+  {"cimag", UNOP_CIMAG, PREC_BUILTIN_FUNCTION, 0},
+  {"fmod", BINOP_FMOD, PREC_BUILTIN_FUNCTION, 0},
+  {"fabs", UNOP_FABS, PREC_BUILTIN_FUNCTION, 0},
+  {"ceil", UNOP_CEIL, PREC_BUILTIN_FUNCTION, 0},
+  {"floor", UNOP_FLOOR, PREC_BUILTIN_FUNCTION, 0},
+#endif
   {NULL, OP_NULL, PREC_PREFIX, 0}
 };
 

@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "symtab.h"
 #include "objfiles.h"
@@ -94,7 +98,12 @@ require_partial_symbols (struct objfile *objfile, bool verbose)
     {
       objfile->flags |= OBJF_PSYMTABS_READ;
 
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA: bugfix for null sf */
+      if (objfile->sf && objfile->sf->sym_read_psymbols)
+#else
       if (objfile->sf->sym_read_psymbols)
+#endif
 	{
 	  if (verbose)
 	    printf_filtered (_("Reading symbols from %s...\n"),
@@ -190,6 +199,11 @@ psym_map_symtabs_matching_filename
 	 this symtab and use its absolute path.  */
       if (real_path != NULL)
 	{
+#ifdef NVIDIA_CUDA_GDB
+          const int realpath_len = strlen (real_path);
+          const int dirname_len = pst->dirname ? strlen(pst->dirname) : 0;
+          const int filename_len = pst->filename ? strlen(pst->filename) : 0;
+#endif
 	  gdb_assert (IS_ABSOLUTE_PATH (real_path));
 	  gdb_assert (IS_ABSOLUTE_PATH (name));
 	  if (filename_cmp (psymtab_to_fullname (pst), real_path) == 0)
@@ -199,6 +213,21 @@ psym_map_symtabs_matching_filename
 		return true;
 	      continue;
 	    }
+#ifdef NVIDIA_CUDA_GDB
+          /* And finally check if real_path equals to pst->dirname concatenated
+             with pst->filename */
+          if (pst->dirname != NULL && pst->filename != NULL &&
+              realpath_len == dirname_len + filename_len + 1 &&
+              filename_ncmp(real_path, pst->dirname, dirname_len) == 0 &&
+              real_path[dirname_len] == '/' &&
+              filename_ncmp(real_path+dirname_len+1, pst->filename, filename_len) == 0)
+            {
+              if (partial_map_expand_apply (objfile, name, real_path,
+                                            pst, callback))
+                return true;
+              continue;
+            }
+#endif
 	}
     }
 

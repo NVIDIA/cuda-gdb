@@ -19,6 +19,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "ui-out.h"
 #include "value.h"
@@ -46,11 +50,24 @@
 #include <unordered_set>
 #include "gdbsupport/underlying.h"
 #include "gdbsupport/byte-vector.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-frame.h"
+#include "cuda/cuda-utils.h"
+#include "cuda/cuda-regmap.h"
+#include "cuda/cuda-tdep.h"
+#endif
 
+#ifdef NVIDIA_CUDA_GDB
+static struct value *dwarf2_evaluate_loc_desc_full 
+  (struct type *type, struct frame_info *frame, const gdb_byte *data, 
+   size_t size, dwarf2_per_cu_data *per_cu, dwarf2_per_objfile *per_objfile,
+   struct type *subobj_type, LONGEST subobj_byte_offset, CORE_ADDR push_obj); 
+#else
 static struct value *dwarf2_evaluate_loc_desc_full
   (struct type *type, struct frame_info *frame, const gdb_byte *data,
    size_t size, dwarf2_per_cu_data *per_cu, dwarf2_per_objfile *per_objfile,
    struct type *subobj_type, LONGEST subobj_byte_offset);
+#endif
 
 static struct call_site_parameter *dwarf_expr_reg_to_entry_parameter
     (struct frame_info *frame,
@@ -503,8 +520,13 @@ locexpr_get_frame_base (struct symbol *framefunc, struct frame_info *frame)
 
   SYMBOL_BLOCK_OPS (framefunc)->find_frame_base_location
     (framefunc, get_frame_pc (frame), &start, &length);
+#ifdef NVIDIA_CUDA_GDB
+  result = dwarf2_evaluate_loc_desc (type, frame, start, length, 
+				     dlbaton->per_cu, dlbaton->per_objfile, 0); 
+#else
   result = dwarf2_evaluate_loc_desc (type, frame, start, length,
 				     dlbaton->per_cu, dlbaton->per_objfile);
+#endif
 
   /* The DW_AT_frame_base attribute contains a location description which
      computes the base address itself.  However, the call to
@@ -560,8 +582,13 @@ loclist_get_frame_base (struct symbol *framefunc, struct frame_info *frame)
 
   SYMBOL_BLOCK_OPS (framefunc)->find_frame_base_location
     (framefunc, get_frame_pc (frame), &start, &length);
+#ifdef NVIDIA_CUDA_GDB
+  result = dwarf2_evaluate_loc_desc (type, frame, start, length, 
+				     dlbaton->per_cu, dlbaton->per_objfile, 0); 
+#else
   result = dwarf2_evaluate_loc_desc (type, frame, start, length,
 				     dlbaton->per_cu, dlbaton->per_objfile);
+#endif
 
   /* The DW_AT_frame_base attribute contains a location description which
      computes the base address itself.  However, the call to
@@ -818,7 +845,11 @@ public:
 
   /* Using the frame specified in BATON, return the value of register
      REGNUM, treated as a pointer.  */
+#ifdef NVIDIA_CUDA_GDB
+  CORE_ADDR read_addr_from_reg (reg_t dwarf_regnum) override 
+#else
   CORE_ADDR read_addr_from_reg (int dwarf_regnum) override
+#endif
   {
     struct gdbarch *gdbarch = get_frame_arch (frame);
     int regnum = dwarf_reg_to_regnum_or_error (gdbarch, dwarf_regnum);
@@ -828,7 +859,11 @@ public:
 
   /* Implement "get_reg_value" callback.  */
 
+#ifdef NVIDIA_CUDA_GDB
+  struct value *get_reg_value (struct type *type, reg_t dwarf_regnum) override 
+#else
   struct value *get_reg_value (struct type *type, int dwarf_regnum) override
+#endif
   {
     struct gdbarch *gdbarch = get_frame_arch (frame);
     int regnum = dwarf_reg_to_regnum_or_error (gdbarch, dwarf_regnum);
@@ -899,10 +934,18 @@ call_site_to_target_addr (struct gdbarch *call_site_gdbarch,
 	  }
 	caller_arch = get_frame_arch (caller_frame);
 	caller_core_addr_type = builtin_type (caller_arch)->builtin_func_ptr;
+#ifdef NVIDIA_CUDA_GDB
+	val = dwarf2_evaluate_loc_desc (caller_core_addr_type, caller_frame, 
+					dwarf_block->data, dwarf_block->size, 
+					dwarf_block->per_cu, 
+					dwarf_block->per_objfile,
+					0); 
+#else
 	val = dwarf2_evaluate_loc_desc (caller_core_addr_type, caller_frame,
 					dwarf_block->data, dwarf_block->size,
 					dwarf_block->per_cu,
 					dwarf_block->per_objfile);
+#endif
 	/* DW_AT_call_target is a DWARF expression, not a DWARF location.  */
 	if (VALUE_LVAL (val) == lval_memory)
 	  return value_address (val);
@@ -1457,8 +1500,14 @@ dwarf_entry_parameter_to_value (struct call_site_parameter *parameter,
   memcpy (data, data_src, size);
   data[size] = DW_OP_stack_value;
 
+#ifdef NVIDIA_CUDA_GDB
+  return dwarf2_evaluate_loc_desc (type, caller_frame, data, size + 1, per_cu, 
+		  		   per_objfile,
+				   /* FIXME: What should be passed for object address here? */ 0); 
+#else
   return dwarf2_evaluate_loc_desc (type, caller_frame, data, size + 1, per_cu,
 				   per_objfile);
+#endif
 }
 
 /* VALUE must be of type lval_computed with entry_data_value_funcs.  Perform
@@ -2059,11 +2108,19 @@ indirect_synthetic_pointer (sect_offset die, LONGEST byte_offset,
      resulting value.  Otherwise, it may have a DW_AT_const_value instead,
      or it may've been optimized out.  */
   if (baton.data != NULL)
+#ifdef NVIDIA_CUDA_GDB
+    return dwarf2_evaluate_loc_desc_full (orig_type, frame, baton.data, 
+					  baton.size, baton.per_cu, 
+					  baton.per_objfile,
+					  TYPE_TARGET_TYPE (type), 
+					  byte_offset, 0); 
+#else
     return dwarf2_evaluate_loc_desc_full (orig_type, frame, baton.data,
 					  baton.size, baton.per_cu,
 					  baton.per_objfile,
 					  TYPE_TARGET_TYPE (type),
 					  byte_offset);
+#endif
   else
     return fetch_const_value_from_synthetic_pointer (die, byte_offset, per_cu,
 						     per_objfile, type);
@@ -2223,6 +2280,16 @@ static const struct lval_funcs pieced_value_funcs = {
    location of the subobject of type SUBOBJ_TYPE at byte offset
    SUBOBJ_BYTE_OFFSET within the variable of type TYPE.  */
 
+#ifdef NVIDIA_CUDA_GDB
+static struct value * 
+dwarf2_evaluate_loc_desc_full (struct type *type, struct frame_info *frame, 
+			       const gdb_byte *data, size_t size, 
+			       dwarf2_per_cu_data *per_cu, 
+			       dwarf2_per_objfile *per_objfile,
+			       struct type *subobj_type, 
+			       LONGEST subobj_byte_offset, 
+                               CORE_ADDR push_obj) 
+#else
 static struct value *
 dwarf2_evaluate_loc_desc_full (struct type *type, struct frame_info *frame,
 			       const gdb_byte *data, size_t size,
@@ -2230,6 +2297,7 @@ dwarf2_evaluate_loc_desc_full (struct type *type, struct frame_info *frame,
 			       dwarf2_per_objfile *per_objfile,
 			       struct type *subobj_type,
 			       LONGEST subobj_byte_offset)
+#endif
 {
   struct value *retval;
 
@@ -2247,8 +2315,11 @@ dwarf2_evaluate_loc_desc_full (struct type *type, struct frame_info *frame,
   dwarf_evaluate_loc_desc ctx (per_objfile);
   ctx.frame = frame;
   ctx.per_cu = per_cu;
+#ifdef NVIDIA_CUDA_GDB
+  ctx.obj_address = push_obj; 
+#else
   ctx.obj_address = 0;
-
+#endif
   scoped_value_mark free_values;
 
   ctx.gdbarch = per_objfile->objfile->arch ();
@@ -2308,14 +2379,58 @@ dwarf2_evaluate_loc_desc_full (struct type *type, struct frame_info *frame,
 	case DWARF_VALUE_REGISTER:
 	  {
 	    struct gdbarch *arch = get_frame_arch (frame);
+#ifdef NVIDIA_CUDA_GDB
+	    /* CUDA has more registers, so we need to use something other than
+	       int for its register numbers.  Therefore we use value_as_long
+	       here as opposed to longest_to_int as in vanilla GDB.  */
+	    bool extrapolated = false; 
+	    reg_t dwarf_regnum = value_as_long (ctx.fetch (0)); 
+	    /* CUDA - extrapolated regmap */ 
+	    int gdb_regnum; 
+	    if (gdbarch_bfd_arch_info (arch)->arch == bfd_arch_m68k) 
+	      gdb_regnum = cuda_reg_to_regnum_ex (arch, dwarf_regnum, &extrapolated); 
+	    else 
+              gdb_regnum = gdbarch_dwarf2_reg_to_regnum (arch, dwarf_regnum); 
+#else
 	    int dwarf_regnum
 	      = longest_to_int (value_as_long (ctx.fetch (0)));
 	    int gdb_regnum = dwarf_reg_to_regnum_or_error (arch, dwarf_regnum);
+#endif
 
 	    if (subobj_byte_offset != 0)
 	      error (_("cannot use offset on synthetic pointer to register"));
 	    free_values.free_to_mark ();
+#ifdef NVIDIA_CUDA_GDB
+	    /* CUDA - DW_OP_regx */
+	    /* Locations may be hard-coded with DW_OP_regx as PTX registers. The
+	       liveness informations is done at a lower level (see cuda-regmap.h).
+	       Therefore, it is possible and legal that gdb_regnum == -1. */
+	    if (cuda_frame_p (get_next_frame (frame)) && gdb_regnum == -1) 
+	      { 
+		retval = cuda_ptx_cache_get_register (frame, dwarf_regnum, type); 
+		/* Found a value (e.g., not optimized out), so break out */
+		if (!value_optimized_out(retval)) 
+		    break; 
+		/* If extrapolated and optimized-out, check extrapolated values,
+		 * this is not accurate; however, the user realizes that when using
+		 * 'extrapolated' values.
+		 */
+		if (extrapolated) 
+		    gdb_regnum = cuda_reg_to_regnum_extrapolated (arch, dwarf_regnum); 
+		/* If gdb_regnum is extrapolated and we just found a value do not
+		 * break, but if regnum is still -1, then break.
+		 */
+		if (gdb_regnum == -1) 
+		    break; 
+	      } 
+#endif
 	    retval = value_from_register (subobj_type, gdb_regnum, frame);
+#ifdef NVIDIA_CUDA_GDB
+	    /* CUDA - extrapolated regmap */
+	    if (gdbarch_bfd_arch_info (arch)->arch == bfd_arch_m68k && extrapolated) 
+	      set_value_extrapolated (retval, 1); 
+	    cuda_ptx_cache_store_register (frame, dwarf_regnum, retval); 
+#endif
 	    if (value_optimized_out (retval))
 	      {
 		struct value *tmp;
@@ -2434,6 +2549,18 @@ dwarf2_evaluate_loc_desc_full (struct type *type, struct frame_info *frame,
 /* The exported interface to dwarf2_evaluate_loc_desc_full; it always
    passes 0 as the byte_offset.  */
 
+#ifdef NVIDIA_CUDA_GDB
+struct value * 
+dwarf2_evaluate_loc_desc (struct type *type, struct frame_info *frame, 
+			  const gdb_byte *data, size_t size, 
+			  dwarf2_per_cu_data *per_cu,
+			  dwarf2_per_objfile *per_objfile,
+                          CORE_ADDR push_obj) 
+{ 
+  return dwarf2_evaluate_loc_desc_full (type, frame, data, size, per_cu, 
+					per_objfile, NULL, 0, push_obj); 
+}
+#else
 struct value *
 dwarf2_evaluate_loc_desc (struct type *type, struct frame_info *frame,
 			  const gdb_byte *data, size_t size,
@@ -2443,6 +2570,7 @@ dwarf2_evaluate_loc_desc (struct type *type, struct frame_info *frame,
   return dwarf2_evaluate_loc_desc_full (type, frame, data, size, per_cu,
 					per_objfile, NULL, 0);
 }
+#endif
 
 /* A specialization of dwarf_evaluate_loc_desc that is used by
    dwarf2_locexpr_baton_eval.  This subclass exists to handle the case
@@ -2641,9 +2769,15 @@ dwarf2_evaluate_property (const struct dynamic_prop *prop,
 	data = dwarf2_find_location_expression (&baton->loclist, &size, pc);
 	if (data != NULL)
 	  {
+#ifdef NVIDIA_CUDA_GDB
+	    val = dwarf2_evaluate_loc_desc (baton->property_type, frame, data, 
+					    size, baton->loclist.per_cu, 
+					    baton->loclist.per_objfile, 0); 
+#else
 	    val = dwarf2_evaluate_loc_desc (baton->property_type, frame, data,
 					    size, baton->loclist.per_cu,
 					    baton->loclist.per_objfile);
+#endif
 	    if (!value_optimized_out (val))
 	      {
 		*value = value_as_address (val);
@@ -2742,7 +2876,11 @@ public:
   struct dwarf2_per_cu_data *per_cu;
 
   /* Reads from registers do require a frame.  */
+#ifdef NVIDIA_CUDA_GDB
+  CORE_ADDR read_addr_from_reg (reg_t regnum) override 
+#else
   CORE_ADDR read_addr_from_reg (int regnum) override
+#endif
   {
     needs = SYMBOL_NEEDS_FRAME;
     return 1;
@@ -2751,7 +2889,11 @@ public:
   /* "get_reg_value" callback: Reads from registers do require a
      frame.  */
 
+#ifdef NVIDIA_CUDA_GDB
+  struct value *get_reg_value (struct type *type, reg_t regnum) override 
+#else
   struct value *get_reg_value (struct type *type, int regnum) override
+#endif
   {
     needs = SYMBOL_NEEDS_FRAME;
     return value_zero (type, not_lval);
@@ -3684,9 +3826,16 @@ locexpr_read_variable (struct symbol *symbol, struct frame_info *frame)
     = (struct dwarf2_locexpr_baton *) SYMBOL_LOCATION_BATON (symbol);
   struct value *val;
 
+#ifdef NVIDIA_CUDA_GDB
+  val = dwarf2_evaluate_loc_desc (SYMBOL_TYPE (symbol), frame, dlbaton->data, 
+				  dlbaton->size, dlbaton->per_cu, 
+				  dlbaton->per_objfile,
+				  SYMBOL_VALUE_ADDRESS(symbol)); 
+#else
   val = dwarf2_evaluate_loc_desc (SYMBOL_TYPE (symbol), frame, dlbaton->data,
 				  dlbaton->size, dlbaton->per_cu,
 				  dlbaton->per_objfile);
+#endif
 
   return val;
 }
@@ -4515,8 +4664,14 @@ loclist_read_variable (struct symbol *symbol, struct frame_info *frame)
   CORE_ADDR pc = frame ? get_frame_address_in_block (frame) : 0;
 
   data = dwarf2_find_location_expression (dlbaton, &size, pc);
+#ifdef NVIDIA_CUDA_GDB
+  val = dwarf2_evaluate_loc_desc (SYMBOL_TYPE (symbol), frame, data, size, 
+				dlbaton->per_cu, dlbaton->per_objfile,
+				SYMBOL_VALUE_ADDRESS(symbol)); 
+#else
   val = dwarf2_evaluate_loc_desc (SYMBOL_TYPE (symbol), frame, data, size,
 				  dlbaton->per_cu, dlbaton->per_objfile);
+#endif
 
   return val;
 }
@@ -4763,3 +4918,73 @@ conversational style, when possible."),
 			   &set_dwarf_cmdlist,
 			   &show_dwarf_cmdlist);
 }
+#ifdef NVIDIA_CUDA_GDB
+/**
+ * CUDA PTX cache local variable iterator
+ * If local variable is mapped to a PTX register, its value would be cached.
+ */
+void
+cuda_ptx_cache_local_vars_iterator (const char *name, struct symbol *symbol, void *cb)
+{
+  struct frame_info *frame = (struct frame_info *) cb;
+  struct dwarf2_loclist_baton *dlbaton = (struct dwarf2_loclist_baton *) SYMBOL_LOCATION_BATON (symbol);
+  const gdb_byte *data;
+  size_t size;
+  struct objfile *objfile;
+  ULONGEST dwarf_regnum;
+  int gdb_regnum;
+  struct value *value;
+  if (SYMBOL_CLASS (symbol) != LOC_COMPUTED) return;
+  if (SYMBOL_COMPUTED_OPS (symbol) != &dwarf2_loclist_funcs) return;
+  data = dwarf2_find_location_expression (dlbaton, &size,
+                frame ? get_frame_address_in_block (frame): 0);
+  if (!data || size == 0 ) return;
+  objfile = dlbaton->per_objfile->objfile;
+  dwarf_evaluate_loc_desc ctx (dlbaton->per_objfile);
+  ctx.gdbarch = objfile->arch ();
+  ctx.addr_size = dlbaton->per_cu->addr_size ();
+  ctx.eval (data, size);
+  if (ctx.pieces.size () == 0 && ctx.location == DWARF_VALUE_REGISTER)
+    {
+      dwarf_regnum = value_as_long (ctx.fetch (0));
+      gdb_regnum = gdbarch_dwarf2_reg_to_regnum (get_frame_arch (frame), dwarf_regnum);
+      /* If PTX register to memory and/or GPU register can be established: cache it! */
+      if (gdb_regnum != -1)
+        {
+          value = value_from_register (SYMBOL_TYPE(symbol), gdb_regnum, frame);
+          cuda_ptx_cache_store_register (frame, dwarf_regnum, value);
+        }
+    }
+}
+LONGEST
+dwarf2_evaluate_int (void* locbaton, struct value *obj, void* frame)
+{
+  struct dwarf2_loclist_baton* b = (struct dwarf2_loclist_baton*) locbaton;
+  CORE_ADDR result;
+  struct value *retval;
+  CORE_ADDR push_obj;
+  struct objfile *objfile = b->per_objfile->objfile;
+  struct value *val;
+  push_obj = value_address (obj);
+  dwarf_evaluate_loc_desc ctx (b->per_objfile);
+  ctx.frame = (struct frame_info*) frame;
+  ctx.obj_address = push_obj;
+  ctx.gdbarch = objfile->arch ();
+  ctx.addr_size = b->per_cu->addr_size ();
+  /*
+     This next push statement added to prevent underflow when finding
+     array locations particularly PGI compiler inside structures/types
+     DW_OP_plus_uconst and others for example - seen in test_linear.
+     DWARF2 spec says it is fine to assume object base location is
+     already in stack - so we must allow it.
+  */
+  ctx.push_address (push_obj, 0);
+  ctx.eval (b->data, b->size);
+  val = ctx.fetch (0);
+  if (VALUE_LVAL (val) == lval_memory)
+    result = value_as_address (val);
+  else
+    result = value_address (val);
+  return (LONGEST) result;
+}
+#endif

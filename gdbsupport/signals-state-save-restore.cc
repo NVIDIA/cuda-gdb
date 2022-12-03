@@ -57,6 +57,8 @@ save_original_signals_state (bool quiet)
       else if (res == -1)
 	perror_with_name (("sigaction"));
 
+/* CUDA */
+#if !(__ANDROID__ && __aarch64__)
       /* If we find a custom signal handler already installed, then
 	 this function was called too late.  This is a warning instead
 	 of an internal error because this can also happen if you
@@ -75,6 +77,7 @@ save_original_signals_state (bool quiet)
 		     "%d (%s) preinstalled.\n"), i,
 		   strsignal (i));
 	}
+#endif
     }
 
   if (found_preinstalled)

@@ -16,6 +16,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* Parse a C expression from text in a string,
    and return the result as a  struct expression  pointer.
    That structure contains arithmetic operations in reverse polish,
@@ -244,6 +248,10 @@ static void c_print_token (FILE *file, int type, YYSTYPE value);
 %token <sval> DOLLAR_VARIABLE
 
 %token <opcode> ASSIGN_MODIFY
+/* CUDA */
+%token <opcode> UNOP_INTRINSIC
+%token <opcode> BINOP_INTRINSIC
+/* end CUDA */
 
 /* C++ */
 %token TRUEKEYWORD
@@ -588,6 +596,15 @@ exp	:	UNKNOWN_CPP_NAME '('
 			}
 	;
 
+/* CUDA */
+exp     :       UNOP_INTRINSIC '(' exp ')'
+			{ write_exp_elt_opcode (pstate, $1); }
+	;
+
+exp     :       BINOP_INTRINSIC '(' exp ',' exp ')'
+			{ write_exp_elt_opcode (pstate, $1); }
+	;
+/* END CUDA */
 lcurly	:	'{'
 			{ pstate->start_arglist (); }
 	;
@@ -1213,6 +1230,23 @@ const_or_volatile: const_or_volatile_noopt
 	|
 	;
 
+/* CUDA - address spaces */
+/* To accept @local, @const,... address space qualifiers, few things must happen:
+
+     1. we must accept more names than just NAME. The 'space_identifier' rule
+        needs to be adjusted accordingly and accept 'name' instead of 'NAME'.
+        Accordingly, the action rules must copy the name from the token
+        directly instead of the stoken field.
+
+     2. we must get rid of the reduce/reduce conflicts caused by the empty rules in
+        const_or_volatile and const_or_volatile_or_space_identifier. I rewrote
+        the rules and the caller of those rules to avoid that situation.
+        It decreases the number of reduce/reduce conflicts.
+        Remaining conflicts are unrelated to the '@ name' notation.
+
+  The new set of rules for const, volatile, and space identifiers fully replace
+  the original rules. The callers have been updated accordingly.
+*/
 single_qualifier:
 		CONST_KEYWORD
 			{ cpstate->type_stack.insert (tp_const); }
@@ -1222,10 +1256,17 @@ single_qualifier:
 			{ cpstate->type_stack.insert (tp_atomic); }
 	| 	RESTRICT
 			{ cpstate->type_stack.insert (tp_restrict); }
+/*** CUDA REMOVAL
 	|	'@' NAME
 		{
 		  cpstate->type_stack.insert (pstate,
 					      copy_name ($2.stoken).c_str ());
+		}
+***/
+	|	'@' name
+		{
+		  cpstate->type_stack.insert (pstate,
+					      copy_name ($2).c_str ());
 		}
 	;
 
@@ -2608,6 +2649,21 @@ static bool last_was_structop;
 /* Depth of parentheses.  */
 static int paren_depth;
 
+/* CUDA */
+static const struct token intrinsics[] =
+  {
+    {"isinf", UNOP_INTRINSIC, UNOP_ISINF},
+    {"isnan", UNOP_INTRINSIC, UNOP_ISNAN},
+    {"isfinite", UNOP_INTRINSIC, UNOP_ISFINITE},
+    {"isnormal", UNOP_INTRINSIC, UNOP_ISNORMAL},
+    {"creal", UNOP_INTRINSIC, UNOP_CREAL},
+    {"cimag", UNOP_INTRINSIC, UNOP_CIMAG},
+    {"fabs", UNOP_INTRINSIC, UNOP_FABS},
+    {"fmod", BINOP_INTRINSIC, BINOP_FMOD},
+    {"ceil", UNOP_INTRINSIC, UNOP_CEIL},
+    {"floor", UNOP_INTRINSIC, UNOP_FLOOR},
+  };
+/* END CUDA */
 /* Read one token, getting characters through lexptr.  */
 
 static int
@@ -2945,6 +3001,15 @@ lex_one_token (struct parser_state *par_state, bool *is_quoted_name)
 
   tryname:
 
+/* CUDA */
+  for (i = 0; i < sizeof intrinsics / sizeof intrinsics[0]; i++)
+    if (strncmp (tokstart, intrinsics[i].oper, strlen(intrinsics[i].oper)) == 0
+	&& strlen(intrinsics[i].oper) == namelen)
+      {
+        yylval.opcode = intrinsics[i].opcode;
+        return intrinsics[i].token;
+      }
+/* END CUDA */
   yylval.sval.ptr = tokstart;
   yylval.sval.length = namelen;
 

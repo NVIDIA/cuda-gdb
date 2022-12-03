@@ -78,7 +78,7 @@ extern PyTypeObject membuf_object_type
   do {								\
     if (!Inferior->inferior)					\
       {								\
-	PyErr_SetString (PyExc_RuntimeError,			\
+	PyErr_SetString (*pgdbpyExc_RuntimeError,		\
 			 _("Inferior no longer exists."));	\
 	return NULL;						\
       }								\
@@ -309,7 +309,7 @@ thread_to_thread_object (thread_info *thr)
     if (thread->thread_obj->thread == thr)
       return gdbpy_ref<>::new_reference ((PyObject *) thread->thread_obj.get ());
 
-  PyErr_SetString (PyExc_SystemError,
+  PyErr_SetString (gdbpyExc_SystemError,
 		   _("could not find gdb thread object"));
   return NULL;
 }
@@ -443,8 +443,8 @@ infpy_get_was_attached (PyObject *self, void *closure)
 
   INFPY_REQUIRE_VALID (inf);
   if (inf->inferior->attach_flag)
-    Py_RETURN_TRUE;
-  Py_RETURN_FALSE;
+    GDB_PY_RETURN_TRUE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Getter of gdb.Inferior.progspace.  */
@@ -581,7 +581,7 @@ infpy_write_memory (PyObject *self, PyObject *args, PyObject *kw)
 
   GDB_PY_HANDLE_EXCEPTION (except);
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Destructor of Membuf objects.  */
@@ -598,7 +598,7 @@ mbpy_str (PyObject *self)
 {
   membuf_object *membuf_obj = (membuf_object *) self;
 
-  return PyString_FromFormat (_("Memory buffer for address %s, \
+  return gdbpy_StringFromFormat (_("Memory buffer for address %s, \
 which is %s bytes long."),
 			      paddress (python_gdbarch, membuf_obj->addr),
 			      pulongest (membuf_obj->length));
@@ -612,7 +612,7 @@ get_buffer (PyObject *self, Py_buffer *buf, int flags)
   membuf_object *membuf_obj = (membuf_object *) self;
   int ret;
 
-  ret = PyBuffer_FillInfo (buf, self, membuf_obj->buffer,
+  ret = gdbpy_PyBuffer_FillInfo (buf, self, membuf_obj->buffer,
 			   membuf_obj->length, 0,
 			   PyBUF_CONTIG);
 
@@ -632,7 +632,7 @@ get_read_buffer (PyObject *self, Py_ssize_t segment, void **ptrptr)
 
   if (segment)
     {
-      PyErr_SetString (PyExc_SystemError,
+      PyErr_SetString (gdbpyExc_SystemError,
 		       _("The memory buffer supports only one segment."));
       return -1;
     }
@@ -709,7 +709,7 @@ infpy_search_memory (PyObject *self, PyObject *args, PyObject *kw)
 
   if (!length)
     {
-      PyErr_SetString (PyExc_ValueError,
+      PyErr_SetString (gdbpyExc_ValueError,
 		       _("Search range is empty."));
       return nullptr;
     }
@@ -717,7 +717,7 @@ infpy_search_memory (PyObject *self, PyObject *args, PyObject *kw)
   else if (length > CORE_ADDR_MAX
 	   || (start_addr + length - 1) < start_addr)
     {
-      PyErr_SetString (PyExc_ValueError,
+      PyErr_SetString (gdbpyExc_ValueError,
 		       _("The search range is too large."));
       return nullptr;
     }
@@ -738,7 +738,7 @@ infpy_search_memory (PyObject *self, PyObject *args, PyObject *kw)
   if (found)
     return gdb_py_object_from_ulongest (found_addr).release ();
   else
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 }
 
 /* Implementation of gdb.Inferior.is_valid (self) -> Boolean.
@@ -750,9 +750,9 @@ infpy_is_valid (PyObject *self, PyObject *args)
   inferior_object *inf = (inferior_object *) self;
 
   if (! inf->inferior)
-    Py_RETURN_FALSE;
+    GDB_PY_RETURN_FALSE;
 
-  Py_RETURN_TRUE;
+  GDB_PY_RETURN_TRUE;
 }
 
 /* Implementation of gdb.Inferior.thread_from_handle (self, handle)
@@ -776,7 +776,7 @@ infpy_thread_from_thread_handle (PyObject *self, PyObject *args, PyObject *kw)
   Py_buffer py_buf;
 
   if (PyObject_CheckBuffer (handle_obj)
-      && PyObject_GetBuffer (handle_obj, &py_buf, PyBUF_SIMPLE) == 0)
+      && gdbpy_PyObject_GetBuffer (handle_obj, &py_buf, PyBUF_SIMPLE) == 0)
     {
       buffer_up.reset (&py_buf);
       bytes = (const gdb_byte *) py_buf.buf;
@@ -790,7 +790,7 @@ infpy_thread_from_thread_handle (PyObject *self, PyObject *args, PyObject *kw)
     }
   else
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (*pgdbpyExc_TypeError,
 		       _("Argument 'handle' must be a thread handle object."));
 
       return NULL;
@@ -811,7 +811,7 @@ infpy_thread_from_thread_handle (PyObject *self, PyObject *args, PyObject *kw)
       GDB_PY_HANDLE_EXCEPTION (except);
     }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Implementation of gdb.Inferior.architecture.  */
@@ -837,7 +837,7 @@ infpy_repr (PyObject *obj)
   if (inf == nullptr)
     return PyString_FromString ("<gdb.Inferior (invalid)>");
 
-  return PyString_FromFormat ("<gdb.Inferior num=%d, pid=%d>",
+  return gdbpy_StringFromFormat ("<gdb.Inferior num=%d, pid=%d>",
 			      inf->num, inf->pid);
 }
 

@@ -61,6 +61,11 @@ case "${gdbserver_host}" in
 			ipa_obj="${ipa_obj} linux-aarch64-tdesc-ipa.o"
 			ipa_obj="${ipa_obj} arch/aarch64-ipa.o"
 			;;
+  aarch64*-*-nto*)
+			srv_regobj="arch/aarch64.o"
+			srv_tgtobj="cuda-nto-protocol.o cuda-nto-server.o"
+			srv_qnx=yes
+			;;
   arc*-*-linux*)
 			srv_regobj=""
 			srv_tgtobj="linux-arc-low.o arch/arc.o $srv_linux_obj"

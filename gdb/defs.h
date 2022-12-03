@@ -18,6 +18,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef DEFS_H
 #define DEFS_H
 
@@ -193,6 +197,11 @@ extern void quit_serial_event_set (void);
 /* Clear the serial event associated with the quit flag.  */
 extern void quit_serial_event_clear (void);
 
+#ifdef NVIDIA_CUDA_GDB
+#define QUIT2 { \
+  if (check_quit_flag () > 1) quit (); \
+}
+#endif
 /* * Languages represented in the symbol table and elsewhere.
    This should probably be in language.h, but since enum's can't
    be forward declared to satisfy opaque references before their

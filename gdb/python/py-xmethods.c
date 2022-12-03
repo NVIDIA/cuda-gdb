@@ -95,7 +95,7 @@ invoke_match_method (PyObject *matcher, PyObject *py_obj_type,
   if (enabled == 0)
     {
       /* Return 'None' if the matcher is not enabled.  */
-      Py_RETURN_NONE;
+      GDB_PY_RETURN_NONE;
     }
 
   gdbpy_ref<> match_method (PyObject_GetAttrString (matcher,
@@ -107,7 +107,7 @@ invoke_match_method (PyObject *matcher, PyObject *py_obj_type,
   if (py_xmethod_name == NULL)
     return NULL;
 
-  return PyObject_CallMethodObjArgs (matcher, py_match_method_name,
+  return gdbpy_PyObject_CallMethodObjArgs (matcher, py_match_method_name,
 				     py_obj_type, py_xmethod_name.get (),
 				     NULL);
 }
@@ -154,7 +154,7 @@ gdbpy_get_matching_xmethod_workers
 
       gdbpy_ref<> objfile_matchers (objfpy_get_xmethods (py_objfile.get (),
 							 NULL));
-      gdbpy_ref<> temp (PySequence_Concat (py_xmethod_matcher_list.get (),
+      gdbpy_ref<> temp (gdbpy_PySequence_Concat (py_xmethod_matcher_list.get (),
 					   objfile_matchers.get ()));
       if (temp == NULL)
 	{
@@ -173,8 +173,8 @@ gdbpy_get_matching_xmethod_workers
       gdbpy_ref<> pspace_matchers (pspy_get_xmethods (py_progspace.get (),
 						      NULL));
 
-      gdbpy_ref<> temp (PySequence_Concat (py_xmethod_matcher_list.get (),
-					   pspace_matchers.get ()));
+      gdbpy_ref<> temp (gdbpy_PySequence_Concat (py_xmethod_matcher_list.get (),
+						 pspace_matchers.get ()));
       if (temp == NULL)
 	{
 	  gdbpy_print_stack ();
@@ -197,8 +197,8 @@ gdbpy_get_matching_xmethod_workers
 							matchers_attr_str));
       if (gdb_matchers != NULL)
 	{
-	  gdbpy_ref<> temp (PySequence_Concat (py_xmethod_matcher_list.get (),
-					       gdb_matchers.get ()));
+	  gdbpy_ref<> temp (gdbpy_PySequence_Concat (py_xmethod_matcher_list.get (),
+						     gdb_matchers.get ()));
 	  if (temp == NULL)
 	    {
 	      gdbpy_print_stack ();
@@ -242,7 +242,7 @@ gdbpy_get_matching_xmethod_workers
 	  gdbpy_print_stack ();
 	  return EXT_LANG_RC_ERROR;
 	}
-      if (match_result == Py_None)
+      if (match_result == gdbpy_None)
 	; /* This means there was no match.  */
       else if (PySequence_Check (match_result.get ()))
 	{
@@ -308,7 +308,7 @@ python_xmethod_worker::do_get_arg_types (std::vector<type *> *arg_types)
     }
 
   gdbpy_ref<> py_argtype_list
-    (PyObject_CallMethodObjArgs (m_py_worker, py_get_arg_types_method_name,
+    (gdbpy_PyObject_CallMethodObjArgs (m_py_worker, py_get_arg_types_method_name,
 				 NULL));
   if (py_argtype_list == NULL)
     {
@@ -316,7 +316,7 @@ python_xmethod_worker::do_get_arg_types (std::vector<type *> *arg_types)
       return EXT_LANG_RC_ERROR;
     }
 
-  if (py_argtype_list == Py_None)
+  if (py_argtype_list == gdbpy_None)
     arg_count = 0;
   else if (PySequence_Check (py_argtype_list.get ()))
     {
@@ -358,7 +358,7 @@ python_xmethod_worker::do_get_arg_types (std::vector<type *> *arg_types)
 	  struct type *arg_type = type_object_to_type (item.get ());
 	  if (arg_type == NULL)
 	    {
-	      PyErr_SetString (PyExc_TypeError,
+	      PyErr_SetString (gdbpyExc_TypeError,
 			       _("Arg type returned by the get_arg_types "
 				 "method of a debug method worker object is "
 				 "not a gdb.Type object."));
@@ -377,7 +377,7 @@ python_xmethod_worker::do_get_arg_types (std::vector<type *> *arg_types)
 
       if (arg_type == NULL)
 	{
-	  PyErr_SetString (PyExc_TypeError,
+	  PyErr_SetString (gdbpyExc_TypeError,
 			   _("Arg type returned by the get_arg_types method "
 			     "of an xmethod worker object is not a gdb.Type "
 			     "object."));
@@ -486,7 +486,7 @@ python_xmethod_worker::do_get_result_type (value *obj,
   *result_type_ptr = type_object_to_type (py_result_type.get ());
   if (*result_type_ptr == NULL)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Type returned by the get_result_type method of an"
 			 " xmethod worker object is not a gdb.Type object."));
       gdbpy_print_stack ();
@@ -569,7 +569,7 @@ python_xmethod_worker::invoke (struct value *obj,
       error (_("Error while executing Python code."));
     }
 
-  if (py_result != Py_None)
+  if (py_result != gdbpy_None)
     {
       res = convert_value_from_python (py_result.get ());
       if (res == NULL)

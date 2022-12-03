@@ -71,12 +71,12 @@ stpy_get_encoding (PyObject *self, void *closure)
   PyObject *result;
 
   /* An encoding can be set to NULL by the user, so check before
-     attempting a Python FromString call.  If NULL return Py_None.  */
+     attempting a Python FromString call.  If NULL return gdbpy_None.  */
   if (self_string->encoding)
     result = PyString_FromString (self_string->encoding);
   else
     {
-      result = Py_None;
+      result = gdbpy_None;
       Py_INCREF (result);
     }
 
@@ -174,7 +174,7 @@ gdbpy_create_lazy_string_object (CORE_ADDR address, long length,
 
   if (length < -1)
     {
-      PyErr_SetString (PyExc_ValueError, _("Invalid length."));
+      PyErr_SetString (*pgdbpyExc_ValueError, _("Invalid length."));
       return NULL;
     }
 
@@ -188,7 +188,7 @@ gdbpy_create_lazy_string_object (CORE_ADDR address, long length,
 
   if (!type)
     {
-      PyErr_SetString (PyExc_RuntimeError,
+      PyErr_SetString (gdbpyExc_RuntimeError,
 		       _("A lazy string's type cannot be NULL."));
       return NULL;
     }
@@ -207,7 +207,7 @@ gdbpy_create_lazy_string_object (CORE_ADDR address, long length,
 	  length = array_length;
 	else if (length != array_length)
 	  {
-	    PyErr_SetString (PyExc_ValueError, _("Invalid length."));
+	    PyErr_SetString (*pgdbpyExc_ValueError, _("Invalid length."));
 	    return NULL;
 	  }
 	break;

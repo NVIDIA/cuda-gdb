@@ -1,3 +1,25 @@
+2020-11-19  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* gdb.fortran/array-slices-bad.exp: New file.
+	* gdb.fortran/array-slices-bad.f90: New file.
+	* gdb.fortran/array-slices-sub-slices.exp: New file.
+	* gdb.fortran/array-slices-sub-slices.f90: New file.
+	* gdb.fortran/array-slices.exp: Rewrite tests.
+	* gdb.fortran/array-slices.f90: Rewrite tests.
+	* gdb.fortran/vla-sizeof.exp: Correct expected results.
+
+2020-10-22  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* gdb.fortran/array-slices.exp: Add a new test.
+
+2020-09-19  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* gdb.fortran/array-slices.exp: Update expected results.
+	* gdb.fortran/class-allocatable-array.exp: Likewise.
+	* gdb.fortran/multi-dim.exp: Likewise.
+	* gdb.fortran/vla-type.exp: Likewise.
+	* gdb.mi/mi-vla-fortran.exp: Likewise.
+
 2021-04-22  Simon Marchi  <simon.marchi@polymtl.ca>
 
 	* gdb.python/flexible-array-member.exp: Add check for Python

@@ -19,6 +19,10 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 
 /*
 SECTION
@@ -7492,6 +7496,20 @@ copy_elf_program_header (bfd *ibfd, bfd *obfd)
   map_first = NULL;
   pointer_to_map = &map_first;
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+  num_segments = elf_elfheader (ibfd)->e_phnum;
+  p_paddr_valid = TRUE;
+  /* ldrel has produced binaries that PT_LOAD segments with valid
+     p_paddr and other segments with zero fields. */
+  for (i = 0, segment = elf_tdata (ibfd)->phdr;
+       i < num_segments;
+       i++, segment++)
+    if (!segment->p_paddr)
+      {
+        p_paddr_valid = FALSE;
+        break;
+      }
+#else
   /* If all the segment p_paddr fields are zero, don't set
      map->p_paddr_valid.  */
   p_paddr_valid = FALSE;
@@ -7504,6 +7522,7 @@ copy_elf_program_header (bfd *ibfd, bfd *obfd)
 	p_paddr_valid = TRUE;
 	break;
       }
+#endif
 
   for (i = 0, segment = elf_tdata (ibfd)->phdr;
        i < num_segments;

@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -28,6 +32,9 @@
 #include "cp-abi.h"
 #include "target.h"
 #include "objfiles.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-utils.h"
+#endif
 
 
 /* A helper for c_textual_element_type.  This checks the name of the
@@ -251,7 +258,14 @@ c_value_print_array (struct value *val,
 	error (_("Could not determine the array high bound"));
 
       eltlen = TYPE_LENGTH (elttype);
+#ifdef NVIDIA_CUDA_GDB
+      len = val
+	? std::min (high_bound - low_bound + 1,
+		    (LONGEST) value_length (val) / eltlen)
+	: (high_bound - low_bound + 1);
+#else
       len = high_bound - low_bound + 1;
+#endif
 
       /* Print arrays of textual chars with a string syntax, as
 	 long as the entire array is valid.  */
@@ -442,6 +456,14 @@ c_value_print_inner (struct value *val, struct ui_file *stream, int recurse,
   struct type *type = value_type (val);
   const gdb_byte *valaddr = value_contents_for_printing (val);
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA cached value */
+  if (val && value_cached (val))
+    fprintf_filtered (stream, "(cached) ");
+  /* CUDA extrapolated value */
+  if (val && value_extrapolated (val))
+    fprintf_filtered (stream, "(possibly) ");
+#endif
   type = check_typedef (type);
   switch (type->code ())
     {
@@ -489,6 +511,14 @@ c_value_print_inner (struct value *val, struct ui_file *stream, int recurse,
       generic_value_print (val, stream, recurse, options, &c_decorations);
       break;
     }
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - managed variables */
+  if (recurse == 0 && cuda_is_host_address_resident_on_gpu())
+    {
+      fprintf_filtered (stream, " // Resident on GPU");
+      cuda_set_host_address_resident_on_gpu (false);
+    }
+#endif
 }
 
 
@@ -571,10 +601,22 @@ c_value_print (struct value *val, struct ui_file *stream,
 	}
       else
 	{
+#ifdef NVIDIA_CUDA_GDB
+	  if (current_language->la_language != language_fortran)
+	    {
+	      fprintf_filtered (stream, "(");
+              /* CUDA - managed_variables */
+              if (cuda_is_value_managed_pointer (val))
+                fprintf_filtered (stream, "@managed ");
+	      type_print (value_type (val), "", stream, -1);
+	      fprintf_filtered (stream, ") ");
+	    }
+#else
 	  /* normal case */
 	  fprintf_filtered (stream, "(");
 	  type_print (value_type (val), "", stream, -1);
 	  fprintf_filtered (stream, ") ");
+#endif
 	}
     }
 

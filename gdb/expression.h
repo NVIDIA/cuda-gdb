@@ -155,6 +155,18 @@ enum noside
 extern struct value *evaluate_subexp_standard
   (struct type *, struct expression *, int *, enum noside);
 
+/* Evaluate a function call.  The function to be called is in ARGVEC[0] and
+   the arguments passed to the function are in ARGVEC[1..NARGS].
+   FUNCTION_NAME is the name of the function, if known.
+   DEFAULT_RETURN_TYPE is used as the function's return type if the return
+   type is unknown.  */
+
+extern struct value *evaluate_subexp_do_call (expression *exp,
+					      enum noside noside,
+					      int nargs, value **argvec,
+					      const char *function_name,
+					      type *default_return_type);
+
 /* From expprint.c */
 
 extern void print_expression (struct expression *, struct ui_file *);
@@ -173,22 +185,25 @@ extern void dump_prefix_expression (struct expression *, struct ui_file *);
    or inclusive.  So we have six sorts of subrange.  This enumeration
    type is to identify this.  */
 
-enum range_type
+enum range_type : unsigned
 {
-  /* Neither the low nor the high bound was given -- so this refers to
-     the entire available range.  */
-  BOTH_BOUND_DEFAULT,
-  /* The low bound was not given and the high bound is inclusive.  */
-  LOW_BOUND_DEFAULT,
-  /* The high bound was not given and the low bound in inclusive.  */
-  HIGH_BOUND_DEFAULT,
-  /* Both bounds were given and both are inclusive.  */
-  NONE_BOUND_DEFAULT,
-  /* The low bound was not given and the high bound is exclusive.  */
-  NONE_BOUND_DEFAULT_EXCLUSIVE,
-  /* Both bounds were given.  The low bound is inclusive and the high
-     bound is exclusive.  */
-  LOW_BOUND_DEFAULT_EXCLUSIVE,
+  /* This is a standard range.  Both the lower and upper bounds are
+     defined, and the bounds are inclusive.  */
+  RANGE_STANDARD = 0,
+
+  /* The low bound was not given.  */
+  RANGE_LOW_BOUND_DEFAULT = 1 << 0,
+
+  /* The high bound was not given.  */
+  RANGE_HIGH_BOUND_DEFAULT = 1 << 1,
+
+  /* The high bound of this range is exclusive.  */
+  RANGE_HIGH_BOUND_EXCLUSIVE = 1 << 2,
+
+  /* The range has a stride.  */
+  RANGE_HAS_STRIDE = 1 << 3,
 };
+
+DEF_ENUM_FLAGS_TYPE (enum range_type, range_types);
 
 #endif /* !defined (EXPRESSION_H) */

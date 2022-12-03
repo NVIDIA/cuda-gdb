@@ -1,5 +1,8 @@
 /* Support routines for manipulating internal types for GDB.
 
+   Modified by Arm.
+
+   Copyright (C) 1995-2021 Arm Limited (or its affiliates). All rights reserved.
    Copyright (C) 1992-2021 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support, using pieces from other GDB modules.
@@ -18,6 +21,10 @@
 
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
 
 #include "defs.h"
 #include "bfd.h"
@@ -39,7 +46,12 @@
 #include "dwarf2/loc.h"
 #include "gdbcore.h"
 #include "floatformat.h"
+#include "f-lang.h"
 #include <algorithm>
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-tdep.h"
+#include "cuda/cuda-textures.h"
+#endif
 
 /* Initialize BADNESS constants.  */
 
@@ -83,6 +95,13 @@ const struct floatformat *floatformats_ieee_double_littlebyte_bigword[BFD_ENDIAN
   &floatformat_ieee_double_big,
   &floatformat_ieee_double_littlebyte_bigword
 };
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - nv_bfloat16 format */
+const struct floatformat *floatformats_nv_bfloat16[BFD_ENDIAN_UNKNOWN] = {
+  &floatformat_nv_bfloat16,
+  &floatformat_nv_bfloat16,
+};
+#endif
 const struct floatformat *floatformats_i387_ext[BFD_ENDIAN_UNKNOWN] = {
   &floatformat_i387_ext,
   &floatformat_i387_ext
@@ -575,14 +594,14 @@ lookup_function_type_with_arguments (struct type *type,
   return fn;
 }
 
-/* Identify address space identifier by name --
-   return the integer flag defined in gdbtypes.h.  */
+/* Identify address space identifier by name -- return a
+   type_instance_flags.  */
 
-int
-address_space_name_to_int (struct gdbarch *gdbarch,
-			   const char *space_identifier)
+type_instance_flags
+address_space_name_to_type_instance_flags (struct gdbarch *gdbarch,
+					   const char *space_identifier)
 {
-  int type_flags;
+  type_instance_flags type_flags;
 
   /* Check for known address space delimiters.  */
   if (!strcmp (space_identifier, "code"))
@@ -594,15 +613,21 @@ address_space_name_to_int (struct gdbarch *gdbarch,
 							space_identifier,
 							&type_flags))
     return type_flags;
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Allow global identifiers to be used from host. */
+  else if (!strcmp (space_identifier, "global"))
+    return TYPE_INSTANCE_FLAG_CUDA_GLOBAL;
+#endif
   else
     error (_("Unknown address space specifier: \"%s\""), space_identifier);
 }
 
-/* Identify address space identifier by integer flag as defined in 
-   gdbtypes.h -- return the string version of the adress space name.  */
+/* Identify address space identifier by type_instance_flags and return
+   the string version of the adress space name.  */
 
 const char *
-address_space_int_to_name (struct gdbarch *gdbarch, int space_flag)
+address_space_type_instance_flags_to_name (struct gdbarch *gdbarch,
+					   type_instance_flags space_flag)
 {
   if (space_flag & TYPE_INSTANCE_FLAG_CODE_SPACE)
     return "code";
@@ -621,7 +646,7 @@ address_space_int_to_name (struct gdbarch *gdbarch, int space_flag)
    STORAGE must be in the same obstack as TYPE.  */
 
 static struct type *
-make_qualified_type (struct type *type, int new_flags,
+make_qualified_type (struct type *type, type_instance_flags new_flags,
 		     struct type *storage)
 {
   struct type *ntype;
@@ -661,7 +686,7 @@ make_qualified_type (struct type *type, int new_flags,
   TYPE_CHAIN (type) = ntype;
 
   /* Now set the instance flags and return the new type.  */
-  TYPE_INSTANCE_FLAGS (ntype) = new_flags;
+  ntype->set_instance_flags (new_flags);
 
   /* Set length of new type to that of the original type.  */
   TYPE_LENGTH (ntype) = TYPE_LENGTH (type);
@@ -679,13 +704,14 @@ make_qualified_type (struct type *type, int new_flags,
    representations.  */
 
 struct type *
-make_type_with_address_space (struct type *type, int space_flag)
+make_type_with_address_space (struct type *type,
+			      type_instance_flags space_flag)
 {
-  int new_flags = ((TYPE_INSTANCE_FLAGS (type)
-		    & ~(TYPE_INSTANCE_FLAG_CODE_SPACE
-			| TYPE_INSTANCE_FLAG_DATA_SPACE
-		        | TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL))
-		   | space_flag);
+  type_instance_flags new_flags = ((type->instance_flags ()
+				    & ~(TYPE_INSTANCE_FLAG_CODE_SPACE
+					| TYPE_INSTANCE_FLAG_DATA_SPACE
+					| TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL))
+				   | space_flag);
 
   return make_qualified_type (type, new_flags, NULL);
 }
@@ -709,9 +735,9 @@ make_cv_type (int cnst, int voltl,
 {
   struct type *ntype;	/* New type */
 
-  int new_flags = (TYPE_INSTANCE_FLAGS (type)
-		   & ~(TYPE_INSTANCE_FLAG_CONST 
-		       | TYPE_INSTANCE_FLAG_VOLATILE));
+  type_instance_flags new_flags = (type->instance_flags ()
+				   & ~(TYPE_INSTANCE_FLAG_CONST
+				       | TYPE_INSTANCE_FLAG_VOLATILE));
 
   if (cnst)
     new_flags |= TYPE_INSTANCE_FLAG_CONST;
@@ -962,6 +988,7 @@ create_range_type (struct type *result_type, struct type *index_type,
     = TYPE_ENDIANITY_NOT_DEFAULT (index_type);
 
   return result_type;
+//#endif
 }
 
 /* See gdbtypes.h.  */
@@ -1359,6 +1386,10 @@ create_array_type_with_stride (struct type *result_type,
 
   result_type->set_code (TYPE_CODE_ARRAY);
   TYPE_TARGET_TYPE (result_type) = element_type;
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Copy instance flags as well */
+  result_type->set_instance_flags (TYPE_INSTANCE_FLAGS (element_type));
+#endif
 
   result_type->set_num_fields (1);
   result_type->set_fields
@@ -1488,7 +1519,6 @@ void
 make_vector_type (struct type *array_type)
 {
   struct type *inner_array, *elt_type;
-  int flags;
 
   /* Find the innermost array type, in case the array is
      multi-dimensional.  */
@@ -1499,7 +1529,8 @@ make_vector_type (struct type *array_type)
   elt_type = TYPE_TARGET_TYPE (inner_array);
   if (elt_type->code () == TYPE_CODE_INT)
     {
-      flags = TYPE_INSTANCE_FLAGS (elt_type) | TYPE_INSTANCE_FLAG_NOTTEXT;
+      type_instance_flags flags
+	= elt_type->instance_flags () | TYPE_INSTANCE_FLAG_NOTTEXT;
       elt_type = make_qualified_type (elt_type, flags, NULL);
       TYPE_TARGET_TYPE (inner_array) = elt_type;
     }
@@ -2050,7 +2081,14 @@ is_dynamic_type_internal (struct type *type, int top_level)
   type = check_typedef (type);
 
   /* We only want to recognize references at the outermost level.  */
+#ifdef NVIDIA_CUDA_GDB
+  if (top_level
+      && (type->code () == TYPE_CODE_REF
+	  || (type->code () == TYPE_CODE_PTR
+	      && !is_producer_ibm (type))))
+#else
   if (top_level && type->code () == TYPE_CODE_REF)
+#endif
     type = check_typedef (TYPE_TARGET_TYPE (type));
 
   /* Types that have a dynamic TYPE_DATA_LOCATION are considered
@@ -2150,6 +2188,49 @@ is_dynamic_type (struct type *type)
   return is_dynamic_type_internal (type, 1);
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* Returns 1 when compiled with an Intel compiler.  */
+
+int
+is_producer_intel (const struct type * const type)
+{
+  return is_producer (type, "Intel");
+}
+
+/* Returns 1 when compiled with a PGI Fortran compiler.  */
+
+int
+is_producer_pgif (const struct type * const type)
+{
+  return is_producer (type, "PGF");
+}
+
+int
+is_producer_ibm (const struct type * const type)
+{
+  return is_producer (type, "IBM");
+}
+
+/* Matches against the producer of a compilation unit  */
+
+int
+is_producer (const struct type * const type, const char * match)
+{
+  // Else use the producer information for the compilation unit.
+  if (TYPE_OBJFILE_OWNED (type))
+    {
+      const compunit_symtab *symtab = TYPE_OBJFILE (type)->compunit_symtabs;
+      if (symtab != NULL)
+       {
+         const char * const producer = COMPUNIT_PRODUCER (symtab);
+         if (producer != NULL)
+           return (!strncasecmp (producer, match, strlen (match)));
+       }
+    }
+
+  return 0;
+}
+#endif
 static struct type *resolve_dynamic_type_internal
   (struct type *type, struct property_addr_info *addr_stack, int top_level);
 
@@ -2606,6 +2687,60 @@ resolve_dynamic_struct (struct type *type,
   return resolved_type;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* Worker for pointer types.  */
+
+static struct type *
+resolve_dynamic_pointer (struct type *type,
+                         struct property_addr_info *addr_stack)
+{
+  type = copy_type (type);
+  CORE_ADDR value;
+  struct dynamic_prop * prop;
+
+  // Resolve the dynamic associated property on the pointer.
+  prop = TYPE_ASSOCIATED_PROP (type);
+  if (prop != NULL 
+      && dwarf2_evaluate_property (prop, NULL, addr_stack, &value))
+    {    
+      prop->set_const_val (value);
+    }    
+  // If the pointer is associated then we may be able to resolve other dynamic
+  // properties deeper in the type.
+  // Restrict the following logic to Fortran as it breaks Ada VLA support.
+  if (!type_not_associated (type)
+      && current_language->la_language == language_fortran)
+    {    
+      const int type_code = TYPE_TARGET_TYPE (type)->code ();
+      // If this is a pointer to a derived type then the address of the pointer
+      // is distinct from the internals and therefore the debugger needs to
+      // dereference the address before resolving the dynamic properties deeper
+      // in the type.  In the case of and array-like type the address of the
+      // pointer is the same as the array itself so no dereference is required.
+      if (!(type_code == TYPE_CODE_ARRAY || type_code == TYPE_CODE_STRING)
+            && !is_producer_ibm (type))
+        {
+          struct property_addr_info pinfo;
+          pinfo.type = check_typedef (TYPE_TARGET_TYPE (type));
+          pinfo.valaddr = {};
+          if (addr_stack->valaddr.data() != NULL)
+            pinfo.addr = extract_typed_address (addr_stack->valaddr.data(),
+                                                type);
+          else
+            pinfo.addr = read_memory_typed_address (addr_stack->addr, type);
+          pinfo.next = addr_stack;
+          TYPE_TARGET_TYPE (type)
+            = resolve_dynamic_type_internal (TYPE_TARGET_TYPE (type),
+                                             &pinfo, 0);
+         }
+        else
+          TYPE_TARGET_TYPE (type)
+            = resolve_dynamic_type_internal (TYPE_TARGET_TYPE (type),
+                                             addr_stack, 0);
+    }    
+  return type;
+}
+#endif
 /* Worker for resolved_dynamic_type.  */
 
 static struct type *
@@ -2660,6 +2795,11 @@ resolve_dynamic_type_internal (struct type *type,
 					       &pinfo, top_level);
 	    break;
 	  }
+#ifdef NVIDIA_CUDA_GDB
+	case TYPE_CODE_PTR:
+	  resolved_type = resolve_dynamic_pointer (type, addr_stack);
+	  break;
+#endif
 
 	case TYPE_CODE_STRING:
 	  /* Strings are very much like an array of characters, and can be
@@ -2695,7 +2835,16 @@ resolve_dynamic_type_internal (struct type *type,
   prop = TYPE_DATA_LOCATION (resolved_type);
   if (prop != NULL
       && dwarf2_evaluate_property (prop, NULL, addr_stack, &value))
-    prop->set_const_val (value);
+    {
+      /* Start of Fortran hack.  See comment in f-lang.h for what is going
+	 on here.*/
+      if (current_language->la_language == language_fortran
+	  && resolved_type->code () == TYPE_CODE_ARRAY)
+	value = fortran_adjust_dynamic_array_base_address_hack (resolved_type,
+								value);
+      /* End of Fortran hack.  */
+      prop->set_const_val (value);
+    }
 
   return resolved_type;
 }
@@ -2810,11 +2959,17 @@ struct type *
 check_typedef (struct type *type)
 {
   struct type *orig_type = type;
-  /* While we're removing typedefs, we don't want to lose qualifiers.
-     E.g., const/volatile.  */
-  int instance_flags = TYPE_INSTANCE_FLAGS (type);
 
   gdb_assert (type);
+
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - textures */
+  if (IS_TEXTURE_TYPE (type))
+    cuda_texture_set_address_class (type);
+#endif
+  /* While we're removing typedefs, we don't want to lose qualifiers.
+     E.g., const/volatile.  */
+  type_instance_flags instance_flags = type->instance_flags ();
 
   while (type->code () == TYPE_CODE_TYPEDEF)
     {
@@ -2856,10 +3011,13 @@ check_typedef (struct type *type)
 	 outer cast in a chain of casting win), instead of assuming
 	 "it can't happen".  */
       {
-	const int ALL_SPACES = (TYPE_INSTANCE_FLAG_CODE_SPACE
-				| TYPE_INSTANCE_FLAG_DATA_SPACE);
-	const int ALL_CLASSES = TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL;
-	int new_instance_flags = TYPE_INSTANCE_FLAGS (type);
+	const type_instance_flags ALL_SPACES
+	  = (TYPE_INSTANCE_FLAG_CODE_SPACE
+	     | TYPE_INSTANCE_FLAG_DATA_SPACE);
+	const type_instance_flags ALL_CLASSES
+	  = TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL;
+
+	type_instance_flags new_instance_flags = type->instance_flags ();
 
 	/* Treat code vs data spaces and address classes separately.  */
 	if ((instance_flags & ALL_SPACES) != 0)
@@ -5104,7 +5262,7 @@ recursive_dump_type (struct type *type, int spaces)
   gdb_print_host_address (TYPE_CHAIN (type), gdb_stdout);
   printf_filtered ("\n");
   printfi_filtered (spaces, "instance_flags 0x%x", 
-		    TYPE_INSTANCE_FLAGS (type));
+		    (unsigned) type->instance_flags ());
   if (TYPE_CONST (type))
     {
       puts_filtered (" TYPE_CONST");
@@ -5372,13 +5530,30 @@ copy_type_recursive (struct objfile *objfile,
   /* Copy the common fields of types.  For the main type, we simply
      copy the entire thing and then update specific fields as needed.  */
   *TYPE_MAIN_TYPE (new_type) = *TYPE_MAIN_TYPE (type);
+#ifdef NVIDIA_CUDA_GDB
+  /* For CUDA objfiles we want to make sure we set the type's objfile ownership
+     information, otherwise, if GDB tries to copy this type, we will run into
+     an assertion above because the ownership of the type is going to be
+     attached to the architecture rather than the objfile.  */
+  if (objfile->cuda_objfile && !objfile->discarding)
+    {
+      TYPE_OBJFILE_OWNED (new_type) = 1;
+      TYPE_OWNER (new_type).objfile = objfile;
+    }
+  else
+    {
+      TYPE_OBJFILE_OWNED (new_type) = 0;
+      TYPE_OWNER (new_type).gdbarch = get_type_arch (type);
+    }
+#else
   TYPE_OBJFILE_OWNED (new_type) = 0;
   TYPE_OWNER (new_type).gdbarch = get_type_arch (type);
+#endif
 
   if (type->name ())
     new_type->set_name (xstrdup (type->name ()));
 
-  TYPE_INSTANCE_FLAGS (new_type) = TYPE_INSTANCE_FLAGS (type);
+  new_type->set_instance_flags (type->instance_flags ());
   TYPE_LENGTH (new_type) = TYPE_LENGTH (type);
 
   /* Copy the fields.  */
@@ -5505,7 +5680,7 @@ copy_type (const struct type *type)
   gdb_assert (TYPE_OBJFILE_OWNED (type));
 
   new_type = alloc_type_copy (type);
-  TYPE_INSTANCE_FLAGS (new_type) = TYPE_INSTANCE_FLAGS (type);
+  new_type->set_instance_flags (type->instance_flags ());
   TYPE_LENGTH (new_type) = TYPE_LENGTH (type);
   memcpy (TYPE_MAIN_TYPE (new_type), TYPE_MAIN_TYPE (type),
 	  sizeof (struct main_type));
@@ -5517,6 +5692,29 @@ copy_type (const struct type *type)
   return new_type;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - find the target type with the same instance flags */
+struct type *
+find_target_type_with_instance_flags (struct type *type)
+{
+  struct type *cur_target = TYPE_TARGET_TYPE(type);
+  if (cur_target == NULL)
+    return cur_target;
+  /* Search through the ring (circularly linked list) of target types that
+     only differ in their instance flags. Find the target type that matches
+     the instance flags of type. */
+  do {
+    if (TYPE_CUDA_ALL (type)
+	== (TYPE_CUDA_ALL (cur_target)))
+      return cur_target;
+    cur_target = TYPE_CHAIN(cur_target);
+  } while (cur_target != TYPE_TARGET_TYPE(type));
+  /* If the target type with the same instance flags is not found then we
+     return the default one, which is the target type pointed to by the main
+     type. */
+  return TYPE_TARGET_TYPE(type);
+}
+#endif
 /* Helper functions to initialize architecture-specific types.  */
 
 /* Allocate a type structure associated with GDBARCH and set its
@@ -5898,10 +6096,14 @@ gdbtypes_post_init (struct gdbarch *gdbarch)
     = arch_integer_type (gdbarch, 128, 0, "int128_t");
   builtin_type->builtin_uint128
     = arch_integer_type (gdbarch, 128, 1, "uint128_t");
-  TYPE_INSTANCE_FLAGS (builtin_type->builtin_int8) |=
-    TYPE_INSTANCE_FLAG_NOTTEXT;
-  TYPE_INSTANCE_FLAGS (builtin_type->builtin_uint8) |=
-    TYPE_INSTANCE_FLAG_NOTTEXT;
+
+  builtin_type->builtin_int8->set_instance_flags
+    (builtin_type->builtin_int8->instance_flags ()
+     | TYPE_INSTANCE_FLAG_NOTTEXT);
+
+  builtin_type->builtin_uint8->set_instance_flags
+    (builtin_type->builtin_uint8->instance_flags ()
+     | TYPE_INSTANCE_FLAG_NOTTEXT);
 
   /* Wide character types.  */
   builtin_type->builtin_char16
@@ -5991,6 +6193,11 @@ objfile_type (struct objfile *objfile)
   objfile_type->builtin_unsigned_long_long
     = init_integer_type (objfile, gdbarch_long_long_bit (gdbarch),
 			 1, "unsigned long long");
+#ifdef NVIDIA_CUDA_GDB
+  objfile_type->builtin_half
+    = init_float_type (objfile, gdbarch_half_bit (gdbarch),
+                       "half", gdbarch_half_format (gdbarch));
+#endif
   objfile_type->builtin_float
     = init_float_type (objfile, gdbarch_float_bit (gdbarch),
 		       "float", gdbarch_float_format (gdbarch));

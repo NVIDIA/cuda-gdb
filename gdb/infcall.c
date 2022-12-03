@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "infcall.h"
 #include "breakpoint.h"
@@ -444,8 +448,14 @@ get_call_return_value (struct call_return_meta_info *ri)
     {
       if (stack_temporaries)
 	{
+#ifdef NVIDIA_CUDA_GDB
+	  retval = value_from_contents_and_address (ri->value_type, NULL,
+						    TYPE_LENGTH (ri->value_type),
+						    ri->struct_addr);
+#else
 	  retval = value_from_contents_and_address (ri->value_type, NULL,
 						    ri->struct_addr);
+#endif
 	  push_thread_stack_temporary (thr, retval);
 	}
       else
@@ -1075,8 +1085,13 @@ call_function_by_hand_dummy (struct value *function,
 	 trivially copy ctor'able, copy bit by bit.  Otherwise, call
 	 the copy ctor to initialize the clone.  */
       CORE_ADDR addr = reserve_stack_space (param_type, sp);
+#ifdef NVIDIA_CUDA_GDB
+      value *clone
+	= value_from_contents_and_address (param_type, nullptr, TYPE_LENGTH (param_type), addr);
+#else
       value *clone
 	= value_from_contents_and_address (param_type, nullptr, addr);
+#endif
       push_thread_stack_temporary (call_thread.get (), clone);
       value *clone_ptr
 	= value_from_pointer (lookup_pointer_type (param_type), addr);

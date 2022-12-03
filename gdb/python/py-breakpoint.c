@@ -81,8 +81,8 @@ bppy_is_valid (PyObject *self, PyObject *args)
   gdbpy_breakpoint_object *self_bp = (gdbpy_breakpoint_object *) self;
 
   if (self_bp->bp)
-    Py_RETURN_TRUE;
-  Py_RETURN_FALSE;
+    GDB_PY_RETURN_TRUE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Python function to test whether or not the breakpoint is enabled.  */
@@ -93,10 +93,10 @@ bppy_get_enabled (PyObject *self, void *closure)
 
   BPPY_REQUIRE_VALID (self_bp);
   if (! self_bp->bp)
-    Py_RETURN_FALSE;
+    GDB_PY_RETURN_FALSE;
   if (self_bp->bp->enable_state == bp_enabled)
-    Py_RETURN_TRUE;
-  Py_RETURN_FALSE;
+    GDB_PY_RETURN_TRUE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Python function to test whether or not the breakpoint is silent.  */
@@ -107,8 +107,8 @@ bppy_get_silent (PyObject *self, void *closure)
 
   BPPY_REQUIRE_VALID (self_bp);
   if (self_bp->bp->silent)
-    Py_RETURN_TRUE;
-  Py_RETURN_FALSE;
+    GDB_PY_RETURN_TRUE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Python function to set the enabled state of a breakpoint.  */
@@ -122,14 +122,14 @@ bppy_set_enabled (PyObject *self, PyObject *newvalue, void *closure)
 
   if (newvalue == NULL)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Cannot delete `enabled' attribute."));
 
       return -1;
     }
-  else if (! PyBool_Check (newvalue))
+  else if (Py_TYPE(newvalue) != gdbpy_BoolType)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("The value of `enabled' must be a boolean."));
       return -1;
     }
@@ -164,13 +164,13 @@ bppy_set_silent (PyObject *self, PyObject *newvalue, void *closure)
 
   if (newvalue == NULL)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Cannot delete `silent' attribute."));
       return -1;
     }
-  else if (! PyBool_Check (newvalue))
+  else if (Py_TYPE(newvalue) != gdbpy_BoolType)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("The value of `silent' must be a boolean."));
       return -1;
     }
@@ -195,27 +195,27 @@ bppy_set_thread (PyObject *self, PyObject *newvalue, void *closure)
 
   if (newvalue == NULL)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Cannot delete `thread' attribute."));
       return -1;
     }
-  else if (PyInt_Check (newvalue))
+  else if (gdbpy_IntCheck (newvalue))
     {
       if (! gdb_py_int_as_long (newvalue, &id))
 	return -1;
 
       if (!valid_global_thread_id (id))
 	{
-	  PyErr_SetString (PyExc_RuntimeError,
+	  PyErr_SetString (*pgdbpyExc_RuntimeError,
 			   _("Invalid thread ID."));
 	  return -1;
 	}
     }
-  else if (newvalue == Py_None)
+  else if (newvalue == gdbpy_None)
     id = -1;
   else
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("The value of `thread' must be an integer or None."));
       return -1;
     }
@@ -237,11 +237,11 @@ bppy_set_task (PyObject *self, PyObject *newvalue, void *closure)
 
   if (newvalue == NULL)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Cannot delete `task' attribute."));
       return -1;
     }
-  else if (PyInt_Check (newvalue))
+  else if (gdbpy_IntCheck (newvalue))
     {
       if (! gdb_py_int_as_long (newvalue, &id))
 	return -1;
@@ -257,16 +257,16 @@ bppy_set_task (PyObject *self, PyObject *newvalue, void *closure)
 
       if (! valid_id)
 	{
-	  PyErr_SetString (PyExc_RuntimeError,
+	  PyErr_SetString (*pgdbpyExc_RuntimeError,
 			   _("Invalid task ID."));
 	  return -1;
 	}
     }
-  else if (newvalue == Py_None)
+  else if (newvalue == gdbpy_None)
     id = 0;
   else
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("The value of `task' must be an integer or None."));
       return -1;
     }
@@ -297,7 +297,7 @@ bppy_delete_breakpoint (PyObject *self, PyObject *args)
       GDB_PY_HANDLE_EXCEPTION (except);
     }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 
@@ -312,13 +312,13 @@ bppy_set_ignore_count (PyObject *self, PyObject *newvalue, void *closure)
 
   if (newvalue == NULL)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Cannot delete `ignore_count' attribute."));
       return -1;
     }
-  else if (! PyInt_Check (newvalue))
+  else if (! gdbpy_IntCheck (newvalue))
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("The value of `ignore_count' must be an integer."));
       return -1;
     }
@@ -351,7 +351,7 @@ bppy_set_hit_count (PyObject *self, PyObject *newvalue, void *closure)
 
   if (newvalue == NULL)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Cannot delete `hit_count' attribute."));
       return -1;
     }
@@ -364,7 +364,7 @@ bppy_set_hit_count (PyObject *self, PyObject *newvalue, void *closure)
 
       if (value != 0)
 	{
-	  PyErr_SetString (PyExc_AttributeError,
+	  PyErr_SetString (gdbpyExc_AttributeError,
 			   _("The value of `hit_count' must be zero."));
 	  return -1;
 	}
@@ -384,7 +384,7 @@ bppy_get_location (PyObject *self, void *closure)
   BPPY_REQUIRE_VALID (obj);
 
   if (obj->bp->type != bp_breakpoint)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   const char *str = event_location_to_string (obj->bp->location.get ());
   if (! str)
@@ -403,7 +403,7 @@ bppy_get_expression (PyObject *self, void *closure)
   BPPY_REQUIRE_VALID (obj);
 
   if (!is_watchpoint (obj->bp))
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   wp = (struct watchpoint *) obj->bp;
 
@@ -425,7 +425,7 @@ bppy_get_condition (PyObject *self, void *closure)
 
   str = obj->bp->cond_string;
   if (! str)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   return host_string_to_python_string (str).release ();
 }
@@ -445,11 +445,11 @@ bppy_set_condition (PyObject *self, PyObject *newvalue, void *closure)
 
   if (newvalue == NULL)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Cannot delete `condition' attribute."));
       return -1;
     }
-  else if (newvalue == Py_None)
+  else if (newvalue == gdbpy_None)
     exp = "";
   else
     {
@@ -483,7 +483,7 @@ bppy_get_commands (PyObject *self, void *closure)
   BPPY_REQUIRE_VALID (self_bp);
 
   if (! self_bp->bp->commands)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   string_file stb;
 
@@ -565,9 +565,9 @@ bppy_get_visibility (PyObject *self, void *closure)
   BPPY_REQUIRE_VALID (self_bp);
 
   if (user_breakpoint_p (self_bp->bp))
-    Py_RETURN_TRUE;
+    GDB_PY_RETURN_TRUE;
 
-  Py_RETURN_FALSE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Python function to determine if the breakpoint is a temporary
@@ -582,9 +582,9 @@ bppy_get_temporary (PyObject *self, void *closure)
 
   if (self_bp->bp->disposition == disp_del
       || self_bp->bp->disposition == disp_del_at_next_stop)
-    Py_RETURN_TRUE;
+    GDB_PY_RETURN_TRUE;
 
-  Py_RETURN_FALSE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Python function to determine if the breakpoint is a pending
@@ -598,11 +598,11 @@ bppy_get_pending (PyObject *self, void *closure)
   BPPY_REQUIRE_VALID (self_bp);
 
   if (is_watchpoint (self_bp->bp))
-    Py_RETURN_FALSE;
+    GDB_PY_RETURN_FALSE;
   if (pending_breakpoint_p (self_bp->bp))
-    Py_RETURN_TRUE;
+    GDB_PY_RETURN_TRUE;
 
-  Py_RETURN_FALSE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Python function to get the breakpoint's number.  */
@@ -625,7 +625,7 @@ bppy_get_thread (PyObject *self, void *closure)
   BPPY_REQUIRE_VALID (self_bp);
 
   if (self_bp->bp->thread == -1)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   return PyInt_FromLong (self_bp->bp->thread);
 }
@@ -639,7 +639,7 @@ bppy_get_task (PyObject *self, void *closure)
   BPPY_REQUIRE_VALID (self_bp);
 
   if (self_bp->bp->task == 0)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   return PyInt_FromLong (self_bp->bp->task);
 }
@@ -680,7 +680,7 @@ bppy_init_validate_args (const char *spec, char *source,
     {
       if (source != NULL || function != NULL || label != NULL || line != NULL)
 	{
-	  PyErr_SetString (PyExc_RuntimeError,
+	  PyErr_SetString (*pgdbpyExc_RuntimeError,
 			   _("Breakpoints specified with spec cannot "
 			     "have source, function, label or line defined."));
 	  return -1;
@@ -692,7 +692,7 @@ bppy_init_validate_args (const char *spec, char *source,
 	 define a watchpoint with an explicit location.  */
       if (type == bp_watchpoint)
 	{
-	  PyErr_SetString (PyExc_RuntimeError,
+	  PyErr_SetString (*pgdbpyExc_RuntimeError,
 			   _("Watchpoints cannot be set by explicit "
 			     "location parameters."));
 	  return -1;
@@ -703,7 +703,7 @@ bppy_init_validate_args (const char *spec, char *source,
 	  if (source == NULL && function == NULL && label == NULL
 	      && line == NULL)
 	    {
-	      PyErr_SetString (PyExc_RuntimeError,
+	      PyErr_SetString (*pgdbpyExc_RuntimeError,
 			       _("Neither spec nor explicit location set."));
 	      return -1;
 	    }
@@ -712,7 +712,7 @@ bppy_init_validate_args (const char *spec, char *source,
 	  if (source != NULL && function == NULL && label == NULL
 	      && line == NULL)
 	    {
-	      PyErr_SetString (PyExc_RuntimeError,
+	      PyErr_SetString (*pgdbpyExc_RuntimeError,
 			       _("Specifying a source must also include a "
 				 "line, label or function."));
 	      return -1;
@@ -760,7 +760,7 @@ bppy_init (PyObject *self, PyObject *args, PyObject *kwargs)
 	line = python_string_to_host_string (lineobj);
       else
 	{
-	  PyErr_SetString (PyExc_RuntimeError,
+	  PyErr_SetString (*pgdbpyExc_RuntimeError,
 			   _("Line keyword should be an integer or a string. "));
 	  return -1;
 	}
@@ -829,7 +829,7 @@ bppy_init (PyObject *self, PyObject *args, PyObject *kwargs)
 	      }
 
 	    const struct breakpoint_ops *ops =
-	      breakpoint_ops_for_event_location (location.get (), false);
+              breakpoint_ops_for_event_location (location.get (), false);
 
 	    create_breakpoint (python_gdbarch,
 			       location.get (), NULL, -1, NULL,
@@ -945,7 +945,7 @@ gdbpy_breakpoint_cond_says_stop (const struct extension_language_defn *extlang,
 
   if (PyObject_HasAttrString (py_bp, stop_func))
     {
-      gdbpy_ref<> result (PyObject_CallMethod (py_bp, stop_func, NULL));
+      gdbpy_ref<> result (gdbpy_PyObject_CallMethod (py_bp, stop_func, NULL));
 
       stop = 1;
       if (result != NULL)
@@ -1035,7 +1035,7 @@ gdbpy_breakpoint_created (struct breakpoint *bp)
     }
   else
     {
-      PyErr_SetString (PyExc_RuntimeError,
+      PyErr_SetString (*pgdbpyExc_RuntimeError,
 		       _("Error while creating breakpoint from GDB."));
       gdbpy_print_stack ();
     }
@@ -1177,7 +1177,7 @@ local_setattro (PyObject *self, PyObject *name, PyObject *v)
 			       " currently a %s stop condition defined for"
 			       " this breakpoint."),
 			     ext_lang_capitalized_name (extlang));
-	  PyErr_SetString (PyExc_RuntimeError, error_text.c_str ());
+	  PyErr_SetString (*pgdbpyExc_RuntimeError, error_text.c_str ());
 	  return -1;
 	}
     }

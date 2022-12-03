@@ -18,6 +18,10 @@
    along with this program; if not, write to the Free Software
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /*
 @setfilename archive-info
 SECTION
@@ -1867,7 +1871,11 @@ bfd_ar_hdr_from_filesystem (bfd *abfd, const char *filename, bfd *member)
     {
       /* Assume we just "made" the member, and fake it.  */
       struct bfd_in_memory *bim = (struct bfd_in_memory *) member->iostream;
+#ifdef NVIDIA_CUDA_GDB
+      time ((time_t *)&status.st_mtime);
+#else
       time (&status.st_mtime);
+#endif
       status.st_uid = getuid ();
       status.st_gid = getgid ();
       status.st_mode = 0644;

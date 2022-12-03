@@ -19,6 +19,10 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "sysdep.h"
 #include "bfd.h"
 #include "libbfd.h"
@@ -240,6 +244,15 @@ bfd_simple_get_relocated_section_contents (bfd *abfd,
   saved_offsets.section_count = abfd->section_count;
   saved_offsets.sections = malloc (sizeof (*saved_offsets.sections)
 				   * saved_offsets.section_count);
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - fix memory leak detected by Valgrind */
+  /* If symbol_table is not allocated yet, reserve space in saved_offsets
+     for "COMMON" section */
+  if (!symbol_table)
+    saved_offsets.sections = realloc (saved_offsets.sections,
+				      sizeof (struct saved_output_info)
+				      * (abfd->section_count + 1));
+#endif
   if (saved_offsets.sections == NULL)
     {
       free (data);

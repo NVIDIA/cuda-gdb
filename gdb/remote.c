@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* See the GDB User Guide for details of the GDB remote protocol.  */
 
 #include "defs.h"
@@ -79,6 +83,16 @@
 #include <unordered_map>
 #include "async-event.h"
 
+#ifdef NVIDIA_CUDA_GDB
+#ifdef __QNXTARGET__
+#include "remote-nto.h"
+#endif
+#include "cuda/remote-cuda.h"
+static remote_target *cuda_new_remote_target (void);
+#ifndef __QNXTARGET__
+static remote_target *cuda_new_extended_remote_target (void);
+#endif
+#endif
 /* The remote target.  */
 
 static const char remote_doc[] = N_("\
@@ -104,12 +118,14 @@ typedef std::unique_ptr<stop_reply> stop_reply_up;
    supports.  Allows the user to specify the use of the packet as well
    as allowing GDB to auto-detect support in the remote stub.  */
 
+#ifndef NVIDIA_CUDA_GDB
 enum packet_support
   {
     PACKET_SUPPORT_UNKNOWN = 0,
     PACKET_ENABLE,
     PACKET_DISABLE
   };
+#endif
 
 /* Analyze a packet's return value and update the packet config
    accordingly.  */
@@ -813,7 +829,11 @@ public: /* Remote specific methods.  */
 
   void get_offsets ();
 
+#ifdef NVIDIA_CUDA_GDB
+  virtual void remote_check_symbols ();
+#else
   void remote_check_symbols ();
+#endif
 
   void remote_supported_packet (const struct protocol_feature *feature,
 				enum packet_support support,
@@ -955,7 +975,12 @@ static const target_info extended_remote_target_info = {
 /* Set up the extended remote target by extending the standard remote
    target and adding to it.  */
 
+#ifdef NVIDIA_CUDA_GDB
+/* Cuda derives this class in remote-cuda.c */
+class extended_remote_target : public remote_target
+#else
 class extended_remote_target final : public remote_target
+#endif
 {
 public:
   const target_info &info () const override
@@ -1388,6 +1413,14 @@ get_current_remote_target ()
   return dynamic_cast<remote_target *> (proc_target);
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* External linkage to get_current_remote_target */
+remote_target *
+cuda_get_current_remote_target ()
+{
+  return get_current_remote_target ();
+}
+#endif
 /* Return the current allowed size of a remote packet.  This is
    inferred from the current architecture, and should be used to
    limit the length of outgoing packets.  */
@@ -1403,6 +1436,13 @@ remote_target::get_remote_packet_size ()
   return rsa->remote_packet_size;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+long
+get_remote_packet_size (void)
+{
+  return get_current_remote_target ()->get_remote_packet_size ();
+}
+#endif
 static struct packet_reg *
 packet_reg_from_regnum (struct gdbarch *gdbarch, struct remote_arch_state *rsa,
 			long regnum)
@@ -2093,6 +2133,10 @@ enum {
   /* Support TARGET_WAITKIND_NO_RESUMED.  */
   PACKET_no_resumed,
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - version handshake */
+  PACKET_CUDAVersion,
+#endif
   PACKET_MAX
 };
 
@@ -2302,6 +2346,18 @@ static const ptid_t magic_null_ptid (42000, -1, 1);
 static const ptid_t not_sent_ptid (42000, -2, 1);
 static const ptid_t any_thread_ptid (42000, 0, 1);
 
+#ifdef NVIDIA_CUDA_GDB
+/* Signal that we have another remote event to handle.  */
+void
+remote_report_event (remote_target *remote, int enable)
+{
+  remote_state *rs = remote->get_remote_state ();
+  if (enable)
+    mark_async_event_handler (rs->remote_async_inferior_event_token);
+  else
+    clear_async_event_handler (rs->remote_async_inferior_event_token);
+}
+#endif
 /* Find out if the stub attached to PID (and hence GDB should offer to
    detach instead of killing it when bailing out).  */
 
@@ -4069,6 +4125,10 @@ remote_target::close ()
   /* Make sure we leave stdin registered in the event loop.  */
   terminal_ours ();
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - set cuda_remote flag to be false */
+  set_cuda_remote_flag (false);
+#endif
   trace_reset_local_state ();
 
   delete this;
@@ -5050,6 +5110,7 @@ remote_target::set_permissions ()
 	     rs->buf.data ());
 }
 
+#ifndef NVIDIA_CUDA_GDB
 /* This type describes each known response to the qSupported
    packet.  */
 struct protocol_feature
@@ -5076,6 +5137,7 @@ struct protocol_feature
      FUNC is remote_supported_packet.  */
   int packet;
 };
+#endif
 
 static void
 remote_supported_packet (remote_target *remote,
@@ -5235,6 +5297,10 @@ static const struct protocol_feature remote_protocol_features[] = {
   { "vContSupported", PACKET_DISABLE, remote_supported_packet, PACKET_vContSupported },
   { "QThreadEvents", PACKET_DISABLE, remote_supported_packet, PACKET_QThreadEvents },
   { "no-resumed", PACKET_DISABLE, remote_supported_packet, PACKET_no_resumed },
+#if defined(NVIDIA_CUDA_GDB) && !defined(__QNXTARGET__)
+  /* CUDA - version handshake */
+  { "CUDAVersion", PACKET_DISABLE, cuda_remote_version_handshake, PACKET_CUDAVersion },
+#endif
 };
 
 static char *remote_support_xml;
@@ -5558,8 +5624,18 @@ remote_target::open_1 (const char *name, int from_tty, int extended_p)
   reopen_exec_file ();
   reread_symbols ();
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - Since we want to preserve the "remote" and "extended-remote" target names,
+     we have to modify the line below to return CUDA-enhanced target classes */
+#ifdef __QNXTARGET__
+  remote_target *remote = cuda_new_remote_target ();
+#else
+  remote_target *remote = extended_p ? cuda_new_extended_remote_target () : cuda_new_remote_target ();
+#endif
+#else
   remote_target *remote
     = (extended_p ? new extended_remote_target () : new remote_target ());
+#endif
   target_ops_up target_holder (remote);
 
   remote_state *rs = remote->get_remote_state ();
@@ -5600,6 +5676,10 @@ remote_target::open_1 (const char *name, int from_tty, int extended_p)
       puts_filtered ("\n");
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - set cuda_remote flag to be true */
+  set_cuda_remote_flag (true);
+#endif
   /* Switch to using the remote target now.  */
   push_target (std::move (target_holder));
 
@@ -5681,6 +5761,10 @@ remote_target::open_1 (const char *name, int from_tty, int extended_p)
 
   if (target_async_permitted)
     rs->wait_forever_enabled_p = 1;
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - Initialize the remote target */
+  cuda_remote_attach ();
+#endif
 }
 
 /* Detach the specified process.  */
@@ -7564,9 +7648,29 @@ Packet: '%s'\n"),
 		ULONGEST upid;
 
 		p += sizeof ("process:") - 1;
+#ifdef NVIDIA_CUDA_GDB
+		p = unpack_varlen_hex (p, &upid);
+		pid = upid;
+                if (*p == ';')
+                  p++;
+	      }
+            /* CUDA - Process the return value of cuda_finalize. */
+            if (strncmp (p,
+                         "cuda_finalize:", sizeof ("cuda_finalize") - 1) == 0)
+              {
+                ULONGEST ures;
+                CUDBGResult res;
+                p += sizeof ("cuda_finalize:") - 1;
+                unpack_varlen_hex (p, &ures);
+                res = (CUDBGResult) ures;
+                cuda_api_clear_state ();
+                cuda_api_handle_finalize_api_error (res);
+              }
+#else
 		unpack_varlen_hex (p, &upid);
 		pid = upid;
 	      }
+#endif
 	    else
 	      error (_("unknown stop reply packet: %s"), buf);
 	  }
@@ -9201,7 +9305,11 @@ print_packet (const char *buf)
 int
 remote_target::putpkt (const char *buf)
 {
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+  return qnx_putpkt (this, buf);
+#else
   return putpkt_binary (buf, strlen (buf));
+#endif
 }
 
 /* Wrapper around remote_target::putpkt to avoid exporting
@@ -9213,6 +9321,19 @@ putpkt (remote_target *remote, const char *buf)
   return remote->putpkt (buf);
 }
 
+#if defined(NVIDIA_CUDA_GDB)
+/* Raw unsafe putpkt_binary */
+int
+putpkt_binary (const char *buf, int cnt)
+{
+#ifdef __QNXTARGET__
+  return qnx_putpkt_binary (buf, cnt);
+#else
+  return get_current_remote_target ()->putpkt_binary (buf, cnt);
+#endif
+}
+#endif
+
 /* Send a packet to the remote machine, with error checking.  The data
    of the packet is in BUF.  The string in BUF can be at most
    get_remote_packet_size () - 5 to account for the $, # and checksum,
@@ -9222,6 +9343,9 @@ putpkt (remote_target *remote, const char *buf)
 int
 remote_target::putpkt_binary (const char *buf, int cnt)
 {
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+  return qnx_putpkt_binary (buf, cnt);
+#else
   struct remote_state *rs = get_remote_state ();
   int i;
   unsigned char csum = 0;
@@ -9426,6 +9550,7 @@ remote_target::putpkt_binary (const char *buf, int cnt)
     }
 
   return 0;
+#endif
 }
 
 /* Come here after finding the start of a frame when we expected an
@@ -9620,9 +9745,30 @@ show_watchdog (struct ui_file *file, int from_tty,
 void
 remote_target::getpkt (gdb::char_vector *buf, int forever)
 {
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+  qnx_getpkt_sane (buf, forever);
+#else
   getpkt_sane (buf, forever);
+#endif
 }
 
+#ifdef NVIDIA_CUDA_GDB
+void
+getpkt (remote_target *remote, gdb::char_vector *buf, int forever)
+{
+  remote->getpkt (buf, forever);
+}
+void
+getpkt (gdb::char_vector *buf, int forever)
+{
+  getpkt (get_current_remote_target (), buf, forever);
+}
+int
+getpkt_sane (gdb::char_vector *buf, int forever)
+{
+  return get_current_remote_target ()->getpkt_sane (buf, forever);
+}
+#endif
 
 /* Read a packet from the remote machine, with error checking, and
    store it in *BUF.  Resize *BUF if necessary to hold the result.  If
@@ -9660,7 +9806,13 @@ remote_target::getpkt_or_notif_sane_1 (gdb::char_vector *buf,
   else
     timeout = remote_timeout;
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA: increase max timeout from 6 to 20 seconds to account for potentially
+ * slow codepathes while single-stepping through CUDA code on older GPUs */
+#define MAX_TRIES 10
+#else
 #define MAX_TRIES 3
+#endif
 
   /* Process any number of notifications, and then return when
      we get a packet.  */
@@ -9787,7 +9939,11 @@ remote_target::getpkt_or_notif_sane_1 (gdb::char_vector *buf,
 int
 remote_target::getpkt_sane (gdb::char_vector *buf, int forever)
 {
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+  return qnx_getpkt_sane (buf, forever);
+#else
   return getpkt_or_notif_sane_1 (buf, forever, 0, NULL);
+#endif
 }
 
 int
@@ -11267,6 +11423,16 @@ remote_target::rcmd (const char *command, struct ui_file *outbuf)
   if (command == NULL)
     command = "";
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - cleanup on "monitor exit" command. */
+  if (strcmp (command, "exit") == 0)
+    {
+      cuda_api_finalize ();
+      cuda_cleanup ();
+      cuda_gdb_session_destroy ();
+      set_cuda_remote_flag (false);
+    }
+#endif
   /* The query prefix.  */
   strcpy (rs->buf.data (), "qRcmd,");
   p = strchr (rs->buf.data (), '\0');
@@ -12350,7 +12516,11 @@ remote_target::filesystem_is_local ()
      this case we treat the remote filesystem as local if the
      sysroot is exactly TARGET_SYSROOT_PREFIX and if the stub
      does not support vFile:open.  */
+#ifdef NVIDIA_CUDA_GDB
+  if (strncmp (gdb_sysroot, TARGET_SYSROOT_PREFIX, strlen (TARGET_SYSROOT_PREFIX)) == 0)
+#else
   if (strcmp (gdb_sysroot, TARGET_SYSROOT_PREFIX) == 0)
+#endif
     {
       enum packet_support ps = packet_support (PACKET_vFile_open);
 
@@ -14382,6 +14552,14 @@ set_range_stepping (const char *ignore_args, int from_tty,
     }
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* QNX NTO protocol */
+#if __QNXTARGET__
+#include "remote-nto.c"
+#endif
+/* CUDA */
+#include "cuda/remote-cuda.c"
+#endif
 void _initialize_remote ();
 void
 _initialize_remote ()
@@ -14396,6 +14574,10 @@ _initialize_remote ()
   add_target (remote_target_info, remote_target::open);
   add_target (extended_remote_target_info, extended_remote_target::open);
 
+  /* CUDA - we hijack the default remote targets, adding CUDA support */
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+  _initialize_nto();
+#endif
   /* Hook into new objfile notification.  */
   gdb::observers::new_objfile.attach (remote_new_objfile);
 
@@ -14781,6 +14963,10 @@ Show the maximum size of the address (in bits) in a memory packet."), NULL,
   add_packet_config_cmd (&remote_protocol_packets[PACKET_no_resumed],
 			 "N stop reply", "no-resumed-stop-reply", 0);
 
+#ifdef NVIDIA_CUDA_GDB
+  add_packet_config_cmd (&remote_protocol_packets[PACKET_CUDAVersion],
+			 "CUDAVersion packet", "CUDAVersion-packet", 0);
+#endif
   /* Assert that we've registered "set remote foo-packet" commands
      for all packet configs.  */
   {

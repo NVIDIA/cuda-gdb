@@ -18,6 +18,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 
 #include "gdbarch.h"
@@ -514,8 +518,13 @@ aarch64_linux_supply_sve_regset (const struct regset *regset,
   if (regnum == -1 || regnum == AARCH64_SVE_VG_REGNUM)
     {
       gdb_byte vg_target[8];
+#ifdef NVIDIA_CUDA_GDB
+      store_unsigned_integer ((gdb_byte *)&vg_target, sizeof (uint64_t),
+			      byte_order, sve_vg_from_vl (vl));
+#else
       store_integer ((gdb_byte *)&vg_target, sizeof (uint64_t), byte_order,
 		     sve_vg_from_vl (vl));
+#endif
       regcache->raw_supply (AARCH64_SVE_VG_REGNUM, &vg_target);
     }
 

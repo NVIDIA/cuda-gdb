@@ -60,7 +60,7 @@ extract_sym (PyObject *obj, gdb::unique_xmalloc_ptr<char> *name,
 	     struct symbol **sym, const struct block **sym_block,
 	     const struct language_defn **language)
 {
-  gdbpy_ref<> result (PyObject_CallMethod (obj, "symbol", NULL));
+  gdbpy_ref<> result (gdbpy_PyObject_CallMethod (obj, "symbol", NULL));
 
   if (result == NULL)
     return EXT_LANG_BT_ERROR;
@@ -95,7 +95,7 @@ extract_sym (PyObject *obj, gdb::unique_xmalloc_ptr<char> *name,
 
       if (*sym == NULL)
 	{
-	  PyErr_SetString (PyExc_RuntimeError,
+	  PyErr_SetString (gdbpyExc_RuntimeError,
 			   _("Unexpected value.  Expecting a "
 			     "gdb.Symbol or a Python string."));
 	  return EXT_LANG_BT_ERROR;
@@ -131,7 +131,7 @@ extract_value (PyObject *obj, struct value **value)
 {
   if (PyObject_HasAttrString (obj, "value"))
     {
-      gdbpy_ref<> vresult (PyObject_CallMethod (obj, "value", NULL));
+      gdbpy_ref<> vresult (gdbpy_PyObject_CallMethod (obj, "value", NULL));
 
       if (vresult == NULL)
 	return EXT_LANG_BT_ERROR;
@@ -139,7 +139,7 @@ extract_value (PyObject *obj, struct value **value)
       /* The Python code has returned 'None' for a value, so we set
 	 value to NULL.  This flags that GDB should read the
 	 value.  */
-      if (vresult == Py_None)
+      if (vresult == gdbpy_None)
 	{
 	  *value = NULL;
 	  return EXT_LANG_BT_OK;
@@ -269,11 +269,11 @@ get_py_iter_from_func (PyObject *filter, const char *func)
 {
   if (PyObject_HasAttrString (filter, func))
     {
-      gdbpy_ref<> result (PyObject_CallMethod (filter, func, NULL));
+      gdbpy_ref<> result (gdbpy_PyObject_CallMethod (filter, func, NULL));
 
       if (result != NULL)
 	{
-	  if (result == Py_None)
+	  if (result == gdbpy_None)
 	    {
 	      return result.release ();
 	    }
@@ -284,7 +284,7 @@ get_py_iter_from_func (PyObject *filter, const char *func)
 	}
     }
   else
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   return NULL;
 }
@@ -479,7 +479,7 @@ enumerate_args (PyObject *iter,
 	     exit.  */
 	  if (sym == NULL)
 	    {
-	      PyErr_SetString (PyExc_RuntimeError,
+	      PyErr_SetString (gdbpyExc_RuntimeError,
 			       _("No symbol or value provided."));
 	      return EXT_LANG_BT_ERROR;
 	    }
@@ -654,12 +654,12 @@ py_mi_print_variables (PyObject *filter, struct ui_out *out,
 
   ui_out_emit_list list_emitter (out, "variables");
 
-  if (args_iter != Py_None
+  if (args_iter != gdbpy_None
       && (enumerate_args (args_iter.get (), out, args_type, 1, frame)
 	  == EXT_LANG_BT_ERROR))
     return EXT_LANG_BT_ERROR;
 
-  if (locals_iter != Py_None
+  if (locals_iter != gdbpy_None
       && (enumerate_locals (locals_iter.get (), out, 1, args_type, 1, frame)
 	  == EXT_LANG_BT_ERROR))
     return EXT_LANG_BT_ERROR;
@@ -684,7 +684,7 @@ py_print_locals (PyObject *filter,
 
   ui_out_emit_list list_emitter (out, "locals");
 
-  if (locals_iter != Py_None
+  if (locals_iter != gdbpy_None
       && (enumerate_locals (locals_iter.get (), out, indent, args_type,
 			    0, frame) == EXT_LANG_BT_ERROR))
     return EXT_LANG_BT_ERROR;
@@ -715,7 +715,7 @@ py_print_args (PyObject *filter,
 
   if (args_type == CLI_PRESENCE)
     {
-      if (args_iter != Py_None)
+      if (args_iter != gdbpy_None)
 	{
 	  gdbpy_ref<> item (PyIter_Next (args_iter.get ()));
 
@@ -725,7 +725,7 @@ py_print_args (PyObject *filter,
 	    return EXT_LANG_BT_ERROR;
 	}
     }
-  else if (args_iter != Py_None
+  else if (args_iter != gdbpy_None
 	   && (enumerate_args (args_iter.get (), out, args_type, 0, frame)
 	       == EXT_LANG_BT_ERROR))
     return EXT_LANG_BT_ERROR;
@@ -794,7 +794,7 @@ py_print_frame (PyObject *filter, frame_filter_flags flags,
   /* Get the underlying frame.  This is needed to determine GDB
   architecture, and also, in the cases of frame variables/arguments to
   read them if they returned filter object requires us to do so.  */
-  gdbpy_ref<> py_inf_frame (PyObject_CallMethod (filter, "inferior_frame",
+  gdbpy_ref<> py_inf_frame (gdbpy_PyObject_CallMethod (filter, "inferior_frame",
 						 NULL));
   if (py_inf_frame == NULL)
     return EXT_LANG_BT_ERROR;
@@ -834,12 +834,12 @@ py_print_frame (PyObject *filter, frame_filter_flags flags,
 	 address printing.  */
       if (PyObject_HasAttrString (filter, "address"))
 	{
-	  gdbpy_ref<> paddr (PyObject_CallMethod (filter, "address", NULL));
+	  gdbpy_ref<> paddr (gdbpy_PyObject_CallMethod (filter, "address", NULL));
 
 	  if (paddr == NULL)
 	    return EXT_LANG_BT_ERROR;
 
-	  if (paddr != Py_None)
+	  if (paddr != gdbpy_None)
 	    {
 	      if (get_addr_from_python (paddr.get (), &address) < 0)
 		return EXT_LANG_BT_ERROR;
@@ -909,7 +909,7 @@ py_print_frame (PyObject *filter, frame_filter_flags flags,
       /* Print frame function name.  */
       if (PyObject_HasAttrString (filter, "function"))
 	{
-	  gdbpy_ref<> py_func (PyObject_CallMethod (filter, "function", NULL));
+	  gdbpy_ref<> py_func (gdbpy_PyObject_CallMethod (filter, "function", NULL));
 	  const char *function = NULL;
 
 	  if (py_func == NULL)
@@ -924,7 +924,7 @@ py_print_frame (PyObject *filter, frame_filter_flags flags,
 
 	      function = function_to_free.get ();
 	    }
-	  else if (PyLong_Check (py_func.get ()))
+	  else if (gdbpy_LongCheck (py_func.get ()))
 	    {
 	      CORE_ADDR addr;
 	      struct bound_minimal_symbol msymbol;
@@ -936,9 +936,9 @@ py_print_frame (PyObject *filter, frame_filter_flags flags,
 	      if (msymbol.minsym != NULL)
 		function = msymbol.minsym->print_name ();
 	    }
-	  else if (py_func != Py_None)
+	  else if (py_func != gdbpy_None)
 	    {
-	      PyErr_SetString (PyExc_RuntimeError,
+	      PyErr_SetString (gdbpyExc_RuntimeError,
 			       _("FrameDecorator.function: expecting a " \
 				 "String, integer or None."));
 	      return EXT_LANG_BT_ERROR;
@@ -971,12 +971,12 @@ py_print_frame (PyObject *filter, frame_filter_flags flags,
 
       if (PyObject_HasAttrString (filter, "filename"))
 	{
-	  gdbpy_ref<> py_fn (PyObject_CallMethod (filter, "filename", NULL));
+	  gdbpy_ref<> py_fn (gdbpy_PyObject_CallMethod (filter, "filename", NULL));
 
 	  if (py_fn == NULL)
 	    return EXT_LANG_BT_ERROR;
 
-	  if (py_fn != Py_None)
+	  if (py_fn != gdbpy_None)
 	    {
 	      gdb::unique_xmalloc_ptr<char>
 		filename (python_string_to_host_string (py_fn.get ()));
@@ -995,15 +995,15 @@ py_print_frame (PyObject *filter, frame_filter_flags flags,
 
       if (PyObject_HasAttrString (filter, "line"))
 	{
-	  gdbpy_ref<> py_line (PyObject_CallMethod (filter, "line", NULL));
+	  gdbpy_ref<> py_line (gdbpy_PyObject_CallMethod (filter, "line", NULL));
 	  int line;
 
 	  if (py_line == NULL)
 	    return EXT_LANG_BT_ERROR;
 
-	  if (py_line != Py_None)
+	  if (py_line != gdbpy_None)
 	    {
-	      line = PyLong_AsLong (py_line.get ());
+	      line = gdbpy_Long_AsLong (py_line.get ());
 	      if (PyErr_Occurred ())
 		return EXT_LANG_BT_ERROR;
 
@@ -1051,7 +1051,7 @@ py_print_frame (PyObject *filter, frame_filter_flags flags,
       if (elided == NULL)
 	return EXT_LANG_BT_ERROR;
 
-      if (elided != Py_None)
+      if (elided != gdbpy_None)
 	{
 	  PyObject *item;
 
@@ -1106,7 +1106,7 @@ bootstrap_python_frame_filters (struct frame_info *frame,
   if (py_frame_high == NULL)
     return NULL;
 
-  gdbpy_ref<> iterable (PyObject_CallFunctionObjArgs (sort_func.get (),
+  gdbpy_ref<> iterable (gdbpy_PyObject_CallFunctionObjArgs (sort_func.get (),
 						      frame_obj.get (),
 						      py_frame_low.get (),
 						      py_frame_high.get (),
@@ -1114,7 +1114,7 @@ bootstrap_python_frame_filters (struct frame_info *frame,
   if (iterable == NULL)
     return NULL;
 
-  if (iterable != Py_None)
+  if (iterable != gdbpy_None)
     return PyObject_GetIter (iterable.get ());
   else
     return iterable.release ();
@@ -1196,7 +1196,7 @@ gdbpy_apply_frame_filter (const struct extension_language_defn *extlang,
   /* If iterable is None, then there are no frame filters registered.
      If this is the case, defer to default GDB printing routines in MI
      and CLI.  */
-  if (iterable == Py_None)
+  if (iterable == gdbpy_None)
     return EXT_LANG_BT_NO_FILTERS;
 
   htab_up levels_printed (htab_create (20,

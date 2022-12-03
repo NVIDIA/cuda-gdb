@@ -1,5 +1,8 @@
 /* Definitions for values of C expressions, for GDB.
 
+   Modified by Arm.
+
+   Copyright (C) 1995-2021 Arm Limited (or its affiliates). All rights reserved.
    Copyright (C) 1986-2021 Free Software Foundation, Inc.
 
    This file is part of GDB.
@@ -16,6 +19,10 @@
 
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
 
 #if !defined (VALUE_H)
 #define VALUE_H 1
@@ -369,6 +376,10 @@ extern gdb_byte *value_contents_writeable (struct value *);
 
 extern gdb_byte *value_contents_all_raw (struct value *);
 extern const gdb_byte *value_contents_all (struct value *);
+#ifdef NVIDIA_CUDA_GDB
+extern gdb_byte *value_contents_all_raw_unlimted (struct value *);
+extern void value_contents_ensure_unlimited (struct value* val);
+#endif
 
 /* Like value_contents_all, but does not require that the returned
    bits be valid.  This should only be used in situations where you
@@ -394,6 +405,14 @@ extern int value_optimized_out (struct value *value);
 
 extern int value_bits_any_optimized_out (const struct value *value,
 					 int bit_offset, int bit_length);
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - register cache */
+extern int value_cached (const struct value *value);
+extern void set_value_cached (struct value *value, int val);
+/* CUDA - regmap extrapolation */
+extern int value_extrapolated (const struct value *value);
+extern void set_value_extrapolated (struct value *value, int val);
+#endif
 
 /* Like value_optimized_out, but return true iff the whole value is
    optimized out.  */
@@ -685,15 +704,21 @@ extern struct value *value_from_host_double (struct type *type, double d);
 extern struct value *value_from_history_ref (const char *, const char **);
 extern struct value *value_from_component (struct value *, struct type *,
 					   LONGEST);
-
 extern struct value *value_at (struct type *type, CORE_ADDR addr);
 extern struct value *value_at_lazy (struct type *type, CORE_ADDR addr);
 
 extern struct value *value_from_contents_and_address_unresolved
      (struct type *, const gdb_byte *, CORE_ADDR);
+#ifdef NVIDIA_CUDA_GDB
+extern struct value *value_from_contents_and_address (struct type *,
+                              const gdb_byte *,
+                              unsigned length,
+                              CORE_ADDR);
+#else
 extern struct value *value_from_contents_and_address (struct type *,
 						      const gdb_byte *,
 						      CORE_ADDR);
+#endif
 extern struct value *value_from_contents (struct type *, const gdb_byte *);
 
 extern struct value *default_value_from_register (struct gdbarch *gdbarch,
@@ -735,6 +760,9 @@ extern struct value *read_var_value (struct symbol *var,
 
 extern struct value *allocate_value (struct type *type);
 extern struct value *allocate_value_lazy (struct type *type);
+#ifdef NVIDIA_CUDA_GDB
+extern void allocate_value_contents_limited (struct value *value);
+#endif
 extern void value_contents_copy (struct value *dst, LONGEST dst_offset,
 				 struct value *src, LONGEST src_offset,
 				 LONGEST length);
@@ -1215,4 +1243,12 @@ extern struct value *call_xmethod (struct value *method,
    exiting (e.g., on quit_force).  */
 extern void finalize_values ();
 
+#ifdef NVIDIA_CUDA_GDB
+extern int value_repeated (const struct value *value);
+extern void set_value_repeated (struct value *value,
+				int repeated);
+extern unsigned value_length (const struct value *value);
+extern void value_copy_contents (struct value *to, struct value *from);
+extern void value_copy_contents_all_raw (struct value *to, struct value *from);
+#endif
 #endif /* !defined (VALUE_H) */

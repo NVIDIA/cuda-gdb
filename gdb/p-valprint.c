@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* This file is derived from c-valprint.c */
 
 #include "defs.h"
@@ -545,7 +549,12 @@ pascal_object_print_value_fields (struct value *val, struct ui_file *stream,
 	  /* If we're at top level, carve out a completely fresh
 	     chunk of the obstack and use that until this particular
 	     invocation returns.  */
+#ifdef NVIDIA_CUDA_GDB
+	  /* To suppress clang's "Unused return value" warning */
+	  (void) obstack_finish (&dont_print_statmem_obstack);
+#else
 	  obstack_finish (&dont_print_statmem_obstack);
+#endif
 	}
 
       for (i = n_baseclasses; i < len; i++)
@@ -702,7 +711,12 @@ pascal_object_print_value (struct value *val, struct ui_file *stream,
          chunk of the obstack and use that until this particular
          invocation returns.  */
       /* Bump up the high-water mark.  Now alpha is omega.  */
+#ifdef NVIDIA_CUDA_GDB
+      /* To suppress clang's "Unused return value" warning */
+      (void) obstack_finish (&dont_print_vb_obstack);
+#else
       obstack_finish (&dont_print_vb_obstack);
+#endif
     }
 
   for (i = 0; i < n_baseclasses; i++)
@@ -755,9 +769,16 @@ pascal_object_print_value (struct value *val, struct ui_file *stream,
 	      if (target_read_memory (address + boffset, buf.data (),
 				      TYPE_LENGTH (baseclass)) != 0)
 		skip = 1;
+#ifdef NVIDIA_CUDA_GDB
+	      base_value = value_from_contents_and_address (baseclass,
+							    buf.data (),
+							    TYPE_LENGTH (baseclass),
+							    address + boffset);
+#else
 	      base_value = value_from_contents_and_address (baseclass,
 							    buf.data (),
 							    address + boffset);
+#endif
 	      baseclass = value_type (base_value);
 	      boffset = 0;
 	    }

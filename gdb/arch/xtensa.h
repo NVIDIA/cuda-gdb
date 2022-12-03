@@ -17,13 +17,21 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef ARCH_XTENSA_H
 #define ARCH_XTENSA_H
 
 /* Xtensa ELF core file register set representation ('.reg' section).
    Copied from target-side ELF header <xtensa/elf.h>.  */
 
+#ifdef NVIDIA_CUDA_GDB
+typedef unsigned long xtensa_elf_greg_t;
+#else
 typedef uint32_t xtensa_elf_greg_t;
+#endif
 
 typedef struct
 {

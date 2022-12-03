@@ -20,6 +20,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* This was blantantly ripped off the C expression parser, please 
    be aware of that as you look at its basic structure -FMB */ 
 
@@ -75,6 +79,9 @@ static int paren_depth;
 /* The current type stack.  */
 static struct type_stack *type_stack;
 
+/* CUDA - The current address space */
+static type_instance_flags address_space = 0;
+/* END CUDA */
 int yyparse (void);
 
 static int yylex (void);
@@ -125,7 +132,12 @@ static int parse_number (struct parser_state *, const char *, int,
 			 int, YYSTYPE *);
 %}
 
+/*** CUDA REMOVAL
 %type <voidval> exp  type_exp start variable 
+***/
+/* CUDA */
+%type <voidval> addrspace exp type_exp start variable
+/* END CUDA */
 %type <tval> type typebase
 %type <tvec> nonempty_typelist
 /* %type <bval> block */
@@ -159,17 +171,27 @@ static int parse_number (struct parser_state *, const char *, int,
 
 %token <ssym> NAME_OR_INT 
 
-%token SIZEOF KIND
+%token SIZEOF KIND POINTER
 %token ERROR
 
 /* Special type cases, put in to allow the parser to distinguish different
    legal basetypes.  */
+/*** CUDA REMOVAL
 %token INT_KEYWORD INT_S2_KEYWORD LOGICAL_S1_KEYWORD LOGICAL_S2_KEYWORD 
+***/
+/* CUDA */
+%token INT_KEYWORD INT_S2_KEYWORD INT_S8_KEYWORD LOGICAL_S1_KEYWORD LOGICAL_S2_KEYWORD
+/* END CUDA */
 %token LOGICAL_S8_KEYWORD
 %token LOGICAL_KEYWORD REAL_KEYWORD REAL_S8_KEYWORD REAL_S16_KEYWORD 
 %token COMPLEX_KEYWORD
 %token COMPLEX_S8_KEYWORD COMPLEX_S16_KEYWORD COMPLEX_S32_KEYWORD 
+/*** CUDA REMOVAL
 %token BOOL_AND BOOL_OR BOOL_NOT   
+***/
+/* CUDA */
+%token BOOL_AND BOOL_OR BOOL_NOT BIN_MOD
+/* END CUDA */
 %token SINGLE DOUBLE PRECISION
 %token <lval> CHARACTER 
 
@@ -216,6 +238,44 @@ exp     :       '(' exp ')'
         		{ }
         ;
 
+/* CUDA: address specifiers */
+addrspace:      '@' name
+                        {
+                            address_space = address_space_name_to_type_instance_flags (pstate->gdbarch (),
+                                                                                       copy_name($2).c_str());
+                        }
+                '(' variable
+			{
+                            if (address_space)
+                                {
+                                    struct type *type;
+                                    struct symbol *sym = pstate->expout->elts[pstate->expout_ptr-2].symbol;
+
+                                    type = make_type_with_address_space (SYMBOL_TYPE (sym), address_space);
+                                    write_exp_elt_opcode (pstate, UNOP_CAST);
+                                    write_exp_elt_type (pstate, type);
+                                    write_exp_elt_opcode (pstate, UNOP_CAST);
+                                    address_space = 0;
+                                }
+                        }
+        ;
+
+exp	:	addrspace '('
+                        {
+			    pstate->start_arglist ();
+                        }
+		arglist ')'
+			{ write_exp_elt_opcode (pstate,
+						OP_F77_UNDETERMINED_ARGLIST);
+			  write_exp_elt_longcst (pstate,
+						 pstate->end_arglist ());
+			  write_exp_elt_opcode (pstate,
+					      OP_F77_UNDETERMINED_ARGLIST); } ')'
+	;
+
+exp	:	addrspace ')'
+	;
+/* END CUDA */
 /* Expressions, not including the comma operator.  */
 exp	:	'*' exp    %prec UNARY
 			{ write_exp_elt_opcode (pstate, UNOP_IND); }
@@ -284,29 +344,69 @@ arglist	:	arglist ',' exp   %prec ABOVE_COMMA
 			{ pstate->arglist_len++; }
 	;
 
+arglist	:	arglist ',' subrange   %prec ABOVE_COMMA
+			{ pstate->arglist_len++; }
+	;
+
 /* There are four sorts of subrange types in F90.  */
 
 subrange:	exp ':' exp	%prec ABOVE_COMMA
-			{ write_exp_elt_opcode (pstate, OP_RANGE); 
-			  write_exp_elt_longcst (pstate, NONE_BOUND_DEFAULT);
+			{ write_exp_elt_opcode (pstate, OP_RANGE);
+			  write_exp_elt_longcst (pstate, RANGE_STANDARD);
 			  write_exp_elt_opcode (pstate, OP_RANGE); }
 	;
 
 subrange:	exp ':'	%prec ABOVE_COMMA
 			{ write_exp_elt_opcode (pstate, OP_RANGE);
-			  write_exp_elt_longcst (pstate, HIGH_BOUND_DEFAULT);
+			  write_exp_elt_longcst (pstate,
+						 RANGE_HIGH_BOUND_DEFAULT);
 			  write_exp_elt_opcode (pstate, OP_RANGE); }
 	;
 
 subrange:	':' exp	%prec ABOVE_COMMA
 			{ write_exp_elt_opcode (pstate, OP_RANGE);
-			  write_exp_elt_longcst (pstate, LOW_BOUND_DEFAULT);
+			  write_exp_elt_longcst (pstate,
+						 RANGE_LOW_BOUND_DEFAULT);
 			  write_exp_elt_opcode (pstate, OP_RANGE); }
 	;
 
 subrange:	':'	%prec ABOVE_COMMA
 			{ write_exp_elt_opcode (pstate, OP_RANGE);
-			  write_exp_elt_longcst (pstate, BOTH_BOUND_DEFAULT);
+			  write_exp_elt_longcst (pstate,
+						 (RANGE_LOW_BOUND_DEFAULT
+						  | RANGE_HIGH_BOUND_DEFAULT));
+			  write_exp_elt_opcode (pstate, OP_RANGE); }
+	;
+
+/* And each of the four subrange types can also have a stride.  */
+subrange:	exp ':' exp ':' exp	%prec ABOVE_COMMA
+			{ write_exp_elt_opcode (pstate, OP_RANGE);
+			  write_exp_elt_longcst (pstate, RANGE_HAS_STRIDE);
+			  write_exp_elt_opcode (pstate, OP_RANGE); }
+	;
+
+subrange:	exp ':' ':' exp	%prec ABOVE_COMMA
+			{ write_exp_elt_opcode (pstate, OP_RANGE);
+			  write_exp_elt_longcst (pstate,
+						 (RANGE_HIGH_BOUND_DEFAULT
+						  | RANGE_HAS_STRIDE));
+			  write_exp_elt_opcode (pstate, OP_RANGE); }
+	;
+
+subrange:	':' exp ':' exp	%prec ABOVE_COMMA
+			{ write_exp_elt_opcode (pstate, OP_RANGE);
+			  write_exp_elt_longcst (pstate,
+						 (RANGE_LOW_BOUND_DEFAULT
+						  | RANGE_HAS_STRIDE));
+			  write_exp_elt_opcode (pstate, OP_RANGE); }
+	;
+
+subrange:	':' ':' exp	%prec ABOVE_COMMA
+			{ write_exp_elt_opcode (pstate, OP_RANGE);
+			  write_exp_elt_longcst (pstate,
+						 (RANGE_LOW_BOUND_DEFAULT
+						  | RANGE_HIGH_BOUND_DEFAULT
+						  | RANGE_HAS_STRIDE));
 			  write_exp_elt_opcode (pstate, OP_RANGE); }
 	;
 
@@ -392,6 +492,15 @@ exp	:	exp GREATERTHAN exp
 			{ write_exp_elt_opcode (pstate, BINOP_GTR); }
 	;
 
+/* CUDA */
+exp	:	exp '>' exp
+			{ write_exp_elt_opcode (pstate, BINOP_GTR); }
+	;
+
+exp	:	exp '<' exp
+			{ write_exp_elt_opcode (pstate, BINOP_LESS); }
+	;
+/* END CUDA */
 exp	:	exp '&' exp
 			{ write_exp_elt_opcode (pstate, BINOP_BITWISE_AND); }
 	;
@@ -413,6 +522,11 @@ exp	:	exp BOOL_OR exp
 			{ write_exp_elt_opcode (pstate, BINOP_LOGICAL_OR); }
 	;
 
+/* CUDA */
+exp	:	exp BIN_MOD exp
+			{ write_exp_elt_opcode (pstate, BINOP_REM); }
+	;
+/* END CUDA */
 exp	:	exp '=' exp
 			{ write_exp_elt_opcode (pstate, BINOP_ASSIGN); }
 	;
@@ -601,8 +715,14 @@ typebase  /* Implements (approximately): (type-qualifier)* type-specifier */
 			{ $$ = $1.type; }
 	|	INT_KEYWORD
 			{ $$ = parse_f_type (pstate)->builtin_integer; }
-	|	INT_S2_KEYWORD 
+        |       POINTER ',' typebase
+                        { type_stack->push (tp_pointer); $$ = $3; }
+	|	INT_S2_KEYWORD
 			{ $$ = parse_f_type (pstate)->builtin_integer_s2; }
+/* CUDA */
+	|	INT_S8_KEYWORD 
+			{ $$ = parse_f_type (pstate)->builtin_integer_s8; }
+/* END CUDA */
 	|	CHARACTER 
 			{ $$ = parse_f_type (pstate)->builtin_character; }
 	|	LOGICAL_S8_KEYWORD
@@ -620,7 +740,7 @@ typebase  /* Implements (approximately): (type-qualifier)* type-specifier */
 	|	REAL_S16_KEYWORD
 			{ $$ = parse_f_type (pstate)->builtin_real_s16; }
 	|	COMPLEX_KEYWORD
-			{ $$ = parse_f_type (pstate)->builtin_complex_s8; }
+                        { $$ = parse_f_type (pstate)->builtin_complex_s8; }
 	|	COMPLEX_S8_KEYWORD
 			{ $$ = parse_f_type (pstate)->builtin_complex_s8; }
 	|	COMPLEX_S16_KEYWORD 
@@ -925,13 +1045,26 @@ static const struct token dot_ops[] =
 {
   { ".and.", BOOL_AND, BINOP_END, false },
   { ".or.", BOOL_OR, BINOP_END, false },
+/* CUDA */
+  { ".mod.", BIN_MOD, BINOP_END, false },
+  { "==", EQUAL, BINOP_END, false },
+/* END CUDA */
   { ".not.", BOOL_NOT, BINOP_END, false },
   { ".eq.", EQUAL, BINOP_END, false },
   { ".eqv.", EQUAL, BINOP_END, false },
   { ".neqv.", NOTEQUAL, BINOP_END, false },
+/* CUDA */
+  { "!=", NOTEQUAL, BINOP_END, false },
+/* END CUDA */
   { ".ne.", NOTEQUAL, BINOP_END, false },
   { ".le.", LEQ, BINOP_END, false },
+/* CUDA */
+  { "<=", LEQ, BINOP_END, false },
+/* END CUDA */
   { ".ge.", GEQ, BINOP_END, false },
+/* CUDA */
+  { ">=", GEQ, BINOP_END, false },
+/* END CUDA */
   { ".gt.", GREATERTHAN, BINOP_END, false },
   { ".lt.", LESSTHAN, BINOP_END, false },
 };
@@ -966,12 +1099,18 @@ static const struct token f77_keywords[] =
   { "logical_8", LOGICAL_S8_KEYWORD, BINOP_END, true },
   { "complex_8", COMPLEX_S8_KEYWORD, BINOP_END, true },
   { "integer", INT_KEYWORD, BINOP_END, true },
+/* CUDA */
+  { "integer_8", INT_S8_KEYWORD, BINOP_END, true },
+/* END CUDA */
   { "logical", LOGICAL_KEYWORD, BINOP_END, true },
   { "real_16", REAL_S16_KEYWORD, BINOP_END, true },
   { "complex", COMPLEX_KEYWORD, BINOP_END, true },
   { "sizeof", SIZEOF, BINOP_END, true },
   { "real_8", REAL_S8_KEYWORD, BINOP_END, true },
   { "real", REAL_KEYWORD, BINOP_END, true },
+/* CUDA */
+  { "pointer", POINTER, BINOP_END, true },
+/* END CUDA */
   { "single", SINGLE, BINOP_END, true },
   { "double", DOUBLE, BINOP_END, true },
   { "precision", PRECISION, BINOP_END, true },
@@ -986,6 +1125,21 @@ static const struct token f77_keywords[] =
   { "cmplx", BINOP_INTRINSIC, BINOP_FORTRAN_CMPLX, false },
 };
 
+/* CUDA */
+static const struct token intrinsics[] =
+  {
+    {"AIMAG", UNOP_INTRINSIC, UNOP_CIMAG, false},
+    {"REALPART", UNOP_INTRINSIC, UNOP_CREAL, false},
+    {"ISINF", UNOP_INTRINSIC, UNOP_IEEE_IS_INF, false},
+    {"IEEE_IS_INF", UNOP_INTRINSIC, UNOP_IEEE_IS_INF, false},
+    {"ISFINITE", UNOP_INTRINSIC, UNOP_IEEE_IS_FINITE, false},
+    {"IEEE_IS_FINITE", UNOP_INTRINSIC, UNOP_IEEE_IS_FINITE, false},
+    {"ISNAN", UNOP_INTRINSIC, UNOP_IEEE_IS_NAN, false},
+    {"IEEE_IS_NAN", UNOP_INTRINSIC, UNOP_IEEE_IS_NAN, false},
+    {"ISNORMAL", UNOP_INTRINSIC, UNOP_IEEE_IS_NORMAL, false},
+    {"IEEE_IS_NORMAL", UNOP_INTRINSIC, UNOP_IEEE_IS_NORMAL, false},
+  };
+/* END CUDA */
 /* Implementation of a dynamically expandable buffer for processing input
    characters acquired through lexptr and building a value to return in
    yylval.  Ripped off from ch-exp.y */ 
@@ -1274,7 +1428,19 @@ yylex (void)
 	yylval.opcode = f77_keywords[i].opcode;
 	return f77_keywords[i].token;
       }
-
+  
+/* CUDA */
+  for (int i = 0; i < ARRAY_SIZE (intrinsics); i++)
+    if (strlen (intrinsics[i].oper) == namelen
+	&& ((!intrinsics[i].case_sensitive
+	     && strncasecmp (tokstart, intrinsics[i].oper, namelen) == 0)
+	  || (intrinsics[i].case_sensitive
+	      && strncmp (tokstart, intrinsics[i].oper, namelen) == 0)))
+      {
+	yylval.opcode = intrinsics[i].opcode;
+	return intrinsics[i].token;
+      }
+/* END CUDA */
   yylval.sval.ptr = tokstart;
   yylval.sval.length = namelen;
   

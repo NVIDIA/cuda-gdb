@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "inferior.h"
 #include "infrun.h"
@@ -39,7 +43,12 @@
 #include "inf-child.h"
 #include "inf-ptrace.h"
 #include "auxv.h"
+#if defined(NVIDIA_CUDA_GDB) && defined(__ANDROID__)
+#define PT_KILL 8
+#define W_STOPCODE(sig) ((sig) << 8 | 0x7f)
+#else
 #include <sys/procfs.h>		/* for elf_gregset etc.  */
+#endif
 #include "elf-bfd.h"		/* for elfcore_write_* */
 #include "gregset.h"		/* for gregset */
 #include "gdbcore.h"		/* for get_exec_file */
@@ -69,6 +78,12 @@
 #include "gdbsupport/scope-exit.h"
 #include "gdbsupport/gdb-sigmask.h"
 #include "debug.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-exceptions.h"
+#include "cuda/cuda-notifications.h"
+#include "cuda/cuda-tdep.h"
+#include "cuda/cuda-options.h"
+#endif
 
 /* This comment documents high-level logic of this file.
 
@@ -190,7 +205,11 @@ struct linux_nat_target *linux_target;
 /* Does the current host support PTRACE_GETREGSET?  */
 enum tribool have_ptrace_getregset = TRIBOOL_UNKNOWN;
 
+#ifdef NVIDIA_CUDA_GDB
+static unsigned int debug_linux_nat = 0;
+#else
 static unsigned int debug_linux_nat;
+#endif
 static void
 show_debug_linux_nat (struct ui_file *file, int from_tty,
 		      struct cmd_list_element *c, const char *value)
@@ -528,7 +547,11 @@ linux_nat_target::follow_fork (bool follow_child, bool detach_fork)
 	      if (signo != 0
 		  && !signal_pass_state (gdb_signal_from_host (signo)))
 		signo = 0;
+#ifdef NVIDIA_CUDA_GDB
+	      ptrace (PTRACE_DETACH, child_pid, 0, (PTRACE_TYPE_ARG4) (long) signo);
+#else
 	      ptrace (PTRACE_DETACH, child_pid, 0, signo);
+#endif
 	    }
 	}
       else
@@ -965,6 +988,14 @@ find_lwp_pid (ptid_t ptid)
   return lp;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - external linkage for find_lwp_pid */
+struct lwp_info *
+cuda_find_lwp_pid (ptid_t ptid)
+{
+  return find_lwp_pid (ptid);
+}
+#endif
 /* See nat/linux-nat.h.  */
 
 struct lwp_info *
@@ -2073,7 +2104,13 @@ static void
 wait_for_signal ()
 {
   linux_nat_debug_printf ("about to sigsuspend");
+#ifdef NVIDIA_CUDA_GDB
+  cuda_notification_accept ();
+#endif
   sigsuspend (&suspend_mask);
+#ifdef NVIDIA_CUDA_GDB
+  cuda_notification_block ();
+#endif
 
   /* If the quit flag is set, it means that the user pressed Ctrl-C
      and we're debugging a process that is running on a separate
@@ -3010,6 +3047,14 @@ linux_nat_filter_event (int lwpid, int status)
     {
       enum gdb_signal signo = gdb_signal_from_host (WSTOPSIG (status));
 
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - Check if we have received an urgent message (aka sync event) */
+      if (cuda_notification_received () && cuda_options_stop_signal() == GDB_SIGNAL_URG
+          && WSTOPSIG(status) == SIGURG)
+        {
+          lp->stopped = 1;
+        }
+#endif
       if (!target_is_non_stop_p ())
 	{
 	  /* Only do the below in all-stop, as we currently use SIGSTOP
@@ -3033,11 +3078,19 @@ linux_nat_filter_event (int lwpid, int status)
 	 Otherwise, signals in pass_mask may be short-circuited
 	 except signals that might be caused by a breakpoint, or SIGSTOP
 	 if we sent the SIGSTOP and are waiting for it to arrive.  */
+#ifdef NVIDIA_CUDA_GDB
+      else if (!lp->step && !cuda_notification_pending ()
+	  && WSTOPSIG (status) && sigismember (&pass_mask, WSTOPSIG (status)) 
+	  && (WSTOPSIG (status) != SIGSTOP
+	      || !find_thread_ptid (linux_target, lp->ptid)->stop_requested)
+	  && !linux_wstatus_maybe_breakpoint (status)) 
+#else
       if (!lp->step
 	  && WSTOPSIG (status) && sigismember (&pass_mask, WSTOPSIG (status))
 	  && (WSTOPSIG (status) != SIGSTOP
 	      || !find_thread_ptid (linux_target, lp->ptid)->stop_requested)
 	  && !linux_wstatus_maybe_breakpoint (status))
+#endif
 	{
 	  linux_resume_one_lwp (lp, lp->step, signo);
 	  linux_nat_debug_printf
@@ -3188,7 +3241,13 @@ linux_nat_wait_1 (ptid_t ptid, struct target_waitstatus *ourstatus,
 	   the TGID pid.  */
 
       errno = 0;
+#ifdef NVIDIA_CUDA_GDB
+      cuda_notification_accept ();
+#endif
       lwpid = my_waitpid (-1, &status,  __WALL | WNOHANG);
+#ifdef NVIDIA_CUDA_GDB
+      cuda_notification_block ();
+#endif
 
       linux_nat_debug_printf ("waitpid(-1, ...) returned %d, %s",
 			      lwpid,
