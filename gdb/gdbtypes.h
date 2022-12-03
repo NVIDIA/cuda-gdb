@@ -1,6 +1,9 @@
 
 /* Internal type definitions for GDB.
 
+   Modified by Arm.
+
+   Copyright (C) 1995-2021 Arm Limited (or its affiliates). All rights reserved.
    Copyright (C) 1992-2020 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support, using pieces from other GDB modules.
@@ -19,6 +22,10 @@
 
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
 
 #if !defined (GDBTYPES_H)
 #define GDBTYPES_H 1
@@ -206,6 +213,21 @@ enum type_instance_flag_value : unsigned
   TYPE_INSTANCE_FLAG_NOTTEXT = (1 << 6),
   TYPE_INSTANCE_FLAG_RESTRICT = (1 << 7),
   TYPE_INSTANCE_FLAG_ATOMIC = (1 << 8)
+#ifdef NVIDIA_CUDA_GDB
+  ,
+  /* CUDA - Register/Memory Segments */
+  TYPE_INSTANCE_FLAG_CUDA_CODE = (1 << 9),
+  TYPE_INSTANCE_FLAG_CUDA_CONST = (1 << 10),
+  TYPE_INSTANCE_FLAG_CUDA_GENERIC = (1 << 11),
+  TYPE_INSTANCE_FLAG_CUDA_GLOBAL = (1 << 12),
+  TYPE_INSTANCE_FLAG_CUDA_PARAM = (1 << 13),
+  TYPE_INSTANCE_FLAG_CUDA_SHARED = (1 << 14),
+  TYPE_INSTANCE_FLAG_CUDA_TEX = (1 << 15),
+  TYPE_INSTANCE_FLAG_CUDA_LOCAL = (1 << 16),
+  TYPE_INSTANCE_FLAG_CUDA_REG = (1 << 17),
+  TYPE_INSTANCE_FLAG_CUDA_MANAGED = (1 << 18),
+  TYPE_INSTANCE_FLAG_CUDA_UREG = (1 << 19),
+#endif
 };
 
 DEF_ENUM_FLAGS_TYPE (enum type_instance_flag_value, type_instance_flags);
@@ -376,6 +398,33 @@ DEF_ENUM_FLAGS_TYPE (enum type_instance_flag_value, type_instance_flags);
 #define TYPE_DATA_SPACE(t) \
   ((TYPE_INSTANCE_FLAGS (t) & TYPE_INSTANCE_FLAG_DATA_SPACE) != 0)
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - Memory Segments */
+#define TYPE_INSTANCE_FLAG_CUDA_ALL  \
+  (TYPE_INSTANCE_FLAG_CUDA_CODE    | \
+   TYPE_INSTANCE_FLAG_CUDA_CONST   | \
+   TYPE_INSTANCE_FLAG_CUDA_GENERIC | \
+   TYPE_INSTANCE_FLAG_CUDA_GLOBAL  | \
+   TYPE_INSTANCE_FLAG_CUDA_PARAM   | \
+   TYPE_INSTANCE_FLAG_CUDA_SHARED  | \
+   TYPE_INSTANCE_FLAG_CUDA_TEX     | \
+   TYPE_INSTANCE_FLAG_CUDA_LOCAL   | \
+   TYPE_INSTANCE_FLAG_CUDA_MANAGED | \
+   TYPE_INSTANCE_FLAG_CUDA_REG     | \
+   TYPE_INSTANCE_FLAG_CUDA_UREG)
+#define TYPE_CUDA_ALL(t) (TYPE_INSTANCE_FLAGS(t) & \
+                          TYPE_INSTANCE_FLAG_CUDA_ALL)
+#define TYPE_CUDA_CODE(t) (TYPE_CUDA_ALL(t) == TYPE_INSTANCE_FLAG_CUDA_CODE)
+#define TYPE_CUDA_CONST(t) (TYPE_CUDA_ALL(t) == TYPE_INSTANCE_FLAG_CUDA_CONST)
+#define TYPE_CUDA_GENERIC(t) ((TYPE_CUDA_ALL(t) == TYPE_INSTANCE_FLAG_CUDA_GENERIC) | (TYPE_CUDA_ALL(t) == TYPE_INSTANCE_FLAG_CUDA_MANAGED))
+#define TYPE_CUDA_GLOBAL(t) (TYPE_CUDA_ALL(t) == TYPE_INSTANCE_FLAG_CUDA_GLOBAL)
+#define TYPE_CUDA_PARAM(t) (TYPE_CUDA_ALL(t) == TYPE_INSTANCE_FLAG_CUDA_PARAM)
+#define TYPE_CUDA_SHARED(t) (TYPE_CUDA_ALL(t) == TYPE_INSTANCE_FLAG_CUDA_SHARED)
+#define TYPE_CUDA_TEX(t) (TYPE_CUDA_ALL(t) == TYPE_INSTANCE_FLAG_CUDA_TEX)
+#define TYPE_CUDA_LOCAL(t) (TYPE_CUDA_ALL(t) == TYPE_INSTANCE_FLAG_CUDA_LOCAL)
+#define TYPE_CUDA_REG(t) (TYPE_CUDA_ALL(t) == TYPE_INSTANCE_FLAG_CUDA_REG)
+#define TYPE_CUDA_UREG(t) (TYPE_CUDA_ALL(t) == TYPE_INSTANCE_FLAG_CUDA_UREG)
+#endif
 /* * Address class flags.  Some environments provide for pointers
    whose size is different from that of a normal pointer or address
    types where the bits are interpreted differently than normal
@@ -387,8 +436,14 @@ DEF_ENUM_FLAGS_TYPE (enum type_instance_flag_value, type_instance_flags);
                                  & TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1)
 #define TYPE_ADDRESS_CLASS_2(t) (TYPE_INSTANCE_FLAGS(t) \
 				 & TYPE_INSTANCE_FLAG_ADDRESS_CLASS_2)
+#ifdef NVIDIA_CUDA_GDB
+#define TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL \
+  (TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 | TYPE_INSTANCE_FLAG_ADDRESS_CLASS_2 \
+   | TYPE_INSTANCE_FLAG_CUDA_ALL)
+#else
 #define TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL \
   (TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 | TYPE_INSTANCE_FLAG_ADDRESS_CLASS_2)
+#endif
 #define TYPE_ADDRESS_CLASS_ALL(t) (TYPE_INSTANCE_FLAGS(t) \
 				   & TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL)
 
@@ -1037,6 +1092,18 @@ struct type
     this->field (0).set_type (index_type);
   }
 
+  /* Return the instance flags converted to the correct type.  */
+  const type_instance_flags instance_flags () const
+  {
+    return (enum type_instance_flag_value) this->m_instance_flags;
+  }
+
+  /* Set the instance flags.  */
+  void set_instance_flags (type_instance_flags flags)
+  {
+    this->m_instance_flags = flags;
+  }
+
   /* Get the bounds bounds of this type.  The type must be a range type.  */
   range_bounds *bounds () const
   {
@@ -1123,7 +1190,11 @@ struct type
      instance flags are completely inherited from the target type.  No
      qualifiers can be cleared by the typedef.  See also
      check_typedef.  */
-  unsigned instance_flags : 9;
+#ifdef NVIDIA_CUDA_GDB
+  unsigned m_instance_flags : 20;
+#else
+  unsigned m_instance_flags : 9;
+#endif
 
   /* * Length of storage for a value of this type.  The value is the
      expression in host bytes of what sizeof(type) would return.  This
@@ -1583,8 +1654,12 @@ extern void allocate_gnat_aux_type (struct type *);
      TYPE_ZALLOC (type,							       \
 		  sizeof (*TYPE_MAIN_TYPE (type)->type_specific.func_stuff)))
 
-#define TYPE_INSTANCE_FLAGS(thistype) (thistype)->instance_flags
+#define TYPE_INSTANCE_FLAGS(thistype) ((thistype)->instance_flags ())
 #define TYPE_MAIN_TYPE(thistype) (thistype)->main_type
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - find the target type with the same instance flags */
+#define FIND_TARGET_TYPE(thistype) (find_target_type_with_instance_flags(thistype))
+#endif
 #define TYPE_TARGET_TYPE(thistype) TYPE_MAIN_TYPE(thistype)->target_type
 #define TYPE_POINTER_TYPE(thistype) (thistype)->pointer_type
 #define TYPE_REFERENCE_TYPE(thistype) (thistype)->reference_type
@@ -1974,6 +2049,10 @@ extern const struct floatformat *floatformats_ieee_half[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_ieee_single[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_ieee_double[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_ieee_double_littlebyte_bigword[BFD_ENDIAN_UNKNOWN];
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - nv_bfloat16 format */
+extern const struct floatformat *floatformats_nv_bfloat16[BFD_ENDIAN_UNKNOWN];
+#endif
 extern const struct floatformat *floatformats_i387_ext[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_m68881_ext[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_arm_ext[BFD_ENDIAN_UNKNOWN];
@@ -2116,12 +2195,14 @@ extern struct type *make_atomic_type (struct type *);
 
 extern void replace_type (struct type *, struct type *);
 
-extern int address_space_name_to_int (struct gdbarch *, const char *);
+extern type_instance_flags address_space_name_to_type_instance_flags
+  (struct gdbarch *, const char *);
 
-extern const char *address_space_int_to_name (struct gdbarch *, int);
+extern const char *address_space_type_instance_flags_to_name
+  (struct gdbarch *, type_instance_flags);
 
-extern struct type *make_type_with_address_space (struct type *type, 
-						  int space_identifier);
+extern struct type *make_type_with_address_space
+  (struct type *type, type_instance_flags space_identifier);
 
 extern struct type *lookup_memberptr_type (struct type *, struct type *);
 
@@ -2386,6 +2467,15 @@ extern int type_not_allocated (const struct type *type);
 
 extern int type_not_associated (const struct type *type);
 
+#ifdef NVIDIA_CUDA_GDB
+int is_producer_intel (const struct type * const type);
+
+int is_producer_pgif (const struct type * const type);
+
+int is_producer_ibm (const struct type * const type);
+
+int is_producer (const struct type * const type, const char * match);
+#endif
 /* * When the type includes explicit byte ordering, return that.
    Otherwise, the byte ordering from gdbarch_byte_order for 
    get_type_arch is returned.  */
@@ -2397,4 +2487,8 @@ extern enum bfd_endian type_byte_order (const struct type *type);
 
 extern unsigned int overload_debug;
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - find the target type with the same instance flags */
+struct type *find_target_type_with_instance_flags (struct type *type);
+#endif
 #endif /* GDBTYPES_H */

@@ -230,7 +230,7 @@ gdbpy_reggroup_iter_next (PyObject *self)
   struct reggroup *next_group = reggroup_next (gdbarch, iter_obj->reggroup);
   if (next_group == NULL)
     {
-      PyErr_SetString (PyExc_StopIteration, _("No more groups"));
+      PyErr_SetString (gdbpyExc_StopIteration, _("No more groups"));
       return NULL;
     }
 
@@ -279,7 +279,7 @@ gdbpy_new_register_descriptor_iterator (struct gdbarch *gdbarch,
       grp = reggroup_find (gdbarch, group_name);
       if (grp == NULL)
 	{
-	  PyErr_SetString (PyExc_ValueError,
+	  PyErr_SetString (gdbpyExc_ValueError,
 			   _("Unknown register group name."));
 	  return NULL;
 	}
@@ -321,7 +321,7 @@ gdbpy_register_descriptor_iter_next (PyObject *self)
     {
       if (iter_obj->regnum >= gdbarch_num_cooked_regs (gdbarch))
 	{
-	  PyErr_SetString (PyExc_StopIteration, _("No more registers"));
+	  PyErr_SetString (gdbpyExc_StopIteration, _("No more registers"));
 	  return NULL;
 	}
 
@@ -367,7 +367,7 @@ register_descriptor_iter_find (PyObject *self, PyObject *args, PyObject *kw)
 	return gdbpy_get_register_descriptor (gdbarch, regnum).release ();
     }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* See python-internal.h.  */
@@ -404,7 +404,7 @@ gdbpy_parse_register_id (struct gdbarch *gdbarch, PyObject *pyo_reg_id,
         }
     }
   /* The register could be a gdb.RegisterDescriptor object.  */
-  else if (PyObject_IsInstance (pyo_reg_id,
+  else if (gdbpy_PyObject__IsInstance (pyo_reg_id,
 			   (PyObject *) &register_descriptor_object_type))
     {
       register_descriptor_object *reg
@@ -415,7 +415,7 @@ gdbpy_parse_register_id (struct gdbarch *gdbarch, PyObject *pyo_reg_id,
 	  return true;
 	}
       else
-	PyErr_SetString (PyExc_ValueError,
+	PyErr_SetString (gdbpyExc_ValueError,
 			 _("Invalid Architecture in RegisterDescriptor"));
     }
 

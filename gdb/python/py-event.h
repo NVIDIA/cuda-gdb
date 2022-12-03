@@ -67,7 +67,7 @@ extern gdbpy_ref<> create_event_object (PyTypeObject *py_type);
    running in non-stop mode then the event is thread specific, otherwise
    it is process wide.
    This function returns the currently stopped thread in non-stop mode and
-   Py_None otherwise.  */
+   gdbpy_None otherwise.  */
 extern gdbpy_ref<> py_get_event_thread (ptid_t ptid);
 
 extern gdbpy_ref<> create_thread_event_object (PyTypeObject *py_type,

@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 
 #include <ctype.h>		/* XXX for isupper ().  */
@@ -4130,11 +4134,20 @@ arm_register_type (struct gdbarch *gdbarch, int regnum)
 /* Map a DWARF register REGNUM onto the appropriate GDB register
    number.  */
 
+#ifdef NVIDIA_CUDA_GDB
+static int
+arm_dwarf_reg_to_regnum (struct gdbarch *gdbarch, reg_t reg)
+#else
 static int
 arm_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
+#endif
 {
   /* Core integer regs.  */
+#ifdef NVIDIA_CUDA_GDB
+  if (reg <= 15)
+#else
   if (reg >= 0 && reg <= 15)
+#endif
     return reg;
 
   /* Legacy FPA encoding.  These were once used in a way which
@@ -4170,7 +4183,11 @@ arm_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
     {
       char name_buf[4];
 
+#ifdef NVIDIA_CUDA_GDB
+      xsnprintf (name_buf, sizeof (name_buf), "s%ld", (long)(reg - 64));
+#else
       xsnprintf (name_buf, sizeof (name_buf), "s%d", reg - 64);
+#endif
       return user_reg_map_name_to_regnum (gdbarch, name_buf,
 					  strlen (name_buf));
     }
@@ -4181,7 +4198,11 @@ arm_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
     {
       char name_buf[4];
 
+#ifdef NVIDIA_CUDA_GDB
+      xsnprintf (name_buf, sizeof (name_buf), "d%ld", (long)(reg - 256));
+#else
       xsnprintf (name_buf, sizeof (name_buf), "d%d", reg - 256);
+#endif
       return user_reg_map_name_to_regnum (gdbarch, name_buf,
 					  strlen (name_buf));
     }

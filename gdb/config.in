@@ -596,6 +596,9 @@
    moved. */
 #undef JIT_READER_DIR_RELOCATABLE
 
+/* Define if building cuda-gdb. */
+#undef NVIDIA_CUDA_GDB
+
 /* Name of this package. */
 #undef PACKAGE
 

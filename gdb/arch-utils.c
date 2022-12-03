@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 
 #include "arch-utils.h"
@@ -139,8 +143,13 @@ convert_from_func_ptr_addr_identity (struct gdbarch *gdbarch, CORE_ADDR addr,
   return addr;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+int
+no_op_reg_to_regnum (struct gdbarch *gdbarch, reg_t reg)
+#else
 int
 no_op_reg_to_regnum (struct gdbarch *gdbarch, int reg)
+#endif
 {
   return reg;
 }
@@ -232,7 +241,17 @@ default_floatformat_for_type (struct gdbarch *gdbarch,
   const struct floatformat **format = NULL;
 
   if (len == gdbarch_half_bit (gdbarch))
+#ifdef NVIDIA_CUDA_GDB
+    {
+      /* CUDA - nv_bfloat16 support */
+      if (name && !strcmp(name, "__nv_bfloat16"))
+        format = floatformats_nv_bfloat16;
+      else
+        format = gdbarch_half_format (gdbarch);
+    }
+#else
     format = gdbarch_half_format (gdbarch);
+#endif
   else if (len == gdbarch_float_bit (gdbarch))
     format = gdbarch_float_format (gdbarch);
   else if (len == gdbarch_double_bit (gdbarch))

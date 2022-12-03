@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "frame.h"
 #include "target.h"
@@ -43,6 +47,10 @@
 #include "hashtab.h"
 #include "valprint.h"
 #include "cli/cli-option.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-tdep.h"
+#include "cuda/cuda-frame.h"
+#endif
 
 /* The sentinel frame terminates the innermost end of the frame chain.
    If unwound, it returns the information needed to construct an
@@ -673,6 +681,14 @@ frame_unwind_caller_id (struct frame_info *next_frame)
     return null_frame_id;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+bool get_frame_id_p (struct frame_info *fi)
+{
+    if (fi == NULL)
+        return false;
+    return fi->this_id.p == frame_id_status::COMPUTED;
+}
+#endif
 const struct frame_id null_frame_id = { 0 }; /* All zeros.  */
 const struct frame_id sentinel_frame_id = { 0, 0, 0, FID_STACK_SENTINEL, 0, 1, 0 };
 const struct frame_id outer_frame_id = { 0, 0, 0, FID_STACK_OUTER, 0, 1, 0 };
@@ -1981,7 +1997,11 @@ get_prev_frame_if_no_cycle (struct frame_info *this_frame)
   try
     {
       compute_frame_id (prev_frame);
+#ifdef NVIDIA_CUDA_GDB
+      if (!frame_stash_add (prev_frame) && !cuda_focus_is_device ())
+#else
       if (!frame_stash_add (prev_frame))
+#endif
 	{
 	  /* Another frame with the same id was already in the stash.  We just
 	     detected a cycle.  */
@@ -2084,6 +2104,23 @@ get_prev_frame_always_1 (struct frame_info *this_frame)
       return NULL;
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - frames */
+  /* Stop unwinding if the current frame is the outermost CUDA device frame */
+  if (this_frame->level >= 0
+      && cuda_focus_is_device ()
+      && cuda_frame_outermost_p (this_frame))
+    {
+      if (frame_debug)
+	{
+	  fprintf_unfiltered (gdb_stdlog, "-> ");
+	  fprint_frame (gdb_stdlog, NULL);
+	  fprintf_unfiltered (gdb_stdlog, " // Outermost CUDA frame }\n");
+	}
+      this_frame->stop_reason = UNWIND_NULL_ID;
+      return NULL;
+    }
+#endif
   /* Check that this frame's ID isn't inner to (younger, below, next)
      the next frame.  This happens when a frame unwind goes backwards.
      This check is valid only if this frame and the next frame are NORMAL.
@@ -2288,14 +2325,26 @@ frame_debug_got_null_frame (struct frame_info *this_frame,
 
 /* Is this (non-sentinel) frame in the "main"() function?  */
 
+#ifdef NVIDIA_CUDA_GDB
+static bool
+inside_func (frame_info *this_frame, const char *name, struct objfile *objfile)
+#else
 static bool
 inside_main_func (frame_info *this_frame)
+#endif
 {
   if (symfile_objfile == nullptr)
     return false;
 
+#ifdef NVIDIA_CUDA_GDB
+  if (name == nullptr)
+    return false;
+  bound_minimal_symbol msymbol
+    = lookup_minimal_symbol (name, NULL, objfile);
+#else
   bound_minimal_symbol msymbol
     = lookup_minimal_symbol (main_name (), NULL, symfile_objfile);
+#endif
   if (msymbol.minsym == nullptr)
     return false;
 
@@ -2309,6 +2358,39 @@ inside_main_func (frame_info *this_frame)
   return maddr == get_frame_func (this_frame);
 }
 
+#ifdef NVIDIA_CUDA_GDB
+static int
+inside_func_full (struct frame_info *this_frame, const char *name, struct objfile *objfile)
+{
+  struct symbol *sym = lookup_symbol(name, NULL, VAR_DOMAIN, 0).symbol;
+  if (sym) {
+     CORE_ADDR maddr;
+     const struct block *block;
+     block = SYMBOL_BLOCK_VALUE (sym); /* gives block for symtab */
+     if (block) {
+         maddr = gdbarch_convert_from_func_ptr_addr (get_frame_arch (this_frame),
+						     BLOCK_START (block),
+						     current_top_target ());
+         return maddr == get_frame_func (this_frame);
+     }
+  }
+  return 0;
+}
+static int
+inside_main_func (struct frame_info *this_frame)
+{
+  int ret = 0;
+  if (symfile_objfile != NULL)
+    {
+      ret = inside_func_full(this_frame, main_name (), symfile_objfile) ||
+            inside_func(this_frame, "MAIN__", symfile_objfile) ||
+            inside_func(this_frame, "_main_", symfile_objfile) ||
+            inside_func(this_frame, "start__", symfile_objfile) ||
+            inside_func(this_frame, "main", symfile_objfile);
+    }
+  return ret || inside_func(this_frame, "__libc_start_main", NULL);
+}
+#endif
 /* Test whether THIS_FRAME is inside the process entry point function.  */
 
 static bool
@@ -2378,6 +2460,17 @@ get_prev_frame (struct frame_info *this_frame)
       return NULL;
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - frames */
+  /* Stop unwinding if the current frame is the outermost CUDA device frame */
+  if (this_frame->level >= 0
+      && cuda_focus_is_device ()
+      && cuda_frame_outermost_p (this_frame->next))
+    {
+      frame_debug_got_null_frame (this_frame, "outermost CUDA device frame");
+      return NULL;
+    }
+#endif
   /* If the user's backtrace limit has been exceeded, stop.  We must
      add two to the current level; one of those accounts for backtrace_limit
      being 1-based and the level being 0-based, and the other accounts for

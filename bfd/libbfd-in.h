@@ -22,6 +22,10 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef _LIBBFD_H
 #define _LIBBFD_H 1
 
@@ -121,7 +125,11 @@ static inline char *
 bfd_strdup (const char *str)
 {
   size_t len = strlen (str) + 1;
+#ifdef NVIDIA_CUDA_GDB
+  char *buf = (char *)bfd_malloc (len);
+#else
   char *buf = bfd_malloc (len);
+#endif
   if (buf != NULL)
     memcpy (buf, str, len);
   return buf;
@@ -926,7 +934,11 @@ _bfd_alloc_and_read (bfd *abfd, bfd_size_type asize, bfd_size_type rsize)
 	  return NULL;
 	}
     }
+#ifdef NVIDIA_CUDA_GDB
+  mem = (bfd_byte *)bfd_alloc (abfd, asize);
+#else
   mem = bfd_alloc (abfd, asize);
+#endif
   if (mem != NULL)
     {
       if (bfd_bread (mem, rsize, abfd) == rsize)
@@ -949,7 +961,11 @@ _bfd_malloc_and_read (bfd *abfd, bfd_size_type asize, bfd_size_type rsize)
 	  return NULL;
 	}
     }
+#ifdef NVIDIA_CUDA_GDB
+  mem = (bfd_byte *)bfd_malloc (asize);
+#else
   mem = bfd_malloc (asize);
+#endif
   if (mem != NULL)
     {
       if (bfd_bread (mem, rsize, abfd) == rsize)

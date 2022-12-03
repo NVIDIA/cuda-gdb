@@ -56,6 +56,11 @@ static struct i386_darwin_nat_target darwin_target;
    If REGNO is -1, do this for all registers.
    Otherwise, REGNO specifies which register (so we can save time).  */
 
+/* CUDA - remove verbose warnings */
+/* The first time the application stops thread_get_state will return
+   KERN_INVALID_ARGUMENT. To avoid displaing a worrying warning message about a
+   harmless issue, filter out the warning messages for that error type. The
+   arguments should always be valid, except at the first stop. */
 void
 i386_darwin_nat_target::fetch_registers (struct regcache *regcache, int regno)
 {
@@ -294,6 +299,7 @@ i386_darwin_dr_set (int regnum, CORE_ADDR value)
   dr_count = x86_DEBUG_STATE_COUNT;
   ret = thread_get_state (current_thread, x86_DEBUG_STATE,
                           (thread_state_t) &dr_regs, &dr_count);
+
   MACH_CHECK_ERROR (ret);
 
   switch (dr_regs.dsh.flavor)

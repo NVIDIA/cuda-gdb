@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "value.h"
 #include "symtab.h"
@@ -28,6 +32,14 @@
 #include "infcall.h"
 #include "gdbsupport/byte-vector.h"
 #include "gdbarch.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-tdep.h"
+#include "cuda/cuda-textures.h"
+#include "cuda/cuda-tdep.h"
+#include "cuda/cuda-textures.h"
+#include "cuda/cuda-tdep.h"
+#include "cuda/cuda-textures.h"
+#endif
 
 /* Define whether or not the C operator '/' truncates towards zero for
    differently signed operands (truncation direction is undefined in C).  */
@@ -86,6 +98,11 @@ value_ptradd (struct value *arg1, LONGEST arg2)
   valptrtype = check_typedef (value_type (arg1));
   sz = find_size_for_pointer_math (valptrtype);
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - textures */
+  if (TYPE_TARGET_TYPE (valptrtype) && cuda_texture_is_tex_ptr (valptrtype))
+    return cuda_texture_value_ptradd (valptrtype, arg1, arg2);
+#endif
   result = value_from_pointer (valptrtype,
 			       value_as_address (arg1) + sz * arg2);
   if (VALUE_LVAL (result) != lval_internalvar)
@@ -1128,12 +1145,21 @@ scalar_binop (struct value *arg1, struct value *arg2, enum exp_opcode op)
 	  v = v1 ^ v2;
           break;
               
+
         case BINOP_EQUAL:
+#ifdef NVIDIA_CUDA_GDB
+          v = !((!v1 && v2) || (v1 && !v2));
+#else
           v = v1 == v2;
+#endif
           break;
           
         case BINOP_NOTEQUAL:
+#ifdef NVIDIA_CUDA_GDB
+          v = (!v1 && v2) || (v1 && !v2);
+#else
           v = v1 != v2;
+#endif
 	  break;
 
 	default:
@@ -1419,6 +1445,11 @@ scalar_binop (struct value *arg1, struct value *arg2, enum exp_opcode op)
 	}
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - register cache */
+  if (value_cached (arg1) || value_cached (arg2))
+    set_value_cached (val, 1);
+#endif
   return val;
 }
 
@@ -1690,6 +1721,11 @@ value_equal_contents (struct value *arg1, struct value *arg2)
 {
   struct type *type1, *type2;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* make sure the the contents are not of a capped length due to lazy fetching */
+  value_contents_ensure_unlimited(arg1);
+  value_contents_ensure_unlimited(arg2);
+#endif
   type1 = check_typedef (value_type (arg1));
   type2 = check_typedef (value_type (arg2));
 

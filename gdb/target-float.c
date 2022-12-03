@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "gdbtypes.h"
 #include "floatformat.h"
@@ -261,9 +265,19 @@ put_field (unsigned char *data, enum floatformat_byteorders order,
     }
   if (cur_bitshift > -FLOATFORMAT_CHAR_BIT)
     {
+#ifdef NVIDIA_CUDA_GDB
+      /* 8.2 uses (start + len) instead of (len) like 7.12 does.
+	 This change broke fp16 to_target() handling (writing the exponent
+	 clobbered the sign big). This change reverts to the
+	 7.12 behaviour */
+      *(data + cur_byte) &=
+	~(((1 << ((len) % FLOATFORMAT_CHAR_BIT)) - 1)
+	  << (-cur_bitshift));
+#else
       *(data + cur_byte) &=
 	~(((1 << ((start + len) % FLOATFORMAT_CHAR_BIT)) - 1)
 	  << (-cur_bitshift));
+#endif
       *(data + cur_byte) |=
 	(stuff_to_put & ((1 << FLOATFORMAT_CHAR_BIT) - 1)) << (-cur_bitshift);
     }

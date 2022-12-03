@@ -16,6 +16,9 @@ dnl You should have received a copy of the GNU General Public License
 dnl along with this program; see the file COPYING3.  If not see
 dnl <http://www.gnu.org/licenses/>.
 dnl
+dnl NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+dnl Modified from the original GDB file referenced above by the CUDA-GDB
+dnl team at NVIDIA <cudatools@nvidia.com>.
 
 m4_include([version.m4])
 AC_INIT([bfd], BFD_VERSION)
@@ -69,6 +72,19 @@ changequote([,])dnl
 esac
 
 AM_CONDITIONAL(PLUGINS, test "$plugins" = "yes")
+
+
+# Enable CUDA
+AC_ARG_ENABLE(cuda,
+AS_HELP_STRING([--disable-cuda], [disable CUDA support (cuda-gdb)]),
+[case "${enableval}" in
+    yes | no)	;;
+    *)		AC_MSG_ERROR([bad value $enableval for --enable-cuda]) ;;
+  esac],
+  [enable_cuda=yes])
+if test x"$enable_cuda" = xyes; then
+  AC_DEFINE(NVIDIA_CUDA_GDB, 1, [Define if building cuda-gdb.])
+fi
 
 AC_ARG_ENABLE(64-bit-bfd,
 [  --enable-64-bit-bfd     64-bit support (on hosts with narrower word sizes)],

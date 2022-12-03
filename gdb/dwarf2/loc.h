@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #if !defined (DWARF2LOC_H)
 #define DWARF2LOC_H
 
@@ -57,12 +61,22 @@ extern void func_get_frame_base_dwarf_block (struct symbol *framefunc,
    SIZE, to find the current location of variable of TYPE in the context
    of FRAME.  */
 
+#ifdef NVIDIA_CUDA_GDB
+struct value *dwarf2_evaluate_loc_desc (struct type *type, 
+					struct frame_info *frame, 
+					const gdb_byte *data, 
+					size_t size, 
+					dwarf2_per_cu_data *per_cu, 
+					dwarf2_per_objfile *per_objfile,
+					CORE_ADDR push_obj);
+#else
 struct value *dwarf2_evaluate_loc_desc (struct type *type,
 					struct frame_info *frame,
 					const gdb_byte *data,
 					size_t size,
 					dwarf2_per_cu_data *per_cu,
 					dwarf2_per_objfile *per_objfile);
+#endif
 
 /* A chain of addresses that might be needed to resolve a dynamic
    property.  */
@@ -264,4 +278,16 @@ extern int dwarf_reg_to_regnum (struct gdbarch *arch, int dwarf_reg);
 extern int dwarf_reg_to_regnum_or_error (struct gdbarch *arch,
 					 ULONGEST dwarf_reg);
 
+#ifdef NVIDIA_CUDA_GDB
+LONGEST dwarf2_evaluate_int (void* locbaton, struct value *, void *frame_info);
+struct array_location_batons
+{
+    struct dwarf2_loclist_baton *intel_location_baton;
+    struct dwarf2_loclist_baton *allocated_baton;
+    struct dwarf2_loclist_baton *pgi_lbase_baton;
+    struct dwarf2_loclist_baton *pgi_elem_skip_baton;
+    void *baton_evaluation_function;
+    struct objfile *objfile;
+};
+#endif
 #endif /* dwarf2loc.h */

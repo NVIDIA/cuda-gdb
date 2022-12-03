@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -26,7 +30,6 @@
 #include "frame.h"
 #include "gdbthread.h"
 #include "language.h"		/* For CAST_IS_CONVERSION.  */
-#include "f-lang.h"		/* For array bound stuff.  */
 #include "cp-abi.h"
 #include "infcall.h"
 #include "objc-lang.h"
@@ -41,6 +44,10 @@
 #include "objfiles.h"
 #include "typeprint.h"
 #include <ctype.h>
+#ifdef NVIDIA_CUDA_GDB
+#include "target-float.h"
+#include <math.h>
+#endif
 
 /* Prototypes for local functions.  */
 
@@ -371,32 +378,6 @@ init_array_element (struct value *array, struct value *element,
   return index;
 }
 
-static struct value *
-value_f90_subarray (struct value *array,
-		    struct expression *exp, int *pos, enum noside noside)
-{
-  int pc = (*pos) + 1;
-  LONGEST low_bound, high_bound;
-  struct type *range = check_typedef (value_type (array)->index_type ());
-  enum range_type range_type
-    = (enum range_type) longest_to_int (exp->elts[pc].longconst);
- 
-  *pos += 3;
-
-  if (range_type == LOW_BOUND_DEFAULT || range_type == BOTH_BOUND_DEFAULT)
-    low_bound = range->bounds ()->low.const_val ();
-  else
-    low_bound = value_as_long (evaluate_subexp (nullptr, exp, pos, noside));
-
-  if (range_type == HIGH_BOUND_DEFAULT || range_type == BOTH_BOUND_DEFAULT)
-    high_bound = range->bounds ()->high.const_val ();
-  else
-    high_bound = value_as_long (evaluate_subexp (nullptr, exp, pos, noside));
-
-  return value_slice (array, low_bound, high_bound - low_bound + 1);
-}
-
-
 /* Promote value ARG1 as appropriate before performing a unary operation
    on this argument.
    If the result is not appropriate for any particular language then it
@@ -659,7 +640,7 @@ fake_method::fake_method (type_instance_flags flags,
   TYPE_LENGTH (type) = 1;
   type->set_code (TYPE_CODE_METHOD);
   TYPE_CHAIN (type) = type;
-  TYPE_INSTANCE_FLAGS (type) = flags;
+  type->set_instance_flags (flags);
   if (num_types > 0)
     {
       if (param_types[num_types - 1] == NULL)
@@ -749,17 +730,13 @@ eval_skip_value (expression *exp)
   return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, 1);
 }
 
-/* Evaluate a function call.  The function to be called is in
-   ARGVEC[0] and the arguments passed to the function are in
-   ARGVEC[1..NARGS].  FUNCTION_NAME is the name of the function, if
-   known.  DEFAULT_RETURN_TYPE is used as the function's return type
-   if the return type is unknown.  */
+/* See expression.h.  */
 
-static value *
-eval_call (expression *exp, enum noside noside,
-	   int nargs, value **argvec,
-	   const char *function_name,
-	   type *default_return_type)
+value *
+evaluate_subexp_do_call (expression *exp, enum noside noside,
+			 int nargs, value **argvec,
+			 const char *function_name,
+			 type *default_return_type)
 {
   if (argvec[0] == NULL)
     error (_("Cannot evaluate function -- may be inlined"));
@@ -1054,7 +1031,11 @@ evaluate_funcall (type *expect_type, expression *exp, int *pos,
 	  argvec[0] = evaluate_subexp_with_coercion (exp, pos, noside);
 	  type *type = value_type (argvec[0]);
 	  if (type && type->code () == TYPE_CODE_PTR)
+#ifdef NVIDIA_CUDA_GDB
+	    type = FIND_TARGET_TYPE (type);
+#else
 	    type = TYPE_TARGET_TYPE (type);
+#endif
 	  if (type && type->code () == TYPE_CODE_FUNC)
 	    {
 	      for (; tem <= nargs && tem <= type->num_fields (); tem++)
@@ -1230,20 +1211,8 @@ evaluate_funcall (type *expect_type, expression *exp, int *pos,
       /* Nothing to be done; argvec already correctly set up.  */
     }
 
-  return eval_call (exp, noside, nargs, argvec, var_func_name, expect_type);
-}
-
-/* Helper for skipping all the arguments in an undetermined argument list.
-   This function was designed for use in the OP_F77_UNDETERMINED_ARGLIST
-   case of evaluate_subexp_standard as multiple, but not all, code paths
-   require a generic skip.  */
-
-static void
-skip_undetermined_arglist (int nargs, struct expression *exp, int *pos,
-			   enum noside noside)
-{
-  for (int i = 0; i < nargs; ++i)
-    evaluate_subexp (nullptr, exp, pos, noside);
+  return evaluate_subexp_do_call (exp, noside, nargs, argvec,
+				  var_func_name, expect_type);
 }
 
 /* Return true if type is integral or reference to integral */
@@ -1274,7 +1243,6 @@ evaluate_subexp_standard (struct type *expect_type,
   struct type *type;
   int nargs;
   struct value **argvec;
-  int code;
   int ix;
   long mem_offset;
   struct type **arg_types;
@@ -1459,7 +1427,11 @@ evaluate_subexp_standard (struct type *expect_type,
 	  && type->code () == TYPE_CODE_ARRAY)
 	{
 	  struct type *range_type = type->index_type ();
+#ifdef NVIDIA_CUDA_GDB
+	  struct type *element_type = FIND_TARGET_TYPE (type);
+#else
 	  struct type *element_type = TYPE_TARGET_TYPE (type);
+#endif
 	  struct value *array = allocate_value (expect_type);
 	  int element_size = TYPE_LENGTH (check_typedef (element_type));
 	  LONGEST low_bound, high_bound, index;
@@ -1515,7 +1487,11 @@ evaluate_subexp_standard (struct type *expect_type,
 	  /* Get targettype of elementtype.  */
 	  while (check_type->code () == TYPE_CODE_RANGE
 		 || check_type->code () == TYPE_CODE_TYPEDEF)
+#ifdef NVIDIA_CUDA_GDB
+	    check_type = FIND_TARGET_TYPE (check_type);
+#else
 	    check_type = TYPE_TARGET_TYPE (check_type);
+#endif
 
 	  if (get_discrete_bounds (element_type, &low_bound, &high_bound) < 0)
 	    error (_("(power)set type with unknown size"));
@@ -1534,9 +1510,17 @@ evaluate_subexp_standard (struct type *expect_type,
 	         different types. Also check if type of element is "compatible"
 	         with element type of powerset.  */
 	      if (range_low_type->code () == TYPE_CODE_RANGE)
+#ifdef NVIDIA_CUDA_GDB
+		range_low_type = FIND_TARGET_TYPE (range_low_type);
+#else
 		range_low_type = TYPE_TARGET_TYPE (range_low_type);
+#endif
 	      if (range_high_type->code () == TYPE_CODE_RANGE)
+#ifdef NVIDIA_CUDA_GDB
+		range_high_type = FIND_TARGET_TYPE (range_high_type);
+#else
 		range_high_type = TYPE_TARGET_TYPE (range_high_type);
+#endif
 	      if ((range_low_type->code () != range_high_type->code ())
 		  || (range_low_type->code () == TYPE_CODE_ENUM
 		      && (range_low_type != range_high_type)))
@@ -1915,109 +1899,6 @@ evaluate_subexp_standard (struct type *expect_type,
     case OP_FUNCALL:
       return evaluate_funcall (expect_type, exp, pos, noside);
 
-    case OP_F77_UNDETERMINED_ARGLIST:
-
-      /* Remember that in F77, functions, substring ops and 
-         array subscript operations cannot be disambiguated 
-         at parse time.  We have made all array subscript operations, 
-         substring operations as well as function calls  come here 
-         and we now have to discover what the heck this thing actually was.
-         If it is a function, we process just as if we got an OP_FUNCALL.  */
-
-      nargs = longest_to_int (exp->elts[pc + 1].longconst);
-      (*pos) += 2;
-
-      /* First determine the type code we are dealing with.  */
-      arg1 = evaluate_subexp (nullptr, exp, pos, noside);
-      type = check_typedef (value_type (arg1));
-      code = type->code ();
-
-      if (code == TYPE_CODE_PTR)
-	{
-	  /* Fortran always passes variable to subroutines as pointer.
-	     So we need to look into its target type to see if it is
-	     array, string or function.  If it is, we need to switch
-	     to the target value the original one points to.  */ 
-	  struct type *target_type = check_typedef (TYPE_TARGET_TYPE (type));
-
-	  if (target_type->code () == TYPE_CODE_ARRAY
-	      || target_type->code () == TYPE_CODE_STRING
-	      || target_type->code () == TYPE_CODE_FUNC)
-	    {
-	      arg1 = value_ind (arg1);
-	      type = check_typedef (value_type (arg1));
-	      code = type->code ();
-	    }
-	} 
-
-      switch (code)
-	{
-	case TYPE_CODE_ARRAY:
-	  if (exp->elts[*pos].opcode == OP_RANGE)
-	    return value_f90_subarray (arg1, exp, pos, noside);
-	  else
-	    {
-	      if (noside == EVAL_SKIP)
-		{
-		  skip_undetermined_arglist (nargs, exp, pos, noside);
-		  /* Return the dummy value with the correct type.  */
-		  return arg1;
-		}
-	      goto multi_f77_subscript;
-	    }
-
-	case TYPE_CODE_STRING:
-	  if (exp->elts[*pos].opcode == OP_RANGE)
-	    return value_f90_subarray (arg1, exp, pos, noside);
-	  else
-	    {
-	      if (noside == EVAL_SKIP)
-		{
-		  skip_undetermined_arglist (nargs, exp, pos, noside);
-		  /* Return the dummy value with the correct type.  */
-		  return arg1;
-		}
-	      arg2 = evaluate_subexp_with_coercion (exp, pos, noside);
-	      return value_subscript (arg1, value_as_long (arg2));
-	    }
-
-	case TYPE_CODE_PTR:
-	case TYPE_CODE_FUNC:
-	case TYPE_CODE_INTERNAL_FUNCTION:
-	  /* It's a function call.  */
-	  /* Allocate arg vector, including space for the function to be
-	     called in argvec[0] and a terminating NULL.  */
-	  argvec = (struct value **)
-	    alloca (sizeof (struct value *) * (nargs + 2));
-	  argvec[0] = arg1;
-	  tem = 1;
-	  for (; tem <= nargs; tem++)
-	    {
-	      argvec[tem] = evaluate_subexp_with_coercion (exp, pos, noside);
-	      /* Arguments in Fortran are passed by address.  Coerce the
-		 arguments here rather than in value_arg_coerce as otherwise
-		 the call to malloc to place the non-lvalue parameters in
-		 target memory is hit by this Fortran specific logic.  This
-		 results in malloc being called with a pointer to an integer
-		 followed by an attempt to malloc the arguments to malloc in
-		 target memory.  Infinite recursion ensues.  */
-	      if (code == TYPE_CODE_PTR || code == TYPE_CODE_FUNC)
-		{
-		  bool is_artificial
-		    = TYPE_FIELD_ARTIFICIAL (value_type (arg1), tem - 1);
-		  argvec[tem] = fortran_argument_convert (argvec[tem],
-							  is_artificial);
-		}
-	    }
-	  argvec[tem] = 0;	/* signal end of arglist */
-	  if (noside == EVAL_SKIP)
-	    return eval_skip_value (exp);
-	  return eval_call (exp, noside, nargs, argvec, NULL, expect_type);
-
-	default:
-	  error (_("Cannot perform substring on this type"));
-	}
-
     case OP_COMPLEX:
       /* We have a complex number, There should be 2 floating 
          point numbers that compose it.  */
@@ -2126,8 +2007,13 @@ evaluate_subexp_standard (struct type *expect_type,
 
 	  mem_offset = value_as_long (arg2);
 
+#ifdef NVIDIA_CUDA_GDB
+	  arg3 = value_from_pointer (lookup_pointer_type (FIND_TARGET_TYPE (type)),
+				     value_as_long (arg1) + mem_offset);
+#else
 	  arg3 = value_from_pointer (lookup_pointer_type (TYPE_TARGET_TYPE (type)),
 				     value_as_long (arg1) + mem_offset);
+#endif
 	  return value_ind (arg3);
 
 	default:
@@ -2333,7 +2219,11 @@ evaluate_subexp_standard (struct type *expect_type,
 	    }
 
 	  if (noside == EVAL_AVOID_SIDE_EFFECTS)
+#ifdef NVIDIA_CUDA_GDB
+	    return value_zero (FIND_TARGET_TYPE (type), VALUE_LVAL (arg1));
+#else
 	    return value_zero (TYPE_TARGET_TYPE (type), VALUE_LVAL (arg1));
+#endif
 	  else
 	    return value_subscript (arg1, value_as_long (arg2));
 	}
@@ -2358,7 +2248,11 @@ evaluate_subexp_standard (struct type *expect_type,
 	         type (like a plain int variable for example), then report this
 	         as an error.  */
 
+#ifdef NVIDIA_CUDA_GDB
+	      type = FIND_TARGET_TYPE (check_typedef (value_type (arg1)));
+#else
 	      type = TYPE_TARGET_TYPE (check_typedef (value_type (arg1)));
+#endif
 	      if (type != NULL)
 		{
 		  arg1 = value_zero (type, VALUE_LVAL (arg1));
@@ -2399,49 +2293,6 @@ evaluate_subexp_standard (struct type *expect_type,
 	    }
 	}
       return (arg1);
-
-    multi_f77_subscript:
-      {
-	LONGEST subscript_array[MAX_FORTRAN_DIMS];
-	int ndimensions = 1, i;
-	struct value *array = arg1;
-
-	if (nargs > MAX_FORTRAN_DIMS)
-	  error (_("Too many subscripts for F77 (%d Max)"), MAX_FORTRAN_DIMS);
-
-	ndimensions = calc_f77_array_dims (type);
-
-	if (nargs != ndimensions)
-	  error (_("Wrong number of subscripts"));
-
-	gdb_assert (nargs > 0);
-
-	/* Now that we know we have a legal array subscript expression 
-	   let us actually find out where this element exists in the array.  */
-
-	/* Take array indices left to right.  */
-	for (i = 0; i < nargs; i++)
-	  {
-	    /* Evaluate each subscript; it must be a legal integer in F77.  */
-	    arg2 = evaluate_subexp_with_coercion (exp, pos, noside);
-
-	    /* Fill in the subscript array.  */
-
-	    subscript_array[i] = value_as_long (arg2);
-	  }
-
-	/* Internal type of array is arranged right to left.  */
-	for (i = nargs; i > 0; i--)
-	  {
-	    struct type *array_type = check_typedef (value_type (array));
-	    LONGEST index = subscript_array[i - 1];
-
-	    array = value_subscripted_rvalue (array, index,
-					      f77_get_lowerbound (array_type));
-	  }
-
-	return array;
-      }
 
     case BINOP_LOGICAL_AND:
       arg1 = evaluate_subexp (nullptr, exp, pos, noside);
@@ -2672,7 +2523,11 @@ evaluate_subexp_standard (struct type *expect_type,
 
     case UNOP_IND:
       if (expect_type && expect_type->code () == TYPE_CODE_PTR)
+#ifdef NVIDIA_CUDA_GDB
+	expect_type = FIND_TARGET_TYPE (check_typedef (expect_type));
+#else
 	expect_type = TYPE_TARGET_TYPE (check_typedef (expect_type));
+#endif
       arg1 = evaluate_subexp (expect_type, exp, pos, noside);
       type = check_typedef (value_type (arg1));
       if (type->code () == TYPE_CODE_METHODPTR
@@ -2691,8 +2546,13 @@ evaluate_subexp_standard (struct type *expect_type,
 	  /* In C you can dereference an array to get the 1st elt.  */
 	      || type->code () == TYPE_CODE_ARRAY
 	    )
+#ifdef NVIDIA_CUDA_GDB
+	    return value_zero (FIND_TARGET_TYPE (type),
+			       lval_memory);
+#else
 	    return value_zero (TYPE_TARGET_TYPE (type),
 			       lval_memory);
+#endif
 	  else if (type->code () == TYPE_CODE_INT)
 	    /* GDB allows dereferencing an int.  */
 	    return value_zero (builtin_type (exp->gdbarch)->builtin_int,
@@ -2911,6 +2771,123 @@ evaluate_subexp_standard (struct type *expect_type,
       else
         error (_("Attempt to use a type name as an expression"));
 
+#ifdef NVIDIA_CUDA_GDB
+    case UNOP_ISNAN:
+      arg1 = evaluate_subexp (nullptr, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+	return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, 1);
+      return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, 
+				 isnan (target_float_to_host_double (value_contents (arg1),
+								     value_type (arg1))));
+    case UNOP_IEEE_IS_NAN:
+      arg1 = evaluate_subexp (nullptr, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, 1);
+      return value_from_longest (language_bool_type (exp->language_defn, exp->gdbarch), 
+				 isnan (target_float_to_host_double (value_contents (arg1),
+								     value_type (arg1))) != 0);
+    case UNOP_ISINF:
+      arg1 = evaluate_subexp (nullptr, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, 1);
+      return value_from_longest (builtin_type (exp->gdbarch)->builtin_int,
+				 isinf (target_float_to_host_double (value_contents (arg1),
+								     value_type (arg1))));
+    case UNOP_IEEE_IS_INF:
+      arg1 = evaluate_subexp (nullptr, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, 1);
+      return value_from_longest (language_bool_type (exp->language_defn, exp->gdbarch), 
+				 isinf (target_float_to_host_double (value_contents (arg1),
+								     value_type (arg1))) != 0);
+    case UNOP_ISFINITE:
+      arg1 = evaluate_subexp (nullptr, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, 1);
+      return value_from_longest (builtin_type (exp->gdbarch)->builtin_int,
+				 isfinite (target_float_to_host_double (value_contents (arg1),
+									value_type (arg1))));
+    case UNOP_IEEE_IS_FINITE:
+      arg1 = evaluate_subexp (nullptr, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, 1);
+      return value_from_longest (language_bool_type (exp->language_defn, exp->gdbarch),
+				 isfinite (target_float_to_host_double (value_contents (arg1),
+									value_type (arg1))) != 0);
+    case UNOP_ISNORMAL:
+      arg1 = evaluate_subexp (nullptr, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, 1);
+      return value_from_longest (builtin_type (exp->gdbarch)->builtin_int,
+				 isnormal (target_float_to_host_double (value_contents (arg1),
+									value_type (arg1))));
+    case UNOP_IEEE_IS_NORMAL:
+      arg1 = evaluate_subexp (nullptr, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, 1);
+      return value_from_longest (language_bool_type (exp->language_defn, exp->gdbarch),
+				 isnormal (target_float_to_host_double (value_contents (arg1),
+									value_type (arg1))) != 0);
+    case UNOP_CREAL:
+      arg1 = evaluate_subexp (nullptr, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, 1);
+      return value_real_part (arg1);
+    case UNOP_CIMAG:
+      arg1 = evaluate_subexp (nullptr, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, 1);
+      return value_imaginary_part (arg1);
+    case UNOP_FABS:
+      arg1 = evaluate_subexp (nullptr, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, 1);
+      type = value_type (arg1);
+      if (type->code () != TYPE_CODE_FLT)
+        type = builtin_type (exp->gdbarch)->builtin_double;
+      return value_from_host_double (type,
+				     fabs (target_float_to_host_double (value_contents (arg1),
+									value_type (arg1))));
+    case UNOP_CEIL:
+      arg1 = evaluate_subexp (nullptr, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, 1);
+      type = value_type (arg1);
+      if (type->code () != TYPE_CODE_FLT)
+        type = builtin_type (exp->gdbarch)->builtin_double;
+      return value_from_host_double (type, 
+				     ceil (target_float_to_host_double (value_contents (arg1),
+									value_type (arg1))));
+    case UNOP_FLOOR:
+      arg1 = evaluate_subexp (nullptr, exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, 1);
+      type = value_type (arg1);
+      if (type->code () != TYPE_CODE_FLT)
+        type = builtin_type (exp->gdbarch)->builtin_double;
+      return value_from_host_double (type,
+				     floor (target_float_to_host_double (value_contents (arg1),
+									 value_type (arg1))));
+    case BINOP_FMOD:
+      arg1 = evaluate_subexp (nullptr, exp, pos, noside);
+      arg2 = evaluate_subexp (value_type (arg1), exp, pos, noside);
+      if (noside == EVAL_SKIP)
+        return value_from_longest (builtin_type (exp->gdbarch)->builtin_int, 1);
+      type = value_type (arg1);
+      if (type->code () != TYPE_CODE_FLT
+          && value_type (arg2)->code () == TYPE_CODE_FLT)
+        type = value_type (arg2);
+      if (type->code () != TYPE_CODE_FLT)
+	  return value_from_longest (value_type (arg1), (LONGEST)fmod (value_as_long (arg1), value_as_long (arg2)));
+      else
+	{
+	  auto a = target_float_to_host_double (value_contents (arg1),
+						value_type (arg1));
+	  auto b = target_float_to_host_double (value_contents (arg2),
+						value_type (arg2));
+	  return value_from_host_double (type, fmod (a, b));
+	}
+#endif /* NVIDIA_CUDA_GDB */
     case OP_TYPEOF:
     case OP_DECLTYPE:
       if (noside == EVAL_SKIP)
@@ -3352,23 +3329,4 @@ parse_and_eval_type (char *p, int length)
   if (expr->elts[0].opcode != UNOP_CAST)
     error (_("Internal error in eval_type."));
   return expr->elts[1].type;
-}
-
-int
-calc_f77_array_dims (struct type *array_type)
-{
-  int ndimen = 1;
-  struct type *tmp_type;
-
-  if ((array_type->code () != TYPE_CODE_ARRAY))
-    error (_("Can't get dimensions for a non-array type"));
-
-  tmp_type = array_type;
-
-  while ((tmp_type = TYPE_TARGET_TYPE (tmp_type)))
-    {
-      if (tmp_type->code () == TYPE_CODE_ARRAY)
-	++ndimen;
-    }
-  return ndimen;
 }

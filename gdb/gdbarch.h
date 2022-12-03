@@ -20,6 +20,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* This file was created with the aid of ``gdbarch.sh''.  */
 
 #ifndef GDBARCH_H
@@ -74,6 +78,11 @@ struct ui_out;
 
 /* This is a convenience wrapper for 'current_inferior ()->gdbarch'.  */
 extern struct gdbarch *target_gdbarch (void);
+
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - 64-bit register index */
+typedef ULONGEST reg_t;
+#endif
 
 /* Callback type for the 'iterate_over_objfiles_in_search_order'
    gdbarch  method.  */
@@ -356,27 +365,47 @@ extern void set_gdbarch_fp0_regnum (struct gdbarch *gdbarch, int fp0_regnum);
 
 /* Convert stab register number (from `r' declaration) to a gdb REGNUM. */
 
+#ifdef NVIDIA_CUDA_GDB
+typedef int (gdbarch_stab_reg_to_regnum_ftype) (struct gdbarch *gdbarch, reg_t stab_regnr);
+extern int gdbarch_stab_reg_to_regnum (struct gdbarch *gdbarch, reg_t stab_regnr);
+#else
 typedef int (gdbarch_stab_reg_to_regnum_ftype) (struct gdbarch *gdbarch, int stab_regnr);
 extern int gdbarch_stab_reg_to_regnum (struct gdbarch *gdbarch, int stab_regnr);
+#endif
 extern void set_gdbarch_stab_reg_to_regnum (struct gdbarch *gdbarch, gdbarch_stab_reg_to_regnum_ftype *stab_reg_to_regnum);
 
 /* Provide a default mapping from a ecoff register number to a gdb REGNUM. */
 
+#ifdef NVIDIA_CUDA_GDB
+typedef int (gdbarch_ecoff_reg_to_regnum_ftype) (struct gdbarch *gdbarch, reg_t ecoff_regnr);
+extern int gdbarch_ecoff_reg_to_regnum (struct gdbarch *gdbarch, reg_t ecoff_regnr);
+#else
 typedef int (gdbarch_ecoff_reg_to_regnum_ftype) (struct gdbarch *gdbarch, int ecoff_regnr);
 extern int gdbarch_ecoff_reg_to_regnum (struct gdbarch *gdbarch, int ecoff_regnr);
+#endif
 extern void set_gdbarch_ecoff_reg_to_regnum (struct gdbarch *gdbarch, gdbarch_ecoff_reg_to_regnum_ftype *ecoff_reg_to_regnum);
 
 /* Convert from an sdb register number to an internal gdb register number. */
 
+#ifdef NVIDIA_CUDA_GDB
+typedef int (gdbarch_sdb_reg_to_regnum_ftype) (struct gdbarch *gdbarch, reg_t sdb_regnr);
+extern int gdbarch_sdb_reg_to_regnum (struct gdbarch *gdbarch, reg_t sdb_regnr);
+#else
 typedef int (gdbarch_sdb_reg_to_regnum_ftype) (struct gdbarch *gdbarch, int sdb_regnr);
 extern int gdbarch_sdb_reg_to_regnum (struct gdbarch *gdbarch, int sdb_regnr);
+#endif
 extern void set_gdbarch_sdb_reg_to_regnum (struct gdbarch *gdbarch, gdbarch_sdb_reg_to_regnum_ftype *sdb_reg_to_regnum);
 
 /* Provide a default mapping from a DWARF2 register number to a gdb REGNUM.
    Return -1 for bad REGNUM.  Note: Several targets get this wrong. */
 
+#ifdef NVIDIA_CUDA_GDB
+typedef int (gdbarch_dwarf2_reg_to_regnum_ftype) (struct gdbarch *gdbarch, reg_t dwarf2_regnr);
+extern int gdbarch_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, reg_t dwarf2_regnr);
+#else
 typedef int (gdbarch_dwarf2_reg_to_regnum_ftype) (struct gdbarch *gdbarch, int dwarf2_regnr);
 extern int gdbarch_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int dwarf2_regnr);
+#endif
 extern void set_gdbarch_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, gdbarch_dwarf2_reg_to_regnum_ftype *dwarf2_reg_to_regnum);
 
 typedef const char * (gdbarch_register_name_ftype) (struct gdbarch *gdbarch, int regnr);
@@ -854,14 +883,14 @@ extern void set_gdbarch_have_nonsteppable_watchpoint (struct gdbarch *gdbarch, i
 
 extern int gdbarch_address_class_type_flags_p (struct gdbarch *gdbarch);
 
-typedef int (gdbarch_address_class_type_flags_ftype) (int byte_size, int dwarf2_addr_class);
-extern int gdbarch_address_class_type_flags (struct gdbarch *gdbarch, int byte_size, int dwarf2_addr_class);
+typedef type_instance_flags (gdbarch_address_class_type_flags_ftype) (int byte_size, int dwarf2_addr_class);
+extern type_instance_flags gdbarch_address_class_type_flags (struct gdbarch *gdbarch, int byte_size, int dwarf2_addr_class);
 extern void set_gdbarch_address_class_type_flags (struct gdbarch *gdbarch, gdbarch_address_class_type_flags_ftype *address_class_type_flags);
 
 extern int gdbarch_address_class_type_flags_to_name_p (struct gdbarch *gdbarch);
 
-typedef const char * (gdbarch_address_class_type_flags_to_name_ftype) (struct gdbarch *gdbarch, int type_flags);
-extern const char * gdbarch_address_class_type_flags_to_name (struct gdbarch *gdbarch, int type_flags);
+typedef const char * (gdbarch_address_class_type_flags_to_name_ftype) (struct gdbarch *gdbarch, type_instance_flags type_flags);
+extern const char * gdbarch_address_class_type_flags_to_name (struct gdbarch *gdbarch, type_instance_flags type_flags);
 extern void set_gdbarch_address_class_type_flags_to_name (struct gdbarch *gdbarch, gdbarch_address_class_type_flags_to_name_ftype *address_class_type_flags_to_name);
 
 /* Execute vendor-specific DWARF Call Frame Instruction.  OP is the instruction.
@@ -872,13 +901,13 @@ extern bool gdbarch_execute_dwarf_cfa_vendor_op (struct gdbarch *gdbarch, gdb_by
 extern void set_gdbarch_execute_dwarf_cfa_vendor_op (struct gdbarch *gdbarch, gdbarch_execute_dwarf_cfa_vendor_op_ftype *execute_dwarf_cfa_vendor_op);
 
 /* Return the appropriate type_flags for the supplied address class.
-   This function should return 1 if the address class was recognized and
-   type_flags was set, zero otherwise. */
+   This function should return true if the address class was recognized and
+   type_flags was set, false otherwise. */
 
 extern int gdbarch_address_class_name_to_type_flags_p (struct gdbarch *gdbarch);
 
-typedef int (gdbarch_address_class_name_to_type_flags_ftype) (struct gdbarch *gdbarch, const char *name, int *type_flags_ptr);
-extern int gdbarch_address_class_name_to_type_flags (struct gdbarch *gdbarch, const char *name, int *type_flags_ptr);
+typedef bool (gdbarch_address_class_name_to_type_flags_ftype) (struct gdbarch *gdbarch, const char *name, type_instance_flags *type_flags_ptr);
+extern bool gdbarch_address_class_name_to_type_flags (struct gdbarch *gdbarch, const char *name, type_instance_flags *type_flags_ptr);
 extern void set_gdbarch_address_class_name_to_type_flags (struct gdbarch *gdbarch, gdbarch_address_class_name_to_type_flags_ftype *address_class_name_to_type_flags);
 
 /* Is a register in a group */

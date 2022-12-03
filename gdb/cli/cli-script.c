@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "value.h"
 #include "language.h"		/* For value_true */
@@ -30,6 +34,9 @@
 #include "cli/cli-decode.h"
 #include "cli/cli-script.h"
 #include "cli/cli-style.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "arch-utils.h"
+#endif
 
 #include "extension.h"
 #include "interps.h"
@@ -574,6 +581,13 @@ execute_control_command_1 (struct command_line *cmd, int from_tty)
 
 	    QUIT;
 
+#ifdef NVIDIA_CUDA_GDB
+	    /* CUDA - while loop */
+	    /* expr->gdbarch is set before entering the loop. But that may
+	       change during the execution of the loop. We must reset it every
+	       time. */
+	    expr->gdbarch = get_current_arch ();
+#endif
 	    /* Evaluate the expression.  */
 	    val_mark = value_mark ();
 	    val = evaluate_expression (expr.get ());

@@ -16,6 +16,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "arch-utils.h"
 #include "symtab.h"
@@ -51,6 +55,10 @@
 #include "build-id.h"
 #include "debuginfod-support.h"
 
+#ifdef NVIDIA_CUDA_GDB
+#include "demangle.h"
+#include "symtab.h"
+#endif
 #define OPEN_MODE (O_RDONLY | O_BINARY)
 #define FDOPEN_MODE FOPEN_RB
 
@@ -679,8 +687,27 @@ info_source_command (const char *ignore, int from_tty)
 
   cust = SYMTAB_COMPUNIT (s);
   printf_filtered (_("Current source file is %s\n"), s->filename);
+#ifdef NVIDIA_CUDA_GDB
+  if (SYMTAB_DIRNAME (s) != NULL)
+    {
+      /* CUDA - filenames */
+      const char *lastsep;
+      int dirnamelen;
+      lastsep = strrchr(s->filename, '/');
+      dirnamelen = strlen(SYMTAB_DIRNAME (s));
+      if (lastsep)
+        {
+          if (SYMTAB_DIRNAME (s)[dirnamelen-1]=='/') dirnamelen--;
+          while (SYMTAB_DIRNAME (s)[dirnamelen-1]==*(--lastsep)) dirnamelen--;
+          if (SYMTAB_DIRNAME (s)[dirnamelen-1]=='/') dirnamelen--;
+        }
+      printf_filtered (_("Compilation directory is %.*s\n"), dirnamelen,
+		       SYMTAB_DIRNAME (s));
+    }
+#else
   if (SYMTAB_DIRNAME (s) != NULL)
     printf_filtered (_("Compilation directory is %s\n"), SYMTAB_DIRNAME (s));
+#endif
   if (s->fullname)
     printf_filtered (_("Located in %s\n"), s->fullname);
   const std::vector<off_t> *offsets;
@@ -1287,6 +1314,9 @@ print_source_lines_base (struct symtab *s, int line, int stopline,
 
   if (noprint)
     {
+#ifdef NVIDIA_CUDA_GDB
+      last_line_listed = line;
+#endif
       if (!(flags & PRINT_SOURCE_LINES_NOERROR))
 	{
 	  const char *filename = symtab_to_filename_for_display (s);
@@ -1476,6 +1506,9 @@ info_line_command (const char *arg, int from_tty)
       if (sal.pspace != current_program_space)
 	continue;
 
+#ifdef NVIDIA_CUDA_GDB
+      struct cuda_debug_inline_info *inline_info = NULL;
+#endif
       if (sal.symtab == 0)
 	{
 	  struct gdbarch *gdbarch = get_current_arch ();
@@ -1494,8 +1527,13 @@ info_line_command (const char *arg, int from_tty)
 	    printf_filtered (".");
 	  printf_filtered ("\n");
 	}
+#ifdef NVIDIA_CUDA_GDB
+      else if (sal.line > 0
+	       && find_line_pc_range (sal, &start_pc, &end_pc, &inline_info))
+#else
       else if (sal.line > 0
 	       && find_line_pc_range (sal, &start_pc, &end_pc))
+#endif
 	{
 	  struct gdbarch *gdbarch = SYMTAB_OBJFILE (sal.symtab)->arch ();
 
@@ -1507,6 +1545,19 @@ info_line_command (const char *arg, int from_tty)
 	      wrap_here ("  ");
 	      printf_filtered (" is at address ");
 	      print_address (gdbarch, start_pc, gdb_stdout);
+#ifdef NVIDIA_CUDA_GDB
+	      if (inline_info)
+		{
+		  char *demangled = language_demangle (language_def (current_language->la_language),
+						       inline_info->function,
+						       DMGL_ANSI);
+		  printf_filtered (" inlined from %s",
+				   demangled ? demangled : inline_info->function);
+		  xfree (demangled);
+		  printf_filtered (" at line %d of %s",
+				   inline_info->line, lbasename (inline_info->filename));
+		}
+#endif
 	      wrap_here ("  ");
 	      printf_filtered (" but contains no code.\n");
 	    }
@@ -1521,6 +1572,19 @@ info_line_command (const char *arg, int from_tty)
 	      wrap_here ("  ");
 	      printf_filtered (" and ends at ");
 	      print_address (gdbarch, end_pc, gdb_stdout);
+#ifdef NVIDIA_CUDA_GDB
+	      if (inline_info)
+		{
+		  char *demangled = language_demangle (language_def (current_language->la_language),
+						       inline_info->function,
+						       DMGL_ANSI);
+		  printf_filtered (" inlined from %s",
+				   demangled ? demangled : inline_info->function);
+		  xfree (demangled);
+		  printf_filtered (" at line %d of %s",
+				   inline_info->line, lbasename (inline_info->filename));
+		}
+#endif
 	      printf_filtered (".\n");
 	    }
 

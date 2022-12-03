@@ -21,6 +21,10 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "sysdep.h"
 #include <limits.h>
 #include "bfd.h"
@@ -141,7 +145,8 @@ _bfd_real_fopen (const char *filename, const char *modes)
       return file;
     }
 
-#elif defined (HAVE_FOPEN64)
+/* CUDA */
+#elif defined (HAVE_FOPEN64) && !defined(__ANDROID__)
   return close_on_exec (fopen64 (filename, modes));
 #endif
 

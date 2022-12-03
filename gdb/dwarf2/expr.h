@@ -19,11 +19,18 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #if !defined (DWARF2EXPR_H)
 #define DWARF2EXPR_H
 
 #include "leb128.h"
 #include "gdbtypes.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "gdbarch.h"
+#endif
 
 struct dwarf2_per_objfile;
 
@@ -188,13 +195,21 @@ struct dwarf_expr_context
 
   /* Return the value of register number REGNUM (a DWARF register number),
      read as an address.  */
+#ifdef NVIDIA_CUDA_GDB
+  virtual CORE_ADDR read_addr_from_reg (reg_t regnum) = 0;
+#else
   virtual CORE_ADDR read_addr_from_reg (int regnum) = 0;
+#endif
 
   /* Return a value of type TYPE, stored in register number REGNUM
      of the frame associated to the given BATON.
 
      REGNUM is a DWARF register number.  */
+#ifdef NVIDIA_CUDA_GDB
+  virtual struct value *get_reg_value (struct type *type, reg_t regnum) = 0;
+#else
   virtual struct value *get_reg_value (struct type *type, int regnum) = 0;
+#endif
 
   /* Read LENGTH bytes at ADDR into BUF.  */
   virtual void read_mem (gdb_byte *buf, CORE_ADDR addr, size_t length) = 0;

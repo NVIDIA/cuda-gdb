@@ -18,6 +18,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "inferior.h"
 #include "regcache.h"
@@ -39,13 +43,21 @@
 #include "nat/linux-ptrace.h"
 #include "nat/amd64-linux-siginfo.h"
 
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-linux-nat-template.h"
+#endif
+
 /* This definition comes from prctl.h.  Kernels older than 2.5.64
    do not have it.  */
 #ifndef PTRACE_ARCH_PRCTL
 #define PTRACE_ARCH_PRCTL      30
 #endif
 
+#ifdef NVIDIA_CUDA_GDB
+struct amd64_linux_nat_target : public x86_linux_nat_target
+#else
 struct amd64_linux_nat_target final : public x86_linux_nat_target
+#endif
 {
   /* Add our register access methods.  */
   void fetch_registers (struct regcache *, int) override;
@@ -55,7 +67,11 @@ struct amd64_linux_nat_target final : public x86_linux_nat_target
     override;
 };
 
+#ifdef NVIDIA_CUDA_GDB
+static cuda_nat_linux<amd64_linux_nat_target> the_amd64_linux_nat_target;
+#else
 static amd64_linux_nat_target the_amd64_linux_nat_target;
+#endif
 
 /* Mapping between the general-purpose registers in GNU/Linux x86-64
    `struct user' format and GDB's register cache layout for GNU/Linux
@@ -310,6 +326,10 @@ amd64_linux_nat_target::store_registers (struct regcache *regcache, int regnum)
 
 	  amd64_collect_xsave (regcache, regnum, xstateregs, 0);
 
+#ifdef NVIDIA_CUDA_GDB
+	  iov.iov_base = xstateregs;
+	  iov.iov_len = sizeof (xstateregs);
+#endif
 	  if (ptrace (PTRACE_SETREGSET, tid,
 		      (unsigned int) NT_X86_XSTATE, (long) &iov) < 0)
 	    perror_with_name (_("Couldn't write extended state status"));

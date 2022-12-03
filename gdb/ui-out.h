@@ -20,6 +20,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef UI_OUT_H
 #define UI_OUT_H 1
 
@@ -187,6 +191,9 @@ class ui_out
 			 LONGEST value);
   /* Like field_signed, but print an unsigned value.  */
   void field_unsigned (const char *fldname, ULONGEST value);
+#ifdef NVIDIA_CUDA_GDB
+  void field_long_long (const char *filename, long long value);
+#endif
   void field_core_addr (const char *fldname, struct gdbarch *gdbarch,
 			CORE_ADDR address);
   void field_string (const char *fldname, const char *string,

@@ -106,7 +106,7 @@ static PyObject *show_doc_cst;
 static PyObject *
 get_attr (PyObject *obj, PyObject *attr_name)
 {
-  if (PyString_Check (attr_name)
+  if (gdbpy_StringCheck (attr_name)
 #ifdef IS_PY3K
       && ! PyUnicode_CompareWithASCIIString (attr_name, "value"))
 #else
@@ -136,14 +136,14 @@ set_parameter_value (parmpy_object *self, PyObject *value)
     case var_filename:
       if (! gdbpy_is_string (value)
 	  && (self->type == var_filename
-	      || value != Py_None))
+	      || value != gdbpy_None))
 	{
-	  PyErr_SetString (PyExc_RuntimeError,
+	  PyErr_SetString (gdbpyExc_RuntimeError,
 			   _("String required for filename."));
 
 	  return -1;
 	}
-      if (value == Py_None)
+      if (value == gdbpy_None)
 	{
 	  xfree (self->value.stringval);
 	  if (self->type == var_optional_filename)
@@ -169,7 +169,7 @@ set_parameter_value (parmpy_object *self, PyObject *value)
 
 	if (! gdbpy_is_string (value))
 	  {
-	    PyErr_SetString (PyExc_RuntimeError,
+	    PyErr_SetString (gdbpyExc_RuntimeError,
 			     _("ENUM arguments must be a string."));
 	    return -1;
 	  }
@@ -183,7 +183,7 @@ set_parameter_value (parmpy_object *self, PyObject *value)
 	    break;
 	if (! self->enumeration[i])
 	  {
-	    PyErr_SetString (PyExc_RuntimeError,
+	    PyErr_SetString (gdbpyExc_RuntimeError,
 			     _("The value must be member of an enumeration."));
 	    return -1;
 	  }
@@ -192,9 +192,9 @@ set_parameter_value (parmpy_object *self, PyObject *value)
       }
 
     case var_boolean:
-      if (! PyBool_Check (value))
+      if (Py_TYPE(value) != gdbpy_BoolType)
 	{
-	  PyErr_SetString (PyExc_RuntimeError,
+	  PyErr_SetString (gdbpyExc_RuntimeError,
 			   _("A boolean argument is required."));
 	  return -1;
 	}
@@ -205,14 +205,14 @@ set_parameter_value (parmpy_object *self, PyObject *value)
       break;
 
     case var_auto_boolean:
-      if (! PyBool_Check (value) && value != Py_None)
+      if (Py_TYPE(value) != gdbpy_BoolType && value != gdbpy_None)
 	{
-	  PyErr_SetString (PyExc_RuntimeError,
+	  PyErr_SetString (gdbpyExc_RuntimeError,
 			   _("A boolean or None is required"));
 	  return -1;
 	}
 
-      if (value == Py_None)
+      if (value == gdbpy_None)
 	self->value.autoboolval = AUTO_BOOLEAN_AUTO;
       else
 	{
@@ -235,9 +235,9 @@ set_parameter_value (parmpy_object *self, PyObject *value)
 	long l;
 	int ok;
 
-	if (! PyInt_Check (value))
+	if (! gdbpy_IntCheck (value))
 	  {
-	    PyErr_SetString (PyExc_RuntimeError,
+	    PyErr_SetString (gdbpyExc_RuntimeError,
 			     _("The value must be integer."));
 	    return -1;
 	  }
@@ -275,7 +275,7 @@ set_parameter_value (parmpy_object *self, PyObject *value)
 
 	if (! ok)
 	  {
-	    PyErr_SetString (PyExc_RuntimeError,
+	    PyErr_SetString (gdbpyExc_RuntimeError,
 			     _("Range exceeded."));
 	    return -1;
 	  }
@@ -288,7 +288,7 @@ set_parameter_value (parmpy_object *self, PyObject *value)
       }
 
     default:
-      PyErr_SetString (PyExc_RuntimeError,
+      PyErr_SetString (gdbpyExc_RuntimeError,
 		       _("Unhandled type in parameter value."));
       return -1;
     }
@@ -300,7 +300,7 @@ set_parameter_value (parmpy_object *self, PyObject *value)
 static int
 set_attr (PyObject *obj, PyObject *attr_name, PyObject *val)
 {
-  if (PyString_Check (attr_name)
+  if (gdbpy_StringCheck (attr_name)
 #ifdef IS_PY3K
       && ! PyUnicode_CompareWithASCIIString (attr_name, "value"))
 #else
@@ -309,7 +309,7 @@ set_attr (PyObject *obj, PyObject *attr_name, PyObject *val)
     {
       if (!val)
 	{
-	  PyErr_SetString (PyExc_RuntimeError,
+	  PyErr_SetString (gdbpyExc_RuntimeError,
 			   _("Cannot delete a parameter's value."));
 	  return -1;
 	}
@@ -351,7 +351,7 @@ static gdb::unique_xmalloc_ptr<char>
 call_doc_function (PyObject *obj, PyObject *method, PyObject *arg)
 {
   gdb::unique_xmalloc_ptr<char> data;
-  gdbpy_ref<> result (PyObject_CallMethodObjArgs (obj, method, arg, NULL));
+  gdbpy_ref<> result (gdbpy_PyObject_CallMethodObjArgs (obj, method, arg, NULL));
 
   if (result == NULL)
     return NULL;
@@ -364,7 +364,7 @@ call_doc_function (PyObject *obj, PyObject *method, PyObject *arg)
     }
   else
     {
-      PyErr_SetString (PyExc_RuntimeError,
+      PyErr_SetString (gdbpyExc_RuntimeError,
 		       _("Parameter must return a string value."));
       return NULL;
     }
@@ -588,14 +588,14 @@ compute_enum_values (parmpy_object *self, PyObject *enum_values)
 
   if (! enum_values)
     {
-      PyErr_SetString (PyExc_RuntimeError,
+      PyErr_SetString (gdbpyExc_RuntimeError,
 		       _("An enumeration is required for PARAM_ENUM."));
       return 0;
     }
 
   if (! PySequence_Check (enum_values))
     {
-      PyErr_SetString (PyExc_RuntimeError,
+      PyErr_SetString (gdbpyExc_RuntimeError,
 		       _("The enumeration is not a sequence."));
       return 0;
     }
@@ -605,7 +605,7 @@ compute_enum_values (parmpy_object *self, PyObject *enum_values)
     return 0;
   if (size == 0)
     {
-      PyErr_SetString (PyExc_RuntimeError,
+      PyErr_SetString (gdbpyExc_RuntimeError,
 		       _("The enumeration is empty."));
       return 0;
     }
@@ -621,7 +621,7 @@ compute_enum_values (parmpy_object *self, PyObject *enum_values)
 	return 0;
       if (! gdbpy_is_string (item.get ()))
 	{
-	  PyErr_SetString (PyExc_RuntimeError,
+	  PyErr_SetString (gdbpyExc_RuntimeError,
 			   _("The enumeration item not a string."));
 	  return 0;
 	}
@@ -668,7 +668,7 @@ parmpy_init (PyObject *self, PyObject *args, PyObject *kwds)
   PyObject *enum_values = NULL;
   struct cmd_list_element **set_list, **show_list;
 
-  if (! PyArg_ParseTuple (args, "sii|O", &name, &cmdtype, &parmclass,
+  if (! gdbpy_PyArg_ParseTuple (args, "sii|O", &name, &cmdtype, &parmclass,
 			  &enum_values))
     return -1;
 
@@ -679,7 +679,7 @@ parmpy_init (PyObject *self, PyObject *args, PyObject *kwds)
       && cmdtype != class_trace && cmdtype != class_obscure
       && cmdtype != class_maintenance)
     {
-      PyErr_Format (PyExc_RuntimeError, _("Invalid command class argument."));
+      gdbpy_ErrFormat (gdbpyExc_RuntimeError, _("Invalid command class argument."));
       return -1;
     }
 
@@ -691,14 +691,14 @@ parmpy_init (PyObject *self, PyObject *args, PyObject *kwds)
       && parmclass != var_zinteger && parmclass != var_zuinteger
       && parmclass != var_zuinteger_unlimited && parmclass != var_enum)
     {
-      PyErr_SetString (PyExc_RuntimeError,
+      PyErr_SetString (gdbpyExc_RuntimeError,
 		       _("Invalid parameter class argument."));
       return -1;
     }
 
   if (enum_values && parmclass != var_enum)
     {
-      PyErr_SetString (PyExc_RuntimeError,
+      PyErr_SetString (gdbpyExc_RuntimeError,
 		       _("Only PARAM_ENUM accepts a fourth argument."));
       return -1;
     }

@@ -141,12 +141,12 @@ pyuw_object_attribute_to_pointer (PyObject *pyo, const char *attr_name,
     {
       gdbpy_ref<> pyo_value (PyObject_GetAttrString (pyo, attr_name));
 
-      if (pyo_value != NULL && pyo_value != Py_None)
+      if (pyo_value != NULL && pyo_value != gdbpy_None)
         {
           rc = pyuw_value_obj_to_pointer (pyo_value.get (), addr);
           if (!rc)
-            PyErr_Format (
-                PyExc_ValueError,
+            gdbpy_ErrFormat (
+                gdbpyExc_ValueError,
                 _("The value of the '%s' attribute is not a pointer."),
                 attr_name);
         }
@@ -210,7 +210,7 @@ pyuw_create_unwind_info (PyObject *pyo_pending_frame,
 
   if (((pending_frame_object *) pyo_pending_frame)->frame_info == NULL)
     {
-      PyErr_SetString (PyExc_ValueError,
+      PyErr_SetString (gdbpyExc_ValueError,
                        "Attempting to use stale PendingFrame");
       return NULL;
     }
@@ -236,16 +236,16 @@ unwind_infopy_add_saved_register (PyObject *self, PyObject *args)
 
   if (pending_frame->frame_info == NULL)
     {
-      PyErr_SetString (PyExc_ValueError,
+      PyErr_SetString (gdbpyExc_ValueError,
                        "UnwindInfo instance refers to a stale PendingFrame");
       return NULL;
     }
-  if (!PyArg_UnpackTuple (args, "previous_frame_register", 2, 2,
+  if (!gdbpy_Arg_UnpackTuple (args, "previous_frame_register", 2, 2,
                           &pyo_reg_id, &pyo_reg_value))
     return NULL;
   if (!gdbpy_parse_register_id (pending_frame->gdbarch, pyo_reg_id, &regnum))
     {
-      PyErr_SetString (PyExc_ValueError, "Bad register");
+      PyErr_SetString (gdbpyExc_ValueError, "Bad register");
       return NULL;
     }
   {
@@ -255,14 +255,14 @@ unwind_infopy_add_saved_register (PyObject *self, PyObject *args)
     if (pyo_reg_value == NULL
       || (value = value_object_to_value (pyo_reg_value)) == NULL)
       {
-        PyErr_SetString (PyExc_ValueError, "Bad register value");
+        PyErr_SetString (gdbpyExc_ValueError, "Bad register value");
         return NULL;
       }
     data_size = register_size (pending_frame->gdbarch, regnum);
     if (data_size != TYPE_LENGTH (value_type (value)))
       {
-        PyErr_Format (
-            PyExc_ValueError,
+        gdbpy_ErrFormat (
+            gdbpyExc_ValueError,
             "The value of the register returned by the Python "
             "sniffer has unexpected size: %u instead of %u.",
             (unsigned) TYPE_LENGTH (value_type (value)),
@@ -285,7 +285,7 @@ unwind_infopy_add_saved_register (PyObject *self, PyObject *args)
     if (!found)
       unwind_info->saved_regs->emplace_back (regnum, std::move (new_value));
   }
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* UnwindInfo cleanup.  */
@@ -322,7 +322,7 @@ pending_framepy_str (PyObject *self)
       GDB_PY_HANDLE_EXCEPTION (except);
     }
 
-  return PyString_FromFormat ("SP=%s,PC=%s", sp_str, pc_str);
+  return gdbpy_StringFromFormat ("SP=%s,PC=%s", sp_str, pc_str);
 }
 
 /* Implementation of gdb.PendingFrame.read_register (self, reg) -> gdb.Value.
@@ -338,15 +338,15 @@ pending_framepy_read_register (PyObject *self, PyObject *args)
 
   if (pending_frame->frame_info == NULL)
     {
-      PyErr_SetString (PyExc_ValueError,
+      PyErr_SetString (gdbpyExc_ValueError,
                        "Attempting to read register from stale PendingFrame");
       return NULL;
     }
-  if (!PyArg_UnpackTuple (args, "read_register", 1, 1, &pyo_reg_id))
+  if (!gdbpy_Arg_UnpackTuple (args, "read_register", 1, 1, &pyo_reg_id))
     return NULL;
   if (!gdbpy_parse_register_id (pending_frame->gdbarch, pyo_reg_id, &regnum))
     {
-      PyErr_SetString (PyExc_ValueError, "Bad register");
+      PyErr_SetString (gdbpyExc_ValueError, "Bad register");
       return NULL;
     }
 
@@ -359,7 +359,7 @@ pending_framepy_read_register (PyObject *self, PyObject *args)
 	 handle the user register case.  */
       val = value_of_register (regnum, pending_frame->frame_info);
       if (val == NULL)
-        PyErr_Format (PyExc_ValueError,
+        gdbpy_ErrFormat (gdbpyExc_ValueError,
                       "Cannot read register %d from frame.",
                       regnum);
     }
@@ -382,11 +382,11 @@ pending_framepy_create_unwind_info (PyObject *self, PyObject *args)
   CORE_ADDR pc;
   CORE_ADDR special;
 
-  if (!PyArg_ParseTuple (args, "O:create_unwind_info", &pyo_frame_id))
+  if (!gdbpy_PyArg_ParseTuple (args, "O:create_unwind_info", &pyo_frame_id))
       return NULL;
   if (!pyuw_object_attribute_to_pointer (pyo_frame_id, "sp", &sp))
     {
-      PyErr_SetString (PyExc_ValueError,
+      PyErr_SetString (gdbpyExc_ValueError,
                        _("frame_id should have 'sp' attribute."));
       return NULL;
     }
@@ -418,7 +418,7 @@ pending_framepy_architecture (PyObject *self, PyObject *args)
 
   if (pending_frame->frame_info == NULL)
     {
-      PyErr_SetString (PyExc_ValueError,
+      PyErr_SetString (gdbpyExc_ValueError,
                        "Attempting to read register from stale PendingFrame");
       return NULL;
     }
@@ -493,7 +493,7 @@ pyuw_sniffer (const struct frame_unwind *self, struct frame_info *this_frame,
   if (gdb_python_module == NULL
       || ! PyObject_HasAttrString (gdb_python_module, "_execute_unwinders"))
     {
-      PyErr_SetString (PyExc_NameError,
+      PyErr_SetString (gdbpyExc_NameError,
                        "Installation error: gdb._execute_unwinders function "
                        "is missing");
       gdbpy_print_stack ();
@@ -508,7 +508,7 @@ pyuw_sniffer (const struct frame_unwind *self, struct frame_info *this_frame,
     }
 
   gdbpy_ref<> pyo_unwind_info
-    (PyObject_CallFunctionObjArgs (pyo_execute.get (),
+    (gdbpy_PyObject_CallFunctionObjArgs (pyo_execute.get (),
 				   pyo_pending_frame.get (), NULL));
   if (pyo_unwind_info == NULL)
     {
@@ -517,11 +517,11 @@ pyuw_sniffer (const struct frame_unwind *self, struct frame_info *this_frame,
       gdbpy_print_stack_or_quit ();
       return 0;
     }
-  if (pyo_unwind_info == Py_None)
+  if (pyo_unwind_info == gdbpy_None)
     return 0;
 
   /* Received UnwindInfo, cache data.  */
-  if (PyObject_IsInstance (pyo_unwind_info.get (),
+  if (gdbpy_PyObject__IsInstance (pyo_unwind_info.get (),
                            (PyObject *) &unwind_info_object_type) <= 0)
     error (_("A Unwinder should return gdb.UnwindInfo instance."));
 

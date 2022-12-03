@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "frame.h"
 #include "symtab.h"
@@ -58,6 +62,10 @@
 
 static char last_format = 0;
 
+#ifdef NVIDIA_CUDA_GDB
+/* Last CUDA memory segment used. */
+static type_instance_flags last_segment_type = 0;
+#endif
 /* Last specified examination size.  'b', 'h', 'w' or `q'.  */
 
 static char last_size = 'w';
@@ -114,7 +122,15 @@ show_print_symbol_filename (struct ui_file *file, int from_tty,
    So that we can disable it if we get a signal within it.
    -1 when not doing one.  */
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - fix GDB bug */
+/* Make current_display_number a static variable so that it is initialized
+   earlier to -1. If an error is thrown before a later initialization, its
+   value is zero and bogus error messages are printed. */
+static int current_display_number = -1;
+#else
 static int current_display_number;
+#endif
 
 /* Last allocated display number.  */
 
@@ -177,8 +193,14 @@ static void do_one_display (struct display *);
    found in the specification.  In addition, *STRING_PTR is advanced
    past the specification and past all whitespace following it.  */
 
+#ifdef NVIDIA_CUDA_GDB
+static struct format_data
+decode_format (const char **string_ptr, int oformat, int osize,
+	       type_instance_flags st)
+#else
 static struct format_data
 decode_format (const char **string_ptr, int oformat, int osize)
+#endif
 {
   struct format_data val;
   const char *p = *string_ptr;
@@ -187,6 +209,9 @@ decode_format (const char **string_ptr, int oformat, int osize)
   val.size = '?';
   val.count = 1;
   val.raw = 0;
+#ifdef NVIDIA_CUDA_GDB
+  val.segment_type = st;
+#endif
 
   if (*p == '-')
     {
@@ -338,6 +363,10 @@ float_type_from_length (struct type *type)
     type = builtin->builtin_double;
   else if (TYPE_LENGTH (type) == TYPE_LENGTH (builtin->builtin_long_double))
     type = builtin->builtin_long_double;
+#ifdef NVIDIA_CUDA_GDB
+  else if (TYPE_LENGTH (type) == TYPE_LENGTH (builtin->builtin_half))
+    type = builtin->builtin_half;
+#endif
 
   return type;
 }
@@ -1040,6 +1069,11 @@ do_examine (struct format_data fmt, struct gdbarch *gdbarch, CORE_ADDR addr)
         }
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - memory segments */
+  if (fmt.segment_type)
+    val_type = make_type_with_address_space ( val_type, fmt.segment_type);
+#endif
   maxelts = 8;
   if (size == 'w')
     maxelts = 4;
@@ -1156,7 +1190,11 @@ print_command_parse_format (const char **expp, const char *cmdname,
       format_data fmt;
 
       exp++;
+#ifdef NVIDIA_CUDA_GDB
+      fmt = decode_format (&exp, last_format, 0, 0);
+#else
       fmt = decode_format (&exp, last_format, 0);
+#endif
       validate_format (fmt, cmdname);
       last_format = fmt.format;
 
@@ -1266,7 +1304,11 @@ output_command (const char *exp, int from_tty)
   if (exp && *exp == '/')
     {
       exp++;
+#ifdef NVIDIA_CUDA_GDB
+      fmt = decode_format (&exp, 0, 0, 0);
+#else
       fmt = decode_format (&exp, 0, 0);
+#endif
       validate_format (fmt, "output");
       format = fmt.format;
     }
@@ -1638,6 +1680,24 @@ info_address_command (const char *exp, int from_tty)
   printf_filtered (".\n");
 }
 
+#ifdef NVIDIA_CUDA_GDB
+static void
+data_address_info (const char *exp, int from_tty)
+{
+  struct value *val;
+  if (exp)
+    {
+      expression_up expr = parse_expression (exp);
+      val = evaluate_type (expr.get ());
+    }
+  else
+    val = access_value_history (0);
+  if (VALUE_LVAL (val) != lval_memory)
+    error(_("Value not in memory."));
+  fputs_filtered (paddress (get_type_arch (value_type (val)), value_address (val)), gdb_stdout);
+  printf_filtered ("\n");
+}
+#endif
 
 static void
 x_command (const char *exp, int from_tty)
@@ -1649,6 +1709,9 @@ x_command (const char *exp, int from_tty)
   fmt.size = last_size;
   fmt.count = 1;
   fmt.raw = 0;
+#ifdef NVIDIA_CUDA_GDB
+  fmt.segment_type = 0;
+#endif
 
   /* If there is no expression and no format, use the most recent
      count.  */
@@ -1659,7 +1722,11 @@ x_command (const char *exp, int from_tty)
     {
       const char *tmp = exp + 1;
 
+#ifdef NVIDIA_CUDA_GDB
+      fmt = decode_format (&tmp, last_format, last_size, 0);
+#else
       fmt = decode_format (&tmp, last_format, last_size);
+#endif
       exp = (char *) tmp;
     }
 
@@ -1686,6 +1753,18 @@ x_command (const char *exp, int from_tty)
       else
 	next_address = value_as_address (val);
 
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - memory segments */
+      struct type *type = value_type (val);
+      if (type->code () == TYPE_CODE_PTR)
+         type = TYPE_TARGET_TYPE(type);
+      if (TYPE_CUDA_ALL(type))
+        {
+	  fmt.segment_type = TYPE_INSTANCE_FLAGS(type) 
+		  	     & TYPE_INSTANCE_FLAG_CUDA_ALL;
+          last_segment_type = fmt.segment_type;
+        }
+#endif
       next_gdbarch = expr->gdbarch;
     }
 
@@ -1744,7 +1823,11 @@ display_command (const char *arg, int from_tty)
   if (*exp == '/')
     {
       exp++;
+#ifdef NVIDIA_CUDA_GDB
+      fmt = decode_format (&exp, 0, 0, 0);
+#else
       fmt = decode_format (&exp, 0, 0);
+#endif
       if (fmt.size && fmt.format == 0)
 	fmt.format = 'x';
       if (fmt.format == 'i' || fmt.format == 's')
@@ -1756,6 +1839,9 @@ display_command (const char *arg, int from_tty)
       fmt.size = 0;
       fmt.count = 0;
       fmt.raw = 0;
+#ifdef NVIDIA_CUDA_GDB
+      fmt.segment_type = 0;
+#endif
     }
 
   innermost_block_tracker tracker;
@@ -2682,6 +2768,71 @@ eval_command (const char *arg, int from_tty)
   execute_command (expanded.c_str (), from_tty);
 }
 
+#ifdef NVIDIA_CUDA_GDB
+static void
+map_command (const char *arg, int from_tty)
+{
+  char *exp = NULL;
+  const char *function = NULL;
+  struct value *val, *fval;
+  struct type *type;
+  struct value_print_options opts;
+  function = strstr (arg, " function ");
+  if (function == NULL)
+      error (_("Missing function argument"));
+  exp = savestring (arg, function - arg);
+  function += 10; /* strlen (" function ") */
+  expression_up expr = parse_expression (exp);
+  expression_up fexpr = parse_expression (function);
+  val = evaluate_expression (expr.get ());
+  type = (val != NULL) ? value_type (val) : NULL;
+  if (type &&
+      type->code () == TYPE_CODE_ARRAY)
+    {
+      unsigned int things_printed = 0;
+      struct type *elttype = TYPE_TARGET_TYPE (type);
+      unsigned eltlen = TYPE_LENGTH (check_typedef (elttype));
+      unsigned len = TYPE_LENGTH (type) / eltlen;
+      unsigned int i;
+      struct type *range_type = type->index_type ();
+      LONGEST lowerbound, upperbound;
+      get_discrete_bounds (range_type, &lowerbound, &upperbound);
+      annotate_array_section_begin (0, elttype);
+      get_user_print_options (&opts);
+      for (i = 0; i < len && things_printed < opts.print_max; i++)
+        {
+          int is_fortran =
+                (current_language->la_language == language_fortran);
+          struct value *ind = value_from_longest(builtin_type (get_type_arch(type))->builtin_int, is_fortran ? (i + 1) : i );
+	  struct value *subscript = value_subscript(val, value_as_long (ind));
+	  set_internalvar (lookup_internalvar ("value"),
+		           subscript);
+          fval = evaluate_expression (fexpr.get ());
+	  if (i != 0)
+	      printf_filtered (", ");
+	  annotate_value_begin (value_type (fval));
+	  print_formatted (fval, 0, &opts, gdb_stdout);
+	  annotate_value_end ();
+	}
+      annotate_array_section_end ();
+      if (i < len)
+        {
+          fprintf_filtered (gdb_stdout, "...");
+        }
+      printf_filtered ("\n");
+    }
+  else
+    {
+      set_internalvar (lookup_internalvar ("value"),
+		       val);
+      fval = evaluate_expression (fexpr.get ());
+      annotate_value_begin (value_type (fval));
+      print_formatted (fval, 0, &opts, gdb_stdout);
+      printf_filtered ("\n");
+      annotate_value_end ();
+    }
+}
+#endif
 void _initialize_printcmd ();
 void
 _initialize_printcmd ()
@@ -2695,6 +2846,10 @@ _initialize_printcmd ()
   add_info ("address", info_address_command,
 	    _("Describe where symbol SYM is stored.\n\
 Usage: info address SYM"));
+#ifdef NVIDIA_CUDA_GDB
+  add_info ("data-address", data_address_info,
+	    _("Describe where the data for expression EXPR is stored."));
+#endif
 
   add_info ("symbol", info_symbol_command, _("\
 Describe what symbol is at location ADDR.\n\
@@ -2869,6 +3024,12 @@ it.  Zero is equivalent to \"unlimited\"."),
 			    NULL,
 			    show_max_symbolic_offset,
 			    &setprintlist, &showprintlist);
+
+#ifdef NVIDIA_CUDA_GDB
+  add_com ("map", class_vars, map_command, _("\
+Maps values in collection EXP using function FUNCTION.\n      \
+map EXP function FUNCTION"));
+#endif
   add_setshow_boolean_cmd ("symbol-filename", no_class,
 			   &print_symbol_filename, _("\
 Set printing of source filename and line number with <SYMBOL>."), _("\

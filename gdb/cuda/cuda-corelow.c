@@ -1,0 +1,427 @@
+/*
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2015-2021 NVIDIA Corporation
+ * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 3 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include "defs.h"
+#include "cuda-corelow.h"
+
+#include "inferior.h"
+#include "target.h"
+#include "process-stratum-target.h"
+#include "gdbthread.h"
+#include "regcache.h"
+#include "completer.h"
+#include "readline/readline.h"
+
+#include "cuda-api.h"
+#include "cuda-tdep.h"
+#include "cuda-events.h"
+#include "cuda-state.h"
+#include "cuda-exceptions.h"
+#include "cuda-context.h"
+#include "cuda-iterator.h"
+#include "cuda-linux-nat.h"
+
+#include "../libcudacore/libcudacore.h"
+
+/* The CUDA core file target */
+
+static const target_info cuda_core_target_info = {
+  "cudacore",
+  N_("Local CUDA core dump file"),
+  N_("Use CUDA core file as a target.\n\
+Specify the filename to the core file.")
+};
+
+class cuda_core_target final : public process_stratum_target
+{
+public:
+  /* public data members */
+  static CudaCore *m_cuda_core;
+  /* public methods */
+  cuda_core_target () = delete;
+  cuda_core_target (const char *);
+  ~cuda_core_target () override = default;
+
+  /* Return a reference to this target's unique target_info
+     object.  */
+  const target_info &info () const override
+  { return cuda_core_target_info; }
+
+  void close () override;
+  void detach (inferior *inf, int from_tty) override;
+  void fetch_registers (struct regcache *, int) override;
+ 
+  bool thread_alive (ptid_t ptid) override { return true; }
+
+  std::string pid_to_str (ptid_t) override;
+  
+  bool has_memory () override { return true; }
+  bool has_stack () override { return true; }
+  bool has_registers () override { return true; }
+  bool has_execution (inferior *inf) override { return false; }
+};
+
+CudaCore *cuda_core_target::m_cuda_core = nullptr;
+
+cuda_core_target::cuda_core_target (const char *filename)
+: process_stratum_target ()
+{
+  cuda_core_load_api (filename);
+}
+
+std::string
+cuda_core_target::pid_to_str (ptid_t ptid)
+{
+  struct inferior *inf;
+  int pid;
+
+  /* Try the LWPID field first.  */
+  pid = ptid.lwp ();
+  if (pid != 0)
+    return normal_pid_to_str (ptid_t (pid));
+
+  /* Otherwise, this isn't a "threaded" core -- use the PID field, but
+   * only if it isn't a fake PID.  */
+  inf = find_inferior_ptid (this, ptid);
+  if (inf != NULL && !inf->fake_pid_p)
+    return normal_pid_to_str (ptid);
+
+  /* No luck.  We simply don't have a valid PID to print.  */
+  return "<main task>";
+}
+
+void
+cuda_core_target::fetch_registers (struct regcache *regcache, int regno)
+{
+  cuda_core_fetch_registers (regcache, regno);
+}
+
+void
+cuda_core_fetch_registers (struct regcache *regcache, int regno)
+{
+  cuda_coords_t c;
+  unsigned reg_no, reg_value, num_regs;
+  uint64_t pc;
+  struct gdbarch *gdbarch = cuda_get_gdbarch();
+  uint32_t pc_regnum = gdbarch ? gdbarch_pc_regnum (gdbarch): 256;
+
+  if (cuda_coords_get_current (&c))
+    return;
+
+  num_regs = device_get_num_registers (c.dev);
+  for (reg_no = 0; reg_no < num_regs; ++reg_no)
+    {
+      reg_value = lane_get_register (c.dev, c.sm, c.wp, c.ln, reg_no);
+      regcache->raw_supply (reg_no, &reg_value);
+    }
+
+  /* Save PC as well */
+  pc = lane_get_virtual_pc (c.dev, c.sm, c.wp, c.ln);
+  regcache->raw_supply (pc_regnum, &pc);
+
+  if (gdbarch)
+    {
+      int i;
+
+      num_regs = device_get_num_uregisters (c.dev);
+      for (reg_no = 0; reg_no < num_regs; ++reg_no)
+	{
+	  reg_t reg = CUDA_REG_CLASS_AND_REGNO (REG_CLASS_UREG_FULL, reg_no);
+	  uint32_t regnum = cuda_reg_to_regnum (gdbarch, reg);
+
+	  reg_value = warp_get_uregister (c.dev, c.sm, c.wp, reg_no);
+	  regcache->raw_supply (regnum, &reg_value);
+	}
+
+      num_regs = device_get_num_upredicates (c.dev);
+      for (reg_no = 0; reg_no < num_regs; ++reg_no)
+	{
+	  reg_t reg = CUDA_REG_CLASS_AND_REGNO (REG_CLASS_UREG_PRED, reg_no);
+	  uint32_t regnum = cuda_reg_to_regnum (gdbarch, reg);
+
+	  reg_value = warp_get_upredicate (c.dev, c.sm, c.wp, reg_no);
+	  regcache->raw_supply (regnum, &reg_value);
+	}
+
+      /* Mark all registers not found in the core as unavailable.  */
+      for (i = 0; i < gdbarch_num_regs (gdbarch); i++)
+	if (regcache->get_register_status (i) == REG_UNKNOWN)
+	  regcache->raw_supply (i, NULL);
+    }
+}
+
+#define CUDA_CORE_PID 966617
+
+static void
+cuda_core_register_tid (uint32_t tid)
+{
+  if (inferior_ptid != null_ptid)
+    return;
+
+  ptid_t ptid (CUDA_CORE_PID, tid, tid);
+  struct thread_info *tp = add_thread (current_inferior ()->process_target (), ptid);
+  switch_to_thread_no_regs (tp);
+}
+
+/*
+ * This is called by both the cuda_core_target and the core_target.
+ * For the latter, we don't want to install the entire cuda_core_target.
+ */
+void
+cuda_core_load_api (const char *filename)
+{
+  CUDBGAPI api;
+
+  printf_unfiltered (_("Opening GPU coredump: %s\n"), filename);
+
+  gdb_assert (cuda_core_target::m_cuda_core == nullptr);
+
+  cuda_core_target::m_cuda_core = cuCoreOpenByName (filename);
+  if (cuda_core_target::m_cuda_core == nullptr)
+    error ("Failed to read core file: %s", cuCoreErrorMsg());
+  api = cuCoreGetApi (cuda_core_target::m_cuda_core);
+  if (api == NULL)
+    error ("Failed to get debugger APIs: %s", cuCoreErrorMsg());
+
+  cuda_api_set_api (api);
+
+  /* Initialize the APIs */
+  cuda_initialize ();
+  if (!cuda_initialized)
+    error ("Failed to initialize CUDA Core debugger API!");
+}
+
+void
+cuda_core_free (void)
+{
+  if (cuda_core_target::m_cuda_core == nullptr)
+    return;
+
+  cuda_cleanup ();
+  cuda_gdb_session_destroy ();
+  cuCoreFree(cuda_core_target::m_cuda_core);
+  cuda_core_target::m_cuda_core = nullptr;
+}
+
+void
+cuda_core_initialize_events_exceptions (void)
+{
+  CUDBGEvent event;
+
+  /* Flush registers cache */
+  registers_changed ();
+
+  /* Create session directory */
+  if (cuda_gdb_session_create ())
+    error ("Failed to create session directory");
+
+  /* Drain the event queue */
+  while (true) {
+    cuda_api_get_next_sync_event (&event);
+
+    if (event.kind == CUDBG_EVENT_INVALID)
+      break;
+
+    if (event.kind == CUDBG_EVENT_CTX_CREATE)
+      cuda_core_register_tid (event.cases.contextCreate.tid);
+
+    cuda_process_event (&event);
+  }
+
+  /* Figure out, where exception happened */
+  if (cuda_exception_hit_p (cuda_exception))
+    {
+      uint64_t kernelId;
+      cuda_coords_t c = cuda_exception_get_coords (cuda_exception);
+
+      cuda_coords_set_current (&c);
+
+      /* Set the current coordinates context to current */
+      if (!cuda_coords_get_current_logical (&kernelId, NULL, NULL, NULL))
+        {
+          kernel_t kernel = kernels_find_kernel_by_kernel_id (kernelId);
+          context_t ctx = kernel ? kernel_get_context (kernel) : get_current_context ();
+          if (ctx != NULL)
+             set_current_context (ctx);
+        }
+
+      cuda_exception_print_message (cuda_exception);
+    }
+  else
+    {
+      /* No exception detected, check for fatal signals (SIGTRAP) */
+      cuda_coords_t filter = CUDA_WILDCARD_COORDS;
+      cuda_coords_t c = CUDA_INVALID_COORDS;
+      uint64_t kernelId;
+      cuda_iterator itr = cuda_iterator_create (CUDA_ITERATOR_TYPE_THREADS, &filter,
+                                                (cuda_select_t)(CUDA_SELECT_VALID | CUDA_SELECT_TRAP |
+                                                                CUDA_SELECT_CURRENT_CLOCK |
+                                                                CUDA_SELECT_SNGL));
+      cuda_iterator_start (itr);
+      if (!cuda_iterator_end (itr))
+        {
+          /* This is the first lane in the warp at a trap */
+          c = cuda_iterator_get_current (itr);
+          cuda_coords_set_current (&c);
+
+          /* Set the current coordinates context to current */
+          if (!cuda_coords_get_current_logical (&kernelId, NULL, NULL, NULL))
+            {
+              kernel_t kernel = kernels_find_kernel_by_kernel_id (kernelId);
+              context_t ctx = kernel ? kernel_get_context (kernel) : get_current_context ();
+              if (ctx != NULL)
+                set_current_context (ctx);
+            }
+          cuda_set_signo (GDB_SIGNAL_TRAP);
+          printf_filtered (_("Program terminated with signal %s, %s.\n"),
+                          gdb_signal_to_name (GDB_SIGNAL_TRAP), gdb_signal_to_string (GDB_SIGNAL_TRAP));
+        }
+      cuda_iterator_destroy (itr);
+    }
+
+  /* Fetch latest information about coredump grids */
+  kernels_update_args ();
+}
+
+static void
+cuda_find_first_valid_lane (void)
+{
+  cuda_iterator itr;
+  cuda_coords_t c;
+  itr = cuda_iterator_create (CUDA_ITERATOR_TYPE_THREADS, NULL,
+                              (cuda_select_t) (CUDA_SELECT_VALID | CUDA_SELECT_SNGL));
+  cuda_iterator_start (itr);
+  c  = cuda_iterator_get_current (itr);
+  cuda_iterator_destroy (itr);
+  if (!c.valid)
+    {
+      cuda_coords_update_current ();
+      return;
+    }
+  cuda_coords_set_current (&c);
+}
+
+static void
+cuda_core_target_open (const char *filename, int from_tty)
+{
+  struct inferior *inf;
+  gdbarch *old_gdbarch = nullptr;
+
+  target_preopen (from_tty);
+
+  if (filename == NULL)
+    error (_("No core file specified."));
+
+  gdb::unique_xmalloc_ptr<char> expanded_filename (tilde_expand (filename));
+
+  cuda_core_target *target = new cuda_core_target (expanded_filename.get ());
+
+  /* Own the target until it is sucessfully pushed. */
+  target_ops_up target_holder (target);
+
+  try
+    {
+      /* Push the target */
+      push_target (std::move (target_holder));
+
+      switch_to_no_thread ();      
+
+      /* flush register cache from a previous debug session. */
+      registers_changed ();
+
+      /* A CUDA corefile does not contain host process pid information.
+       * We need to fake it here since we are only examining CUDA state.
+       * Add the fake PID for the host thread. */
+      inf = current_inferior ();
+      inferior_appeared (inf, CUDA_CORE_PID);
+      inf->fake_pid_p = true;
+      thread_info *thread = add_thread_silent (target, ptid_t (CUDA_CORE_PID));
+      switch_to_thread_no_regs (thread);
+
+      /* Set debuggers architecture to CUDA */
+      old_gdbarch = target_gdbarch ();
+      set_target_gdbarch (cuda_get_gdbarch ());
+
+      cuda_core_initialize_events_exceptions ();
+
+      post_create_inferior (target, from_tty);
+      
+      /* If no exception found try to set focus to first valid thread */
+      if (!cuda_focus_is_device())
+        {
+          warning ("No exception was found on the device");
+          cuda_find_first_valid_lane ();
+	  /* If we still are not focused on the device, give up. */
+	  if (!cuda_focus_is_device ())
+	    throw_error (GENERIC_ERROR, "No focus could be set on device");
+        }
+      
+      /* Always print cuda focus */
+      cuda_print_message_focus (false);
+
+      switch_to_thread_keep_cuda_focus (thread);
+
+      /* Fetch all registers from core file.  */
+      target_fetch_registers (get_current_regcache (), -1);
+
+      /* Now, set up the frame cache, and print the top of stack.  */
+      reinit_frame_cache ();
+      print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC, 1);
+    }
+  catch (const gdb_exception_error &e)
+    {
+      if (e.reason < 0)
+	{
+	  pop_all_targets_at_and_above (process_stratum);
+	  
+	  if (old_gdbarch != nullptr)
+	    set_target_gdbarch (old_gdbarch);
+
+	  registers_changed ();
+	  reinit_frame_cache ();
+	  cuda_cleanup ();
+
+	  error (_("Could not open CUDA core file: %s"), e.what ());
+	}
+    }
+}
+
+void
+cuda_core_target::close ()
+{
+  switch_to_no_thread ();
+  exit_inferior_silent (current_inferior ());
+  cuda_core_free ();
+}
+
+void
+cuda_core_target::detach (inferior *inf, int from_tty)
+{
+  unpush_target (this);
+  registers_changed ();
+  reinit_frame_cache ();
+  
+  if (from_tty)
+    printf_filtered (_("No core file now.\n"));
+}
+
+void _initialize_cuda_corelow (void);
+void
+_initialize_cuda_corelow (void)
+{
+  add_target (cuda_core_target_info, cuda_core_target_open, filename_completer);
+}

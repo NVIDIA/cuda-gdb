@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 
 #include "defs.h"
 #include <ctype.h>
@@ -6357,10 +6361,18 @@ ada_value_tag (struct value *val)
    saved at VALADDR, if it is non-null, or is at memory address
    ADDRESS.  */
 
+#ifdef NVIDIA_CUDA_GDB
+static struct value *
+value_tag_from_contents_and_address (struct type *type, 
+				     const gdb_byte *valaddr, 
+				     unsigned length,
+                                     CORE_ADDR address) 
+#else
 static struct value *
 value_tag_from_contents_and_address (struct type *type,
 				     const gdb_byte *valaddr,
                                      CORE_ADDR address)
+#endif
 {
   int tag_byte_offset;
   struct type *tag_type;
@@ -6373,7 +6385,11 @@ value_tag_from_contents_and_address (struct type *type,
 				  : valaddr + tag_byte_offset);
       CORE_ADDR address1 = (address == 0) ? 0 : address + tag_byte_offset;
 
+#ifdef NVIDIA_CUDA_GDB
+      return value_from_contents_and_address (tag_type, valaddr1, TYPE_LENGTH (tag_type), address1);
+#else
       return value_from_contents_and_address (tag_type, valaddr1, address1);
+#endif
     }
   return NULL;
 }
@@ -6465,7 +6481,11 @@ ada_tag_value_at_base_address (struct value *obj)
     offset_to_top = -offset_to_top;
 
   base_address = value_address (obj) + offset_to_top;
+#ifdef NVIDIA_CUDA_GDB
+  tag = value_tag_from_contents_and_address (obj_type, NULL, TYPE_LENGTH (obj_type), base_address);
+#else
   tag = value_tag_from_contents_and_address (obj_type, NULL, base_address);
+#endif
 
   /* Make sure that we have a proper tag at the new address.
      Otherwise, offset_to_top is bogus (which can happen when
@@ -6479,7 +6499,11 @@ ada_tag_value_at_base_address (struct value *obj)
   if (!obj_type)
     return obj;
 
+#ifdef NVIDIA_CUDA_GDB
+  return value_from_contents_and_address (obj_type, NULL, TYPE_LENGTH (obj_type), base_address);
+#else
   return value_from_contents_and_address (obj_type, NULL, base_address);
+#endif
 }
 
 /* Return the "ada__tags__type_specific_data" type.  */
@@ -8134,7 +8158,12 @@ to_record_with_fixed_variant_part (struct type *type, const gdb_byte *valaddr,
 
   if (dval0 == NULL)
     {
+#ifdef NVIDIA_CUDA_GDB
+      dval = value_from_contents_and_address (type, valaddr, TYPE_LENGTH (type),
+					      address);
+#else
       dval = value_from_contents_and_address (type, valaddr, address);
+#endif
       type = value_type (dval);
     }
   else
@@ -8535,16 +8564,31 @@ ada_to_fixed_type_1 (struct type *type, const gdb_byte *valaddr,
 
         if (check_tag && address != 0 && ada_is_tagged_type (static_type, 0))
           {
+#ifdef NVIDIA_CUDA_GDB
+	    struct value *tag = 
+	      value_tag_from_contents_and_address (fixed_record_type, valaddr,
+						   TYPE_LENGTH (fixed_record_type),
+						   address); 
+#else
 	    struct value *tag =
 	      value_tag_from_contents_and_address
 	      (fixed_record_type,
 	       valaddr,
 	       address);
+#endif
 	    struct type *real_type = type_from_tag (tag);
+#ifdef NVIDIA_CUDA_GDB
+	    struct value *obj = 
+	      value_from_contents_and_address (fixed_record_type, 
+					       valaddr, 
+					       TYPE_LENGTH (fixed_record_type),
+					       address); 
+#else
 	    struct value *obj =
 	      value_from_contents_and_address (fixed_record_type,
 					       valaddr,
 					       address);
+#endif
             fixed_record_type = value_type (obj);
             if (real_type != NULL)
               return to_fixed_record_type
@@ -8807,7 +8851,11 @@ ada_to_fixed_value_create (struct type *type0, CORE_ADDR address,
       return value_from_contents (type, value_contents (val0));
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  return value_from_contents_and_address (type, 0, TYPE_LENGTH (type), address);
+#else
   return value_from_contents_and_address (type, 0, address);
+#endif
 }
 
 /* A value representing VAL, but with a standard (static-sized) type

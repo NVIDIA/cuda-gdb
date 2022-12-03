@@ -1,5 +1,8 @@
 /* Support for printing Fortran types for GDB, the GNU debugger.
 
+   Modified by Arm.
+
+   Copyright (C) 1995-2021 Arm Limited (or its affiliates). All rights reserved.
    Copyright (C) 1986-2020 Free Software Foundation, Inc.
 
    Contributed by Motorola.  Adapted from the C version by Farooq Butt
@@ -19,6 +22,10 @@
 
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
 
 #include "defs.h"
 #include "gdb_obstack.h"
@@ -56,6 +63,15 @@ f_print_typedef (struct type *type, struct symbol *new_symbol,
   f_print_type (type, "", stream, 0, 0, &type_print_raw_options);
 }
 
+#ifdef NVIDIA_CUDA_GDB
+static int
+f_has_valid_type_name (struct type *type)
+{
+  return (type->name ()) &&
+        ((type->code () != TYPE_CODE_ARRAY && type->code() != TYPE_CODE_STRING) ||
+        strchr( type->name (), '(') != NULL);
+}
+#endif
 /* LEVEL is the depth to indent lines by.  */
 
 void
@@ -65,6 +81,9 @@ f_print_type (struct type *type, const char *varstring, struct ui_file *stream,
   enum type_code code;
 
   f_type_print_base (type, stream, show, level);
+#ifdef NVIDIA_CUDA_GDB
+  show &= f_has_valid_type_name (type);
+#endif
   code = type->code ();
   if ((varstring != NULL && *varstring != '\0')
       /* Need a space if going to print stars or brackets; but not if we
@@ -229,6 +248,13 @@ f_type_print_varspec_suffix (struct type *type, struct ui_file *stream,
 	    {
 	      LONGEST upper_bound = f77_get_upperbound (type);
 
+#ifdef NVIDIA_CUDA_GDB
+	      /* CUDA: Handle the case where we have a lower bound,
+	       * but no upper bound. */
+	      if (lower_bound > upper_bound)
+		fprintf_filtered (stream, "*");
+	      else
+#endif
               fputs_filtered (plongest (upper_bound), stream);
 	    }
 	}
@@ -246,6 +272,11 @@ f_type_print_varspec_suffix (struct type *type, struct ui_file *stream,
       break;
 
     case TYPE_CODE_PTR:
+#ifdef NVIDIA_CUDA_GDB
+      f_type_print_varspec_suffix (TYPE_TARGET_TYPE (type), stream, 0, 1, 0,
+                                   arrayprint_recurse_level, false);
+      break;
+#endif
     case TYPE_CODE_REF:
       f_type_print_varspec_suffix (TYPE_TARGET_TYPE (type), stream, 0, 1, 0,
 				   arrayprint_recurse_level, false);
@@ -353,6 +384,11 @@ f_type_print_base (struct type *type, struct ui_file *stream, int show,
       break;
 
     case TYPE_CODE_ARRAY:
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA: bugfix for allocated array via a pointer */
+      if (TYPE_IS_ALLOCATABLE (type))
+	fprintfi_filtered (level, stream, "pointer, ");
+#endif
       f_type_print_base (TYPE_TARGET_TYPE (type), stream, show, level);
       break;
     case TYPE_CODE_FUNC:
@@ -363,7 +399,11 @@ f_type_print_base (struct type *type, struct ui_file *stream, int show,
       break;
 
     case TYPE_CODE_PTR:
+#ifdef NVIDIA_CUDA_GDB
+      fprintfi_filtered (level, stream, "pointer, ");
+#else
       fprintfi_filtered (level, stream, "PTR TO -> ( ");
+#endif
       f_type_print_base (TYPE_TARGET_TYPE (type), stream, show, 0);
       break;
 

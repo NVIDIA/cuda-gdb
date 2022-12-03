@@ -469,6 +469,9 @@ filename_is_in_auto_load_safe_path_vec (const char *filename,
    even if the caller would quietly skip non-existing file in unsafe
    directory.  */
 
+#ifdef NVIDIA_CUDA_GDB
+ATTRIBUTE_PRINTF(2, 3)
+#endif
 int
 file_is_auto_load_safe (const char *filename, const char *debug_fmt, ...)
 {

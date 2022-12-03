@@ -16,6 +16,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "server.h"
 #include "linux-low.h"
 #include "nat/linux-osdata.h"
@@ -51,6 +55,12 @@
 #include "gdbsupport/environ.h"
 #include "gdbsupport/gdb-sigmask.h"
 #include "gdbsupport/scoped_restore.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-notifications.h"
+#if __ANDROID__ && __aarch64__
+#include <linux/auxvec.h>
+#endif
+#endif
 #ifndef ELFMAG0
 /* Don't include <linux/elf.h> here.  If it got included by gdb_proc_service.h
    then ELFMAG0 will have been defined.  If it didn't get included by
@@ -1427,6 +1437,20 @@ get_detach_signal (struct thread_info *thread)
       return 0;
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /*SIGSEGVs that could be explained by breakpoint
+   need not to be raised again on detach. */
+  if (!lp->status_pending_p && WSTOPSIG (status) == SIGSEGV
+      && lp->breakpoint_explains_trap)
+  {
+      if (debug_threads)
+	fprintf (stderr,
+		 "GPS: lwp %s had stopped due to breakpoint "
+		 "status: no pending signal\n",
+		 target_pid_to_str (ptid_of (thread)));
+	  return 0;
+  }
+#endif
   signo = gdb_signal_from_host (WSTOPSIG (status));
 
   if (cs.program_signals_p && !cs.program_signals[signo])
@@ -2597,8 +2621,16 @@ linux_process_target::wait_for_event_filtered (ptid_t wait_ptid,
 	   without reporting an exit (so we'd hang if we waited for it
 	   explicitly in that case).  The exec event is reported to
 	   the TGID pid.  */
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - notifications */
+      cuda_notification_accept ();
+#endif
       errno = 0;
       ret = my_waitpid (-1, wstatp, options | WNOHANG);
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - notifications */
+      cuda_notification_block ();
+#endif
 
       if (debug_threads)
 	debug_printf ("LWFE: waitpid(-1, ...) returned %d, %s\n",
@@ -2683,7 +2715,15 @@ linux_process_target::wait_for_event_filtered (ptid_t wait_ptid,
       if (debug_threads)
 	debug_printf ("sigsuspend'ing\n");
 
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - notifications */
+      cuda_notification_accept ();
+#endif
       sigsuspend (&prev_mask);
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - notifications */
+      cuda_notification_block ();
+#endif
       gdb_sigmask (SIG_SETMASK, &prev_mask, NULL);
       goto retry;
     }
@@ -2692,6 +2732,10 @@ linux_process_target::wait_for_event_filtered (ptid_t wait_ptid,
 
   current_thread = event_thread;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - notifications */
+  cuda_notification_block ();
+#endif
   return lwpid_of (event_thread);
 }
 
@@ -3129,6 +3173,9 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
 		|| WSTOPSIG (w) == SIGSEGV)
 	       && low_breakpoint_at (event_child->stop_pc))));
 
+#ifdef NVIDIA_CUDA_GDB
+  event_child->breakpoint_explains_trap = 0;
+#endif
   if (maybe_internal_trap)
     {
       /* Handle anything that requires bookkeeping before deciding to
@@ -3158,6 +3205,9 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
 	{
 	  if (debug_threads)
 	    debug_printf ("Hit a gdbserver breakpoint.\n");
+#ifdef NVIDIA_CUDA_GDB
+	  event_child->breakpoint_explains_trap = 1;
+#endif
 	}
     }
   else
@@ -3311,6 +3361,10 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
      breakpoint.  */
   if (WIFSTOPPED (w)
       && current_thread->last_resume_kind != resume_step
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - do we have an urgent message from the backend */
+      && WSTOPSIG (w) != SIGURG
+#endif
       && (
 #if defined (USE_THREAD_DB) && !defined (__ANDROID__)
 	  (current_process ()->priv->thread_db != NULL
@@ -5120,11 +5174,16 @@ regsets_fetch_inferior_registers (struct regsets_info *regsets_info,
       else
 	data = buf;
 
+/* CUDA */
+#ifdef __ANDROID__
+      res = ptrace (regset->get_request, pid, (void *)(long)nt_type, (void *)data);
+#else
 #ifndef __sparc__
       res = ptrace (regset->get_request, pid,
 		    (PTRACE_TYPE_ARG3) (long) nt_type, data);
 #else
       res = ptrace (regset->get_request, pid, data, nt_type);
+#endif
 #endif
       if (res < 0)
 	{
@@ -5204,11 +5263,15 @@ regsets_store_inferior_registers (struct regsets_info *regsets_info,
       else
 	data = buf;
 
+#ifdef __ANDROID__
+      res = ptrace (regset->get_request, pid, (void *)(long)nt_type, (void *)data);
+#else
 #ifndef __sparc__
       res = ptrace (regset->get_request, pid,
 		    (PTRACE_TYPE_ARG3) (long) nt_type, data);
 #else
       res = ptrace (regset->get_request, pid, data, nt_type);
+#endif
 #endif
 
       if (res == 0)
@@ -5217,11 +5280,16 @@ regsets_store_inferior_registers (struct regsets_info *regsets_info,
 	  regset->fill_function (regcache, buf);
 
 	  /* Only now do we write the register set.  */
+/* CUDA */
+#ifdef __ANDROID__
+      res = ptrace (regset->get_request, pid, (void *)(long)nt_type, (void *)data);
+#else
 #ifndef __sparc__
 	  res = ptrace (regset->set_request, pid,
 			(PTRACE_TYPE_ARG3) (long) nt_type, data);
 #else
 	  res = ptrace (regset->set_request, pid, data, nt_type);
+#endif
 #endif
 	}
 
@@ -6772,6 +6840,9 @@ linux_process_target::qxfer_libraries_svr4 (const char *annex,
   CORE_ADDR lm_addr = 0, lm_prev = 0;
   CORE_ADDR l_name, l_addr, l_ld, l_next, l_prev;
   int header_done = 0;
+#if defined(NVIDIA_CUDA_GDB) && defined(__ANDROID__)
+  int first_entry_skipped = 0;
+#endif
 
   if (writebuf != NULL)
     return -2;
@@ -6880,7 +6951,15 @@ linux_process_target::qxfer_libraries_svr4 (const char *annex,
 	  libname[0] = '\0';
 	  linux_read_memory (l_name, libname, sizeof (libname) - 1);
 	  libname[sizeof (libname) - 1] = '\0';
+#if defined(NVIDIA_CUDA_GDB) && defined(__ANDROID__)
+          /* On Android the first entry is always an executable itself,
+             which is skipped by gdb anyway */
+          if (libname[0] != '\0' && !first_entry_skipped)
+            first_entry_skipped = 1;
+          else if (libname[0] != '\0')
+#else
 	  if (libname[0] != '\0')
+#endif
 	    {
 	      if (!header_done)
 		{

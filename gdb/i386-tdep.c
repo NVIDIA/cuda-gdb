@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "opcode/i386.h"
 #include "arch-utils.h"
@@ -479,8 +483,13 @@ i386_pseudo_register_name (struct gdbarch *gdbarch, int regnum)
 /* Convert a dbx register number REG to the appropriate register
    number used by GDB.  */
 
+#ifdef NVIDIA_CUDA_GDB
+static int
+i386_dbx_reg_to_regnum (struct gdbarch *gdbarch, reg_t reg)
+#else
 static int
 i386_dbx_reg_to_regnum (struct gdbarch *gdbarch, int reg)
+#endif
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
@@ -526,8 +535,13 @@ i386_dbx_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 /* Convert SVR4 DWARF register number REG to the appropriate register number
    used by GDB.  */
 
+#ifdef NVIDIA_CUDA_GDB
+static int
+i386_svr4_dwarf_reg_to_regnum (struct gdbarch *gdbarch, reg_t reg)
+#else
 static int
 i386_svr4_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
+#endif
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
@@ -571,8 +585,13 @@ i386_svr4_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 /* Wrapper on i386_svr4_dwarf_reg_to_regnum to return
    num_regs + num_pseudo_regs for other debug formats.  */
 
+#ifdef NVIDIA_CUDA_GDB
+int
+i386_svr4_reg_to_regnum (struct gdbarch *gdbarch, reg_t reg)
+#else
 int
 i386_svr4_reg_to_regnum (struct gdbarch *gdbarch, int reg)
+#endif
 {
   int regnum = i386_svr4_dwarf_reg_to_regnum (gdbarch, reg);
 

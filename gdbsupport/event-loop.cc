@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "gdbsupport/common-defs.h"
 #include "gdbsupport/event-loop.h"
 
@@ -33,6 +37,9 @@
 #include <sys/types.h>
 #include "gdbsupport/gdb_sys_time.h"
 #include "gdbsupport/gdb_select.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-notifications.h"
+#endif
 
 /* Tell create_file_handler what events we are interested in.
    This is used by the select version of the event loop.  */
@@ -212,8 +219,19 @@ gdb_do_one_event (void)
      sources left.  This will make the event loop stop, and the
      application exit.  */
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - notifications */
+  cuda_notification_accept ();
+  if (gdb_wait_for_event (1) < 0) 
+    {
+      cuda_notification_block ();
+      return -1; 
+    }
+  cuda_notification_block ();
+#else
   if (gdb_wait_for_event (1) < 0)
     return -1;
+#endif
 
   /* If gdb_wait_for_event has returned 1, it means that one event has
      been handled.  We break out of the loop.  */

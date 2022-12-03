@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "symtab.h"
 #include "frame.h"
@@ -2543,10 +2547,13 @@ parse_linespec (linespec_parser *parser, const char *arg,
   /* Objective-C shortcut.  */
   if (parser->completion_tracker == NULL)
     {
+/* CUDA - Disable Objective-C selectors lookup*/
+#ifndef NVIDIA_CUDA_GDB
       std::vector<symtab_and_line> values
 	= decode_objc (PARSER_STATE (parser), PARSER_RESULT (parser), arg);
       if (!values.empty ())
 	return values;
+#endif
     }
   else
     {
@@ -3371,6 +3378,8 @@ linespec_expression_to_pc (const char **exp_ptr)
 
 
 
+/* CUDA - Disable Objective-C selectors lookup*/
+#ifndef NVIDIA_CUDA_GDB
 /* Here's where we recognise an Objective-C Selector.  An Objective C
    selector may be implemented by more than one class, therefore it
    may represent more than one method/function.  This gives us a
@@ -3443,6 +3452,7 @@ decode_objc (struct linespec_state *self, linespec_p ls, const char *arg)
 
   return values;
 }
+#endif
 
 namespace {
 

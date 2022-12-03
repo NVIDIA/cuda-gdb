@@ -1,3 +1,10 @@
+2020-11-19  Andrew Burgess  <andrew.burgess@embecosm.com>
+
+	* gdb.texinfo (Debugging Output): Document 'set/show debug
+	fortran-array-slicing'.
+	(Special Fortran Commands): Document 'set/show fortran
+	repack-array-slices'.
+
 2020-08-25  Shahab Vahedi  <shahab@synopsys.com>
 
 	* gdb.texinfo (Synopsys ARC): Document LP_START, LP_END and BTA.

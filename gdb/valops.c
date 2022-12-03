@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -41,6 +45,9 @@
 #include "extension.h"
 #include "gdbtypes.h"
 #include "gdbsupport/byte-vector.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-textures.h"
+#endif
 
 /* Local functions.  */
 
@@ -391,7 +398,12 @@ value_cast (struct type *type, struct value *arg2)
       if (element_length > 0 && type->bounds ()->high.kind () == PROP_UNDEFINED)
 	{
 	  struct type *range_type = type->index_type ();
+#ifdef NVIDIA_CUDA_GDB
+	  struct type *array_type;
+	  int val_length = value_length (arg2);
+#else
 	  int val_length = TYPE_LENGTH (type2);
+#endif
 	  LONGEST low_bound, high_bound, new_length;
 
 	  if (get_discrete_bounds (range_type, &low_bound, &high_bound) < 0)
@@ -406,10 +418,17 @@ value_cast (struct type *type, struct value *arg2)
 						 TYPE_TARGET_TYPE (range_type),
 						 low_bound,
 						 new_length + low_bound - 1);
+#ifdef NVIDIA_CUDA_GDB
+	  array_type = create_array_type ((struct type *) NULL, element_type, range_type);
+	  if (TYPE_INSTANCE_FLAGS (type))
+	      array_type = make_type_with_address_space (type, TYPE_INSTANCE_FLAGS (type));
+	  deprecated_set_value_type (arg2, array_type);
+#else
 	  deprecated_set_value_type (arg2, 
 				     create_array_type (NULL,
 							element_type, 
 							range_type));
+#endif
 	  return arg2;
 	}
     }
@@ -896,7 +915,11 @@ get_value_at (struct type *type, CORE_ADDR addr, int lazy)
   if (check_typedef (type)->code () == TYPE_CODE_VOID)
     error (_("Attempt to dereference a generic pointer."));
 
+#ifdef NVIDIA_CUDA_GDB
+  val = value_from_contents_and_address (type, NULL, 0, addr);
+#else
   val = value_from_contents_and_address (type, NULL, addr);
+#endif
 
   if (!lazy)
     value_fetch_lazy (val);
@@ -936,10 +959,17 @@ value_at_lazy (struct type *type, CORE_ADDR addr)
   return get_value_at (type, addr, 1);
 }
 
+#ifdef NVIDIA_CUDA_GDB
+void
+read_value_memory_1 (struct value *val, LONGEST bit_offset,
+		     int stack, CORE_ADDR memaddr,
+		     gdb_byte *buffer, size_t length)
+#else
 void
 read_value_memory (struct value *val, LONGEST bit_offset,
 		   int stack, CORE_ADDR memaddr,
 		   gdb_byte *buffer, size_t length)
+#endif
 {
   ULONGEST xfered_total = 0;
   struct gdbarch *arch = get_value_arch (val);
@@ -976,6 +1006,19 @@ read_value_memory (struct value *val, LONGEST bit_offset,
     }
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* First try to write the memory as CUDA, if that fails
+   fall back to the original implementation of read_value_memory (). */
+void
+read_value_memory (struct value *val, LONGEST bit_offset,
+		   int stack, CORE_ADDR memaddr,
+		   gdb_byte *buffer, size_t length)
+{
+  struct type *type = value_type (val);
+  if (cuda_read_memory (memaddr, val, type, length))
+    read_value_memory_1 (val, bit_offset, stack, memaddr, buffer, length);
+}
+#endif
 /* Store the contents of FROMVAL into the location of TOVAL.
    Return a new value with the location of TOVAL and contents of FROMVAL.  */
 
@@ -1083,7 +1126,14 @@ value_assign (struct value *toval, struct value *fromval)
 	    dest_buffer = value_contents (fromval);
 	  }
 
+#ifdef NVIDIA_CUDA_GDB
+        /* CUDA - memory segments */
+        cuda_write_memory (changed_addr, dest_buffer, type);
+	gdb::observers::memory_changed.notify (current_inferior (),
+					       changed_addr, changed_len, dest_buffer);
+#else
 	write_memory_with_notification (changed_addr, dest_buffer, changed_len);
+#endif
       }
       break;
 
@@ -1159,10 +1209,17 @@ value_assign (struct value *toval, struct value *fromval)
 	      }
 	    else
 	      {
+#ifdef NVIDIA_CUDA_GDB
+		put_frame_register_bytes (frame, value_reg,
+					  value_offset (toval),
+					  std::min (value_length (toval), value_length (fromval)),
+					  value_contents (fromval));
+#else
 		put_frame_register_bytes (frame, value_reg,
 					  value_offset (toval),
 					  TYPE_LENGTH (type),
 					  value_contents (fromval));
+#endif
 	      }
 	  }
 
@@ -1242,8 +1299,13 @@ value_assign (struct value *toval, struct value *fromval)
      implies the returned value is not lazy, even if TOVAL was.  */
   val = value_copy (toval);
   set_value_lazy (val, 0);
+#ifdef NVIDIA_CUDA_GDB
+  memcpy (value_contents_raw (val), value_contents (fromval),
+	  std::min (value_length (val), value_length (fromval)));
+#else
   memcpy (value_contents_raw (val), value_contents (fromval),
 	  TYPE_LENGTH (type));
+#endif
 
   /* We copy over the enclosing type and pointed-to offset from FROMVAL
      in the case of pointer types.  For object types, the enclosing type
@@ -1271,13 +1333,22 @@ value_repeat (struct value *arg1, int count)
     error (_("Invalid number %d of repetitions."), count);
 
   val = allocate_repeat_value (value_enclosing_type (arg1), count);
+#ifdef NVIDIA_CUDA_GDB
+  set_value_repeated (val, 1);
+#endif
 
   VALUE_LVAL (val) = lval_memory;
   set_value_address (val, value_address (arg1));
 
+#ifdef NVIDIA_CUDA_GDB
+  read_value_memory (val, 0, value_stack (val), value_address (val),
+		     value_contents_all_raw (val),
+		     value_length (val));
+#else
   read_value_memory (val, 0, value_stack (val), value_address (val),
 		     value_contents_all_raw (val),
 		     type_length_units (value_enclosing_type (val)));
+#endif
 
   return val;
 }
@@ -1290,7 +1361,26 @@ value_of_variable (struct symbol *var, const struct block *b)
   if (symbol_read_needs_frame (var))
     frame = get_selected_frame (_("No frame selected."));
 
+#ifdef NVIDIA_CUDA_GDB
+  struct value *val;
+  struct objfile *objfile = NULL;
+  val = read_var_value (var, b, frame);
+  /* If this is a symbol that has objfile section -1, don't attempt to
+     find its objfile.  It may happen with template arguments.  */
+  if (SYMBOL_SECTION (var) < 0)
+    return val;
+  objfile = symbol_objfile (var);
+  /* CUDA - Managed variables */
+  /* If __managed__ variable was declared as type_t var in .cu file,
+   * its host shadow would look like type_t *var,
+   * that is debugger must dereference it before returning value to user */
+  if (SYMBOL_OBJ_SECTION(objfile, var) != NULL
+      && strcmp(SYMBOL_OBJ_SECTION(objfile, var)->the_bfd_section->name, "__nv_managed_data__")==0)
+    return value_ind (val);
+  return val;
+#else
   return read_var_value (var, b, frame);
+#endif
 }
 
 struct value *
@@ -1382,9 +1472,17 @@ value_coerce_to_target (struct value *val)
   if (!value_must_coerce_to_target (val))
     return val;
 
+#ifdef NVIDIA_CUDA_GDB
+  length = value_length (val);
+  addr = allocate_space_in_inferior (length);
+  /* CUDA - memory segments */
+  struct type *type = check_typedef (value_type (val));
+  cuda_write_memory (addr, value_contents (val), type);
+#else
   length = TYPE_LENGTH (check_typedef (value_type (val)));
   addr = allocate_space_in_inferior (length);
   write_memory (addr, value_contents (val), length);
+#endif
   return value_at_lazy (value_type (val), addr);
 }
 
@@ -1560,8 +1658,17 @@ value_ind (struct value *arg1)
       enc_type = TYPE_TARGET_TYPE (enc_type);
 
       CORE_ADDR base_addr;
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - textures */
+      if (cuda_texture_is_tex_ptr (base_type))
+	/* FIXME make this use base_addr */
+        arg2 = cuda_texture_value_ind (enc_type, arg1);
+      else if (check_typedef (enc_type)->code () == TYPE_CODE_FUNC
+	  || check_typedef (enc_type)->code () == TYPE_CODE_METHOD)
+#else
       if (check_typedef (enc_type)->code () == TYPE_CODE_FUNC
 	  || check_typedef (enc_type)->code () == TYPE_CODE_METHOD)
+#endif
 	{
 	  /* For functions, go through find_function_addr, which knows
 	     how to handle function descriptors.  */
@@ -1610,6 +1717,9 @@ value_array (int lowbound, int highbound, struct value **elemvec)
       error (_("bad array bounds (%d, %d)"), lowbound, highbound);
     }
   typelength = type_length_units (value_enclosing_type (elemvec[0]));
+#ifdef NVIDIA_CUDA_GDB
+  ULONGEST vallength = value_length (elemvec[0]);
+#endif
   for (idx = 1; idx < nelem; idx++)
     {
       if (type_length_units (value_enclosing_type (elemvec[idx]))
@@ -1626,8 +1736,13 @@ value_array (int lowbound, int highbound, struct value **elemvec)
     {
       val = allocate_value (arraytype);
       for (idx = 0; idx < nelem; idx++)
+#ifdef NVIDIA_CUDA_GDB
+	value_contents_copy (val, idx * typelength, elemvec[idx], 0,
+			     vallength);
+#else
 	value_contents_copy (val, idx * typelength, elemvec[idx], 0,
 			     typelength);
+#endif
       return val;
     }
 
@@ -1636,7 +1751,11 @@ value_array (int lowbound, int highbound, struct value **elemvec)
 
   val = allocate_value (arraytype);
   for (idx = 0; idx < nelem; idx++)
+#ifdef NVIDIA_CUDA_GDB
+    value_contents_copy (val, idx * typelength, elemvec[idx], 0, vallength);
+#else
     value_contents_copy (val, idx * typelength, elemvec[idx], 0, typelength);
+#endif
   return val;
 }
 
@@ -1909,9 +2028,15 @@ do_search_struct_field (const char *name, struct value *arg1, LONGEST offset,
 
 	      base_addr = value_address (arg1) + boffset;
 	      v2 = value_at_lazy (basetype, base_addr);
+#ifdef NVIDIA_CUDA_GDB
+	      if (target_read_memory (base_addr,
+				      value_contents_raw (v2),
+				      value_length (v2)) != 0)
+#else
 	      if (target_read_memory (base_addr, 
 				      value_contents_raw (v2),
 				      TYPE_LENGTH (value_type (v2))) != 0)
+#endif
 		error (_("virtual baseclass botch"));
 	    }
 	  else
@@ -2055,9 +2180,16 @@ search_struct_method (const char *name, struct value **arg1p,
 				      tmp.data (), TYPE_LENGTH (baseclass)) != 0)
 		error (_("virtual baseclass botch"));
 
+#ifdef NVIDIA_CUDA_GDB
+	      base_val = value_from_contents_and_address (baseclass, 
+							  tmp.data (), 
+							  TYPE_LENGTH (baseclass), 
+							  address + offset); 
+#else
 	      base_val = value_from_contents_and_address (baseclass,
 							  tmp.data (),
 							  address + offset);
+#endif
 	      base_valaddr = value_contents_for_printing (base_val);
 	      this_offset = 0;
 	    }
@@ -2143,11 +2275,35 @@ value_struct_elt (struct value **argp, struct value **args,
 
   if (!args)
     {
+#ifdef NVIDIA_CUDA_GDB
+      int i;
+      char *nname;
+      int len;
+      len = strlen(name);
+      if (current_language
+	  && current_language->la_case_sensitivity == case_sensitive_off)
+	{
+	  int i;
+	  nname = (char *) xmalloc(len + 1);
+	  for (i = 0; i < len + 1; i++)
+	    {
+	      nname[i] = tolower(name[i]);
+	    }
+	}
+      else
+	{
+	  nname = (char *) xmalloc(len + 1);
+	  memcpy(nname, name, len + 1);
+	}
+      v = search_struct_field (nname, *argp, t, 0);
+      xfree(nname);
+#else
       /* if there are no arguments ...do this...  */
 
       /* Try as a field first, because if we succeed, there is less
          work to be done.  */
       v = search_struct_field (name, *argp, t, 0);
+#endif
       if (v)
 	return v;
 
@@ -3802,8 +3958,13 @@ value_slice (struct value *array, int lowbound, int length)
     else
       {
 	slice = allocate_value (slice_type);
+#ifdef NVIDIA_CUDA_GDB
+	value_contents_copy (slice, 0, array, offset,
+			     value_length (slice));
+#else
 	value_contents_copy (slice, 0, array, offset,
 			     type_length_units (slice_type));
+#endif
       }
 
     set_value_component_location (slice, array);
@@ -3827,10 +3988,17 @@ value_literal_complex (struct value *arg1,
   arg1 = value_cast (real_type, arg1);
   arg2 = value_cast (real_type, arg2);
 
+#ifdef NVIDIA_CUDA_GDB
+  memcpy (value_contents_raw (val), 
+	  value_contents (arg1), value_length (arg1));
+  memcpy (value_contents_raw (val) + TYPE_LENGTH (real_type), 
+	  value_contents (arg2), value_length (arg2));
+#else
   memcpy (value_contents_raw (val),
 	  value_contents (arg1), TYPE_LENGTH (real_type));
   memcpy (value_contents_raw (val) + TYPE_LENGTH (real_type),
 	  value_contents (arg2), TYPE_LENGTH (real_type));
+#endif
   return val;
 }
 
@@ -3872,11 +4040,19 @@ cast_into_complex (struct type *type, struct value *val)
       struct value *re_val = allocate_value (val_real_type);
       struct value *im_val = allocate_value (val_real_type);
 
+#ifdef NVIDIA_CUDA_GDB
+      memcpy (value_contents_raw (re_val), 
+	      value_contents (val), value_length (re_val));
+      memcpy (value_contents_raw (im_val), 
+	      value_contents (val) + TYPE_LENGTH (val_real_type), 
+	      value_length (im_val));
+#else
       memcpy (value_contents_raw (re_val),
 	      value_contents (val), TYPE_LENGTH (val_real_type));
       memcpy (value_contents_raw (im_val),
 	      value_contents (val) + TYPE_LENGTH (val_real_type),
 	      TYPE_LENGTH (val_real_type));
+#endif
 
       return value_literal_complex (re_val, im_val, type);
     }

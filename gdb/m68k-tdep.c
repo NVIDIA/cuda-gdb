@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "dwarf2/frame.h"
 #include "frame.h"
@@ -548,8 +552,13 @@ m68k_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
 /* Convert a dwarf or dwarf2 regnumber to a GDB regnum.  */
 
+#ifdef NVIDIA_CUDA_GDB
+static int
+m68k_dwarf_reg_to_regnum (struct gdbarch *gdbarch, reg_t num)
+#else
 static int
 m68k_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int num)
+#endif
 {
   if (num < 8)
     /* d0..7 */
@@ -1285,5 +1294,9 @@ void _initialize_m68k_tdep ();
 void
 _initialize_m68k_tdep ()
 {
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - gdbarch */
+  return;
+#endif
   gdbarch_register (bfd_arch_m68k, m68k_gdbarch_init, m68k_dump_tdep);
 }

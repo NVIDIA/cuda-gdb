@@ -18,6 +18,10 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "sysdep.h"
 #include <limits.h>
 #include "bfd.h"
@@ -52,6 +56,17 @@ bfd_mach_o_version (bfd *abfd)
   return mdata->header.version;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - word size */
+unsigned long
+bfd_mach_o_cputype (bfd *abfd)
+{
+  bfd_mach_o_data_struct *mdata = NULL;
+  BFD_ASSERT (bfd_mach_o_valid (abfd));
+  mdata = bfd_mach_o_get_data (abfd);
+  return mdata->header.cputype;
+}
+#endif
 bfd_boolean
 bfd_mach_o_valid (bfd *abfd)
 {

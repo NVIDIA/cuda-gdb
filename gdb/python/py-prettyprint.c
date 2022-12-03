@@ -73,21 +73,21 @@ search_pp_list (PyObject *list, PyObject *value)
 	    continue;
 	}
 
-      gdbpy_ref<> printer (PyObject_CallFunctionObjArgs (function, value,
+      gdbpy_ref<> printer (gdbpy_PyObject_CallFunctionObjArgs (function, value,
 							 NULL));
       if (printer == NULL)
 	return NULL;
-      else if (printer != Py_None)
+      else if (printer != gdbpy_None)
 	return printer;
     }
 
-  return gdbpy_ref<>::new_reference (Py_None);
+  return gdbpy_ref<>::new_reference (gdbpy_None);
 }
 
 /* Subroutine of find_pretty_printer to simplify it.
    Look for a pretty-printer to print VALUE in all objfiles.
    The result is NULL if there's an error and the search should be terminated.
-   The result is Py_None, suitably inc-ref'd, if no pretty-printer was found.
+   The result is gdbpy_None, suitably inc-ref'd, if no pretty-printer was found.
    Otherwise the result is the pretty-printer function, suitably inc-ref'd.  */
 
 static PyObject *
@@ -110,17 +110,17 @@ find_pretty_printer_from_objfiles (PyObject *value)
       if (function == NULL)
 	return NULL;
 
-      if (function != Py_None)
+      if (function != gdbpy_None)
 	return function.release ();
     }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Subroutine of find_pretty_printer to simplify it.
    Look for a pretty-printer to print VALUE in the current program space.
    The result is NULL if there's an error and the search should be terminated.
-   The result is Py_None, suitably inc-ref'd, if no pretty-printer was found.
+   The result is gdbpy_None, suitably inc-ref'd, if no pretty-printer was found.
    Otherwise the result is the pretty-printer function, suitably inc-ref'd.  */
 
 static gdbpy_ref<>
@@ -137,7 +137,7 @@ find_pretty_printer_from_progspace (PyObject *value)
 /* Subroutine of find_pretty_printer to simplify it.
    Look for a pretty-printer to print VALUE in the gdb module.
    The result is NULL if there's an error and the search should be terminated.
-   The result is Py_None, suitably inc-ref'd, if no pretty-printer was found.
+   The result is gdbpy_None, suitably inc-ref'd, if no pretty-printer was found.
    Otherwise the result is the pretty-printer function, suitably inc-ref'd.  */
 
 static gdbpy_ref<>
@@ -146,11 +146,11 @@ find_pretty_printer_from_gdb (PyObject *value)
   /* Fetch the global pretty printer list.  */
   if (gdb_python_module == NULL
       || ! PyObject_HasAttrString (gdb_python_module, "pretty_printers"))
-    return gdbpy_ref<>::new_reference (Py_None);
+    return gdbpy_ref<>::new_reference (gdbpy_None);
   gdbpy_ref<> pp_list (PyObject_GetAttrString (gdb_python_module,
 					       "pretty_printers"));
-  if (pp_list == NULL || ! PyList_Check (pp_list.get ()))
-    return gdbpy_ref<>::new_reference (Py_None);
+  if (pp_list == NULL || ! gdbpy_ListCheck (pp_list.get ()))
+    return gdbpy_ref<>::new_reference (gdbpy_None);
 
   return search_pp_list (pp_list.get (), value);
 }
@@ -165,12 +165,12 @@ find_pretty_printer (PyObject *value)
   /* Look at the pretty-printer list for each objfile
      in the current program-space.  */
   gdbpy_ref<> function (find_pretty_printer_from_objfiles (value));
-  if (function == NULL || function != Py_None)
+  if (function == NULL || function != gdbpy_None)
     return function;
 
   /* Look at the pretty-printer list for the current program-space.  */
   function = find_pretty_printer_from_progspace (value);
-  if (function == NULL || function != Py_None)
+  if (function == NULL || function != gdbpy_None)
     return function;
 
   /* Look at the pretty-printer list in the gdb module.  */
@@ -194,16 +194,16 @@ pretty_print_one_value (PyObject *printer, struct value **out_value)
   try
     {
       if (!PyObject_HasAttr (printer, gdbpy_to_string_cst))
-	result = gdbpy_ref<>::new_reference (Py_None);
+	result = gdbpy_ref<>::new_reference (gdbpy_None);
       else
 	{
-	  result.reset (PyObject_CallMethodObjArgs (printer, gdbpy_to_string_cst,
+	  result.reset (gdbpy_PyObject_CallMethodObjArgs (printer, gdbpy_to_string_cst,
 						    NULL));
 	  if (result != NULL)
 	    {
 	      if (! gdbpy_is_string (result.get ())
 		  && ! gdbpy_is_lazy_string (result.get ())
-		  && result != Py_None)
+		  && result != gdbpy_None)
 		{
 		  *out_value = convert_value_from_python (result.get ());
 		  if (PyErr_Occurred ())
@@ -232,7 +232,7 @@ gdbpy_get_display_hint (PyObject *printer)
   if (! PyObject_HasAttr (printer, gdbpy_display_hint_cst))
     return NULL;
 
-  gdbpy_ref<> hint (PyObject_CallMethodObjArgs (printer, gdbpy_display_hint_cst,
+  gdbpy_ref<> hint (gdbpy_PyObject_CallMethodObjArgs (printer, gdbpy_display_hint_cst,
 						NULL));
   if (hint != NULL)
     {
@@ -286,7 +286,7 @@ print_string_repr (PyObject *printer, const char *hint,
   gdbpy_ref<> py_str = pretty_print_one_value (printer, &replacement);
   if (py_str != NULL)
     {
-      if (py_str == Py_None)
+      if (py_str == gdbpy_None)
 	result = string_repr_none;
       else if (gdbpy_is_lazy_string (py_str.get ()))
 	{
@@ -367,7 +367,7 @@ print_children (PyObject *printer, const char *hint,
   is_map = hint && ! strcmp (hint, "map");
   is_array = hint && ! strcmp (hint, "array");
 
-  gdbpy_ref<> children (PyObject_CallMethodObjArgs (printer, gdbpy_children_cst,
+  gdbpy_ref<> children (gdbpy_PyObject_CallMethodObjArgs (printer, gdbpy_children_cst,
 						    NULL));
   if (children == NULL)
     {
@@ -412,15 +412,15 @@ print_children (PyObject *printer, const char *hint,
 	  break;
 	}
 
-      if (! PyTuple_Check (item.get ()) || PyTuple_Size (item.get ()) != 2)
+      if (! gdbpy_TupleCheck (item.get ()) || PyTuple_Size (item.get ()) != 2)
 	{
-	  PyErr_SetString (PyExc_TypeError,
+	  PyErr_SetString (gdbpyExc_TypeError,
 			   _("Result of children iterator not a tuple"
 			     " of two elements."));
 	  gdbpy_print_stack ();
 	  continue;
 	}
-      if (! PyArg_ParseTuple (item.get (), "sO", &name, &py_v))
+      if (! gdbpy_PyArg_ParseTuple (item.get (), "sO", &name, &py_v))
 	{
 	  /* The user won't necessarily get a stack trace here, so provide
 	     more context.  */
@@ -594,7 +594,7 @@ gdbpy_apply_val_pretty_printer (const struct extension_language_defn *extlang,
       return EXT_LANG_RC_ERROR;
     }
 
-  if (printer == Py_None)
+  if (printer == gdbpy_None)
     return EXT_LANG_RC_NOP;
 
   if (val_print_check_max_depth (stream, recurse, options, language))
@@ -672,12 +672,12 @@ gdbpy_default_visualizer (PyObject *self, PyObject *args)
   PyObject *val_obj;
   struct value *value;
 
-  if (! PyArg_ParseTuple (args, "O", &val_obj))
+  if (! gdbpy_PyArg_ParseTuple (args, "O", &val_obj))
     return NULL;
   value = value_object_to_value (val_obj);
   if (! value)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Argument must be a gdb.Value."));
       return NULL;
     }

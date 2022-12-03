@@ -17,6 +17,10 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #if !defined (FLOATFORMAT_H)
 #define FLOATFORMAT_H 1
 
@@ -110,6 +114,10 @@ extern const struct floatformat floatformat_ieee_double_little;
 
 extern const struct floatformat floatformat_ieee_double_littlebyte_bigword;
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - nv_bfloat16 format */
+extern const struct floatformat floatformat_nv_bfloat16;
+#endif
 /* floatformats for VAX.  */
 
 extern const struct floatformat floatformat_vax_f;

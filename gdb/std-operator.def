@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* Used when it's necessary to pass an opcode which will be ignored,
    or to catch uninitialized values.  */
 OP (OP_NULL)
@@ -86,6 +90,9 @@ OP (BINOP_VAL)
    If the first operand is a integer expression, then it means concatenate
    the second operand with itself that many times.  */
 OP (BINOP_CONCAT)
+
+/* CUDA - Intrinsic functions (fmod etc.).  */
+OP (BINOP_FMOD)
 
 /* This must be the highest BINOP_ value, for expprint.c.  */
 OP (BINOP_END)
@@ -168,14 +175,6 @@ OP (OP_FUNCALL)
    pointer.  This is an Objective C message.  */
 OP (OP_OBJC_MSGCALL)
 
-/* This is EXACTLY like OP_FUNCALL but is semantically different.
-   In F77, array subscript expressions, substring expressions and
-   function calls are all exactly the same syntactically.  They
-   may only be disambiguated at runtime.  Thus this operator,
-   which indicates that we have found something of the form
-   <name> ( <stuff> ).  */
-OP (OP_F77_UNDETERMINED_ARGLIST)
-
 /* OP_COMPLEX takes a type in the following element, followed by another
    OP_COMPLEX, making three exp_elements.  It is followed by two double
    args, and converts them into a complex number of the given type.  */
@@ -248,6 +247,21 @@ OP (UNOP_MAX)
 OP (UNOP_MIN)
 OP (UNOP_ODD)
 OP (UNOP_TRUNC)
+
+/* CUDA - Intrinsic functions (isnan, isinf, creal, cimag, etc.).  */
+OP (UNOP_ISNAN)
+OP (UNOP_ISINF)
+OP (UNOP_ISFINITE)
+OP (UNOP_ISNORMAL)
+OP (UNOP_CREAL)
+OP (UNOP_CIMAG)
+OP (UNOP_FABS)
+OP (UNOP_CEIL)
+OP (UNOP_FLOOR)
+OP (UNOP_IEEE_IS_NAN)
+OP (UNOP_IEEE_IS_INF)
+OP (UNOP_IEEE_IS_FINITE)
+OP (UNOP_IEEE_IS_NORMAL)
 
 OP (OP_BOOL)			/* Modula-2 builtin BOOLEAN type */
 OP (OP_M2_STRING)		/* Modula-2 string constants */

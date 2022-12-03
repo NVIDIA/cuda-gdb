@@ -79,7 +79,7 @@ py_varobj_iter_next (struct varobj_iter *self)
 
 	  std::string name_str = string_printf ("<error at %d>",
 						self->next_raw_index++);
-	  item.reset (Py_BuildValue ("(ss)", name_str.c_str (),
+	  item.reset (gdbpy_BuildValue ("(ss)", name_str.c_str (),
 				     value_str.get ()));
 	  if (item == NULL)
 	    {
@@ -95,7 +95,7 @@ py_varobj_iter_next (struct varobj_iter *self)
 	}
     }
 
-  if (!PyArg_ParseTuple (item.get (), "sO", &name, &py_v))
+  if (!gdbpy_PyArg_ParseTuple (item.get (), "sO", &name, &py_v))
     {
       gdbpy_print_stack ();
       error (_("Invalid item from the child list"));
@@ -161,7 +161,7 @@ py_varobj_get_iterator (struct varobj *var, PyObject *printer)
   if (!PyObject_HasAttr (printer, gdbpy_children_cst))
     return NULL;
 
-  gdbpy_ref<> children (PyObject_CallMethodObjArgs (printer, gdbpy_children_cst,
+  gdbpy_ref<> children (gdbpy_PyObject_CallMethodObjArgs (printer, gdbpy_children_cst,
 						    NULL));
   if (children == NULL)
     {

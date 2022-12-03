@@ -19,6 +19,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -30,6 +34,9 @@
 #include "dwarf2/read.h"
 #include "gdbsupport/underlying.h"
 #include "gdbarch.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-tdep.h"
+#endif
 
 /* Cookie for gdbarch data.  */
 
@@ -746,7 +753,14 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 	  dwarf_expr_require_composition (op_ptr, op_end, "DW_OP_regx");
 
 	  result = reg;
+#ifdef NVIDIA_CUDA_GDB
+	  if (this->addr_size == 4 && this->gdbarch == cuda_get_gdbarch ()) 
+	    result_val = value_from_ulongest (builtin_type (this->gdbarch)->builtin_int64, result); 
+	  else 
+	    result_val = value_from_ulongest (address_type, result); 
+#else
 	  result_val = value_from_ulongest (address_type, result);
+#endif
 	  this->location = DWARF_VALUE_REGISTER;
 	  break;
 
@@ -963,7 +977,11 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 					byte_order, datum);
 	      }
 
+#ifdef NVIDIA_CUDA_GDB
+	    result_val = value_from_contents_and_address (type, buf, TYPE_LENGTH (type), addr); 
+#else
 	    result_val = value_from_contents_and_address (type, buf, addr);
+#endif
 	    break;
 	  }
 

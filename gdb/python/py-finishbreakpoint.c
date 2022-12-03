@@ -48,7 +48,7 @@ struct finish_breakpoint_object
      NULL if return_type is NULL.  */
   PyObject *function_value;
   /* When stopped at this FinishBreakpoint, gdb.Value object returned by
-     the function; Py_None if the value is not computable; NULL if GDB is
+     the function; gdbpy_None if the value is not computable; NULL if GDB is
      not stopped at a FinishBreakpoint.  */
   PyObject *return_value;
 };
@@ -66,7 +66,7 @@ bpfinishpy_get_returnvalue (PyObject *self, void *closure)
       (struct finish_breakpoint_object *) self;
 
   if (!self_finishbp->return_value)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   Py_INCREF (self_finishbp->return_value);
   return self_finishbp->return_value;
@@ -118,8 +118,8 @@ bpfinishpy_pre_stop_hook (struct gdbpy_breakpoint_object *bp_obj)
         }
       else
         {
-          Py_INCREF (Py_None);
-          self_finishbp->return_value = Py_None;
+          Py_INCREF (gdbpy_None);
+          self_finishbp->return_value = gdbpy_None;
         }
     }
   catch (const gdb_exception &except)
@@ -181,7 +181,7 @@ bpfinishpy_init (PyObject *self, PyObject *args, PyObject *kwargs)
 
       if (frame == NULL)
 	{
-	  PyErr_SetString (PyExc_ValueError,
+	  PyErr_SetString (gdbpyExc_ValueError,
 			   _("Invalid ID for the `frame' object."));
 	}
       else
@@ -189,14 +189,14 @@ bpfinishpy_init (PyObject *self, PyObject *args, PyObject *kwargs)
 	  prev_frame = get_prev_frame (frame);
 	  if (prev_frame == 0)
 	    {
-	      PyErr_SetString (PyExc_ValueError,
+	      PyErr_SetString (gdbpyExc_ValueError,
 			       _("\"FinishBreakpoint\" not "
 				 "meaningful in the outermost "
 				 "frame."));
 	    }
 	  else if (get_frame_type (prev_frame) == DUMMY_FRAME)
 	    {
-	      PyErr_SetString (PyExc_ValueError,
+	      PyErr_SetString (gdbpyExc_ValueError,
 			       _("\"FinishBreakpoint\" cannot "
 				 "be set on a dummy frame."));
 	    }
@@ -204,7 +204,7 @@ bpfinishpy_init (PyObject *self, PyObject *args, PyObject *kwargs)
 	    {
 	      frame_id = get_frame_id (prev_frame);
 	      if (frame_id_eq (frame_id, null_frame_id))
-		PyErr_SetString (PyExc_ValueError,
+		PyErr_SetString (gdbpyExc_ValueError,
 				 _("Invalid ID for the `frame' object."));
 	    }
 	}
@@ -220,7 +220,7 @@ bpfinishpy_init (PyObject *self, PyObject *args, PyObject *kwargs)
 
   if (inferior_ptid == null_ptid)
     {
-      PyErr_SetString (PyExc_ValueError,
+      PyErr_SetString (gdbpyExc_ValueError,
                        _("No thread currently selected."));
       return -1;
     }
@@ -232,7 +232,7 @@ bpfinishpy_init (PyObject *self, PyObject *args, PyObject *kwargs)
       internal_bp = PyObject_IsTrue (internal);
       if (internal_bp == -1)
         {
-          PyErr_SetString (PyExc_ValueError,
+          PyErr_SetString (gdbpyExc_ValueError,
                            _("The value of `internal' must be a boolean."));
           return -1;
         }
@@ -330,7 +330,7 @@ bpfinishpy_out_of_scope (struct finish_breakpoint_object *bpfinish_obj)
   if (bpfinish_obj->py_bp.bp->enable_state == bp_enabled
       && PyObject_HasAttrString (py_obj, outofscope_func))
     {
-      gdbpy_ref<> meth_result (PyObject_CallMethod (py_obj, outofscope_func,
+      gdbpy_ref<> meth_result (gdbpy_PyObject_CallMethod (py_obj, outofscope_func,
 						    NULL));
       if (meth_result == NULL)
 	gdbpy_print_stack ();

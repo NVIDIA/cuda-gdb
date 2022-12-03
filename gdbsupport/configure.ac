@@ -45,6 +45,18 @@ GDB_AC_COMMON
 GDB_AC_SELFTEST
 AM_CONDITIONAL(SELFTEST, $enable_unittests)
 
+# Enable CUDA
+AC_ARG_ENABLE(cuda,
+AS_HELP_STRING([--disable-cuda], [disable CUDA support (cuda-gdb)]),
+[case "${enableval}" in
+    yes | no)	;;
+    *)		AC_MSG_ERROR([bad value $enableval for --enable-cuda]) ;;
+  esac],
+  [enable_cuda=yes])
+if test x"$enable_cuda" = xyes; then
+  AC_DEFINE(NVIDIA_CUDA_GDB, 1, [Define if building cuda-gdb.])
+fi
+
 # Check the return and argument types of ptrace.
 GDB_AC_PTRACE
 

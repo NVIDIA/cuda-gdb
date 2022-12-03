@@ -253,6 +253,13 @@ struct program_space
   void add_objfile (std::shared_ptr<objfile> &&objfile,
 		    struct objfile *before);
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: We use id to track the insertion order of objfiles. This
+   * greatly (100x) speeds up the sorting when there is address overlap.
+   * For cuda elf images, we have potentially hundreds of overlapping
+   * objfiles. */
+  void regen_objfile_ids ();
+#endif
   /* Remove OBJFILE from the list of objfiles.  */
   void remove_objfile (struct objfile *objfile);
 
