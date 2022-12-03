@@ -76,13 +76,33 @@ cudbgInitialize(void)
     CUDBG_IPC_RECEIVE(&minor, &ipc_buf);
     CUDBG_IPC_RECEIVE(&revision, &ipc_buf);
 
-    if (result == CUDBG_ERROR_INCOMPATIBLE_API)
-      printf("Incompatible CUDA driver version."
-             " Expected %d.%d.%d or later and found %d.%d.%d instead.",
-             CUDBG_API_VERSION_MAJOR,
-             CUDBG_API_VERSION_MINOR,
-             CUDBG_API_VERSION_REVISION,
-             (int)major, (int)minor, (int)revision);
+    if (result == CUDBG_ERROR_INCOMPATIBLE_API) {
+        /* Allow newer cuda-gdb to work with driver from 11.x release. For more
+           details see -
+           https://docs.nvidia.com/deploy/cuda-compatibility/index.html#minor-version-compatibility 
+        */
+        if (revision < 129)
+            /* DEBUG API REVISION for 11.0 was 129 */
+            printf("Incompatible CUDA driver version."
+                   " Expected %d.%d.%d or later and found %d.%d.%d instead.",
+                   CUDBG_API_VERSION_MAJOR,
+                   CUDBG_API_VERSION_MINOR,
+                   CUDBG_API_VERSION_REVISION,
+                   (int)major, (int)minor, (int)revision);
+        else {
+            /* Retry with the version supported by driver */
+            CUDBG_IPC_BEGIN(CUDBGAPIREQ_initialize);
+            CUDBG_IPC_APPEND(&major, sizeof(minor));
+            CUDBG_IPC_APPEND(&minor, sizeof(minor));
+            CUDBG_IPC_APPEND(&revision, sizeof(revision));
+
+            CUDBG_IPC_REQUEST((void **)&ipc_buf);
+            CUDBG_IPC_RECEIVE(&result, &ipc_buf);
+            CUDBG_IPC_RECEIVE(&major, &ipc_buf);
+            CUDBG_IPC_RECEIVE(&minor, &ipc_buf);
+            CUDBG_IPC_RECEIVE(&revision, &ipc_buf);
+        }
+    }
     return result;
 }
 
@@ -2134,6 +2154,30 @@ cudbgGetDeviceName (uint32_t dev, char *buf, uint32_t buf_size)
     return result;
 }
 
+#if CUDBG_API_VERSION_REVISION >= 132
+static CUDBGResult
+cudbgGetLoadedFunctionInfo (uint32_t dev, uint64_t handle, CUDBGLoadedFunctionInfo *info, uint32_t numEntries)
+{
+    char *ipc_buf;
+    CUDBGResult result;
+
+    CUDBG_IPC_PROFILE_START();
+
+    CUDBG_IPC_BEGIN(CUDBGAPIREQ_getLoadedFunctionInfo);
+    CUDBG_IPC_APPEND(&dev, sizeof(dev));
+    CUDBG_IPC_APPEND(&handle, sizeof(handle));
+    CUDBG_IPC_APPEND(&numEntries, sizeof(numEntries));
+
+    CUDBG_IPC_REQUEST((void **)&ipc_buf);
+    CUDBG_IPC_RECEIVE(&result, &ipc_buf);
+    CUDBG_IPC_RECEIVE_ARRAY((char *)info, numEntries * sizeof (CUDBGLoadedFunctionInfo), &ipc_buf);
+
+    CUDBG_IPC_PROFILE_END(CUDBGAPIREQ_getLoadedFunctionInfo, "getLoadedFunctionInfo");
+
+    return result;
+}
+#endif
+
 static CUDBGResult
 cudbgSingleStepWarp (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t nsteps, uint64_t *warpMask)
 {
@@ -2320,6 +2364,11 @@ static const struct CUDBGAPI_st cudbgCurrentApi={
     cudbgGetNumUniformPredicates,
     cudbgReadUniformPredicates,
     cudbgWriteUniformPredicates,
+
+#if CUDBG_API_VERSION_REVISION >= 132
+    /* 11.8 Extensions */
+    cudbgGetLoadedFunctionInfo,
+#endif
 };
 
 CUDBGResult

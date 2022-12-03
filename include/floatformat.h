@@ -17,7 +17,7 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
-/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2022 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -114,10 +114,6 @@ extern const struct floatformat floatformat_ieee_double_little;
 
 extern const struct floatformat floatformat_ieee_double_littlebyte_bigword;
 
-#ifdef NVIDIA_CUDA_GDB
-/* CUDA - nv_bfloat16 format */
-extern const struct floatformat floatformat_nv_bfloat16;
-#endif
 /* floatformats for VAX.  */
 
 extern const struct floatformat floatformat_vax_f;
@@ -144,6 +140,13 @@ extern const struct floatformat floatformat_ibm_long_double_little;
 /* bfloat16.  */
 extern const struct floatformat floatformat_bfloat16_big;
 extern const struct floatformat floatformat_bfloat16_little;
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - fp8 formats */
+extern const struct floatformat floatformat_nv_fp8_e5m2_big;
+extern const struct floatformat floatformat_nv_fp8_e5m2_little;
+extern const struct floatformat floatformat_nv_fp8_e4m3_big;
+extern const struct floatformat floatformat_nv_fp8_e4m3_little;
+#endif
 
 /* Convert from FMT to a double.
    FROM is the address of the extended float.

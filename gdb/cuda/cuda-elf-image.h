@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2022 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -50,6 +50,8 @@ bool             cuda_elf_image_is_system        (elf_image_t elf_image);
 void             cuda_elf_image_save             (elf_image_t elf_image, void *image);
 void             cuda_elf_image_load             (elf_image_t elf_image, bool is_system);
 void             cuda_elf_image_unload           (elf_image_t elf_image);
+void             cuda_elf_image_read (const char *filename, void *image, size_t len);
+void             cuda_elf_image_write (int fd, const void *image, size_t len);
 
 bool             cuda_elf_image_contains_address (elf_image_t elf_image, CORE_ADDR addr);
 

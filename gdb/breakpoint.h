@@ -180,6 +180,8 @@ enum bptype
     bp_cuda_uvm,
     /* CUDA - CDP */
     bp_cuda_cdp,
+    /* CUDA - Graph */
+    bp_cuda_graph,
 #endif
     /* On the same principal, an overlay manager can arrange to call a
        magic location in the inferior whenever there is an interesting
@@ -1475,6 +1477,7 @@ extern int remove_breakpoints (void);
    the host watchpoints are skipped. */
 extern void cuda_insert_breakpoints (void);
 extern int cuda_remove_breakpoints (void);
+extern void cuda_reset_breakpoints (void);
 #endif
 /* Remove breakpoints of inferior INF.  */
 

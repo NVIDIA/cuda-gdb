@@ -733,6 +733,10 @@ public:
   int cuda_producer_is_open64 = 0;
   /* A unique sequence identifier for the global linked list */
   int id;
+  /* True if host shadow function name scanning has occured */
+  bool cuda_host_shadow_scan_complete = false;
+  /* True if this objfile contains host shadow functions */
+  bool cuda_host_shadow_found = false;
 #endif
 
   /* JIT-related data for this objfile, if the objfile is a JITer;

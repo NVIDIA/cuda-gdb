@@ -28,6 +28,7 @@ void        module_print  (module_t module);
 uint64_t    module_get_id         (module_t module);
 context_t   module_get_context    (module_t module);
 elf_image_t module_get_elf_image  (module_t module);
+void        module_set_elf_image  (module_t module, elf_image_t elf_image);
 
 modules_t  modules_new    (void);
 void       modules_delete (modules_t modules);

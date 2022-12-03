@@ -228,8 +228,10 @@ public:
   void write_global_memory (uint64_t addr, const void *buf, uint32_t buf_size);
   void get_managed_memory_region_info (uint64_t start_addr, CUDBGMemoryInfo *meminfo, uint32_t entries_count, uint32_t *entries_written);
 
-
-
+#if CUDBG_API_VERSION_REVISION >= 132
+  void get_loaded_function_info (uint32_t dev, uint64_t handle, CUDBGLoadedFunctionInfo *info, uint32_t numEntries);
+#endif
+  
 private:
   // This function needs updating whenever a new cache map is added.
   void clear_caches ();
@@ -392,5 +394,10 @@ void cuda_api_set_kernel_launch_notification_mode (CUDBGKernelLaunchNotifyMode m
 
 /* Memcheck related */
 void cuda_api_memcheck_read_error_address(uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint64_t *address, ptxStorageKind *storage);
+
+#if CUDBG_API_VERSION_REVISION >= 132
+/* Lazy function loading */
+void cuda_api_get_loaded_function_info (uint32_t dev, uint64_t handle, CUDBGLoadedFunctionInfo *info, uint32_t numEntries);
 #endif
 
+#endif

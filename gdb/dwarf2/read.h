@@ -394,6 +394,13 @@ private:
   /* Map from the objfile-independent dwarf2_per_cu_data instances to the
      corresponding objfile-dependent dwarf2_cu instances.  */
   std::unordered_map<dwarf2_per_cu_data *, dwarf2_cu *> m_dwarf2_cus;
+
+#ifdef NVIDIA_CUDA_GDB
+public:
+  /* Vector of detected host shadow stubs generated for CUDA runtime programs.
+     Need to defer processing until after the entire symtab has been built. */
+  std::vector<const char *> m_cuda_device_stubs;
+#endif
 };
 
 /* Get the dwarf2_per_objfile associated to OBJFILE.  */

@@ -367,6 +367,20 @@ cuda_nat_attach (void)
   if (resumeAppOnAttachFlagAddr == 0 || debugFlagAddr == 0)
     error (_("This CUDA driver does not support attaching to a running CUDA process."));
 
+  /* capability ifdef protections in case compiling against an older version of cudadebugger.h */
+#if CUDBG_API_VERSION_REVISION >= 132
+  CORE_ADDR capability_addr = cuda_get_symbol_address (_STRING_(CUDBG_DEBUGGER_CAPABILITIES));
+  if (capability_addr)
+    {
+      uint32_t capabilities = CUDBG_DEBUGGER_CAPABILITY_NONE;
+
+      cuda_trace_domain (CUDA_TRACE_GENERAL, "requesting CUDA lazy function loading support\n");
+      capabilities |= CUDBG_DEBUGGER_CAPABILITY_LAZY_FUNCTION_LOADING;
+
+      target_write_memory (capability_addr, (const gdb_byte *)&capabilities, sizeof (capabilities));
+    }
+#endif
+  
   /* Wait till the backend has started up and is ready to service API calls */
   while (cuda_api_initialize () != CUDBG_SUCCESS)
     {
@@ -491,6 +505,17 @@ void cuda_do_detach(inferior *inf, bool remote)
   /* If this flag is set, the debugger backend needs to be notified to cleanup on detach */
   if (resumeAppOnDetach)
     cuda_api_request_cleanup_on_detach (resumeAppOnDetach);
+
+  /* Clear requested capabilities for the next debugger attach which
+     may not support all of the ones requested by this instance. */
+#if CUDBG_API_VERSION_REVISION >= 132
+  CORE_ADDR capability_addr = cuda_get_symbol_address (_STRING_(CUDBG_DEBUGGER_CAPABILITIES));
+  if (capability_addr)
+    {
+      uint32_t capabilities = CUDBG_DEBUGGER_CAPABILITY_NONE;
+      target_write_memory (capability_addr, (const gdb_byte *)&capabilities, sizeof (capabilities));
+    }
+#endif
 
   /* Make sure the debugger is reinitialized from scratch on reattaching
      to the inferior */

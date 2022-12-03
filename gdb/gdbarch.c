@@ -20,7 +20,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2022 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -170,6 +170,10 @@ struct gdbarch
   int int_bit;
   int long_bit;
   int long_long_bit;
+  int nv_fp8_e5m2_bit;
+  const struct floatformat ** nv_fp8_e5m2_format;
+  int nv_fp8_e4m3_bit;
+  const struct floatformat ** nv_fp8_e4m3_format;
   int bfloat16_bit;
   const struct floatformat ** bfloat16_format;
   int half_bit;
@@ -389,6 +393,8 @@ gdbarch_alloc (const struct gdbarch_info *info,
   gdbarch->int_bit = 4*TARGET_CHAR_BIT;
   gdbarch->long_bit = 4*TARGET_CHAR_BIT;
   gdbarch->long_long_bit = 2*gdbarch->long_bit;
+  gdbarch->nv_fp8_e5m2_bit = TARGET_CHAR_BIT;
+  gdbarch->nv_fp8_e4m3_bit = TARGET_CHAR_BIT;
   gdbarch->bfloat16_bit = 2*TARGET_CHAR_BIT;
   gdbarch->half_bit = 2*TARGET_CHAR_BIT;
   gdbarch->float_bit = 4*TARGET_CHAR_BIT;
@@ -530,6 +536,12 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of int_bit, invalid_p == 0 */
   /* Skip verify of long_bit, invalid_p == 0 */
   /* Skip verify of long_long_bit, invalid_p == 0 */
+  /* Skip verify of nv_fp8_e5m2_bit, invalid_p == 0 */
+  if (gdbarch->nv_fp8_e5m2_format == 0)
+    gdbarch->nv_fp8_e5m2_format = floatformats_nv_fp8_e5m2;
+  /* Skip verify of nv_fp8_e4m3_bit, invalid_p == 0 */
+  if (gdbarch->nv_fp8_e4m3_format == 0)
+    gdbarch->nv_fp8_e4m3_format = floatformats_nv_fp8_e4m3;
   /* Skip verify of bfloat16_bit, invalid_p == 0 */
   if (gdbarch->bfloat16_format == 0)
     gdbarch->bfloat16_format = floatformats_bfloat16;
@@ -1208,6 +1220,18 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
                       "gdbarch_dump: num_regs = %s\n",
                       plongest (gdbarch->num_regs));
   fprintf_unfiltered (file,
+                      "gdbarch_dump: nv_fp8_e4m3_bit = %s\n",
+                      plongest (gdbarch->nv_fp8_e4m3_bit));
+  fprintf_unfiltered (file,
+                      "gdbarch_dump: nv_fp8_e4m3_format = %s\n",
+                      pformat (gdbarch->nv_fp8_e4m3_format));
+  fprintf_unfiltered (file,
+                      "gdbarch_dump: nv_fp8_e5m2_bit = %s\n",
+                      plongest (gdbarch->nv_fp8_e5m2_bit));
+  fprintf_unfiltered (file,
+                      "gdbarch_dump: nv_fp8_e5m2_format = %s\n",
+                      pformat (gdbarch->nv_fp8_e5m2_format));
+  fprintf_unfiltered (file,
                       "gdbarch_dump: osabi = %s\n",
                       plongest (gdbarch->osabi));
   fprintf_unfiltered (file,
@@ -1634,6 +1658,72 @@ set_gdbarch_long_long_bit (struct gdbarch *gdbarch,
                            int long_long_bit)
 {
   gdbarch->long_long_bit = long_long_bit;
+}
+
+int
+gdbarch_nv_fp8_e5m2_bit (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of nv_fp8_e5m2_bit, invalid_p == 0 */
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_nv_fp8_e5m2_bit called\n");
+  return gdbarch->nv_fp8_e5m2_bit;
+}
+
+void
+set_gdbarch_nv_fp8_e5m2_bit (struct gdbarch *gdbarch,
+                             int nv_fp8_e5m2_bit)
+{
+  gdbarch->nv_fp8_e5m2_bit = nv_fp8_e5m2_bit;
+}
+
+const struct floatformat **
+gdbarch_nv_fp8_e5m2_format (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_nv_fp8_e5m2_format called\n");
+  return gdbarch->nv_fp8_e5m2_format;
+}
+
+void
+set_gdbarch_nv_fp8_e5m2_format (struct gdbarch *gdbarch,
+                                const struct floatformat ** nv_fp8_e5m2_format)
+{
+  gdbarch->nv_fp8_e5m2_format = nv_fp8_e5m2_format;
+}
+
+int
+gdbarch_nv_fp8_e4m3_bit (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of nv_fp8_e4m3_bit, invalid_p == 0 */
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_nv_fp8_e4m3_bit called\n");
+  return gdbarch->nv_fp8_e4m3_bit;
+}
+
+void
+set_gdbarch_nv_fp8_e4m3_bit (struct gdbarch *gdbarch,
+                             int nv_fp8_e4m3_bit)
+{
+  gdbarch->nv_fp8_e4m3_bit = nv_fp8_e4m3_bit;
+}
+
+const struct floatformat **
+gdbarch_nv_fp8_e4m3_format (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_nv_fp8_e4m3_format called\n");
+  return gdbarch->nv_fp8_e4m3_format;
+}
+
+void
+set_gdbarch_nv_fp8_e4m3_format (struct gdbarch *gdbarch,
+                                const struct floatformat ** nv_fp8_e4m3_format)
+{
+  gdbarch->nv_fp8_e4m3_format = nv_fp8_e4m3_format;
 }
 
 int
@@ -2236,13 +2326,8 @@ set_gdbarch_fp0_regnum (struct gdbarch *gdbarch,
   gdbarch->fp0_regnum = fp0_regnum;
 }
 
-#ifdef NVIDIA_CUDA_GDB
 int
 gdbarch_stab_reg_to_regnum (struct gdbarch *gdbarch, reg_t stab_regnr)
-#else
-int
-gdbarch_stab_reg_to_regnum (struct gdbarch *gdbarch, int stab_regnr)
-#endif
 {
   gdb_assert (gdbarch != NULL);
   gdb_assert (gdbarch->stab_reg_to_regnum != NULL);
@@ -2258,13 +2343,8 @@ set_gdbarch_stab_reg_to_regnum (struct gdbarch *gdbarch,
   gdbarch->stab_reg_to_regnum = stab_reg_to_regnum;
 }
 
-#ifdef NVIDIA_CUDA_GDB
 int
 gdbarch_ecoff_reg_to_regnum (struct gdbarch *gdbarch, reg_t ecoff_regnr)
-#else
-int
-gdbarch_ecoff_reg_to_regnum (struct gdbarch *gdbarch, int ecoff_regnr)
-#endif
 {
   gdb_assert (gdbarch != NULL);
   gdb_assert (gdbarch->ecoff_reg_to_regnum != NULL);
@@ -2280,13 +2360,8 @@ set_gdbarch_ecoff_reg_to_regnum (struct gdbarch *gdbarch,
   gdbarch->ecoff_reg_to_regnum = ecoff_reg_to_regnum;
 }
 
-#ifdef NVIDIA_CUDA_GDB
 int
 gdbarch_sdb_reg_to_regnum (struct gdbarch *gdbarch, reg_t sdb_regnr)
-#else
-int
-gdbarch_sdb_reg_to_regnum (struct gdbarch *gdbarch, int sdb_regnr)
-#endif
 {
   gdb_assert (gdbarch != NULL);
   gdb_assert (gdbarch->sdb_reg_to_regnum != NULL);
@@ -2302,13 +2377,8 @@ set_gdbarch_sdb_reg_to_regnum (struct gdbarch *gdbarch,
   gdbarch->sdb_reg_to_regnum = sdb_reg_to_regnum;
 }
 
-#ifdef NVIDIA_CUDA_GDB
 int
 gdbarch_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, reg_t dwarf2_regnr)
-#else
-int
-gdbarch_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int dwarf2_regnr)
-#endif
 {
   gdb_assert (gdbarch != NULL);
   gdb_assert (gdbarch->dwarf2_reg_to_regnum != NULL);
@@ -5411,7 +5481,7 @@ gdbarch_register (enum bfd_architecture bfd_architecture,
        (*curr) != NULL;
        curr = &(*curr)->next)
     {
-/* CUDA - BFD architecture */
+/* CUDA - BFD architecture - we re-use the bfd_arch_m68k arch. */
 #ifndef NVIDIA_CUDA_GDB
       if (bfd_architecture == (*curr)->bfd_architecture)
 	internal_error (__FILE__, __LINE__,

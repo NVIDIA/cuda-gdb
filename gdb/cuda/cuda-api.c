@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2022 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -2441,3 +2441,27 @@ cuda_api_read_error_pc (uint32_t dev, uint32_t sm, uint32_t wp, uint64_t *pc, bo
 {
   cuda_debugapi::instance ().read_error_pc (dev, sm, wp, pc, valid);
 }
+
+#if CUDBG_API_VERSION_REVISION >= 132
+void
+cuda_debugapi::get_loaded_function_info (uint32_t dev, uint64_t handle, CUDBGLoadedFunctionInfo *info, uint32_t numEntries)
+{
+  if (get_state () != CUDA_API_STATE_INITIALIZED)
+    return;
+
+#if (CUDBG_API_VERSION_REVISION >= 131)
+  CUDBGResult res = m_cudbgAPI->getLoadedFunctionInfo (dev, handle, info, numEntries);
+#else
+  CUDBGResult res = CUDBG_ERROR_NOT_SUPPORTED;
+#endif
+  cuda_api_print_api_call_result (res);
+
+  if (res != CUDBG_SUCCESS)
+    cuda_dev_api_error (_("getLoadedFunctionInfo"), dev, res);
+}
+
+void cuda_api_get_loaded_function_info (uint32_t dev, uint64_t handle, CUDBGLoadedFunctionInfo *info, uint32_t numEntries)
+{
+  cuda_debugapi::instance ().get_loaded_function_info (dev, handle, info, numEntries);
+}
+#endif

@@ -1356,13 +1356,17 @@ cuda_options_initialize_single_stepping_optimization (void)
 
 }
 
-static unsigned cuda_stop_signal = GDB_SIGNAL_URG;
-static const char *cuda_stop_signal_string = NULL;
+static const char cuda_stop_signal_sigurg[]	= "SIGURG";
+static const char cuda_stop_signal_sigtrap[]	= "SIGTRAP";
 static const char *cuda_stop_signal_enum[] = {
-  "SIGURG",
-  "SIGTRAP",
-  NULL
+	cuda_stop_signal_sigurg,
+	cuda_stop_signal_sigtrap,
+	NULL
 };
+
+static const char *cuda_stop_signal_string = cuda_stop_signal_sigurg;
+
+static unsigned cuda_stop_signal = GDB_SIGNAL_URG;
 
 static void
 cuda_show_stop_signal (struct ui_file *file, int from_tty,

@@ -20,7 +20,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2022 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -79,10 +79,8 @@ struct ui_out;
 /* This is a convenience wrapper for 'current_inferior ()->gdbarch'.  */
 extern struct gdbarch *target_gdbarch (void);
 
-#ifdef NVIDIA_CUDA_GDB
-/* CUDA - 64-bit register index */
+/* CUDA: 64-bit register index. */
 typedef ULONGEST reg_t;
-#endif
 
 /* Callback type for the 'iterate_over_objfiles_in_search_order'
    gdbarch  method.  */
@@ -167,11 +165,23 @@ extern void set_gdbarch_long_bit (struct gdbarch *gdbarch, int long_bit);
 extern int gdbarch_long_long_bit (struct gdbarch *gdbarch);
 extern void set_gdbarch_long_long_bit (struct gdbarch *gdbarch, int long_long_bit);
 
-/* The ABI default bit-size and format for "bfloat16", "half", "float", "double", and
-   "long double".  These bit/format pairs should eventually be combined
+/* The ABI default bit-size and format for "nv_fp8", "bfloat16", "half", "float",
+   "double", and "long double".  These bit/format pairs should eventually be combined
    into a single object.  For the moment, just initialize them as a pair.
    Each format describes both the big and little endian layouts (if
    useful). */
+
+extern int gdbarch_nv_fp8_e5m2_bit (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp8_e5m2_bit (struct gdbarch *gdbarch, int nv_fp8_e5m2_bit);
+
+extern const struct floatformat ** gdbarch_nv_fp8_e5m2_format (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp8_e5m2_format (struct gdbarch *gdbarch, const struct floatformat ** nv_fp8_e5m2_format);
+
+extern int gdbarch_nv_fp8_e4m3_bit (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp8_e4m3_bit (struct gdbarch *gdbarch, int nv_fp8_e4m3_bit);
+
+extern const struct floatformat ** gdbarch_nv_fp8_e4m3_format (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp8_e4m3_format (struct gdbarch *gdbarch, const struct floatformat ** nv_fp8_e4m3_format);
 
 extern int gdbarch_bfloat16_bit (struct gdbarch *gdbarch);
 extern void set_gdbarch_bfloat16_bit (struct gdbarch *gdbarch, int bfloat16_bit);
@@ -365,47 +375,27 @@ extern void set_gdbarch_fp0_regnum (struct gdbarch *gdbarch, int fp0_regnum);
 
 /* Convert stab register number (from `r' declaration) to a gdb REGNUM. */
 
-#ifdef NVIDIA_CUDA_GDB
 typedef int (gdbarch_stab_reg_to_regnum_ftype) (struct gdbarch *gdbarch, reg_t stab_regnr);
 extern int gdbarch_stab_reg_to_regnum (struct gdbarch *gdbarch, reg_t stab_regnr);
-#else
-typedef int (gdbarch_stab_reg_to_regnum_ftype) (struct gdbarch *gdbarch, int stab_regnr);
-extern int gdbarch_stab_reg_to_regnum (struct gdbarch *gdbarch, int stab_regnr);
-#endif
 extern void set_gdbarch_stab_reg_to_regnum (struct gdbarch *gdbarch, gdbarch_stab_reg_to_regnum_ftype *stab_reg_to_regnum);
 
 /* Provide a default mapping from a ecoff register number to a gdb REGNUM. */
 
-#ifdef NVIDIA_CUDA_GDB
 typedef int (gdbarch_ecoff_reg_to_regnum_ftype) (struct gdbarch *gdbarch, reg_t ecoff_regnr);
 extern int gdbarch_ecoff_reg_to_regnum (struct gdbarch *gdbarch, reg_t ecoff_regnr);
-#else
-typedef int (gdbarch_ecoff_reg_to_regnum_ftype) (struct gdbarch *gdbarch, int ecoff_regnr);
-extern int gdbarch_ecoff_reg_to_regnum (struct gdbarch *gdbarch, int ecoff_regnr);
-#endif
 extern void set_gdbarch_ecoff_reg_to_regnum (struct gdbarch *gdbarch, gdbarch_ecoff_reg_to_regnum_ftype *ecoff_reg_to_regnum);
 
 /* Convert from an sdb register number to an internal gdb register number. */
 
-#ifdef NVIDIA_CUDA_GDB
 typedef int (gdbarch_sdb_reg_to_regnum_ftype) (struct gdbarch *gdbarch, reg_t sdb_regnr);
 extern int gdbarch_sdb_reg_to_regnum (struct gdbarch *gdbarch, reg_t sdb_regnr);
-#else
-typedef int (gdbarch_sdb_reg_to_regnum_ftype) (struct gdbarch *gdbarch, int sdb_regnr);
-extern int gdbarch_sdb_reg_to_regnum (struct gdbarch *gdbarch, int sdb_regnr);
-#endif
 extern void set_gdbarch_sdb_reg_to_regnum (struct gdbarch *gdbarch, gdbarch_sdb_reg_to_regnum_ftype *sdb_reg_to_regnum);
 
 /* Provide a default mapping from a DWARF2 register number to a gdb REGNUM.
    Return -1 for bad REGNUM.  Note: Several targets get this wrong. */
 
-#ifdef NVIDIA_CUDA_GDB
 typedef int (gdbarch_dwarf2_reg_to_regnum_ftype) (struct gdbarch *gdbarch, reg_t dwarf2_regnr);
 extern int gdbarch_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, reg_t dwarf2_regnr);
-#else
-typedef int (gdbarch_dwarf2_reg_to_regnum_ftype) (struct gdbarch *gdbarch, int dwarf2_regnr);
-extern int gdbarch_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int dwarf2_regnr);
-#endif
 extern void set_gdbarch_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, gdbarch_dwarf2_reg_to_regnum_ftype *dwarf2_reg_to_regnum);
 
 typedef const char * (gdbarch_register_name_ftype) (struct gdbarch *gdbarch, int regnr);

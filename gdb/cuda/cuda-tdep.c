@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2022 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -19,6 +19,7 @@
 #include <time.h>
 #include <sys/stat.h>
 #include <ctype.h>
+#include <dlfcn.h>
 #if !defined(__QNX__)
 #include <sys/syscall.h>
 #endif
@@ -106,6 +107,9 @@ static char cuda_gdb_session_dir[CUDA_GDB_TMP_BUF_SIZE] = {0};
 static uint32_t cuda_gdb_session_id = 0;
 
 extern initialize_file_ftype _initialize_cuda_tdep;
+
+int cuda_host_shadow_debug = 0;
+
 
 void cuda_create_driver_breakpoints (void)
 {
@@ -1093,6 +1097,9 @@ cuda_is_device_code_address (CORE_ADDR addr)
             /* Skip sections that do not have code */
             if (!(section->flags & SEC_CODE))
               continue;
+            /* skip sections that are unrelocated */
+            if (section->vma == 0)
+              continue;
             if (section->vma > addr || section->vma + section->size <= addr)
               continue;
             return true;
@@ -1400,6 +1407,7 @@ cuda_initialize_injection ()
 {
   CORE_ADDR injectionPathAddr;
   char *injectionPathEnv;
+  void *injectionLib;
 
   injectionPathEnv = getenv ("CUDBG_INJECTION_PATH");
   if (!injectionPathEnv) {
@@ -1411,6 +1419,15 @@ cuda_initialize_injection ()
     error (_("CUDBG_INJECTION_PATH must be no longer than %d: %s is %zd"), CUDBG_INJECTION_PATH_SIZE - 1, injectionPathEnv, strlen (injectionPathEnv));
     return false;
   }
+
+  injectionLib = dlopen(injectionPathEnv, RTLD_LAZY);
+
+  if (injectionLib == NULL) {
+    error (_("Cannot open library %s pointed by CUDBG_INJECTION_PATH: %s"), injectionPathEnv, dlerror());
+    return false;
+  }
+
+  dlclose(injectionLib);
 
   injectionPathAddr  = cuda_get_symbol_address ("cudbgInjectionPath");
   if (!injectionPathAddr) {
@@ -1501,6 +1518,22 @@ cuda_initialize_target (void)
   cuda_write_bool     (memcheckAddr           , cuda_options_memcheck ());
   cuda_write_bool     (launchblockingAddr     , cuda_options_launch_blocking ());
   cuda_write_bool     (preemptionAddr         , cuda_options_software_preemption ());
+
+  /* We may be compiling against an older version of cudadebugger.h,
+     so guard this code with #if checks. */
+#if CUDBG_API_VERSION_REVISION >= 132
+  CORE_ADDR capability_addr = cuda_get_symbol_address (_STRING_(CUDBG_DEBUGGER_CAPABILITIES));
+  if (capability_addr)
+    {
+      uint32_t capabilities = CUDBG_DEBUGGER_CAPABILITY_NONE;
+
+      cuda_trace_domain (CUDA_TRACE_GENERAL, "requesting CUDA lazy function loading support\n");
+      capabilities |= CUDBG_DEBUGGER_CAPABILITY_LAZY_FUNCTION_LOADING;
+
+      target_write_memory (capability_addr, (const gdb_byte *)&capabilities, sizeof (capabilities));
+    }
+#endif
+
   cuda_update_report_driver_api_error_flags ();
 
   inferior_in_debug_mode = true;
@@ -1663,6 +1696,9 @@ cuda_print_lmem_address_type (void)
 static void
 cuda_elf_make_msymbol_special (asymbol *sym, struct minimal_symbol *msym)
 {
+  cuda_trace_domain (CUDA_TRACE_GENERAL, "symbol at 0x%016lx %s",
+		     MSYMBOL_VALUE_RAW_ADDRESS (msym), msym->linkage_name ());
+
   /* managed variables */
   if (((elf_symbol_type *) sym)->internal_elf_sym.st_other == STO_CUDA_MANAGED)
     {
@@ -1673,9 +1709,12 @@ cuda_elf_make_msymbol_special (asymbol *sym, struct minimal_symbol *msym)
   /* break_on_launch */
   if (((elf_symbol_type *) sym)->internal_elf_sym.st_other == STO_CUDA_ENTRY)
     {
-      cuda_elf_image_add_kernel_entry (MSYMBOL_VALUE_RAW_ADDRESS (msym));
+      /* Only insert loaded/relocated kernel entry points */
+      auto addr = MSYMBOL_VALUE_RAW_ADDRESS (msym);
+      if (addr)
+	cuda_elf_image_add_kernel_entry (addr);
 
-      SET_MSYMBOL_VALUE_ADDRESS (msym, MSYMBOL_VALUE_RAW_ADDRESS (msym));
+      SET_MSYMBOL_VALUE_ADDRESS (msym, addr);
     }
 }
 
@@ -2115,7 +2154,6 @@ cuda_sstep_set_ptid (ptid_t ptid)
 static bool
 cuda_control_flow_instruction (const char *inst, bool skip_subroutines)
 {
-  const char *substr = NULL;
   if (!inst) return true;
   /* Maxwell+: https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#maxwell-pascal */
   if (strstr(inst, "BRA") != 0) return true;
@@ -2146,7 +2184,10 @@ cuda_control_flow_instruction (const char *inst, bool skip_subroutines)
   /* Turing+: https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#turing */
   /* BRXU - covered with BRX */
   /* JMXU - covered with JMX */
-
+  /* Hopper+: https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#hopper */
+  if (strstr(inst, "ACQBULK") != 0) return true;
+  if (strstr(inst, "ENDCOLLECTIVE") != 0) return true;
+  /* UCGABAR_* - covered with BAR */
   return false;
 }
 
@@ -2871,8 +2912,18 @@ cuda_adjust_breakpoint_address (struct gdbarch *gdbarch, CORE_ADDR bpaddr)
   context_t context = cuda_system_find_context_by_addr (bpaddr);
 
   if (context)
-    cuda_api_get_adjusted_code_address (context_get_device_id (context),
-                                        bpaddr, &adjusted_addr, CUDBG_ADJ_CURRENT_ADDRESS);
+    {
+      // This can fail if the bpaddr is unrelocated. In that case, we return the original address
+      try
+        {
+          cuda_api_get_adjusted_code_address (context_get_device_id (context),
+                                              bpaddr, &adjusted_addr, CUDBG_ADJ_CURRENT_ADDRESS);
+        }
+      catch (const gdb_exception &ex)
+        {
+          adjusted_addr = bpaddr;
+        }
+    }
   return (CORE_ADDR)adjusted_addr;
 }
 
@@ -3164,4 +3215,129 @@ cuda_update_report_driver_api_error_flags (void)
     return;
 
    target_write_memory (addr, (gdb_byte *)&flags, sizeof(flags));
+}
+
+/* Determine if symbol refers to the __device_stub_ function corresponding
+   to the potential host shadow function 'name'.
+*/
+/*
+  Found a device stub function. Extract the shadow function name from
+  the device stub mangled name and mark it as a shadow function. Can't
+  use language_demangle here as the format appears non-standard.
+
+  Example: _Z38__device_stub__Z9acos_main10acosParamsR10acosParams
+  */
+
+char *
+cuda_is_kernel_launch_stub (const char *linkage_name)
+{
+  auto size = strlen (linkage_name) + 1;
+  auto buffer = (char *)xmalloc (size);
+  strcpy (buffer, linkage_name);
+
+  /* We only want __device_stub_ functions, and not the wrapper ones */
+  if (!strstr (linkage_name, "__device_stub_"))
+    return nullptr;
+  if (strstr (linkage_name, "__wrapper__device_stub_"))
+    return nullptr;
+
+  auto demangled = language_demangle (language_def (language_cplus), linkage_name, DMGL_ANSI);
+  if (!demangled)
+    return nullptr;
+
+  auto name = xstrdup (demangled + strlen ("__device_stub_"));
+  if (cuda_host_shadow_debug)
+    cuda_trace ("host shadow function '%s' '%s'", demangled, name);
+  xfree (demangled);
+
+  return name;
+}
+
+/* Search the given objfile to find host shadow functions.
+   Return true if any found, false otherwise. */
+static void
+cuda_find_objfile_host_shadow_minsyms (struct objfile *objfile,
+				       std::vector<const char *>& cuda_device_stubs)
+{
+  if (cuda_host_shadow_debug)
+    cuda_trace ("host shadow scanning %s", objfile->original_name);
+
+  for (auto msymbol : objfile->msymbols ())
+    {
+      auto symbol_name = cuda_is_kernel_launch_stub (msymbol->linkage_name ());
+      if (symbol_name)
+	{
+	  if (cuda_host_shadow_debug)
+	    cuda_trace ("host shadow minsym '%s' demangled '%s'",
+			msymbol->linkage_name (), symbol_name);
+
+	  auto shadow_minsym = lookup_minimal_symbol_text (symbol_name, objfile);
+	  if (shadow_minsym.minsym && !shadow_minsym.minsym->cuda_host_shadow_checked)
+	    {
+	      shadow_minsym.minsym->cuda_host_shadow = 1;
+	      if (cuda_host_shadow_debug)
+		cuda_trace ("host shadow minsym found %s", symbol_name);
+	      /* Only check the minsym once once */
+	      shadow_minsym.minsym->cuda_host_shadow_checked = 1;
+	    }
+	  cuda_device_stubs.push_back (symbol_name);
+	}
+    }
+}
+
+/* Search the given objfile to find host shadow functions.
+   Return true if any found, false otherwise. */
+void
+cuda_find_objfile_host_shadow_functions (struct objfile *objfile)
+{
+  if (cuda_host_shadow_debug > 1)
+    cuda_trace ("host shadow checking %s", objfile->original_name);
+
+  /* If we've alreasdy scanned, we're done */
+  if (objfile->cuda_host_shadow_scan_complete)
+    return;
+
+  /* host shadow functions are only on the CPU side. */
+  if (objfile->cuda_objfile)
+    return;
+
+  std::vector<const char *> cuda_device_stubs;
+  cuda_find_objfile_host_shadow_minsyms (objfile, cuda_device_stubs);
+
+  /* If no matching minsyms were found, we're done scanning this objfile */
+  if (!cuda_device_stubs.size ())
+    {
+      objfile->cuda_host_shadow_scan_complete = true;
+      return;
+    }
+
+  /* At least one host shadow function */
+  objfile->cuda_host_shadow_found = true;
+
+  if (cuda_host_shadow_debug)
+    cuda_trace ("processing host shadow queue %d", (int)cuda_device_stubs.size ());
+
+  bool all_symbols_found = true;
+  for (const char *host_shadow_name : cuda_device_stubs)
+    {
+      auto host_shadow_sym = cuda_lookup_symbol_in_objfile_from_linkage_name (objfile, host_shadow_name, language_cplus, VAR_DOMAIN);
+      if (host_shadow_sym.symbol)
+	{
+	  host_shadow_sym.symbol->cuda_host_shadow = 1;
+	  if (cuda_host_shadow_debug)
+	    cuda_trace ("cuda host shadow symbol %s", host_shadow_name);
+	  continue;
+	}
+      else
+	{
+	  all_symbols_found = false;
+	  if (cuda_host_shadow_debug)
+	    cuda_trace ("cuda host shadow symbol %s not found", host_shadow_name);
+	}
+      xfree ((char *)host_shadow_name);
+    }
+
+  /* If we found all the symbols, mark the objfile as fully scanned so we don't repeat */
+  if (all_symbols_found)
+    objfile->cuda_host_shadow_scan_complete = true;
 }

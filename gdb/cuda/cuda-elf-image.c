@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2022 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -196,6 +196,52 @@ cuda_elf_image_auto_breakpoints_update_locations ()
 
 void cuda_decode_line_table (struct objfile *objfile);
 
+/* For very large cubins we may run into the Linux per-write-syscall
+   limitation on the number of bytes read/written (which is just under 2G).
+   Read/write in a loop to avoid that problem. */
+
+static void
+cuda_elf_image_rw (int fd, void *image, size_t len, bool read_direction)
+{
+  size_t remaining = len;
+  char *ptr = (char *)image;
+
+  while (remaining > 0)
+    {
+      ssize_t nbytes;
+
+      if (read_direction)
+	nbytes = read (fd, ptr, remaining);
+      else
+	nbytes = write (fd, ptr, remaining);
+
+      if (nbytes < 0)
+	error (_("Error: Failed to %s the ELF image file"),
+	       read_direction ? "read" : "write");
+
+      remaining -= (size_t) nbytes;
+      ptr += nbytes;
+    }
+}
+
+void
+cuda_elf_image_read (const char *filename, void *image, size_t len)
+{
+  auto fd = open (filename, O_RDONLY);
+  if (fd < 0)
+    error (_("Could not open %s for reading"), filename);
+
+  cuda_elf_image_rw (fd, image, len, true);
+
+  close (fd);
+}
+
+void
+cuda_elf_image_write (int fd, const void *image, size_t len)
+{
+  cuda_elf_image_rw (fd, (char *)image, len, false);
+}
+
 /* This function gets the ELF image from a module load and saves it
  * onto the hard drive. */
 void
@@ -223,19 +269,8 @@ cuda_elf_image_save (elf_image_t elf_image, void *image)
   if (object_file_fd == -1)
     error (_("Error: Failed to create device ELF symbol file!"));
 
-  /* For very large cubins we may run into the Linux per-write-syscall
-     limitation on the number of bytes written (which is just under 2G).
-     Write in a loop to avoid that problem. */
+  cuda_elf_image_write (object_file_fd, image, elf_image->size);
 
-  size_t remaining = elf_image->size;
-  const char *wr_ptr = (const char *)image;
-  while (remaining > 0) {
-    ssize_t nbytes = write (object_file_fd, wr_ptr, remaining);
-    if (nbytes < 0)
-      error (_("Error: Failed to write the ELF image file"));
-    remaining -= (size_t) nbytes;
-    wr_ptr += nbytes;
-  }
   close (object_file_fd);
 
   if (stat (elf_image->objfile_path, &object_file_stat))
@@ -305,6 +340,8 @@ cuda_elf_image_load (elf_image_t elf_image, bool is_system)
   cuda_elf_image_auto_breakpoints_update_locations ();
 
   current_elf_image = nullptr;
+
+  cuda_trace ("ELF image load done");
 }
 
 void
@@ -326,6 +363,11 @@ cuda_elf_image_unload (elf_image_t elf_image)
   clear_current_source_symtab_and_line ();
   clear_displays ();
   cuda_reset_invalid_breakpoint_location_section (objfile);
+
+  /* Unlink the ELF image in /tmp/cuda-dbg/ */
+  unlink (objfile->original_name);
+
+  /* Request the objfile be destroyed */
   objfile->unlink();
 
   elf_image->objfile = nullptr;
@@ -334,8 +376,10 @@ cuda_elf_image_unload (elf_image_t elf_image)
 
   /* Remove any still pending locations from the map for this key. */
   cuda_kernel_entry_points.erase (elf_image);
+
   /* Update the forced breakpoints to remove locations for this image. */
   cuda_auto_breakpoints_remove_locations (elf_image);
+
   /* Remove any user set breakpoints for this image. */
   cuda_unresolve_breakpoints (elf_image);
 }

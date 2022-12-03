@@ -22,7 +22,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2022 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -95,13 +95,6 @@ const struct floatformat *floatformats_ieee_double_littlebyte_bigword[BFD_ENDIAN
   &floatformat_ieee_double_big,
   &floatformat_ieee_double_littlebyte_bigword
 };
-#ifdef NVIDIA_CUDA_GDB
-/* CUDA - nv_bfloat16 format */
-const struct floatformat *floatformats_nv_bfloat16[BFD_ENDIAN_UNKNOWN] = {
-  &floatformat_nv_bfloat16,
-  &floatformat_nv_bfloat16,
-};
-#endif
 const struct floatformat *floatformats_i387_ext[BFD_ENDIAN_UNKNOWN] = {
   &floatformat_i387_ext,
   &floatformat_i387_ext
@@ -138,6 +131,16 @@ const struct floatformat *floatformats_bfloat16[BFD_ENDIAN_UNKNOWN] = {
   &floatformat_bfloat16_big,
   &floatformat_bfloat16_little
 };
+#ifdef NVIDIA_CUDA_GDB
+const struct floatformat *floatformats_nv_fp8_e5m2[BFD_ENDIAN_UNKNOWN] = {
+  &floatformat_nv_fp8_e5m2_big,
+  &floatformat_nv_fp8_e5m2_little
+};
+const struct floatformat *floatformats_nv_fp8_e4m3[BFD_ENDIAN_UNKNOWN] = {
+  &floatformat_nv_fp8_e4m3_big,
+  &floatformat_nv_fp8_e4m3_little
+};
+#endif
 
 /* Should opaque types be resolved?  */
 
@@ -6030,6 +6033,14 @@ gdbtypes_post_init (struct gdbarch *gdbarch)
   builtin_type->builtin_unsigned_long_long
     = arch_integer_type (gdbarch, gdbarch_long_long_bit (gdbarch),
 			 1, "unsigned long long");
+#ifdef NVIDIA_CUDA_GDB
+  builtin_type->builtin_nv_fp8_e5m2
+    = arch_float_type (gdbarch, gdbarch_nv_fp8_e5m2_bit (gdbarch),
+		       "__nv_fp8_e5m2", gdbarch_nv_fp8_e5m2_format (gdbarch));
+  builtin_type->builtin_nv_fp8_e4m3
+    = arch_float_type (gdbarch, gdbarch_nv_fp8_e4m3_bit (gdbarch),
+		       "__nv_fp8_e4m3", gdbarch_nv_fp8_e4m3_format (gdbarch));
+#endif
   builtin_type->builtin_half
     = arch_float_type (gdbarch, gdbarch_half_bit (gdbarch),
 		       "half", gdbarch_half_format (gdbarch));

@@ -2457,6 +2457,42 @@ lookup_symbol_in_objfile_from_linkage_name (struct objfile *objfile,
   return {};
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* Like lookup_symbol_in_objfile_from_linkage_name(), but takes an
+   explicit language argument. */
+struct block_symbol
+cuda_lookup_symbol_in_objfile_from_linkage_name (struct objfile *objfile,
+						 const char *linkage_name,
+						 enum language lang,
+						 domain_enum domain)
+{
+  struct objfile *main_objfile;
+
+  demangle_result_storage storage;
+  const char *modified_name = demangle_for_lookup (linkage_name, lang, storage);
+
+  if (objfile->separate_debug_objfile_backlink)
+    main_objfile = objfile->separate_debug_objfile_backlink;
+  else
+    main_objfile = objfile;
+
+  for (::objfile *cur_objfile : main_objfile->separate_debug_objfiles ())
+    {
+      struct block_symbol result;
+
+      result = lookup_symbol_in_objfile_symtabs (cur_objfile, GLOBAL_BLOCK,
+						 modified_name, domain);
+      if (result.symbol == NULL)
+	result = lookup_symbol_in_objfile_symtabs (cur_objfile, STATIC_BLOCK,
+						   modified_name, domain);
+      if (result.symbol != NULL)
+	return result;
+    }
+
+  return {};
+}
+#endif
+
 /* A helper function that throws an exception when a symbol was found
    in a psymtab but not in a symtab.  */
 

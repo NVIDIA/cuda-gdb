@@ -330,6 +330,12 @@ kernel_get_module (kernel_t kernel)
   return kernel->module;
 }
 
+void
+kernel_set_module (kernel_t kernel, module_t module)
+{
+  kernel->module = module;
+}
+
 uint32_t
 kernel_get_dev_id (kernel_t kernel)
 {
@@ -531,6 +537,8 @@ kernels_start_kernel (uint32_t dev_id, uint64_t grid_id,
   context = device_find_context_by_id (dev_id, context_id);
   modules = context_get_modules (context);
   module = modules_find_module_by_id (modules, module_id);
+
+  gdb_assert (module);
 
   if (context)
     set_current_context (context);

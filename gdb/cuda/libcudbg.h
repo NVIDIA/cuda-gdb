@@ -165,6 +165,8 @@ typedef enum {
     CUDBGAPIREQ_readUniformPredicates,
     CUDBGAPIREQ_writeUniformPredicates,
 
+    /* 11.8 extensions */
+    CUDBGAPIREQ_getLoadedFunctionInfo,
 } CUDBGAPIREQ_t;
 
 typedef enum {

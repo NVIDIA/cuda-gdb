@@ -28,7 +28,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2022 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -16123,29 +16123,36 @@ read_structure_type (struct die_info *die, struct dwarf2_cu *cu)
 
 #ifdef NVIDIA_CUDA_GDB
   name = dwarf2_name (die, cu);
+  int nv_bits = 0;
+  /* Load __nv_fp8_e5m2 and __nv_fp8_e4m3 structs as float */
+  if (name && (!strcmp(name, "__nv_fp8_e5m2") || !strcmp(name, "__nv_fp8_e4m3")))
+    nv_bits = 8;
   /* Load __half and __nv_bfloat16 structs as float */
   if (name && (!strcmp(name, "__half") || !strcmp(name, "__nv_bfloat16")))
-  {
-    enum bfd_endian byte_order = gdbarch_byte_order (objfile->arch ());
-    struct attribute *attr = dwarf2_attr (die, DW_AT_endianity, cu);
-    if (attr)
-      {
-	int endianity = DW_UNSND (attr);
-	switch (endianity)
-	  {
-	  case DW_END_big:
-	    byte_order = BFD_ENDIAN_BIG;
-	    break;
-	  case DW_END_little:
-	    byte_order = BFD_ENDIAN_LITTLE;
-	    break;
-	  }
-      }
-    type = dwarf2_init_float_type (objfile, 16, name, name, byte_order);
-    type->set_name (name);
-    set_die_type (die, type, cu);
-    return type;
-  }
+    nv_bits = 16;
+  /* If nv_bits is non-zero, load the nv fp type structs as float. */
+  if (nv_bits)
+    {
+      enum bfd_endian byte_order = gdbarch_byte_order (objfile->arch ());
+      struct attribute *attr = dwarf2_attr (die, DW_AT_endianity, cu);
+      if (attr)
+	{
+	  int endianity = DW_UNSND (attr);
+	  switch (endianity)
+	    {
+	    case DW_END_big:
+	      byte_order = BFD_ENDIAN_BIG;
+	      break;
+	    case DW_END_little:
+	      byte_order = BFD_ENDIAN_LITTLE;
+	      break;
+	    }
+	}
+      type = dwarf2_init_float_type (objfile, nv_bits, name, name, byte_order);
+      type->set_name (name);
+      set_die_type (die, type, cu);
+      return type;
+    }
 #endif
   /* If the definition of this type lives in .debug_types, read that type.
      Don't follow DW_AT_specification though, that will take us back up
@@ -16456,7 +16463,8 @@ process_structure_scope (struct die_info *die, struct dwarf2_cu *cu)
 
 #ifdef NVIDIA_CUDA_GDB
   const char *type_name = type->name ();
-  if (type_name && (!strcmp (type_name, "__half") || !strcmp(type_name, "__nv_bfloat16")))
+  if (type_name && (!strcmp (type_name, "__half") || !strcmp(type_name, "__nv_bfloat16")
+		    || !strcmp(type_name, "__nv_fp8_e5m2") || !strcmp(type_name, "__nv_fp8_e4m3")))
     return;
 #endif
   bool has_template_parameters = false;
@@ -22005,6 +22013,14 @@ new_symbol (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 	  sym->set_linkage_name (linkagename);
 	}
 
+#ifdef NVIDIA_CUDA_GDB
+      auto host_shadow_name = cuda_is_kernel_launch_stub (sym->linkage_name ());
+      if (host_shadow_name)
+	{
+	  dwarf2_per_objfile *per_objfile = cu->per_objfile;
+	  per_objfile->m_cuda_device_stubs.push_back (host_shadow_name);
+	}
+#endif
       /* Default assumptions.
          Use the passed type or decode it from the die.  */
       SYMBOL_DOMAIN (sym) = VAR_DOMAIN;

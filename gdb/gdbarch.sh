@@ -19,7 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+# NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2022 NVIDIA Corporation
 # Modified from the original GDB file referenced above by the CUDA-GDB
 # team at NVIDIA <cudatools@nvidia.com>.
 
@@ -329,12 +329,16 @@ v;int;long_bit;;;8 * sizeof (long);4*TARGET_CHAR_BIT;;0
 # machine.
 v;int;long_long_bit;;;8 * sizeof (LONGEST);2*gdbarch->long_bit;;0
 
-# The ABI default bit-size and format for "bfloat16", "half", "float", "double", and
-# "long double".  These bit/format pairs should eventually be combined
+# The ABI default bit-size and format for "nv_fp8", "bfloat16", "half", "float",
+# "double", and "long double".  These bit/format pairs should eventually be combined
 # into a single object.  For the moment, just initialize them as a pair.
 # Each format describes both the big and little endian layouts (if
 # useful).
 
+v;int;nv_fp8_e5m2_bit;;;8;TARGET_CHAR_BIT;;0
+v;const struct floatformat **;nv_fp8_e5m2_format;;;;;floatformats_nv_fp8_e5m2;;pformat (gdbarch->nv_fp8_e5m2_format)
+v;int;nv_fp8_e4m3_bit;;;8;TARGET_CHAR_BIT;;0
+v;const struct floatformat **;nv_fp8_e4m3_format;;;;;floatformats_nv_fp8_e4m3;;pformat (gdbarch->nv_fp8_e4m3_format)
 v;int;bfloat16_bit;;;16;2*TARGET_CHAR_BIT;;0
 v;const struct floatformat **;bfloat16_format;;;;;floatformats_bfloat16;;pformat (gdbarch->bfloat16_format)
 v;int;half_bit;;;16;2*TARGET_CHAR_BIT;;0
@@ -434,14 +438,14 @@ v;int;pc_regnum;;;-1;-1;;0
 v;int;ps_regnum;;;-1;-1;;0
 v;int;fp0_regnum;;;0;-1;;0
 # Convert stab register number (from \`r\' declaration) to a gdb REGNUM.
-m;int;stab_reg_to_regnum;int stab_regnr;stab_regnr;;no_op_reg_to_regnum;;0
+m;int;stab_reg_to_regnum;reg_t stab_regnr;stab_regnr;;no_op_reg_to_regnum;;0
 # Provide a default mapping from a ecoff register number to a gdb REGNUM.
-m;int;ecoff_reg_to_regnum;int ecoff_regnr;ecoff_regnr;;no_op_reg_to_regnum;;0
+m;int;ecoff_reg_to_regnum;reg_t ecoff_regnr;ecoff_regnr;;no_op_reg_to_regnum;;0
 # Convert from an sdb register number to an internal gdb register number.
-m;int;sdb_reg_to_regnum;int sdb_regnr;sdb_regnr;;no_op_reg_to_regnum;;0
+m;int;sdb_reg_to_regnum;reg_t sdb_regnr;sdb_regnr;;no_op_reg_to_regnum;;0
 # Provide a default mapping from a DWARF2 register number to a gdb REGNUM.
 # Return -1 for bad REGNUM.  Note: Several targets get this wrong.
-m;int;dwarf2_reg_to_regnum;int dwarf2_regnr;dwarf2_regnr;;no_op_reg_to_regnum;;0
+m;int;dwarf2_reg_to_regnum;reg_t dwarf2_regnr;dwarf2_regnr;;no_op_reg_to_regnum;;0
 m;const char *;register_name;int regnr;regnr;;0
 
 # Return the type of a register specified by the architecture.  Only
@@ -521,9 +525,6 @@ m;int;return_in_first_hidden_param_p;struct type *type;type;;default_return_in_f
 
 m;CORE_ADDR;skip_prologue;CORE_ADDR ip;ip;0;0
 M;CORE_ADDR;skip_main_prologue;CORE_ADDR ip;ip
-# CUDA
-M:CORE_ADDR:skip_entrypoint:CORE_ADDR ip:ip
-# END CUDA
 # On some platforms, a single function may provide multiple entry points,
 # e.g. one that is used for function-pointer calls and a different one
 # that is used for direct function calls.
@@ -1257,6 +1258,10 @@ cat <<EOF
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2022 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* This file was created with the aid of \`\`gdbarch.sh''.  */
 
 EOF
@@ -1321,6 +1326,9 @@ struct ui_out;
 
 /* This is a convenience wrapper for 'current_inferior ()->gdbarch'.  */
 extern struct gdbarch *target_gdbarch (void);
+
+/* CUDA: 64-bit register index. */
+typedef ULONGEST reg_t;
 
 /* Callback type for the 'iterate_over_objfiles_in_search_order'
    gdbarch  method.  */
@@ -2356,11 +2364,14 @@ gdbarch_register (enum bfd_architecture bfd_architecture,
        (*curr) != NULL;
        curr = &(*curr)->next)
     {
+/* CUDA - BFD architecture - we re-use the bfd_arch_m68k arch. */
+#ifndef NVIDIA_CUDA_GDB
       if (bfd_architecture == (*curr)->bfd_architecture)
 	internal_error (__FILE__, __LINE__,
                         _("gdbarch: Duplicate registration "
 			  "of architecture (%s)"),
 	                bfd_arch_info->printable_name);
+#endif
     }
   /* log it */
   if (gdbarch_debug)

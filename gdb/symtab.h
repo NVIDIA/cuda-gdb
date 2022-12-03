@@ -539,6 +539,13 @@ struct general_symbol_info
      valid.  */
   unsigned int ada_mangled : 1;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* Only true for CPU symbols. Is this symbol a CUDA runtime host
+     shadow function. Cache if we've already checked this symbol or not */
+  unsigned int cuda_host_shadow : 1;
+  unsigned int cuda_host_shadow_checked : 1;
+#endif
+
   /* Which section is this symbol in?  This is an index into
      section_offsets for this objfile.  Negative means that the symbol
      does not get relocated relative to a section.  */
@@ -1137,6 +1144,10 @@ struct symbol : public general_symbol_info, public allocate_on_obstack
       language_specific.obstack = nullptr;
       m_language = language_unknown;
       ada_mangled = 0;
+#ifdef NVIDIA_CUDA_GDB
+      cuda_host_shadow = 0;
+      cuda_host_shadow_checked = 0;
+#endif
       section = -1;
       /* GCC 4.8.5 (on CentOS 7) does not correctly compile class-
          initialization of unions, so we initialize it manually here.  */
@@ -2412,4 +2423,12 @@ private:
   std::vector<bound_minimal_symbol> m_minimal_symbols;
 };
 
+#ifdef NVIDIA_CUDA_GDB
+/* Used for finding host shadow functions by linkage name */
+extern struct block_symbol
+cuda_lookup_symbol_in_objfile_from_linkage_name (struct objfile *objfile,
+						 const char *linkage_name,
+						 enum language lang,
+						 domain_enum domain);
+#endif
 #endif /* !defined(SYMTAB_H) */

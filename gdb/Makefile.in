@@ -266,6 +266,7 @@ SUBDIR_CUDA_SRCS = \
 	cuda/cuda-events.c \
 	cuda/cuda-exceptions.c \
 	cuda/cuda-frame.c \
+	cuda/cuda-functions.c \
 	cuda/cuda-gdb.c \
 	cuda/cuda-iterator.c \
 	cuda/cuda-kernel.c \
@@ -287,7 +288,7 @@ SUBDIR_CUDA_SRCS = \
 
 @ENABLE_CUDA_TRUE@SUBDIR_CUDA_SFILE_SRCS = cuda/cuda-parser.exp.y cuda/cuda-parser.lex.l
 @ENABLE_CUDA_FALSE@SUBDIR_CUDA_SFILE_SRCS =
-	
+
 @ENABLE_CUDA_TRUE@SUBDIR_CUDA_YYFILES = cuda-parser.lex.c cuda-parser.tab.c
 @ENABLE_CUDA_FALSE@SUBDIR_CUDA_YYFILES =
 

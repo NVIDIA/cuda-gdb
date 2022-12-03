@@ -43,6 +43,8 @@ uint32_t            kernel_get_num_children             (kernel_t kernel);
 bool                kernel_has_launched                 (kernel_t kernel);
 bool                kernel_is_present                   (kernel_t kernel);
 
+void                kernel_set_module         (kernel_t kernel, module_t module);
+
 void                kernel_invalidate         (kernel_t kernel);
 uint32_t            kernel_compute_sms_mask   (kernel_t kernel);
 void                kernel_print              (kernel_t kernel);

@@ -1133,6 +1133,10 @@ buildsym_compunit::end_symtab_with_blockvector (struct block *static_block,
 
   add_compunit_symtab_to_objfile (cu);
 
+#ifdef NVIDIA_CUDA_GDB
+  /* Will early out if we've already scanned the objfile */
+  cuda_find_objfile_host_shadow_functions (m_objfile);
+#endif
   return cu;
 }
 

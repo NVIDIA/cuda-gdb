@@ -111,6 +111,8 @@ static void map_breakpoint_numbers (const char *,
 				    gdb::function_view<void (breakpoint *)>);
 #ifdef NVIDIA_CUDA_GDB
 static void breakpoint_re_set_one (breakpoint *);
+
+static void cuda_print_breakpoints (const char *str);
 #endif
 
 static void breakpoint_re_set_default (struct breakpoint *);
@@ -284,6 +286,8 @@ static struct breakpoint_ops tracepoint_probe_breakpoint_ops;
 struct breakpoint_ops dprintf_breakpoint_ops;
 
 #ifdef NVIDIA_CUDA_GDB
+/* CUDA breakpoint debugging set >0 for full CUDA breakpoint trace messages. */
+static int cuda_breakpoint_debug = 0;
 /* Breakpoint on CUDA UMD API error. */
 static struct breakpoint_ops bkpt_driver_api_error_ops;
 
@@ -951,6 +955,11 @@ set_breakpoint_condition (struct breakpoint *b, const char *exp,
 	  for (bp_location *loc = b->loc; loc != nullptr; loc = loc->next)
 	    {
 	      const char *arg = exp;
+#ifdef NVIDIA_CUDA_GDB
+	      /* Skip disabled locations to deal with disabled shadow breakpoints. */
+	      if (!loc->enabled)
+		continue;
+#endif
 	      parse_exp_1 (&arg, loc->address,
 			   block_for_pc (loc->address), 0);
 	      if (*arg != 0)
@@ -960,6 +969,11 @@ set_breakpoint_condition (struct breakpoint *b, const char *exp,
 	  /* If we reach here, the condition is valid at all locations.  */
 	  for (bp_location *loc = b->loc; loc != nullptr; loc = loc->next)
 	    {
+#ifdef NVIDIA_CUDA_GDB
+	      /* Skip disabled locations to deal with disabled shadow breakpoints. */
+	      if (!loc->enabled)
+		continue;
+#endif
 	      const char *arg = exp;
 	      loc->cond =
 		parse_exp_1 (&arg, loc->address,
@@ -2914,15 +2928,37 @@ insert_breakpoints (void)
 }
 
 #ifdef NVIDIA_CUDA_GDB
+static void
+cuda_notify_all_breakpoints_modified (void)
+{
+  struct breakpoint *b;
+  ALL_BREAKPOINTS (b)  
+    gdb::observers::breakpoint_modified.notify (b);
+}
+
+void
+cuda_reset_breakpoints (void)
+{
+  cuda_remove_breakpoints ();
+  cuda_insert_breakpoints ();
+}
+
 void
 cuda_insert_breakpoints (void)
 {
-  update_global_location_list ((enum ugll_insert_mode) 1);
-  /* update_global_location_list does not insert breakpoints when
+  cuda_trace_breakpoint ("cuda_insert_breakpoints");
+
+  update_global_location_list (UGLL_MAY_INSERT);
+
+  /* update_global_location_list() does not insert breakpoints when
      always_inserted_mode is not enabled.  Explicitly insert them
      now.  */
   if (!always_inserted_mode)
     insert_breakpoint_locations ();
+
+  cuda_notify_all_breakpoints_modified ();
+
+  cuda_print_breakpoints ("after cuda_insert_breakpoints");
 }
 #endif
 /* Invoke CALLBACK for each of bp_location.  */
@@ -3141,15 +3177,25 @@ Thread-specific breakpoint %d deleted - thread %s no longer in the thread list.\
 int
 cuda_remove_breakpoints (void)
 {
-  struct bp_location *b, **bp_tmp;
   int val = 0;
-  ALL_BP_LOCATIONS (b, bp_tmp)
+
+  struct bp_location *bl, **bp_tmp;
+  ALL_BP_LOCATIONS (bl, bp_tmp)
   {
-    if (b->loc_type == bp_loc_hardware_watchpoint)
+    if (bl->loc_type == bp_loc_hardware_watchpoint)
       continue;
-    if (b->inserted)
-      val |= remove_breakpoint (b);
+    if (bl->inserted)
+      {
+	cuda_trace_breakpoint ("cuda_remove_breakpoints: breakpoint %d addr %p",
+			       bl->owner->number, bl->address);
+	val |= remove_breakpoint (bl);
+      }
   }
+
+  cuda_notify_all_breakpoints_modified ();
+
+  cuda_print_breakpoints ("after cuda_remove_breakpoints");
+
   return val;
 }
 static void
@@ -3230,10 +3276,14 @@ static const char *const longjmp_names[] =
 #ifdef NVIDIA_CUDA_GDB
 static const char *const cuda_cdp_names[] =
   {
-    "cudaLaunchDevice", "cudaLaunchDeviceV2",
-    "cudaLaunchDevice_ptsz", "cudaLaunchDeviceV2_ptsz"
+    "cudaLaunchDevice", "cudaLaunchDeviceV2"
   };
 #define NUM_CUDA_CDP_NAMES ARRAY_SIZE(cuda_cdp_names)
+static const char *const cuda_graph_names[] =
+  {
+    "cudaGraphLaunch"
+  };
+#define NUM_CUDA_GRAPH_NAMES ARRAY_SIZE(cuda_graph_names)
 #endif
 /* Per-objfile data private to breakpoint.c.  */
 struct breakpoint_objfile_data
@@ -3260,6 +3310,8 @@ struct breakpoint_objfile_data
 #ifdef NVIDIA_CUDA_GDB
   /* CUDA: Minimal symbol(s) for cdp launch (if any). */
   struct bound_minimal_symbol cuda_cdp_msym[NUM_CUDA_CDP_NAMES] {};
+  /* CUDA: Minimal symbol(s) for graph launch (if any). */
+  struct bound_minimal_symbol cuda_graph_msym[NUM_CUDA_GRAPH_NAMES] {};
 #endif
   /* True if we have looked for exception probes.  */
   int exception_searched = 0;
@@ -3691,6 +3743,71 @@ delete_cuda_cdp_breakpoint (void)
     if (b->type == bp_cuda_cdp)
       delete_breakpoint (b);
 }
+/* Install a master breakpoint for CUDA graph launch. */
+static void
+create_cuda_graph_breakpoint (void)
+{
+  /* Early exit if we already detected device launch in use or if we are debugging a corefile. */
+  if (cuda_is_device_launch_used () || current_inferior ()->fake_pid_p)
+    return;
+
+  scoped_restore_current_program_space restore_pspace;
+
+  for (program_space *pspace : program_spaces)
+    {
+      set_current_program_space (pspace);
+
+      for (objfile *objfile : current_program_space->objfiles ())
+	{
+	  struct breakpoint_objfile_data *bp_objfile_data;
+
+	  bp_objfile_data = get_breakpoint_objfile_data (objfile);
+
+	  for (int i = 0; i < NUM_CUDA_GRAPH_NAMES; i++)
+	    {
+	      struct breakpoint *b;
+	      CORE_ADDR addr;
+	      struct explicit_location explicit_loc;
+      
+	      if (msym_not_found_p (bp_objfile_data->cuda_graph_msym[i].minsym))
+		continue;
+
+	      auto func_name = cuda_graph_names[i];
+	      if (bp_objfile_data->cuda_graph_msym[i].minsym == NULL)
+		{
+		  struct bound_minimal_symbol m;
+
+		  m = lookup_minimal_symbol_text (func_name, objfile);
+		  if (m.minsym == NULL)
+		    {
+		      /* Prevent future lookups in this objfile.  */
+		      bp_objfile_data->cuda_graph_msym[i].minsym = &msym_not_found;
+		      continue;
+		    }
+		  bp_objfile_data->cuda_graph_msym[i] = m;
+		}
+
+	      addr = BMSYMBOL_VALUE_ADDRESS (bp_objfile_data->cuda_graph_msym[i]);
+	      /* Skip prologue, get the function name and adjust breakpoint address */
+	      addr = gdbarch_skip_prologue (objfile->arch (), addr);
+	      addr = adjust_breakpoint_address (objfile->arch (), addr, bp_cuda_graph);
+	      b = create_internal_breakpoint (objfile->arch (), addr, bp_cuda_graph, &internal_breakpoint_ops);
+	      initialize_explicit_location (&explicit_loc);
+	      explicit_loc.function_name = ASTRDUP (func_name);
+	      b->location = new_explicit_location (&explicit_loc);
+	      b->enable_state = bp_enabled;
+	    }
+	}
+    }
+}
+static void
+delete_cuda_graph_breakpoint (void)
+{
+  struct breakpoint *b, *b_tmp;
+  ALL_BREAKPOINTS_SAFE (b, b_tmp)
+    if (b->type == bp_cuda_graph)
+      delete_breakpoint (b);
+}
 #endif
 /* Does B have a location spec?  */
 
@@ -3753,25 +3870,15 @@ update_breakpoints_after_exec (void)
 
 #ifdef NVIDIA_CUDA_GDB
     /* CUDA - breakpoint for error reporting */
-    if (b->type == bp_cuda_driver_api_error)
+    /* Cleanup CUDA internal breakpoints */
+    if (b->type == bp_cuda_driver_api_error
+	|| b->type == bp_cuda_driver_internal_error
+	|| b->type == bp_cuda_uvm
+	|| b->type == bp_cuda_cdp
+	|| b->type == bp_cuda_graph)
       {
         delete_breakpoint (b);
         continue;
-      }
-    if (b->type == bp_cuda_driver_internal_error)
-      {
-        delete_breakpoint (b);
-        continue;
-      }
-    if (b->type == bp_cuda_uvm)
-      {
-	delete_breakpoint (b);
-	continue;
-      }
-    if (b->type == bp_cuda_cdp)
-      {
-	delete_breakpoint (b);
-	continue;
       }
 #endif
     /* Step-resume breakpoints are meaningless after an exec().  */
@@ -4112,6 +4219,7 @@ breakpoint_init_inferior (enum inf_context context)
       case bp_cuda_driver_internal_error:
       case bp_cuda_uvm:
       case bp_cuda_cdp:
+      case bp_cuda_graph:
 	/* Also remove cuda internal breakpoints since their
 	   addresses might change from last run.
 	*/
@@ -6013,12 +6121,15 @@ bpstat_what (bpstat bs_head)
 	  break;
 	/* CUDA - cdp detection */
 	case bp_cuda_cdp:
+	/* CUDA - graph detection */
+	case bp_cuda_graph:
 	  /* Setup auto breakpoints to use forced method. */
 	  cuda_set_device_launch_used (true);
 	  cuda_elf_image_auto_breakpoints_update_locations ();
 	  this_action = BPSTAT_WHAT_SINGLE;
-	  /* Delete cdp detection breakpoints once it was hit */
+	  /* Delete forced detection breakpoints once it was hit */
 	  delete_cuda_cdp_breakpoint ();
+	  delete_cuda_graph_breakpoint ();
 	  break;
 #endif
 	case bp_watchpoint:
@@ -6436,6 +6547,8 @@ bptype_string (enum bptype type)
     {bp_cuda_uvm, "cuda uvm detection"},
     /* CUDA - cdp detection */
     {bp_cuda_cdp, "cuda cdp detection"},
+    /* CUDA - graph detection */
+    {bp_cuda_graph, "cuda graph detection"},
 #endif
     {bp_overlay_event, "overlay events"},
     {bp_longjmp_master, "longjmp master"},
@@ -7443,7 +7556,8 @@ adjust_breakpoint_address (struct gdbarch *gdbarch,
 #ifdef NVIDIA_CUDA_GDB
       /* CUDA - auto breakpoints; do not print warnings for adjustments */
       if (adjusted_bpaddr != bpaddr && bptype != bp_cuda_auto && 
-	  bptype != bp_cuda_cdp && bptype != bp_cuda_uvm)
+	  bptype != bp_cuda_cdp && bptype != bp_cuda_uvm &&
+	  bptype != bp_cuda_graph)
 #else
       if (adjusted_bpaddr != bpaddr)
 #endif
@@ -7492,6 +7606,8 @@ bp_location_from_bp_type (bptype type)
     case bp_cuda_uvm:
     /* CUDA - cdp detection */
     case bp_cuda_cdp:
+    /* CUDA - graph detection */
+    case bp_cuda_graph:
 #endif
       return bp_loc_software_breakpoint;
     case bp_hardware_breakpoint:
@@ -8271,6 +8387,34 @@ cuda_promote_location (struct bp_location* loc, elf_image_t elf_image)
               b->number, loc->address);
   return loc;
 }
+
+static void
+cuda_print_breakpoint (const char *desc, struct breakpoint *b)
+{
+  if (desc)
+    cuda_trace_breakpoint (desc);
+
+  int loc_number = 1;
+  for (auto loc = b->loc; loc; loc = loc->next, loc_number++)
+    {
+      cuda_trace_breakpoint ("breakpoint %d.%d inserted %d enabled %d address %p",
+			     b->number, loc_number, loc->inserted, loc->enabled, (void *)loc->address);
+    }
+}
+
+static void
+cuda_print_breakpoints (const char *str)
+{
+  if (cuda_breakpoint_debug > 1)
+    {
+      cuda_trace_breakpoint ("breakpoints %s", str);
+
+      struct breakpoint *b = NULL;
+      ALL_BREAKPOINTS (b)
+	cuda_print_breakpoint (nullptr, b);
+    }
+}
+
 /* Clean up breakpoints set on host shadow code by line number that also have
    locations on host and device. Happens when setting a breakpoint on the
    closing bracket of a device function. */
@@ -8282,11 +8426,10 @@ cuda_clean_shadow_host_breakpoints (struct breakpoint *b, elf_image_t elf_image)
   int num_device_locations = 0;
   int num_host_locations = 0;
   struct bp_location *loc = NULL;
-  struct bp_location *prev_loc = NULL;
   /* check if we have a mixed bag of host and device locations */
   for (loc = b->loc; loc; loc = loc->next)
   {
-    if (cuda_is_device_code_address (loc->address))
+    if (loc->cuda_breakpoint)
       ++num_device_locations;
     else
       ++num_host_locations;
@@ -8299,21 +8442,18 @@ cuda_clean_shadow_host_breakpoints (struct breakpoint *b, elf_image_t elf_image)
 					&addr))
     return;
   /* uninsert the existing breakpoint on the host locations */
+  uint32_t loc_number = 0;
   for (loc = b->loc; loc; loc = loc->next)
-    if (!cuda_is_device_code_address (loc->address))
-      remove_breakpoint (loc);
-  /* remove the host locations from the location list */
-  for (loc = b->loc, prev_loc = NULL; loc; loc = loc->next)
     {
-      if (!cuda_is_device_code_address (loc->address))
-        {
-          if (prev_loc == NULL)
-            b->loc = loc->next;
-          else
-            prev_loc->next = loc->next;
-        }
-      prev_loc = loc;
+      if (!loc->cuda_breakpoint)
+	{
+	  cuda_trace_breakpoint ("disabling host breakpoint location %d.%d",
+				 b->number, loc_number);
+	  loc->enabled = false;
+	}
+      loc_number++;
     }
+  update_global_location_list (UGLL_DONT_INSERT);
 }
 /* When a CUDA ELF image gets unloaded, any pointer to its objfile or any of
    its section becomes invalid. cuda_update_breakpoint_locations updates those
@@ -8343,7 +8483,9 @@ cuda_remove_duplicate_locations (struct bp_location *promoted_loc, struct breakp
     if (*ploc == promoted_loc)
       break;
   gdb_assert (*ploc == promoted_loc);
-  cuda_trace_breakpoint ("Removing promoted breakpoint location to avoid duplication");
+
+  cuda_trace_breakpoint ("removing promoted breakpoint location to avoid duplication");
+
   *ploc = promoted_loc->next;
   /* If another location type is yet not set, copy it from promoted location */
   if (loc->cuda_elf_image == NULL)
@@ -8352,12 +8494,14 @@ cuda_remove_duplicate_locations (struct bp_location *promoted_loc, struct breakp
       gdb_assert (loc->cuda_elf_image);
       loc->cuda_breakpoint = true;
     }
-  if (loc->cuda_breakpoint)
-    cuda_trace_breakpoint ("removed CUDA breakpoint location: breakpoint %d addr %p",
+
+  if (cuda_breakpoint_debug)
+    cuda_trace_breakpoint ("removed %s breakpoint location: breakpoint %d addr %p",
+			   loc->cuda_breakpoint ? "CUDA" : "host",
 			   b->number, loc->address);
   promoted_loc->cuda_elf_image = NULL;
   promoted_loc->cuda_breakpoint = false;
-  update_global_location_list ((enum ugll_insert_mode) 0);
+  update_global_location_list (UGLL_DONT_INSERT);
   return true;
 }
 void
@@ -8394,6 +8538,7 @@ cuda_resolve_breakpoints (int bp_number_from, elf_image_t elf_image)
 	{
 	  warning ("Error while resolving breakpoint %d: ", b->number);
 	}
+      cuda_print_breakpoint ("after breakpoint reset", b);
       /* avoid duplicate breakpoints on shadow code */
       cuda_clean_shadow_host_breakpoints (b, elf_image);
       /* Promote existing host breakpoints to device breakpoints if possible */
@@ -8418,12 +8563,14 @@ cuda_resolve_breakpoints (int bp_number_from, elf_image_t elf_image)
           - when there are more than one device location (the first is
             promoted, the others are created from scratch). */
       cuda_add_location (b, elf_image);
+      cuda_print_breakpoint ("after cuda_add_location", b);
       /* restore the section (and objfile) if it has been removed after
          unloading the ELF image for one reason or another. */
       for (loc = b->loc; loc; loc = loc->next)
         if (!loc->section)
           b->loc->section = find_pc_section (loc->address);
     }
+  cuda_print_breakpoints ("after cuda_resolve_breakpoints");
 }
 /* CUDA - cuda breakpoints */
 /* Unresolve the breakpoints in CUDA device code.
@@ -8471,7 +8618,7 @@ cuda_unresolve_breakpoints (elf_image_t elf_image)
         else
           ploc = &((*ploc)->next);
     }
-  update_global_location_list ((enum ugll_insert_mode) 0);
+  update_global_location_list (UGLL_DONT_INSERT);
   clear_last_displayed_sal ();
 }
 #endif /* NVIDIA_CUDA_GDB */
@@ -9736,6 +9883,40 @@ add_location_to_breakpoint (struct breakpoint *b,
 	loc->cuda_elf_image = cuda_get_elf_image_by_objfile (sal->section->objfile);
       loc->cuda_breakpoint = true;
       b->cuda_breakpoint =   true;
+      /* LFL - ensure that the address is relocated. We want to disable unrelocated locations. */
+      if (!cuda_is_device_code_address (loc->address))
+	loc->enabled = false;
+    }
+  else
+    {
+      /* Only host symbols can be host shadow functions */
+      if (sal->msymbol && sal->msymbol->cuda_host_shadow)
+	{
+	  cuda_trace_breakpoint ("disabling host shadow breakpoint location %p on minsym %s",
+				 (void *)loc->address, sal->msymbol->linkage_name());
+	  loc->enabled = false;
+	}
+      if (sal->symbol)
+	{
+	  if (sal->symbol->cuda_host_shadow)
+	    {
+	      cuda_trace_breakpoint ("disabling host shadow breakpoint location %p on symbol %s",
+				     (void *)loc->address, sal->symbol->linkage_name());
+	      loc->enabled = false;
+	    }
+	  else if (!sal->symbol->cuda_host_shadow_checked)
+	    {
+	      auto shadow_minsym = lookup_minimal_symbol_text (sal->symbol->linkage_name (), sal->objfile);
+	      if (shadow_minsym.minsym && shadow_minsym.minsym->cuda_host_shadow)
+		{
+		  loc->enabled = false;
+		  sal->symbol->cuda_host_shadow = 1;
+		  cuda_trace_breakpoint ("host shadow minsym found %s via minsym", sal->symbol->linkage_name ());
+		}
+	      /* Either way, don't repeat the check. */
+	      sal->symbol->cuda_host_shadow_checked = 1;
+	    }
+	}
     }
 #endif
   set_breakpoint_location_function (loc);
@@ -9757,9 +9938,11 @@ add_location_to_breakpoint (struct breakpoint *b,
     loc->permanent = 1;
 
 #ifdef NVIDIA_CUDA_GDB
-  if (loc->cuda_breakpoint)
-    cuda_trace_breakpoint ("added location to CUDA breakpoint: breakpoint %d addr %p",
-			   b->number, loc->address);
+  auto expr = b->location.get () ? &event_location_to_string (b->location.get ())[3] : "<nil>";
+  cuda_trace_breakpoint ("added location to %s breakpoint %d enabled %d addr %p expr %s",
+			 loc->cuda_breakpoint ? "CUDA" : "host",
+			 b->number, loc->enabled, loc->address, expr);
+  cuda_print_breakpoints ("after add_location_to_breakpoint");
 #endif
   return loc;
 }
@@ -13922,6 +14105,8 @@ internal_bkpt_re_set (struct breakpoint *b)
 #ifdef NVIDIA_CUDA_GDB
     /* CUDA - cdp detection */
     case bp_cuda_cdp:
+    /* CUDA - graph detection */
+    case bp_cuda_graph:
 #endif
       delete_breakpoint (b);
       break;
@@ -14003,6 +14188,7 @@ internal_bkpt_print_it (bpstat bs)
 #ifdef NVIDIA_CUDA_GDB
     case bp_cuda_uvm:
     case bp_cuda_cdp:
+    case bp_cuda_graph:
       /* These should never be enabled.  */
       printf_filtered (_("CUDA internal Breakpoint: "
 			 "gdb should not stop!\n"));
@@ -15254,6 +15440,7 @@ breakpoint_re_set (void)
   create_exception_master_breakpoint ();
 #ifdef NVIDIA_CUDA_GDB
   create_cuda_cdp_breakpoint ();
+  create_cuda_graph_breakpoint ();
 #endif
 
   /* Now we can insert.  */

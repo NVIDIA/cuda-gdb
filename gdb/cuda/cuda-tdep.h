@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2022 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -237,5 +237,8 @@ void cuda_nat_attach (void);
 void cuda_do_detach(struct inferior *inf, bool remote);
 void cuda_remote_attach (void);
 
-#endif
+/* Support for detecting host shadow functions */
+void cuda_find_objfile_host_shadow_functions (struct objfile *objfile);
+char *cuda_is_kernel_launch_stub (const char *linkage_name);
 
+#endif

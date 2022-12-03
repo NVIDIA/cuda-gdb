@@ -256,6 +256,10 @@ cuda_exception_print_message (cuda_exception_t exception)
     case GDB_SIGNAL_CUDA_WARP_INVALID_PC:
     case GDB_SIGNAL_CUDA_WARP_HARDWARE_STACK_OVERFLOW:
     case GDB_SIGNAL_CUDA_WARP_ILLEGAL_ADDRESS:
+#if (CUDBG_API_VERSION_REVISION >= 131)
+    case GDB_SIGNAL_CUDA_CLUSTER_OUT_OF_RANGE_ADDRESS:
+    case GDB_SIGNAL_CUDA_CLUSTER_BLOCK_NOT_PRESENT:
+#endif
       print_exception_name (exception);
       print_exception_origin (exception);
       break;
@@ -385,6 +389,18 @@ cuda_exception_hit_p (cuda_exception_t exception)
       exception->valid = true;
       exception->recoverable = false;
       break;
+#if (CUDBG_API_VERSION_REVISION >= 131)
+    case CUDBG_EXCEPTION_CLUSTER_BLOCK_NOT_PRESENT:
+      exception->value = GDB_SIGNAL_CUDA_CLUSTER_BLOCK_NOT_PRESENT;
+      exception->valid = true;
+      exception->recoverable = false;
+      break;
+    case CUDBG_EXCEPTION_CLUSTER_OUT_OF_RANGE_ADDRESS:
+      exception->value = GDB_SIGNAL_CUDA_CLUSTER_OUT_OF_RANGE_ADDRESS;
+      exception->valid = true;
+      exception->recoverable = false;
+      break;
+#endif
     case CUDBG_EXCEPTION_NONE:
       break;
     case CUDBG_EXCEPTION_UNKNOWN:
@@ -436,6 +452,12 @@ cuda_exception_type_to_name (CUDBGException_t exception_type)
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_WARP_ILLEGAL_ADDRESS);
     case CUDBG_EXCEPTION_LANE_NONMIGRATABLE_ATOMSYS:
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_LANE_NONMIGRATABLE_ATOMSYS);
+#if (CUDBG_API_VERSION_REVISION >= 131)
+    case CUDBG_EXCEPTION_CLUSTER_BLOCK_NOT_PRESENT:
+      return gdb_signal_to_string (GDB_SIGNAL_CUDA_CLUSTER_BLOCK_NOT_PRESENT);
+    case CUDBG_EXCEPTION_CLUSTER_OUT_OF_RANGE_ADDRESS:
+      return gdb_signal_to_string (GDB_SIGNAL_CUDA_CLUSTER_OUT_OF_RANGE_ADDRESS);
+#endif
     default:
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_UNKNOWN_EXCEPTION);
     }

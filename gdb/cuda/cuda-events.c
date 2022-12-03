@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2022 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -21,12 +21,16 @@
 #if defined(__linux__) && defined(GDB_NM_FILE)
 #include "linux-nat.h"
 #endif
+#include "exec.h"
+#include "observable.h"
 #include "source.h"
 #include "target.h"
 #include "arch-utils.h"
+#include "varobj.h"
 
 #include "cuda-context.h"
 #include "cuda-events.h"
+#include "cuda-functions.h"
 #include "cuda-kernel.h"
 #include "cuda-modules.h"
 #include "cuda-options.h"
@@ -176,6 +180,9 @@ cuda_event_load_elf_image (uint32_t dev_id, uint64_t context_id, uint64_t module
 
   elf_image = module_get_elf_image (module);
   cuda_elf_image_load (elf_image, is_system);
+
+  auto objfile = cuda_elf_image_get_objfile (elf_image);
+  cuda_trace_event ("    -> ELF image %s\n", objfile->original_name);
 }
 
 static void
@@ -297,16 +304,98 @@ cuda_event_timeout (void)
   cuda_trace_event ("CUDBG_EVENT_TIMEOUT\n");
 }
 
+#if CUDBG_API_VERSION_REVISION >= 132
+static void
+cuda_event_functions_loaded (uint32_t dev_id,
+			     uint64_t context_id,
+			     uint64_t module_id,
+                             uint32_t count)
+{
+  cuda_trace_event ("CUDBG_FUNCTIONS_LOADED dev_id=%u context=0x%llx module=0x%llx count=%d",
+                    dev_id,
+                    (unsigned long long)context_id,
+                    (unsigned long long)module_id,
+                    count);
+
+  auto context = device_find_context_by_id (dev_id, context_id);
+  auto modules = context_get_modules (context);
+  auto module = modules_find_module_by_id (modules, module_id);
+  auto elf_image = module_get_elf_image (module);
+
+  auto objfile_old = cuda_elf_image_get_objfile (elf_image);
+  cuda_trace_event ("  -> old ELF image %p (%s)", elf_image, objfile_old->original_name);
+
+  /* Record information about the current elf image */
+  auto is_system = cuda_elf_image_is_system (elf_image);
+  auto image_size = cuda_elf_image_get_size (elf_image);
+
+  /* Save a copy of the ELF image for updating below */
+  auto buffer = (void *)xmalloc (image_size);
+
+  /* For debugging incremental vs. full reload */
+  bool incremental_updates = true;
+  if (incremental_updates)
+    {
+      /* Save a copy of the current cubin */
+      cuda_elf_image_read (objfile_old->original_name, buffer, image_size);
+
+      /* Unload the elf_image and objfile */
+      cuda_elf_image_unload (elf_image);
+
+      /* Fetch the incremental function load information */
+      size_t len = count * sizeof(CUDBGLoadedFunctionInfo);
+      auto info = (CUDBGLoadedFunctionInfo *)xmalloc (len);
+      cuda_api_get_loaded_function_info (dev_id, module_id, info, count);
+
+      /* Apply the incremental relocations */
+      cuda_apply_function_load_updates ((char *)buffer, info, count);
+      xfree (info);
+
+      /* For debugging, compare before and after incremental updates */
+      bool compare_cubins = false;
+      if (compare_cubins)
+	{
+	  /* Save a copy of the ELF image for updating below */
+	  auto original = (void *)xmalloc (image_size);
+
+	  /* Re-fetch the whole cubin */
+	  cuda_api_get_elf_image (dev_id, module_id, true, original, image_size);
+
+	  /* Compare */
+	  if (memcmp (buffer, original, image_size))
+	    error (_("cubin buffers do not compare\n"));
+
+	  /* Done with the temp copy */
+	  xfree (original);
+	}
+    }
+  else
+    {
+      /* Unload the elf_image and objfile */
+      cuda_elf_image_unload (elf_image);
+
+      /* Re-fetch the whole cubin */
+      cuda_api_get_elf_image (dev_id, module_id, true, buffer, image_size);
+    }
+
+  /* Write image back out to disk for cuda_elf_image_load() to create
+     a BFD from. */
+  cuda_elf_image_save (elf_image, buffer);
+  xfree (buffer);
+
+  /* Load the ELF image from the filesystem, creating a new objfile */
+  cuda_elf_image_load (elf_image, is_system);
+}
+#endif
+
 void
 cuda_event_post_process (bool reset_bpt)
 {
 
   /* Launch (kernel ready) events may require additional
      breakpoint handling (via remove/insert). */
-  if (reset_bpt) {
-      cuda_remove_breakpoints ();
-      cuda_insert_breakpoints ();
-  }
+  if (reset_bpt)
+    cuda_reset_breakpoints ();
 }
 
 void
@@ -324,6 +413,10 @@ cuda_process_events (CUDBGEvent *event, cuda_event_kind_t kind)
     cuda_process_event (event);
     if (event->kind == CUDBG_EVENT_KERNEL_READY)
         reset_bpt = true;
+#if CUDBG_API_VERSION_REVISION >= 132
+    if (event->kind == CUDBG_EVENT_FUNCTIONS_LOADED)
+        reset_bpt = true;
+#endif
   }
 
   /* Step 2:  Post-process events after they've all been consumed. */
@@ -343,6 +436,7 @@ cuda_process_event (CUDBGEvent *event)
   uint32_t properties;
   uint64_t elf_image_size;
   uint64_t parent_grid_id;
+  uint32_t count;
   void    *elf_image;
   CuDim3   grid_dim;
   CuDim3   block_dim;
@@ -457,6 +551,17 @@ cuda_process_event (CUDBGEvent *event)
                                          handle);
             break;
           }
+#if CUDBG_API_VERSION_REVISION >= 132
+        case CUDBG_EVENT_FUNCTIONS_LOADED:
+          {
+            dev_id         = event->cases.functionsLoaded.dev;
+            context_id     = event->cases.functionsLoaded.context;
+            module_id      = event->cases.functionsLoaded.module;
+            count          = event->cases.functionsLoaded.count;
+            cuda_event_functions_loaded (dev_id, context_id, module_id, count);
+            break;
+          }
+#endif
         default:
           gdb_assert (0);
         }

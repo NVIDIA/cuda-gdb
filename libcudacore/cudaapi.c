@@ -1706,11 +1706,14 @@ static const struct CUDBGAPI_st cudbgCoreApi = {
     API_CALL(getNumUniformPredicates),
     API_CALL(readUniformPredicates),
     API_CALL(notSupported),
+
+    /* 11.8 Extensions */
+    API_CALL(notSupported),
 };
 
 CUDBGAPI cuCoreGetApi(CudaCore *cc)
 {
-	curcc = cc;
+  curcc = cc;
 
-	return &cudbgCoreApi;
+  return &cudbgCoreApi;
 }

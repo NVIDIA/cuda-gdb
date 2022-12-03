@@ -23,7 +23,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2022 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -1923,6 +1923,10 @@ struct builtin_type
   struct type *builtin_unsigned_short;
   struct type *builtin_unsigned_int;
   struct type *builtin_unsigned_long;
+#ifdef NVIDIA_CUDA_GDB
+  struct type *builtin_nv_fp8_e5m2;
+  struct type *builtin_nv_fp8_e4m3;
+#endif
   struct type *builtin_bfloat16;
   struct type *builtin_half;
   struct type *builtin_float;
@@ -2050,10 +2054,6 @@ extern const struct floatformat *floatformats_ieee_half[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_ieee_single[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_ieee_double[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_ieee_double_littlebyte_bigword[BFD_ENDIAN_UNKNOWN];
-#ifdef NVIDIA_CUDA_GDB
-/* CUDA - nv_bfloat16 format */
-extern const struct floatformat *floatformats_nv_bfloat16[BFD_ENDIAN_UNKNOWN];
-#endif
 extern const struct floatformat *floatformats_i387_ext[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_m68881_ext[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_arm_ext[BFD_ENDIAN_UNKNOWN];
@@ -2063,6 +2063,10 @@ extern const struct floatformat *floatformats_vax_f[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_vax_d[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_ibm_long_double[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_bfloat16[BFD_ENDIAN_UNKNOWN];
+#ifdef NVIDIA_CUDA_GDB
+extern const struct floatformat *floatformats_nv_fp8_e5m2[BFD_ENDIAN_UNKNOWN];
+extern const struct floatformat *floatformats_nv_fp8_e4m3[BFD_ENDIAN_UNKNOWN];
+#endif
 
 /* Allocate space for storing data associated with a particular
    type.  We ensure that the space is allocated using the same

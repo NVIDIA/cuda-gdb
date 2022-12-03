@@ -18,6 +18,7 @@
 #include "cuda-tdep-server.h"
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <dlfcn.h>
 #ifndef __QNXHOST__
 # include <sys/ptrace.h>
 # ifndef __ANDROID__
@@ -425,6 +426,7 @@ cuda_initialize_injection ()
 {
   CORE_ADDR injectionPathAddr;
   char *injectionPathEnv;
+  void *injectionLib;
 
   injectionPathEnv = getenv ("CUDBG_INJECTION_PATH");
   if (!injectionPathEnv)
@@ -438,6 +440,17 @@ cuda_initialize_injection ()
       error (_("CUDBG_INJECTION_PATH must be no longer than %d: %s is %zd"), CUDBG_INJECTION_PATH_SIZE - 1, injectionPathEnv, strlen (injectionPathEnv));
       return false;
     }
+
+  injectionLib = dlopen(injectionPathEnv, RTLD_LAZY);
+
+  if (injectionLib == NULL)
+    {
+      error (_("Cannot open library %s pointed by CUDBG_INJECTION_PATH: %s"), injectionPathEnv, dlerror());
+      return false;
+    }
+
+  dlclose(injectionLib);
+
 
   injectionPathAddr  = cuda_get_symbol_address_from_cache (_STRING_(cudbgInjectionPath));
   if (!injectionPathAddr)
