@@ -52,7 +52,9 @@ void             cuda_elf_image_load             (elf_image_t elf_image, bool is
 void             cuda_elf_image_unload           (elf_image_t elf_image);
 
 bool             cuda_elf_image_contains_address (elf_image_t elf_image, CORE_ADDR addr);
-void             cuda_elf_image_resolve_breakpoints (elf_image_t elf_image);
+
+void		 cuda_elf_image_add_kernel_entry (CORE_ADDR addr);
+void		 cuda_elf_image_auto_breakpoints_update_locations ();
 
 elf_image_t      cuda_get_elf_image_by_objfile (struct objfile *objfile);
 #endif

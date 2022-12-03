@@ -82,6 +82,8 @@ void cuda_set_host_address_resident_on_gpu (bool);
 bool cuda_is_host_address_resident_on_gpu (void);
 void cuda_managed_memory_clean_regions (void);
 bool cuda_is_value_managed_pointer (struct value *value);
+bool cuda_is_device_launch_used (void);
+void cuda_set_device_launch_used (bool);
 bool cuda_is_uvm_used (void);
 void cuda_set_uvm_used (bool);
 #ifndef GDBSERVER

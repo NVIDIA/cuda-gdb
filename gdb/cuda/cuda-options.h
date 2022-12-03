@@ -63,8 +63,9 @@ bool cuda_options_single_stepping_optimizations_enabled (void);
 unsigned cuda_options_stop_signal (void);
 bool cuda_options_device_resume_on_cpu_dynamic_function_call (void);
 
-/* Return true of BOL/KE breakpoints needs to be inserted */
+/* Return true if KERNEL_READY breakpoints needs to be inserted */
 bool cuda_options_auto_breakpoints_needed (void);
-
+/* Return true if we need to force KE breakpoints. */
+bool cuda_options_auto_breakpoints_forced_needed (void);
 #endif
 

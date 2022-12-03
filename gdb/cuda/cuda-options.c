@@ -32,6 +32,8 @@
 #include "objfiles.h"
 #include "cuda-regmap.h"
 #include "cuda-tdep.h"
+#include "cuda-utils.h"
+#include "cuda-elf-image.h"
 
 /*List of set/show cuda commands */
 struct cmd_list_element *setcudalist;
@@ -572,9 +574,10 @@ cuda_show_break_on_launch (struct ui_file *file, int from_tty,
 static void
 cuda_set_break_on_launch (const char *args, int from_tty, struct cmd_list_element *c)
 {
-  if (cuda_options_auto_breakpoints_needed ())
-    cuda_auto_breakpoints_add_locations ();
-  cuda_auto_breakpoints_update_breakpoints ();
+  /* Update to receive KERNEL_READY events. */
+  cuda_options_force_set_launch_notification_update ();
+  /* Update kernel entry bpts if needed. */
+  cuda_elf_image_auto_breakpoints_update_locations ();
 }
 
 static void
@@ -788,9 +791,11 @@ cuda_show_show_kernel_events (struct ui_file *file, int from_tty,
 void
 cuda_options_force_set_launch_notification_update (void)
 {
-  if (!cuda_options_auto_breakpoints_needed () &&
-      cuda_show_kernel_events != cuda_show_kernel_events_none &&
-      cuda_show_kernel_events_depth == 1)
+  /* Only use KERNEL_READY events if we are using auto breakpoints or kernel ready events
+     and we don't need to use the forced method. */
+  if ((cuda_options_auto_breakpoints_needed () ||
+       (cuda_show_kernel_events != cuda_show_kernel_events_none)) &&
+      (!cuda_options_auto_breakpoints_forced_needed ()))
     cuda_api_set_kernel_launch_notification_mode (CUDBG_KNL_LAUNCH_NOTIFY_EVENT);
   else
     cuda_api_set_kernel_launch_notification_mode (CUDBG_KNL_LAUNCH_NOTIFY_DEFER);
@@ -799,11 +804,10 @@ cuda_options_force_set_launch_notification_update (void)
 static void
 cuda_set_show_kernel_events (const char *args, int from_tty, struct cmd_list_element *c)
 {
-  if (cuda_options_auto_breakpoints_needed ())
-    cuda_auto_breakpoints_add_locations ();
-
+  /* Update to receive KERNEL_READY events. */
   cuda_options_force_set_launch_notification_update ();
-  cuda_auto_breakpoints_update_breakpoints ();
+  /* Update kernel entry bpts if needed. */
+  cuda_elf_image_auto_breakpoints_update_locations ();
 }
 
 static void
@@ -865,9 +869,16 @@ cuda_options_show_kernel_events_application (void)
 bool
 cuda_options_auto_breakpoints_needed (void)
 {
-  return (cuda_show_kernel_events_depth > 1 &&
-          cuda_show_kernel_events != cuda_show_kernel_events_none) ||
-            cuda_break_on_launch != cuda_break_on_launch_none;
+  return (cuda_break_on_launch != cuda_break_on_launch_none);
+}
+
+bool
+cuda_options_auto_breakpoints_forced_needed (void)
+{
+  return ((cuda_show_kernel_events_depth > 1 &&
+           cuda_show_kernel_events != cuda_show_kernel_events_none) ||
+          (cuda_options_auto_breakpoints_needed () && 
+	   cuda_is_device_launch_used ()));
 }
 
 /*

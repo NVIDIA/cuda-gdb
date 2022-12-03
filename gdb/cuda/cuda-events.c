@@ -248,6 +248,14 @@ cuda_event_kernel_ready (uint32_t dev_id, uint64_t context_id, uint64_t module_i
                         module_id, grid_dim, block_dim, type,
                         parent_grid_id, origin);
 
+  // Add auto-breakpoints if necessary
+  if (cuda_options_auto_breakpoints_needed ())
+    {
+      // Get the elf image of the kernel we just added
+      elf_image_t elf_image = module_get_elf_image (kernel_get_module (kernels_get_first_kernel ()));
+      // Add the auto breakpoint
+      cuda_auto_breakpoints_event_add_break (elf_image, virt_code_base);
+    }
 #if defined(__linux__) && defined(GDB_NM_FILE)
   if (lp)
     inferior_ptid = previous_ptid;

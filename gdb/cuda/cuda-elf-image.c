@@ -17,6 +17,8 @@
 #include "defs.h"
 #include <sys/stat.h>
 
+#include <map>
+
 #include "breakpoint.h"
 #include "source.h"
 
@@ -28,7 +30,9 @@
 #include "cuda-tdep.h"
 #include "cuda-utils.h"
 
-elf_image_t elf_image_chain = NULL;
+elf_image_t elf_image_chain = nullptr;
+static elf_image_t current_elf_image = nullptr;
+static std::multimap<elf_image_t, CORE_ADDR> cuda_kernel_entry_points;
 
 struct elf_image_st {
   struct objfile    *objfile;     /* pointer to the ELF image as managed by GDB */
@@ -44,7 +48,6 @@ struct elf_image_st {
   elf_image_t        next;
 };
 
-
 elf_image_t
 cuda_elf_image_new (void *image, uint64_t size, module_t module)
 {
@@ -56,8 +59,8 @@ cuda_elf_image_new (void *image, uint64_t size, module_t module)
   elf_image->uses_abi = false;
   elf_image->system   = false;
   elf_image->module   = module;
-  elf_image->prev     = NULL;
-  elf_image->next     = NULL;
+  elf_image->prev     = nullptr;
+  elf_image->next     = nullptr;
 
   if (elf_image_chain)
     {
@@ -131,8 +134,8 @@ bool
 cuda_elf_image_contains_address (elf_image_t elf_image, CORE_ADDR addr)
 {
   struct objfile       *objfile;
-  struct obj_section   *osect = NULL;
-  asection             *section = NULL;
+  struct obj_section   *osect = nullptr;
+  asection             *section = nullptr;
 
   gdb_assert (elf_image);
 
@@ -157,6 +160,38 @@ cuda_elf_image_uses_abi (elf_image_t elf_image)
   gdb_assert (elf_image);
 
   return elf_image->uses_abi;
+}
+
+void
+cuda_elf_image_add_kernel_entry (CORE_ADDR addr)
+{
+  gdb_assert (current_elf_image);
+
+  cuda_trace ("Adding entry point for ELF image %s pc=0x%llx",
+  	      current_elf_image->objfile_path, (long long)addr);
+  
+  cuda_kernel_entry_points.emplace (current_elf_image, addr);
+}
+
+void
+cuda_elf_image_auto_breakpoints_update_locations ()
+{
+  /* Only add forced locations if we encounter device side launches */
+  if ( cuda_options_auto_breakpoints_forced_needed ())
+    {
+      /* Iterate over each entry in the multimap */
+      for (auto& loc : cuda_kernel_entry_points)
+	cuda_auto_breakpoints_forced_add_location (loc.first, loc.second);
+      
+      cuda_auto_breakpoints_update ();
+      
+      cuda_kernel_entry_points.clear ();
+    }
+  else
+    {
+      /* Always update the auto breakpoints in case the option changed. */
+      cuda_auto_breakpoints_update ();
+    }
 }
 
 void cuda_decode_line_table (struct objfile *objfile);
@@ -215,14 +250,14 @@ cuda_elf_image_save (elf_image_t elf_image, void *image)
 void
 cuda_elf_image_load (elf_image_t elf_image, bool is_system)
 {
-  struct objfile *objfile = NULL;
+  struct objfile *objfile = nullptr;
   const struct bfd_arch_info *arch_info;
 
   gdb_assert (elf_image);
   gdb_assert (!elf_image->loaded);
 
   /* auto breakpoints */
-  cuda_set_current_elf_image (elf_image);
+  current_elf_image = elf_image;
 
   /* Open the object file and make sure to adjust its arch_info before reading
      its symbols. */
@@ -233,8 +268,8 @@ cuda_elf_image_load (elf_image_t elf_image, bool is_system)
   /* Load in the device ELF object file, forcing a symbol read and while
    * making sure that the breakpoints are not re-set automatically. */
   objfile = symbol_file_add_from_bfd (abfd.get (), bfd_get_filename (abfd.get ()),
-				      SYMFILE_DEFER_BP_RESET, NULL, 0,
-				      NULL);
+				      SYMFILE_DEFER_BP_RESET, nullptr, 0,
+				      nullptr);
   if (!objfile)
     error (_("Error: Failed to add symbols from device ELF symbol file!\n"));
 
@@ -243,14 +278,6 @@ cuda_elf_image_load (elf_image_t elf_image, bool is_system)
   objfile->per_bfd->gdbarch        = cuda_get_gdbarch ();
   /* CUDA - skip prologue - temporary */
   objfile->cuda_producer_is_open64 = cuda_producer_is_open64;
-
-  /* In case the CUDA ELF file defines device symbols that
-     overlap/replace existing objfile symtabs in the search order. */
-  clear_symtab_users (0);
-
-  /* CUDA - line info */
-  if (!objfile->compunit_symtabs)
-    cuda_decode_line_table (objfile);
 
   /* Initialize the elf_image object */
   elf_image->objfile  = objfile;
@@ -261,11 +288,23 @@ cuda_elf_image_load (elf_image_t elf_image, bool is_system)
               objfile->original_name, elf_image->module,
               elf_image->uses_abi, objfile);
 
-  cuda_resolve_breakpoints (0, elf_image);
-  if (cuda_options_auto_breakpoints_needed ())
-      cuda_auto_breakpoints_add_locations ();
+  /* In case the CUDA ELF file defines device symbols that
+     overlap/replace existing objfile symtabs in the search order. 
+     This might reset breakpoints for addresses contained in this cubin.
+     We must call this after we have initialized the elf_image object.
+     FIXME: We probably shouldn't allow use of the elf_image we are constructing
+     until after we are certain it has been fully initialized. */
+  clear_symtab_users (0);
 
-  cuda_set_current_elf_image (NULL);
+    /* CUDA - line info. This must happen after the clear_symtab_users above. */
+  if (!objfile->compunit_symtabs)
+    cuda_decode_line_table (objfile);
+  
+  cuda_resolve_breakpoints (0, elf_image);
+
+  cuda_elf_image_auto_breakpoints_update_locations ();
+
+  current_elf_image = nullptr;
 }
 
 void
@@ -289,11 +328,15 @@ cuda_elf_image_unload (elf_image_t elf_image)
   cuda_reset_invalid_breakpoint_location_section (objfile);
   objfile->unlink();
 
-  elf_image->objfile = NULL;
+  elf_image->objfile = nullptr;
   elf_image->loaded = false;
   elf_image->uses_abi = false;
 
+  /* Remove any still pending locations from the map for this key. */
+  cuda_kernel_entry_points.erase (elf_image);
+  /* Update the forced breakpoints to remove locations for this image. */
   cuda_auto_breakpoints_remove_locations (elf_image);
+  /* Remove any user set breakpoints for this image. */
   cuda_unresolve_breakpoints (elf_image);
 }
 
@@ -304,5 +347,6 @@ cuda_get_elf_image_by_objfile (struct objfile *objfile)
   CUDA_ALL_LOADED_ELF_IMAGES(elf_image)
     if (cuda_elf_image_get_objfile(elf_image) == objfile)
       return elf_image;
-  return NULL;
+  return nullptr;
 }
+

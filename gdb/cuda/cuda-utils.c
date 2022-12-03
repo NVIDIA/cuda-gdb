@@ -879,3 +879,17 @@ cuda_set_uvm_used (bool value)
 {
   cuda_app_uses_uvm = value;
 }
+
+static bool cuda_app_uses_device_launch = false;
+
+bool
+cuda_is_device_launch_used (void)
+{
+  return cuda_app_uses_device_launch;
+}
+
+void
+cuda_set_device_launch_used (bool value)
+{
+  cuda_app_uses_device_launch = value;
+}

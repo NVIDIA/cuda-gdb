@@ -78,14 +78,6 @@ extern bool cuda_debugging_enabled;
 struct gdbarch * cuda_get_gdbarch (void);
 bool cuda_is_cuda_gdbarch (struct gdbarch *);
 
-typedef struct {
-  CORE_ADDR addr;
-  elf_image_t elf_image;
-} kernel_entry_point_t;
-
-extern std::vector<kernel_entry_point_t> cuda_kernel_entry_points;
-extern void cuda_set_current_elf_image (elf_image_t);
-
 extern cuda_coords_t cuda_coords_current;
 
 /* Offsets of the CUDA built-in variables */

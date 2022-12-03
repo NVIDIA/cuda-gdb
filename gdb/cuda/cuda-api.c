@@ -787,7 +787,7 @@ cuda_debugapi::read_uregister (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t 
   if (get_state () != CUDA_API_STATE_INITIALIZED)
     return;
 
-  CUDBGResult res = m_cudbgAPI->readUniformRegisterRange (dev, sm, wp, regno, sizeof(uint32_t), val);
+  CUDBGResult res = m_cudbgAPI->readUniformRegisterRange (dev, sm, wp, regno, 1, val);
   cuda_api_print_api_call_result (res);
 
   /* Not all devices support uniform registers */

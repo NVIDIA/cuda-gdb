@@ -888,24 +888,14 @@ STUB_cudbgIsDeviceCodeAddress55 (uintptr_t addr, bool *isDeviceAddress)
 }
 
 static CUDBGResult
-cudbgLookupDeviceCodeSymbol (char *symName, bool *symFound, uintptr_t *symAddr)
+STUB_cudbgLookupDeviceCodeSymbol (char *symName, bool *symFound, uintptr_t *symAddr)
 {
-    char *ipc_buf;
-    CUDBGResult result;
-
-    CUDBG_IPC_PROFILE_START();
-
-    CUDBG_IPC_BEGIN(CUDBGAPIREQ_lookupDeviceCodeSymbol);
-
-    CUDBG_IPC_REQUEST((void **)&ipc_buf);
-    CUDBG_IPC_RECEIVE(&result, &ipc_buf);
-    CUDBG_IPC_RECEIVE(symName, &ipc_buf);
-    CUDBG_IPC_RECEIVE(symFound, &ipc_buf);
-    CUDBG_IPC_RECEIVE(symAddr, &ipc_buf);
-
-    CUDBG_IPC_PROFILE_END(CUDBGAPIREQ_lookupDeviceCodeSymbol, "lookupDeviceCodeSymbol");
-
-    return result;
+    /* NOTE: This API method has been implemented incorrectly in RPCD, but as
+     * it's left unused, we can't start using it in the future (or we'd break
+     * the compatibility with the older drivers). If this method is ever needed
+     * in the future, a separate new RPCD call must be added to support it.
+     */
+    return CUDBG_ERROR_UNKNOWN;
 }
 
 static CUDBGResult
@@ -950,26 +940,14 @@ cudbgGetGridAttribute (uint32_t dev, uint32_t sm, uint32_t wp, CUDBGAttribute at
 }
 
 static CUDBGResult
-cudbgGetGridAttributes (uint32_t dev, uint32_t sm, uint32_t wp, CUDBGAttributeValuePair *pairs, uint32_t numPairs)
+STUB_cudbgGetGridAttributes (uint32_t dev, uint32_t sm, uint32_t wp, CUDBGAttributeValuePair *pairs, uint32_t numPairs)
 {
-    char *ipc_buf;
-    CUDBGResult result;
-
-    CUDBG_IPC_PROFILE_START();
-
-    CUDBG_IPC_BEGIN(CUDBGAPIREQ_getGridAttributes);
-    CUDBG_IPC_APPEND(&dev,sizeof(dev));
-    CUDBG_IPC_APPEND(&sm,sizeof(sm));
-    CUDBG_IPC_APPEND(&wp,sizeof(wp));
-    CUDBG_IPC_APPEND(&numPairs,sizeof(numPairs));
-
-    CUDBG_IPC_REQUEST((void **)&ipc_buf);
-    CUDBG_IPC_RECEIVE(&result, &ipc_buf);
-    CUDBG_IPC_RECEIVE_ARRAY(pairs, numPairs, &ipc_buf);
-
-    CUDBG_IPC_PROFILE_END(CUDBGAPIREQ_getGridAttributes, "getGridAttributes");
-
-    return result;
+    /* NOTE: This API method has been implemented incorrectly in RPCD, but as
+     * it's left unused, we can't start using it in the future (or we'd break
+     * the compatibility with the older drivers). If this method is ever needed
+     * in the future, a separate new RPCD call must be added to support it.
+     */
+    return CUDBG_ERROR_UNKNOWN;
 }
 
 static CUDBGResult
@@ -2238,7 +2216,7 @@ static const struct CUDBGAPI_st cudbgCurrentApi={
     STUB_cudbgGetPhysicalRegister30,
     cudbgDisassemble,
     STUB_cudbgIsDeviceCodeAddress55,
-    cudbgLookupDeviceCodeSymbol,
+    STUB_cudbgLookupDeviceCodeSymbol,
 
     /* Events */
     STUB_cudbgSetNotifyNewEventCallback31,
@@ -2247,7 +2225,7 @@ static const struct CUDBGAPI_st cudbgCurrentApi={
 
     /* 3.1 Extensions */
     cudbgGetGridAttribute,
-    cudbgGetGridAttributes,
+    STUB_cudbgGetGridAttributes,
     STUB_cudbgGetPhysicalRegister40,
     cudbgReadLaneException,
     STUB_cudbgGetNextEvent32,

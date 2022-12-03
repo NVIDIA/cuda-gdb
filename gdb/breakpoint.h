@@ -178,6 +178,8 @@ enum bptype
     bp_cuda_driver_internal_error,
     /* CUDA - UVM */
     bp_cuda_uvm,
+    /* CUDA - CDP */
+    bp_cuda_cdp,
 #endif
     /* On the same principal, an overlay manager can arrange to call a
        magic location in the inferior whenever there is an interesting
@@ -1622,7 +1624,8 @@ extern struct breakpoint *create_thread_event_breakpoint (struct gdbarch *,
 /* CUDA - breakpoint for error reporting */
 extern void create_cuda_driver_api_error_breakpoint (void);
 extern void create_cuda_driver_internal_error_breakpoint (void);
-extern void create_cuda_uvm_breakpoint (struct gdbarch *, CORE_ADDR);
+extern void create_cuda_uvm_breakpoint (struct gdbarch *);
+extern void delete_cuda_uvm_breakpoint (void);
 extern void update_cuda_driver_api_error_breakpoint (void);
 #endif
 extern void remove_jit_event_breakpoints (void);
@@ -1779,10 +1782,11 @@ struct breakpoint *cuda_find_autostep_by_addr (CORE_ADDR address);
 /* CUDA - breakpoint */
 bool cuda_eval_thread_at_breakpoint (uint64_t pc, cuda_coords_t *c, int b_number);
 /* CUDA - auto breakpoints */
-void cuda_auto_breakpoints_add_locations (void);
+void cuda_auto_breakpoints_forced_add_location (elf_image_t elf_image, CORE_ADDR addr);
 void cuda_auto_breakpoints_remove_locations (elf_image_t elf_image);
-void cuda_auto_breakpoints_update_breakpoints (void);
-void cuda_auto_breakpoints_cleanup_breakpoints (void);
+void cuda_auto_breakpoints_update (void);
+void cuda_auto_breakpoints_cleanup (void);
+void cuda_auto_breakpoints_event_add_break (elf_image_t elf_image, CORE_ADDR addr);
 extern void cuda_delete_command (const char *arg, int from_tty);
 #endif
 /* Command element for the 'commands' command.  */

@@ -483,15 +483,6 @@ ui_out::field_unsigned (const char *fldname, ULONGEST value)
   do_field_unsigned (fldno, width, align, fldname, value);
 }
 
-#ifdef NVIDIA_CUDA_GDB
-void
-ui_out::field_long_long (const char *fldname, long long value)
-{
-  char str[32];
-  snprintf (str, sizeof(str), "%lld", value);
-  field_string (fldname, str);
-}
-#endif
 /* Documented in ui-out.h.  */
 
 void

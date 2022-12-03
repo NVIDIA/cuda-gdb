@@ -405,7 +405,12 @@ maintenance_info_sections (const char *arg, int from_tty)
 
       for (objfile *ofile : current_program_space->objfiles ())
 	{
+#ifdef NVIDIA_CUDA_GDB
+	  /* NVIDIA We have an anonymous objfile that won't have a obfd... */
+	  if (allobj && ofile->obfd)
+#else
 	  if (allobj)
+#endif
 	    printf_filtered (_("  Object file: %s\n"),
 			     bfd_get_filename (ofile->obfd));
 	  else if (ofile->obfd != exec_bfd)

@@ -139,7 +139,6 @@ cuda_gdb_get_tid_or_pid (ptid_t ptid)
     return ptid.pid ();
 }
 
-
 /* CUDA - skip prologue */
 bool cuda_producer_is_open64;
 
@@ -196,7 +195,6 @@ struct gdbarch_tdep
   int invalid_lo_regnum;
   int invalid_hi_regnum;
 };
-
 
 /* Predicates for checking if register belongs to specified register group */
 bool cuda_regular_register_p (struct gdbarch *gdbarch, int regnum)
@@ -1220,24 +1218,8 @@ cuda_get_symbol_address (const char *name)
 {
   struct bound_minimal_symbol msym = lookup_minimal_symbol (name, NULL, NULL);
 
-/* CUDA - Mac OS X specific */
-#ifdef target_check_is_objfile_loaded
-  struct objfile *objfile;
-
-  /* CUDA - MAC OS X specific
-     We need to check that the object file is actually loaded into
-     memory, rather than accessing a cached set of symbols. */
-  if (msym.minsym && msym.minsym->ginfo.bfd_section
-      && msym.minsym->mginfo.bfd_section->owner)
-    {
-      objfile = find_objfile_by_name (msym.minsym->mginfo.bfd_section->owner->filename, 1); /* 1 = exact match */
-      if (objfile && target_check_is_objfile_loaded (objfile))
-        return MSYMBOL_VALUE_ADDRESS (objfile, msym.minsym);
-    }
-#else
   if (msym.minsym)
     return MSYMBOL_VALUE_ADDRESS (msym.objfile, msym.minsym);
-#endif
 
   return 0;
 }
@@ -1360,7 +1342,7 @@ cuda_cleanup (void)
 
   registers_changed ();
   set_current_context (NULL);
-  cuda_auto_breakpoints_cleanup_breakpoints ();
+  cuda_auto_breakpoints_cleanup ();
   cuda_system_cleanup_breakpoints ();
   cuda_cleanup_cudart_symbols ();
   cuda_cleanup_tex_maps ();
@@ -1369,6 +1351,7 @@ cuda_cleanup (void)
   if (cuda_initialized)
     cuda_system_finalize ();
   cuda_sstep_reset (false);
+  cuda_set_device_launch_used (false);
 
   /* In remote session, these functions are called on server side by cuda_linux_mourn() */
   if (!cuda_remote)
@@ -1395,18 +1378,6 @@ cuda_final_cleanup (void *unused)
 {
   if (cuda_initialized)
     cuda_api_finalize ();
-}
-
-static void
-cuda_initialize_uvm_detection (void)
-{
-  CORE_ADDR memAllocManagedAddr = cuda_get_symbol_address ("cuMemAllocManaged");
-  if (!memAllocManagedAddr)
-    {
-      warning (_("Cannot find cuMemAllocManaged() routine address."));
-      return;
-    }
-   create_cuda_uvm_breakpoint (get_current_arch(), memAllocManagedAddr);
 }
 
 /* Initialize the CUDA debugger API and collect the static data about
@@ -1534,7 +1505,10 @@ cuda_initialize_target (void)
 
   inferior_in_debug_mode = true;
   cuda_create_driver_breakpoints ();
-  cuda_initialize_uvm_detection ();
+
+  /* Create UVM breakpoint */
+  create_cuda_uvm_breakpoint (get_current_arch ());
+
   return true;
 }
 
@@ -1686,15 +1660,6 @@ cuda_print_lmem_address_type (void)
 #define STO_CUDA_MANAGED      4     /* CUDA - managed variables */
 #define STO_CUDA_ENTRY     0x10     /* CUDA - break_on_launch */
 
-std::vector<kernel_entry_point_t> cuda_kernel_entry_points;
-static elf_image_t cuda_current_elf_image = NULL;
-
-void
-cuda_set_current_elf_image (elf_image_t img)
-{
-  cuda_current_elf_image = img;
-}
-
 static void
 cuda_elf_make_msymbol_special (asymbol *sym, struct minimal_symbol *msym)
 {
@@ -1708,9 +1673,7 @@ cuda_elf_make_msymbol_special (asymbol *sym, struct minimal_symbol *msym)
   /* break_on_launch */
   if (((elf_symbol_type *) sym)->internal_elf_sym.st_other == STO_CUDA_ENTRY)
     {
-      kernel_entry_point_t new_entry = { MSYMBOL_VALUE_RAW_ADDRESS(msym),
-                                         cuda_current_elf_image };
-      cuda_kernel_entry_points.emplace_back (new_entry);
+      cuda_elf_image_add_kernel_entry (MSYMBOL_VALUE_RAW_ADDRESS (msym));
 
       SET_MSYMBOL_VALUE_ADDRESS (msym, MSYMBOL_VALUE_RAW_ADDRESS (msym));
     }

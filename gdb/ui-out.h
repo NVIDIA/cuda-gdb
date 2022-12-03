@@ -191,9 +191,6 @@ class ui_out
 			 LONGEST value);
   /* Like field_signed, but print an unsigned value.  */
   void field_unsigned (const char *fldname, ULONGEST value);
-#ifdef NVIDIA_CUDA_GDB
-  void field_long_long (const char *filename, long long value);
-#endif
   void field_core_addr (const char *fldname, struct gdbarch *gdbarch,
 			CORE_ADDR address);
   void field_string (const char *fldname, const char *string,
