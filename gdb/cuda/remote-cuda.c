@@ -1148,7 +1148,7 @@ cuda_remote_target<parent>::detach (inferior *inf, int from_tty)
      treat the inferior as a host-only process */
   if (cuda_api_get_attach_state() == CUDA_ATTACH_STATE_COMPLETE &&
       cuda_get_current_remote_target ()->remote_query_attached (inferior_ptid.pid ()))
-    cuda_do_detach (inf, true);
+    cuda_do_detach (true);
 
   parent::detach (inf, from_tty);
 }

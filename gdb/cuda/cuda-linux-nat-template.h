@@ -1007,7 +1007,7 @@ cuda_nat_linux<BaseTarget>::detach (inferior *inf, int from_tty)
   /* If the Debug API is not initialized,
    * treat the inferior as a host-only process */
   if (cuda_api_get_state () == CUDA_API_STATE_INITIALIZED)
-    cuda_do_detach (inf, false);
+    cuda_do_detach (false);
 
   /* Do not try to detach from an already dead process */
   if (inferior_ptid.pid () == 0)

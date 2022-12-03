@@ -206,14 +206,7 @@ gdbpy_enter::gdbpy_enter  (struct gdbarch *gdbarch,
 {
   /* We should not ever enter Python unless initialized.  */
   if (!is_python_available() || !gdb_python_initialized)
-    {
-      /* Try to use the init error string if there is one. */
-      auto err_str = get_python_init_error ();
-      if (err_str)
-	error (_("%s"), err_str);
-      else
-	error (_("Python not initialized"));
-    }
+    error (_("Python not initialized"));
 
   m_previous_active = set_active_ext_lang (&extension_language_python);
 

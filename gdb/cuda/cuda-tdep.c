@@ -1487,8 +1487,6 @@ cuda_initialize_target (void)
   if (!debugFlagAddr)
     return false;
 
-  cuda_trace ("Initializing cuda target.\n");
-
   /* Initialize cuda utils, check if cuda-gdb lock is busy */
   cuda_utils_initialize ();
   cuda_signals_initialize ();
@@ -2141,10 +2139,7 @@ cuda_control_flow_instruction (const char *inst, bool skip_subroutines)
 {
   const char *substr = NULL;
   if (!inst) return true;
-  /* Kepler+: https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#kepler */
-  /* All *.S instructions are control flow instructions */
-  if ((substr = strstr(inst, ".S")) != 0)
-    if (substr[3] == ' ' || substr[3] == 0) return true;
+  /* Maxwell+: https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#maxwell-pascal */
   if (strstr(inst, "BRA") != 0) return true;
   if (strstr(inst, "BRX") != 0) return true;
   if (strstr(inst, "JMP") != 0) return true;
@@ -2158,7 +2153,6 @@ cuda_control_flow_instruction (const char *inst, bool skip_subroutines)
   if (strstr(inst, "BPT") != 0) return true;
   if (strstr(inst, "EXIT") != 0) return true;
   if (strstr(inst, "BAR") != 0) return true;
-  /* Maxwell+: https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#maxwell-pascal */
   if (strstr(inst, "SYNC") != 0) return true;
   /* Volta+: https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#volta */
   if (strstr(inst, "BREAK") != 0) return true;
@@ -2169,6 +2163,8 @@ cuda_control_flow_instruction (const char *inst, bool skip_subroutines)
   if (strstr(inst, "RTT") != 0) return true;
   if (strstr(inst, "WARPSYNC") != 0) return true;
   if (strstr(inst, "YIELD") != 0) return true;
+  if (strstr(inst, "BMOV") != 0) return true;
+  if (strstr(inst, "RPCMOV") != 0) return true;
   /* Turing+: https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#turing */
   /* BRXU - covered with BRX */
   /* JMXU - covered with JMX */

@@ -18,7 +18,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2022 NVIDIA Corporation
+/* NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -713,14 +713,6 @@ static bool
 follow_fork ()
 {
   bool follow_child = (follow_fork_mode_string == follow_fork_mode_child);
-#ifdef NVIDIA_CUDA_GDB
-  /* Disallow follow-fork child if we already started initialization of the CUDA debug API */
-  if (follow_child && cuda_api_get_state () != CUDA_API_STATE_UNINITIALIZED)
-    {
-      warning (_("Unable to follow child process when debugging CUDA process."));
-      follow_child = false;
-    }
-#endif
   bool should_resume = true;
   struct thread_info *tp;
 
@@ -5576,14 +5568,6 @@ handle_inferior_event (struct execution_control_state *ecs)
 	{
 	  bool follow_child
 	    = (follow_fork_mode_string == follow_fork_mode_child);
-#ifdef NVIDIA_CUDA_GDB
-	  /* Disallow follow-fork child if we already started initialization of the CUDA debug API */
-	  if (follow_child && cuda_api_get_state () != CUDA_API_STATE_UNINITIALIZED)
-	    {
-	      warning (_("Unable to follow child process when debugging CUDA process."));
-	      follow_child = false;
-	    }
-#endif
 
 	  ecs->event_thread->suspend.stop_signal = GDB_SIGNAL_0;
 

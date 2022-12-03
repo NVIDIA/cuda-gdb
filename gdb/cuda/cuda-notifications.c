@@ -1,5 +1,5 @@
 /*
- * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2022 NVIDIA Corporation
+ * NVIDIA CUDA Debugger CUDA-GDB Copyright (C) 2007-2021 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -65,7 +65,6 @@
 #include "defs.h"
 #include "cuda-options.h"
 #include "cuda-tdep.h"
-#include "cuda-api.h"
 #include "gdbthread.h"
 #include "inferior.h"
 #include "remote.h"
@@ -356,16 +355,7 @@ cuda_notification_send (CUDBGEventCallbackData *data)
     {
       tid = qnx_cuda_notification_notify_thread (inferior_pid);
     }
-#else
-#ifndef GDBSERVER
-  // use the saved ptid used to init the debug API
-  int api_ptid = cuda_api_get_ptid ();
-  if (!tid && api_ptid)
-    {
-      err = cuda_notification_notify_specific_thread (api_ptid);
-      if (!err)
-	tid = api_ptid;
-    }
+  if (0) {
 #endif
   // use the youngest thread if possible
   if (!tid && cuda_options_notify_youngest ())
@@ -374,6 +364,8 @@ cuda_notification_send (CUDBGEventCallbackData *data)
   // otherwise, use any valid host thread to send the notification to.
   if (!tid)
     tid = cuda_notification_notify_first_valid_thread ();
+#ifdef __QNXHOST__
+  }
 #endif
 
   if (tid)

@@ -442,7 +442,7 @@ cuda_nat_attach (void)
   current_inferior ()->control.stop_soon = NO_STOP_QUIETLY;
 }
 
-void cuda_do_detach(inferior *inf, bool remote)
+void cuda_do_detach(bool remote)
 {
   struct cmd_list_element *alias = NULL;
   struct cmd_list_element *prefix_cmd = NULL;
@@ -466,7 +466,7 @@ void cuda_do_detach(inferior *inf, bool remote)
   cuda_api_set_attach_state (CUDA_ATTACH_STATE_DETACHING);
 
   /* Make sure the focus is set on the host */
-  switch_to_thread (inf->process_target (), inferior_ptid);
+  switch_to_thread (current_inferior ()->process_target (), inferior_ptid);
 
   if (!lookup_cmd_composition ("call", &alias, &prefix_cmd, &cmd))
     error (_("Failed to initiate detach."));
@@ -526,7 +526,7 @@ void cuda_do_detach(inferior *inf, bool remote)
 	  }
 
       /* No threads are running at this point.  */
-      set_running (inf->process_target (), minus_one_ptid, 0);
+      set_running (current_inferior ()->process_target (), minus_one_ptid, 0);
     }
   else
     cuda_api_set_attach_state (CUDA_ATTACH_STATE_DETACH_COMPLETE);

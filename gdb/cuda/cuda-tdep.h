@@ -32,8 +32,6 @@
 
 #include <vector>
 
-struct inferior;
-
 extern bool cuda_elf_path; /* REMOVE THIS ONCE CUDA ELF PATH IS COMPLETE! */
 
 /* CUDA - skip prologue
@@ -242,7 +240,7 @@ uint32_t    cuda_gdb_session_get_id (void);
 
 /* Attach support */
 void cuda_nat_attach (void);
-void cuda_do_detach(struct inferior *inf, bool remote);
+void cuda_do_detach(bool remote);
 void cuda_remote_attach (void);
 
 #endif

@@ -42,7 +42,7 @@
 #endif
 
 #define STRINGIFY2(name) #name
-#define PY_STRINGIFY(name) STRINGIFY2(name)
+#define STRINGIFY(name) STRINGIFY2(name)
 
 bool python_initialized = false;
 static void *libpython_handle = NULL;
@@ -305,23 +305,11 @@ static const std::vector<std::string> libpython3_end = {
 };
 
 static const char py_vers_error[] = "Unable to determine python3 interpreter version. Python integration disabled.";
-static std::string python_internal_error{};
 #endif
-
-const char *
-get_python_init_error (void) {
-#ifdef IS_PY3K
-  if (python_internal_error.length() == 0)
-    return nullptr;
-  return python_internal_error.c_str();
-#else
-  return nullptr;
-#endif
-}
 
 bool
 is_python_available (void) {
-#ifndef IS_PY3K
+
   int i;
   static const char *libpython_names[] = {
 #if HAVE_LIBPYTHON2_4
@@ -336,7 +324,6 @@ is_python_available (void) {
                      "/System/Library/Frameworks/Python.framework/Versions/2.7/Python",
 #endif
                      NULL };
-#endif
 
   if (python_initialized)
     return libpython_handle != NULL;
@@ -346,8 +333,8 @@ is_python_available (void) {
   FILE *py_vers_file = popen ("python3 -V 2> /dev/null", "r");
   if (!py_vers_file)
     {
+      fprintf (stderr, "%s\n", py_vers_error);
       python_initialized = true;
-      python_internal_error = py_vers_error;
       return false;
     }
   /* Cleanup for me please. */
@@ -360,8 +347,8 @@ is_python_available (void) {
   char py_vers_buf[BUFSIZ] = {};
   if (!fgets (py_vers_buf, BUFSIZ, py_vers_file))
     {
+      fprintf (stderr, "%s\n", py_vers_error);
       python_initialized = true;
-      python_internal_error = py_vers_error;
       return false;
     }
 
@@ -380,8 +367,8 @@ is_python_available (void) {
   else
     {
       /* Failed to parse the version. */
+      fprintf (stderr, "%s\n", py_vers_error);
       python_initialized = true;
-      python_internal_error = py_vers_error;
       return false;
     }
 
@@ -416,14 +403,7 @@ is_python_available (void) {
 
   python_initialized = true;
   if (!libpython_handle)
-    {
-#if IS_PY3K
-      /* Failed to locate a matching libpython for the python3 interpreter. */
-      python_internal_error = std::string{"Unable to locate matching libpython"} + py_vers + \
-			      std::string{" for the installed python3 interpreter. Python integration disabled."};
-#endif
-      return false;
-    }
+    return false;
 
 #define RESOLVE_AND_CHECK(varname,type,symname)			\
   varname = (type) dlsym (libpython_handle, symname);	\
@@ -484,13 +464,13 @@ is_python_available (void) {
   /* Resolve variadic functions */
   RESOLVE_AND_CHECK(gdbpy_Arg_UnpackTuple, int (*)(PyObject *, const char *, Py_ssize_t, Py_ssize_t, ...), "PyArg_UnpackTuple");
   RESOLVE_AND_CHECK(gdbpy_ErrFormat, PyObject * (*) (PyObject *, const char *, ...), "PyErr_Format");
-  RESOLVE_AND_CHECK(gdbpy_BuildValue, PyObject * (*) (const char *, ...), PY_STRINGIFY(Py_BuildValue));
+  RESOLVE_AND_CHECK(gdbpy_BuildValue, PyObject * (*) (const char *, ...), STRINGIFY(Py_BuildValue));
   RESOLVE_AND_CHECK(gdbpy_PyObject_CallFunctionObjArgs, PyObject * (*) (PyObject *,...), "PyObject_CallFunctionObjArgs");
   RESOLVE_AND_CHECK(gdbpy_PyObject_CallMethodObjArgs, PyObject * (*) (PyObject *, PyObject *,...), "PyObject_CallMethodObjArgs");
   RESOLVE_AND_CHECK(gdbpy_PyObject_CallMethod, PyObject * (*) (PyObject *o, const char *m, const char *format, ...), "PyObject_CallMethod");
-  RESOLVE_AND_CHECK(gdbpy_PyArg_ParseTuple, int (*) (PyObject *obj, const char *, ...), PY_STRINGIFY(PyArg_ParseTuple));
-  RESOLVE_AND_CHECK(gdbpy_PyArg_ParseTupleAndKeywords, int (*) (PyObject *obj, PyObject *, const char *, char **, ...), PY_STRINGIFY(PyArg_ParseTupleAndKeywords));
-  RESOLVE_AND_CHECK(gdbpy_PyArg_VaParseTupleAndKeywords, int (*) (PyObject *obj, PyObject *, const char *, char **, ...), PY_STRINGIFY(PyArg_VaParseTupleAndKeywords));
+  RESOLVE_AND_CHECK(gdbpy_PyArg_ParseTuple, int (*) (PyObject *obj, const char *, ...), STRINGIFY(PyArg_ParseTuple));
+  RESOLVE_AND_CHECK(gdbpy_PyArg_ParseTupleAndKeywords, int (*) (PyObject *obj, PyObject *, const char *, char **, ...), STRINGIFY(PyArg_ParseTupleAndKeywords));
+  RESOLVE_AND_CHECK(gdbpy_PyArg_VaParseTupleAndKeywords, int (*) (PyObject *obj, PyObject *, const char *, char **, ...), STRINGIFY(PyArg_VaParseTupleAndKeywords));
 #ifndef IS_PY3K
   RESOLVE_AND_CHECK(gdbpy_StringFromFormat, PyObject * (*)  (const char *, ...), "PyString_FromFormat");
 #endif
@@ -540,6 +520,8 @@ is_python_available (void) {
   RESOLVE(gdbpy_PyLong_FromLongLong, PyObject * (*) (long long val), "PyLong_FromLongLong");
   RESOLVE(gdbpy_PyLong_FromUnsignedLongLong, PyObject * (*) (unsigned long long val), "PyLong_FromUnsignedLongLong");
   RESOLVE(gdbpy_PyLong_AsUnsignedLongLong, unsigned long long (*) (PyObject *obj), "PyLong_AsUnsignedLongLong");
+
+extern unsigned long long (*gdbpy_PyLong_AsUnsignedLongLong) (PyObject *obj);
 
 #else /* HAVE_LONG_LONG */
 
