@@ -71,7 +71,7 @@ get_symtab (PyObject *linetable)
     symtab = symtab_object_to_symtab (get_symtab (lt_obj));		\
     if (symtab == NULL)							\
       {									\
-	  PyErr_SetString (PyExc_RuntimeError,				\
+	  PyErr_SetString (gdbpyExc_RuntimeError,				\
 			   _("Symbol Table in line table is invalid."));\
 	  return NULL;							\
 	}								\
@@ -126,7 +126,7 @@ build_line_table_tuple_from_pcs (int line, const std::vector<CORE_ADDR> &pcs)
   int i;
 
   if (pcs.size () < 1)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   gdbpy_ref<> tuple (PyTuple_New (pcs.size ()));
 
@@ -161,7 +161,7 @@ ltpy_get_pcs_for_line (PyObject *self, PyObject *args)
 
   LTPY_REQUIRE_VALID (self, symtab);
 
-  if (! PyArg_ParseTuple (args, GDB_PY_LL_ARG, &py_line))
+  if (! gdbpy_PyArg_ParseTuple (args, GDB_PY_LL_ARG, &py_line))
     return NULL;
 
   try
@@ -189,12 +189,12 @@ ltpy_has_line (PyObject *self, PyObject *args)
 
   LTPY_REQUIRE_VALID (self, symtab);
 
-  if (! PyArg_ParseTuple (args, GDB_PY_LL_ARG, &py_line))
+  if (! gdbpy_PyArg_ParseTuple (args, GDB_PY_LL_ARG, &py_line))
     return NULL;
 
   if (symtab->linetable () == NULL)
     {
-      PyErr_SetString (PyExc_RuntimeError,
+      PyErr_SetString (gdbpyExc_RuntimeError,
 		       _("Linetable information not found in symbol table"));
       return NULL;
     }
@@ -203,10 +203,10 @@ ltpy_has_line (PyObject *self, PyObject *args)
     {
       struct linetable_entry *item = &(symtab->linetable ()->item[index]);
       if (item->line == py_line)
-	  Py_RETURN_TRUE;
+	  GDB_PY_RETURN_TRUE;
     }
 
-  Py_RETURN_FALSE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Implementation of gdb.LineTable.source_lines (self) -> List.
@@ -225,7 +225,7 @@ ltpy_get_all_source_lines (PyObject *self, PyObject *args)
 
   if (symtab->linetable () == NULL)
     {
-      PyErr_SetString (PyExc_RuntimeError,
+      PyErr_SetString (gdbpyExc_RuntimeError,
 		       _("Linetable information not found in symbol table"));
       return NULL;
     }
@@ -247,12 +247,12 @@ ltpy_get_all_source_lines (PyObject *self, PyObject *args)
 	  if (line == NULL)
 	    return NULL;
 
-	  if (PyDict_SetItem (source_dict.get (), line.get (), Py_None) == -1)
+	  if (gdbpy_Dict_SetItem (source_dict.get (), line.get (), gdbpy_None) == -1)
 	    return NULL;
 	}
     }
 
-  return PyDict_Keys (source_dict.get ());
+  return gdbpy_Dict_Keys (source_dict.get ());
 }
 
 /* Implementation of gdb.LineTable.is_valid (self) -> Boolean.
@@ -266,9 +266,9 @@ ltpy_is_valid (PyObject *self, PyObject *args)
   symtab = symtab_object_to_symtab (get_symtab (self));
 
   if (symtab == NULL)
-    Py_RETURN_FALSE;
+    GDB_PY_RETURN_FALSE;
 
-  Py_RETURN_TRUE;
+  GDB_PY_RETURN_TRUE;
 }
 
 /* Deconstructor for the line table object.  Decrement the reference
@@ -336,7 +336,7 @@ ltpy_entry_get_pc (PyObject *self, void *closure)
 {
   linetable_entry_object *obj = (linetable_entry_object *) self;
 
-  return gdb_py_object_from_ulongest (obj->pc).release ();
+  return  gdb_py_object_from_longest (obj->pc).release ();
 }
 
 /* LineTable iterator functions.  */
@@ -401,7 +401,7 @@ ltpy_iternext (PyObject *self)
 
   if (iter_obj->current_index >= symtab->linetable ()->nitems)
     {
-      PyErr_SetNone (PyExc_StopIteration);
+      gdbpy_Err_SetNone (gdbpyExc_StopIteration);
       return NULL;
     }
 
@@ -416,7 +416,7 @@ ltpy_iternext (PyObject *self)
       /* Exit if the internal value is the last item in the line table.  */
       if (iter_obj->current_index >= symtab->linetable ()->nitems)
 	{
-	  PyErr_SetNone (PyExc_StopIteration);
+	  gdbpy_Err_SetNone (gdbpyExc_StopIteration);
 	  return NULL;
 	}
       item = &(symtab->linetable ()->item[iter_obj->current_index]);
@@ -441,9 +441,9 @@ ltpy_iter_is_valid (PyObject *self, PyObject *args)
   symtab = symtab_object_to_symtab (get_symtab (iter_obj->source));
 
   if (symtab == NULL)
-    Py_RETURN_FALSE;
+    GDB_PY_RETURN_FALSE;
 
-  Py_RETURN_TRUE;
+  GDB_PY_RETURN_TRUE;
 }
 
 

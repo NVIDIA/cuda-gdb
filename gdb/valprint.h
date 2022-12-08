@@ -17,10 +17,18 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2022 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef VALPRINT_H
 #define VALPRINT_H
 
 #include "cli/cli-option.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "gdbtypes.h"
+#endif
 
 /* This is used to pass formatting options to various value-printing
    functions.  */
@@ -170,6 +178,14 @@ extern int read_string (CORE_ADDR addr, int len, int width,
 			enum bfd_endian byte_order,
 			gdb::unique_xmalloc_ptr<gdb_byte> *buffer,
 			int *bytes_read);
+#ifdef NVIDIA_CUDA_GDB
+extern int read_string_by_type (CORE_ADDR addr, int len, int width,
+				unsigned int fetchlimit,
+				enum bfd_endian byte_order,
+				gdb::unique_xmalloc_ptr<gdb_byte> *buffer,
+				int *bytes_read,
+				struct type *type);
+#endif
 
 /* Helper function to check the validity of some bits of a value.
 
@@ -257,6 +273,10 @@ struct format_data
     char size;
     bool print_tags;
 
+#ifdef NVIDIA_CUDA_GDB
+    /* CUDA - memory segments */
+    type_instance_flags segment_type;
+#endif
     /* True if the value should be printed raw -- that is, bypassing
        python-based formatters.  */
     unsigned char raw;

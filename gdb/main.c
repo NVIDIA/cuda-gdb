@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2022 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "top.h"
 #include "target.h"
@@ -38,6 +43,9 @@
 #include "objfiles.h"
 #include "auto-load.h"
 #include "maint.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-gdb.h"
+#endif
 
 #include "filenames.h"
 #include "gdbsupport/filestuff.h"
@@ -446,6 +454,20 @@ start_event_loop ()
 	    (*after_char_processing_hook) ();
 	  /* Maybe better to set a flag to be checked somewhere as to
 	     whether display the prompt or not.  */
+#ifdef NVIDIA_CUDA_GDB
+	  /* We may have gotten here due to a debugAPI error resulting
+	     in an exception throw. Turning off async operation
+	     prevents an infinite loop where a async fd event
+	     gdb_do_one_event() leads to state gathering through the
+	     debugAPI. This can throw an exception due to something
+	     like a CUDBG_ERROR_INVALID_WARP return value, but where
+	     the asyncio fd read event isn't cleared. Each following
+	     time through the loop we repeat this sequence.
+	  */
+
+	  if (target_has_execution ())
+	    target_async (0);
+#endif
 	}
 
       if (result < 0)
@@ -657,7 +679,14 @@ captured_main_1 (struct captured_main_args *context)
 
 #ifdef HAVE_USEFUL_SBRK
   /* Set this before constructing scoped_command_stats.  */
+# if defined(NVIDIA_CUDA_GDB) && defined(__clang__)
+#   pragma clang diagnostic push
+#   pragma clang diagnostic ignored "-Wdeprecated-declarations"
   lim_at_start = (char *) sbrk (0);
+#   pragma clang diagnostic pop
+# else
+  lim_at_start = (char *) sbrk (0);
+# endif
 #endif
 
   scoped_command_stats stat_reporter (false);
@@ -758,7 +787,15 @@ captured_main_1 (struct captured_main_args *context)
       OPT_EIX,
       OPT_EIEX,
       OPT_READNOW,
+#ifdef NVIDIA_CUDA_GDB
+      OPT_READNEVER,
+      OPT_CUDA_USE_LOCKFILE,
+#ifdef HAVE_PYTHON
+      OPT_CUDA_DISABLE_PYTHON
+#endif
+#else
       OPT_READNEVER
+#endif
     };
     /* This struct requires int* in the struct, but write_files is a bool.
        So use this temporary int that we write back after argument parsing.  */
@@ -835,6 +872,12 @@ captured_main_1 (struct captured_main_args *context)
       {"args", no_argument, &set_args, 1},
       {"l", required_argument, 0, 'l'},
       {"return-child-result", no_argument, &return_child_result, 1},
+#ifdef NVIDIA_CUDA_GDB
+      {"cuda-use-lockfile", required_argument, 0, OPT_CUDA_USE_LOCKFILE},
+#ifdef HAVE_PYTHON
+      {"disable-python", no_argument, 0, OPT_CUDA_DISABLE_PYTHON},
+#endif
+#endif
       {0, no_argument, 0, 0}
     };
 
@@ -895,6 +938,24 @@ captured_main_1 (struct captured_main_args *context)
 	    xfree (interpreter_p);
 	    interpreter_p = xstrdup (INTERP_CONSOLE);
 	    break;
+#ifdef NVIDIA_CUDA_GDB
+	  case OPT_CUDA_USE_LOCKFILE:
+            {
+              /* Whether cuda-gdb should create a global lock file */
+              extern bool cuda_use_lockfile;
+              cuda_use_lockfile = (atoi (optarg) != 0);
+              break;
+            }
+#ifdef HAVE_PYTHON
+	  case OPT_CUDA_DISABLE_PYTHON:
+	    {
+	      /* Whether cuda-gdb should disable dylib python support. */
+	      extern bool cuda_disable_python;
+	      cuda_disable_python = true;
+	      break;
+	    }
+#endif
+#endif
 	  case 'f':
 	    annotation_level = 1;
 	    break;
@@ -1394,11 +1455,19 @@ print_gdb_help (struct ui_file *stream)
   /* Note: The options in the list below are only approximately sorted
      in the alphabetical order, so as to group closely related options
      together.  */
+#ifdef NVIDIA_CUDA_GDB
+  fputs_unfiltered (_("\
+This is the GNU debugger with CUDA support.  Usage:\n\n\
+    cuda-gdb [options] [executable-file [core-file or process-id]]\n\
+    cuda-gdb [options] --args executable-file [inferior-arguments ...]\n\n\
+"), stream);
+#else
   fputs_unfiltered (_("\
 This is the GNU debugger.  Usage:\n\n\
     gdb [options] [executable-file [core-file or process-id]]\n\
     gdb [options] --args executable-file [inferior-arguments ...]\n\n\
 "), stream);
+#endif
   fputs_unfiltered (_("\
 Selection of debuggee and its files:\n\n\
   --args             Arguments after executable-file are passed to inferior.\n\
@@ -1445,6 +1514,23 @@ Output and user interface control:\n\n\
   -q, --quiet, --silent\n\
 		     Do not print version number on startup.\n\n\
 "), stream);
+#ifdef NVIDIA_CUDA_GDB
+  fputs_unfiltered (_("\
+CUDA-specific options:\n\n\
+"), stream);
+  fputs_unfiltered (_("\
+  --cuda-use-lockfile=VALUE\n\
+                     If VALUE == 1, create a lock file for cuda-gdb.\n\
+                     Default behavior is not to create a lock file.\n\
+"), stream);
+#ifdef HAVE_PYTHON
+  fputs_unfiltered (_("\
+  --disable-python   Disable python integration.\n\n\
+"), stream);
+#else
+  fputs_unfiltered (_("\n"), stream);
+#endif
+#endif
   fputs_unfiltered (_("\
 Operating modes:\n\n\
   --batch            Exit after processing options.\n\
@@ -1501,10 +1587,22 @@ At startup, GDB reads the following init files and executes their commands:\n\
       && local_gdbinit.empty ())
     fprintf_unfiltered (stream, _("\
    None found.\n"));
+#ifdef NVIDIA_CUDA_GDB
+    fprintf_unfiltered (stream, _("\
+   * local cuda-gdb init file: ./%s\n\
+"), GDBINIT);
+#endif
   fputs_unfiltered (_("\n\
 For more information, type \"help\" from within GDB, or consult the\n\
 GDB manual (available as on-line info or a printed manual).\n\
 "), stream);
+#ifdef NVIDIA_CUDA_GDB
+  fputs_unfiltered (_("\n\
+For more information about CUDA-related features, type \"help cuda\"\n\
+or \"help info cuda\" from within GDB, or consult the CUDA-GDB manual.\n\
+Report CUDA-related bugs to \"cuda-debugger-bugs@nvidia.com\".\n\
+"), stream);
+#endif
   if (REPORT_BUGS_TO[0] && stream == gdb_stdout)
     fprintf_unfiltered (stream, _("\n\
 Report bugs to %s.\n\

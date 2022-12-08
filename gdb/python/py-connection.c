@@ -53,6 +53,17 @@ extern PyTypeObject remote_connection_object_type
   CPYCHECKER_TYPE_OBJECT_FOR_TYPEDEF ("remote_connection_object");
 
 /* Require that CONNECTION be valid.  */
+#ifdef NVIDIA_CUDA_GDB
+#define CONNPY_REQUIRE_VALID(connection)			\
+  do {								\
+    if (connection->target == nullptr)				\
+      {								\
+	PyErr_SetString (gdbpyExc_RuntimeError,			\
+			 _("Connection no longer exists."));	\
+	return nullptr;						\
+      }								\
+  } while (0)
+#else
 #define CONNPY_REQUIRE_VALID(connection)			\
   do {								\
     if (connection->target == nullptr)				\
@@ -62,6 +73,7 @@ extern PyTypeObject remote_connection_object_type
 	return nullptr;						\
       }								\
   } while (0)
+#endif
 
 /* A map between process_stratum targets and the Python object representing
    them.  We actually hold a gdbpy_ref around the Python object so that
@@ -80,7 +92,11 @@ gdbpy_ref<>
 target_to_connection_object (process_stratum_target *target)
 {
   if (target == nullptr)
+#ifdef NVIDIA_CUDA_GDB
+    return gdbpy_ref<>::new_reference (gdbpy_None);
+#else
     return gdbpy_ref<>::new_reference (Py_None);
+#endif
 
   gdbpy_ref <connection_object> conn_obj;
   auto conn_obj_iter = all_connection_objects.find (target);
@@ -125,7 +141,11 @@ gdbpy_connections (PyObject *self, PyObject *args)
       gdbpy_ref<> conn = target_to_connection_object (target);
       if (conn == nullptr)
 	return nullptr;
+#ifdef NVIDIA_CUDA_GDB
+      gdb_assert (conn.get () != gdbpy_None);
+#else
       gdb_assert (conn.get () != Py_None);
+#endif
 
       if (PyList_Append (list.get (), conn.get ()) < 0)
 	return nullptr;
@@ -204,12 +224,23 @@ connpy_repr (PyObject *obj)
   process_stratum_target *target = self->target;
 
   if (target == nullptr)
+#ifdef NVIDIA_CUDA_GDB
+    return gdbpy_StringFromFormat ("<%s (invalid)>", Py_TYPE (obj)->tp_name);
+#else
     return PyString_FromFormat ("<%s (invalid)>", Py_TYPE (obj)->tp_name);
+#endif
 
+#ifdef NVIDIA_CUDA_GDB
+  return gdbpy_StringFromFormat ("<%s num=%d, what=\"%s\">",
+			      Py_TYPE (obj)->tp_name,
+			      target->connection_number,
+			      make_target_connection_string (target).c_str ());
+#else
   return PyString_FromFormat ("<%s num=%d, what=\"%s\">",
 			      Py_TYPE (obj)->tp_name,
 			      target->connection_number,
 			      make_target_connection_string (target).c_str ());
+#endif
 }
 
 /* Implementation of gdb.TargetConnection.is_valid() -> Boolean.  Returns
@@ -222,9 +253,21 @@ connpy_is_valid (PyObject *self, PyObject *args)
   connection_object *conn = (connection_object *) self;
 
   if (conn->target == nullptr)
+#ifdef NVIDIA_CUDA_GDB
+    {
+      Py_INCREF (gdbpy_False);
+      return gdbpy_False;
+    }
+#else
     Py_RETURN_FALSE;
+#endif
 
+#ifdef NVIDIA_CUDA_GDB
+  Py_INCREF (gdbpy_True);
+  return gdbpy_True;
+#else
   Py_RETURN_TRUE;
+#endif
 }
 
 /* Return the id number of this connection.  */
@@ -280,7 +323,14 @@ connpy_get_connection_details (PyObject *self, void *closure)
   if (details != nullptr)
     return host_string_to_python_string (details).release ();
   else
+#ifdef NVIDIA_CUDA_GDB
+    {
+      Py_INCREF (gdbpy_None);
+      return gdbpy_None;
+    }
+#else
     Py_RETURN_NONE;
+#endif
 }
 
 /* Python specific initialization for this file.  */
@@ -331,12 +381,21 @@ struct py_send_packet_callbacks : public send_remote_packet_callbacks
   void received (gdb::array_view<const char> &buf) override
   {
     if (buf.size () > 0 && buf.data ()[0] != '\0')
+#ifdef NVIDIA_CUDA_GDB
+      m_result.reset (gdbpy_PyBytes_FromStringAndSize (buf.data (), buf.size ()));
+#else
       m_result.reset (PyBytes_FromStringAndSize (buf.data (), buf.size ()));
+#endif
     else
       {
 	/* We didn't get back any result data; set the result to None.  */
+#ifdef NVIDIA_CUDA_GDB
+	Py_INCREF (gdbpy_None);
+	m_result.reset (gdbpy_None);
+#else
 	Py_INCREF (Py_None);
 	m_result.reset (Py_None);
+#endif
       }
   }
 
@@ -397,7 +456,11 @@ connpy_send_packet (PyObject *self, PyObject *args, PyObject *kw)
   /* Check the packet is now a bytes object.  */
   if (!PyBytes_Check (packet_obj))
     {
+#ifdef NVIDIA_CUDA_GDB
+      PyErr_SetString (gdbpyExc_TypeError, _("Packet is not a bytes object"));
+#else
       PyErr_SetString (PyExc_TypeError, _("Packet is not a bytes object"));
+#endif
       return nullptr;
     }
 
@@ -411,7 +474,11 @@ connpy_send_packet (PyObject *self, PyObject *args, PyObject *kw)
 
   if (packet_len == 0)
     {
+#ifdef NVIDIA_CUDA_GDB
+      PyErr_SetString (gdbpyExc_ValueError, _("Packet must not be empty"));
+#else
       PyErr_SetString (PyExc_ValueError, _("Packet must not be empty"));
+#endif
       return nullptr;
     }
 

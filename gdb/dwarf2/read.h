@@ -603,6 +603,7 @@ private:
   /* Map from the objfile-independent dwarf2_per_cu_data instances to the
      corresponding objfile-dependent dwarf2_cu instances.  */
   std::unordered_map<dwarf2_per_cu_data *, dwarf2_cu *> m_dwarf2_cus;
+
 };
 
 /* Get the dwarf2_per_objfile associated to OBJFILE.  */

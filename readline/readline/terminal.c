@@ -370,7 +370,12 @@ rl_get_screen_size (int *rows, int *cols)
 void
 rl_reset_screen_size (void)
 {
-  _rl_get_screen_size (fileno (rl_instream), 0);
+  /* CUDA - Instead of using unconditional dereference for rl_instream, use
+     stdin in case it is not set. It can be null in cases where the terminal is
+     resized */
+  int tty = rl_instream ? fileno (rl_instream) : 0;
+
+  _rl_get_screen_size (tty, 0);
 }
 
 void
@@ -382,7 +387,12 @@ _rl_sigwinch_resize_terminal (void)
 void
 rl_resize_terminal (void)
 {
-  _rl_get_screen_size (fileno (rl_instream), 1);
+  /* CUDA - Instead of using unconditional dereference for rl_instream, use
+     stdin in case it is not set. It can be null in cases where the terminal is
+     resized */
+  int tty = rl_instream ? fileno (rl_instream) : 0;
+
+  _rl_get_screen_size (tty, 1);
   if (_rl_echoing_p)
     {
       if (CUSTOM_REDISPLAY_FUNC ())

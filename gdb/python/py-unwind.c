@@ -160,6 +160,7 @@ pyuw_object_attribute_to_pointer (PyObject *pyo, const char *attr_name,
     {
       gdbpy_ref<> pyo_value (PyObject_GetAttrString (pyo, attr_name));
 
+#ifndef NVIDIA_CUDA_GDB
       if (pyo_value != NULL && pyo_value != Py_None)
 	{
 	  rc = pyuw_value_obj_to_pointer (pyo_value.get (), addr);
@@ -169,6 +170,17 @@ pyuw_object_attribute_to_pointer (PyObject *pyo, const char *attr_name,
 		_("The value of the '%s' attribute is not a pointer."),
 		attr_name);
 	}
+#else
+      if (pyo_value != NULL && pyo_value != gdbpy_None)
+        {
+          rc = pyuw_value_obj_to_pointer (pyo_value.get (), addr);
+          if (!rc)
+            gdbpy_ErrFormat (
+                gdbpyExc_ValueError,
+                _("The value of the '%s' attribute is not a pointer."),
+                attr_name);
+        }
+#endif
     }
   return rc;
 }
@@ -228,8 +240,13 @@ pyuw_create_unwind_info (PyObject *pyo_pending_frame,
 
   if (((pending_frame_object *) pyo_pending_frame)->frame_info == NULL)
     {
+#ifndef NVIDIA_CUDA_GDB
       PyErr_SetString (PyExc_ValueError,
 		       "Attempting to use stale PendingFrame");
+#else
+      PyErr_SetString (gdbpyExc_ValueError,
+                       "Attempting to use stale PendingFrame");
+#endif
       return NULL;
     }
   unwind_info->frame_id = frame_id;
@@ -254,16 +271,25 @@ unwind_infopy_add_saved_register (PyObject *self, PyObject *args)
 
   if (pending_frame->frame_info == NULL)
     {
+#ifndef NVIDIA_CUDA_GDB
       PyErr_SetString (PyExc_ValueError,
 		       "UnwindInfo instance refers to a stale PendingFrame");
       return NULL;
     }
   if (!PyArg_UnpackTuple (args, "previous_frame_register", 2, 2,
 			  &pyo_reg_id, &pyo_reg_value))
+#else
+      PyErr_SetString (gdbpyExc_ValueError,
+                       "UnwindInfo instance refers to a stale PendingFrame");
+      return NULL;
+    }
+  if (!gdbpy_Arg_UnpackTuple (args, "previous_frame_register", 2, 2,
+                          &pyo_reg_id, &pyo_reg_value))
+#endif
     return NULL;
   if (!gdbpy_parse_register_id (pending_frame->gdbarch, pyo_reg_id, &regnum))
     {
-      PyErr_SetString (PyExc_ValueError, "Bad register");
+      PyErr_SetString (gdbpyExc_ValueError, "Bad register");
       return NULL;
     }
 
@@ -281,7 +307,11 @@ unwind_infopy_add_saved_register (PyObject *self, PyObject *args)
 	regnum = VALUE_REGNUM (user_reg_value);
       if (regnum >= gdbarch_num_cooked_regs (pending_frame->gdbarch))
 	{
+#ifdef NVIDIA_CUDA_GDB
+	  PyErr_SetString (gdbpyExc_ValueError, "Bad register");
+#else
 	  PyErr_SetString (PyExc_ValueError, "Bad register");
+#endif
 	  return NULL;
 	}
     }
@@ -293,12 +323,18 @@ unwind_infopy_add_saved_register (PyObject *self, PyObject *args)
     if (pyo_reg_value == NULL
       || (value = value_object_to_value (pyo_reg_value)) == NULL)
       {
+#ifndef NVIDIA_CUDA_GDB
 	PyErr_SetString (PyExc_ValueError, "Bad register value");
 	return NULL;
+#else
+        PyErr_SetString (gdbpyExc_ValueError, "Bad register value");
+        return NULL;
+#endif
       }
     data_size = register_size (pending_frame->gdbarch, regnum);
     if (data_size != TYPE_LENGTH (value_type (value)))
       {
+#ifndef NVIDIA_CUDA_GDB
 	PyErr_Format (
 	    PyExc_ValueError,
 	    "The value of the register returned by the Python "
@@ -306,6 +342,15 @@ unwind_infopy_add_saved_register (PyObject *self, PyObject *args)
 	    (unsigned) TYPE_LENGTH (value_type (value)),
 	    (unsigned) data_size);
 	return NULL;
+#else
+        gdbpy_ErrFormat (
+            gdbpyExc_ValueError,
+            "The value of the register returned by the Python "
+            "sniffer has unexpected size: %u instead of %u.",
+            (unsigned) TYPE_LENGTH (value_type (value)),
+            (unsigned) data_size);
+        return NULL;
+#endif
       }
   }
   {
@@ -323,7 +368,7 @@ unwind_infopy_add_saved_register (PyObject *self, PyObject *args)
     if (!found)
       unwind_info->saved_regs->emplace_back (regnum, std::move (new_value));
   }
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* UnwindInfo cleanup.  */
@@ -360,7 +405,7 @@ pending_framepy_str (PyObject *self)
       GDB_PY_HANDLE_EXCEPTION (except);
     }
 
-  return PyString_FromFormat ("SP=%s,PC=%s", sp_str, pc_str);
+  return gdbpy_StringFromFormat ("SP=%s,PC=%s", sp_str, pc_str);
 }
 
 /* Implementation of gdb.PendingFrame.read_register (self, reg) -> gdb.Value.
@@ -376,15 +421,19 @@ pending_framepy_read_register (PyObject *self, PyObject *args)
 
   if (pending_frame->frame_info == NULL)
     {
+#ifndef NVIDIA_CUDA_GDB
       PyErr_SetString (PyExc_ValueError,
+#else
+      PyErr_SetString (gdbpyExc_ValueError,
+#endif
 		       "Attempting to read register from stale PendingFrame");
       return NULL;
     }
-  if (!PyArg_UnpackTuple (args, "read_register", 1, 1, &pyo_reg_id))
+  if (!gdbpy_Arg_UnpackTuple (args, "read_register", 1, 1, &pyo_reg_id))
     return NULL;
   if (!gdbpy_parse_register_id (pending_frame->gdbarch, pyo_reg_id, &regnum))
     {
-      PyErr_SetString (PyExc_ValueError, "Bad register");
+      PyErr_SetString (gdbpyExc_ValueError, "Bad register");
       return NULL;
     }
 
@@ -397,7 +446,11 @@ pending_framepy_read_register (PyObject *self, PyObject *args)
 	 handle the user register case.  */
       val = value_of_register (regnum, pending_frame->frame_info);
       if (val == NULL)
+#ifndef NVIDIA_CUDA_GDB
 	PyErr_Format (PyExc_ValueError,
+#else
+        gdbpy_ErrFormat (gdbpyExc_ValueError,
+#endif
 		      "Cannot read register %d from frame.",
 		      regnum);
     }
@@ -420,11 +473,15 @@ pending_framepy_create_unwind_info (PyObject *self, PyObject *args)
   CORE_ADDR pc;
   CORE_ADDR special;
 
-  if (!PyArg_ParseTuple (args, "O:create_unwind_info", &pyo_frame_id))
+  if (!gdbpy_PyArg_ParseTuple (args, "O:create_unwind_info", &pyo_frame_id))
       return NULL;
   if (!pyuw_object_attribute_to_pointer (pyo_frame_id, "sp", &sp))
     {
+#ifndef NVIDIA_CUDA_GDB
       PyErr_SetString (PyExc_ValueError,
+#else
+      PyErr_SetString (gdbpyExc_ValueError,
+#endif
 		       _("frame_id should have 'sp' attribute."));
       return NULL;
     }
@@ -456,7 +513,11 @@ pending_framepy_architecture (PyObject *self, PyObject *args)
 
   if (pending_frame->frame_info == NULL)
     {
+#ifndef NVIDIA_CUDA_GDB
       PyErr_SetString (PyExc_ValueError,
+#else
+      PyErr_SetString (gdbpyExc_ValueError,
+#endif
 		       "Attempting to read register from stale PendingFrame");
       return NULL;
     }
@@ -472,8 +533,13 @@ pending_framepy_level (PyObject *self, PyObject *args)
 
   if (pending_frame->frame_info == NULL)
     {
+#ifdef NVIDIA_CUDA_GDB
+      PyErr_SetString (gdbpyExc_ValueError,
+		       "Attempting to read stack level from stale PendingFrame");
+#else
       PyErr_SetString (PyExc_ValueError,
 		       "Attempting to read stack level from stale PendingFrame");
+#endif
       return NULL;
     }
   int level = frame_relative_level (pending_frame->frame_info);
@@ -548,7 +614,11 @@ pyuw_sniffer (const struct frame_unwind *self, struct frame_info *this_frame,
   if (gdb_python_module == NULL
       || ! PyObject_HasAttrString (gdb_python_module, "_execute_unwinders"))
     {
+#ifndef NVIDIA_CUDA_GDB
       PyErr_SetString (PyExc_NameError,
+#else
+      PyErr_SetString (gdbpyExc_NameError,
+#endif
 		       "Installation error: gdb._execute_unwinders function "
 		       "is missing");
       gdbpy_print_stack ();
@@ -564,7 +634,11 @@ pyuw_sniffer (const struct frame_unwind *self, struct frame_info *this_frame,
 
   /* A (gdb.UnwindInfo, str) tuple, or None.  */
   gdbpy_ref<> pyo_execute_ret
+#ifndef NVIDIA_CUDA_GDB
     (PyObject_CallFunctionObjArgs (pyo_execute.get (),
+#else
+    (gdbpy_PyObject_CallFunctionObjArgs (pyo_execute.get (),
+#endif
 				   pyo_pending_frame.get (), NULL));
   if (pyo_execute_ret == nullptr)
     {
@@ -573,7 +647,11 @@ pyuw_sniffer (const struct frame_unwind *self, struct frame_info *this_frame,
       gdbpy_print_stack_or_quit ();
       return 0;
     }
+#ifndef NVIDIA_CUDA_GDB
   if (pyo_execute_ret == Py_None)
+#else
+  if (pyo_execute_ret == gdbpy_None)
+#endif
     return 0;
 
   /* Verify the return value of _execute_unwinders is a tuple of size 2.  */
@@ -598,9 +676,15 @@ pyuw_sniffer (const struct frame_unwind *self, struct frame_info *this_frame,
     }
 
   /* Received UnwindInfo, cache data.  */
+#ifndef NVIDIA_CUDA_GDB
   PyObject *pyo_unwind_info = PyTuple_GET_ITEM (pyo_execute_ret.get (), 0);
   if (PyObject_IsInstance (pyo_unwind_info,
 			   (PyObject *) &unwind_info_object_type) <= 0)
+#else
+  PyObject *pyo_unwind_info = PyTuple_GET_ITEM (pyo_execute_ret.get (), 0);
+  if (gdbpy_PyObject__IsInstance (pyo_unwind_info,
+                           (PyObject *) &unwind_info_object_type) <= 0)
+#endif
     error (_("A Unwinder should return gdb.UnwindInfo instance."));
 
   {

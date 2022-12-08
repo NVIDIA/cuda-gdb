@@ -16,6 +16,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2022 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "gdbsupport/gdb_obstack.h"
 #include "bfd.h"		/* Binary File Description.  */
@@ -382,16 +387,27 @@ c_type_print_varspec_prefix (struct type *type,
   switch (type->code ())
     {
     case TYPE_CODE_PTR:
+#ifdef NVIDIA_CUDA_GDB
+      c_type_print_varspec_prefix (FIND_TARGET_TYPE (type),
+				   stream, show, 1, 1, language, flags, 
+				   podata); 
+#else
       c_type_print_varspec_prefix (TYPE_TARGET_TYPE (type),
 				   stream, show, 1, 1, language, flags,
 				   podata);
+#endif
       fprintf_filtered (stream, "*");
       c_type_print_modifier (type, stream, 1, need_post_space, language);
       break;
 
     case TYPE_CODE_MEMBERPTR:
+#ifdef NVIDIA_CUDA_GDB
+      c_type_print_varspec_prefix (FIND_TARGET_TYPE (type),
+				   stream, show, 0, 0, language, flags, podata); 
+#else
       c_type_print_varspec_prefix (TYPE_TARGET_TYPE (type),
 				   stream, show, 0, 0, language, flags, podata);
+#endif
       name = TYPE_SELF_TYPE (type)->name ();
       if (name)
 	print_name_maybe_canonical (name, flags, stream);
@@ -403,9 +419,15 @@ c_type_print_varspec_prefix (struct type *type,
       break;
 
     case TYPE_CODE_METHODPTR:
+#ifdef NVIDIA_CUDA_GDB
+      c_type_print_varspec_prefix (FIND_TARGET_TYPE (type),
+				   stream, show, 0, 0, language, flags, 
+				   podata); 
+#else
       c_type_print_varspec_prefix (TYPE_TARGET_TYPE (type),
 				   stream, show, 0, 0, language, flags,
 				   podata);
+#endif
       fprintf_filtered (stream, "(");
       name = TYPE_SELF_TYPE (type)->name ();
       if (name)
@@ -419,34 +441,58 @@ c_type_print_varspec_prefix (struct type *type,
 
     case TYPE_CODE_REF:
     case TYPE_CODE_RVALUE_REF:
+#ifdef NVIDIA_CUDA_GDB
+      c_type_print_varspec_prefix (FIND_TARGET_TYPE (type),
+				   stream, show, 1, 0, language, flags, 
+				   podata); 
+#else
       c_type_print_varspec_prefix (TYPE_TARGET_TYPE (type),
 				   stream, show, 1, 0, language, flags,
 				   podata);
+#endif
       fprintf_filtered (stream, type->code () == TYPE_CODE_REF ? "&" : "&&");
       c_type_print_modifier (type, stream, 1, need_post_space, language);
       break;
 
     case TYPE_CODE_METHOD:
     case TYPE_CODE_FUNC:
+#ifdef NVIDIA_CUDA_GDB
+      c_type_print_varspec_prefix (FIND_TARGET_TYPE (type),
+				   stream, show, 0, 0, language, flags, 
+				   podata); 
+#else
       c_type_print_varspec_prefix (TYPE_TARGET_TYPE (type),
 				   stream, show, 0, 0, language, flags,
 				   podata);
+#endif
       if (passed_a_ptr)
 	fprintf_filtered (stream, "(");
       break;
 
     case TYPE_CODE_ARRAY:
+#ifdef NVIDIA_CUDA_GDB
+      c_type_print_varspec_prefix (FIND_TARGET_TYPE (type),
+				   stream, show, 0, need_post_space,
+				   language, flags, podata);
+#else
       c_type_print_varspec_prefix (TYPE_TARGET_TYPE (type),
 				   stream, show, 0, need_post_space,
 				   language, flags, podata);
+#endif
       if (passed_a_ptr)
 	fprintf_filtered (stream, "(");
       break;
 
     case TYPE_CODE_TYPEDEF:
+#ifdef NVIDIA_CUDA_GDB
+      c_type_print_varspec_prefix (FIND_TARGET_TYPE (type),
+				   stream, show, passed_a_ptr, 0, 
+				   language, flags, podata); 
+#else
       c_type_print_varspec_prefix (TYPE_TARGET_TYPE (type),
 				   stream, show, passed_a_ptr, 0,
 				   language, flags, podata);
+#endif
       break;
 
     case TYPE_CODE_UNDEF:

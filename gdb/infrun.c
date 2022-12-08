@@ -18,6 +18,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2022 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "displaced-stepping.h"
 #include "infrun.h"
@@ -73,6 +78,13 @@
 #include "test-target.h"
 #include "gdbsupport/common-debug.h"
 #include "gdbsupport/buildargv.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-state.h"
+#include "cuda/cuda-iterator.h"
+#include "cuda/cuda-autostep.h"
+#include "cuda/cuda-options.h"
+#include "cuda/cuda-exceptions.h"
+#endif
 
 /* Prototypes for local functions */
 
@@ -95,6 +107,9 @@ static bool maybe_software_singlestep (struct gdbarch *gdbarch);
 static void resume (gdb_signal sig);
 
 static void wait_for_inferior (inferior *inf);
+#ifdef NVIDIA_CUDA_GDB
+void cuda_wait_for_inferior (void);
+#endif
 
 /* Asynchronous signal handler registered as event loop source for
    when we have pending events ready to be passed to the core.  */
@@ -147,6 +162,13 @@ show_step_stop_if_no_debug (struct ui_file *file, int from_tty,
 
 static ptid_t previous_inferior_ptid;
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - focus */
+/* Same as previous_inferior_ptid with CUDA coordinates */
+static cuda_coords_t previous_cuda_coords;
+/* CUDA - host singlestep*/
+int cuda_host_want_singlestep = 0;
+#endif
 /* If set (default for legacy reasons), when following a fork, GDB
    will detach from one of the fork branches, child or parent.
    Exactly which branch is detached depends on 'set follow-fork-mode'
@@ -685,6 +707,14 @@ static bool
 follow_fork ()
 {
   bool follow_child = (follow_fork_mode_string == follow_fork_mode_child);
+#ifdef NVIDIA_CUDA_GDB
+  /* Disallow follow-fork child if we already started initialization of the CUDA debug API */
+  if (follow_child && cuda_api_get_state () != CUDA_API_STATE_UNINITIALIZED)
+    {
+      warning (_("Unable to follow child process when debugging CUDA process."));
+      follow_child = false;
+    }
+#endif
   bool should_resume = true;
 
   /* Copy user stepping state to the new inferior thread.  FIXME: the
@@ -1951,7 +1981,11 @@ start_step_over (void)
       if (!target_is_non_stop_p () && !step_what)
 	continue;
 
+#ifdef NVIDIA_CUDA_GDB
+      switch_to_thread_keep_cuda_focus (tp);
+#else
       switch_to_thread (tp);
+#endif
       reset_ecs (ecs, tp);
       keep_going_pass_signal (ecs);
 
@@ -1985,8 +2019,14 @@ start_step_over (void)
 	{
 	  /* On all-stop, shouldn't have resumed unless we needed a
 	     step over.  */
+#ifdef NVIDIA_CUDA_GDB
+	  gdb_assert (tp->control.trap_expected
+		      || tp->step_after_step_resume_breakpoint
+		      || step_what);
+#else
 	  gdb_assert (tp->control.trap_expected
 		      || tp->step_after_step_resume_breakpoint);
+#endif
 
 	  /* With remote targets (at least), in all-stop, we can't
 	     issue any further remote commands until the program stops
@@ -2028,7 +2068,12 @@ static const char *const scheduler_enums[] = {
   schedlock_replay,
   NULL
 };
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA: We don't support any mode other than "off". */
+static const char *scheduler_mode = schedlock_off;
+#else
 static const char *scheduler_mode = schedlock_replay;
+#endif
 static void
 show_scheduler_mode (struct ui_file *file, int from_tty,
 		     struct cmd_list_element *c, const char *value)
@@ -2209,10 +2254,19 @@ resume_1 (enum gdb_signal sig)
      implement single-stepping with breakpoints (software
      single-step).  */
   bool step;
+#ifdef NVIDIA_CUDA_GDB
+  step = user_step;
+#endif
 
   gdb_assert (!tp->stop_requested);
   gdb_assert (!thread_is_in_step_over_chain (tp));
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - since host resume is faked during single-stepping thru
+     device code it's safe to ignore quit flag */
+  if (!(step && cuda_focus_is_device()))
+    QUIT;
+#endif
   if (tp->has_pending_waitstatus ())
     {
       infrun_debug_printf
@@ -2251,6 +2305,11 @@ resume_1 (enum gdb_signal sig)
   /* Depends on stepped_breakpoint.  */
   step = currently_stepping (tp);
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - sstep */
+  if (cuda_get_autostep_pending ())
+    cuda_sstep_initialize (step);
+#endif
   if (current_inferior ()->waiting_for_vfork_done)
     {
       /* Don't try to single-step a vfork parent that is waiting for
@@ -2356,6 +2415,10 @@ resume_1 (enum gdb_signal sig)
   if (tp->control.trap_expected || bpstat_should_step ())
     tp->control.may_range_step = 0;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - host singlestep*/
+  cuda_host_want_singlestep = step;
+#endif
   /* If displaced stepping is enabled, step over breakpoints by executing a
      copy of the instruction at a different address.
 
@@ -3080,6 +3143,10 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 
   gdb_assert (!thread_is_in_step_over_chain (cur_thr));
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - sstep */
+  cuda_sstep_initialize (cur_thr->control.stepping_command);
+#endif
   ptid_t resume_ptid
     = user_visible_resume_ptid (cur_thr->control.stepping_command);
   process_stratum_target *resume_target
@@ -3182,7 +3249,15 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 	  global_thread_step_over_chain_enqueue (tp);
 	}
 
+#ifdef NVIDIA_CUDA_GDB
+      switch_to_thread_keep_cuda_focus (cur_thr);
+      /* CUDA: FIXME hack to get around the issue where our switch_to_thread code
+       * is clearing out regcaches. The regcache value has been invalidated.
+       */
+      regcache = get_current_regcache ();
+#else
       switch_to_thread (cur_thr);
+#endif
     }
 
   /* Enqueue the current thread last, so that we move all other
@@ -3250,7 +3325,11 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 				 tp->ptid.to_string ().c_str ());
 
 	    reset_ecs (ecs, tp);
+#ifdef NVIDIA_CUDA_GDB
+	    switch_to_thread_keep_cuda_focus (tp);
+#else
 	    switch_to_thread (tp);
+#endif
 	    keep_going_pass_signal (ecs);
 	    if (!ecs->wait_some_more)
 	      error (_("Command aborted."));
@@ -3260,7 +3339,11 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
       {
 	/* The thread wasn't started, and isn't queued, run it now.  */
 	reset_ecs (ecs, cur_thr);
+#ifdef NVIDIA_CUDA_GDB
+	switch_to_thread_keep_cuda_focus (cur_thr);
+#else
 	switch_to_thread (cur_thr);
+#endif
 	keep_going_pass_signal (ecs);
 	if (!ecs->wait_some_more)
 	  error (_("Command aborted."));
@@ -3274,7 +3357,11 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
   /* If we've switched threads above, switch back to the previously
      current thread.  We don't want the user to see a different
      selected thread.  */
+#ifdef NVIDIA_CUDA_GDB
+  switch_to_thread_keep_cuda_focus (cur_thr);
+#else
   switch_to_thread (cur_thr);
+#endif
 
   /* Tell the event loop to wait for it to stop.  If the target
      supports asynchronous execution, it'll do this from within
@@ -3330,6 +3417,10 @@ init_wait_for_inferior (void)
   nullify_last_target_wait_ptid ();
 
   previous_inferior_ptid = inferior_ptid;
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - focus */
+  previous_cuda_coords = CUDA_INVALID_COORDS;
+#endif
 }
 
 
@@ -3853,6 +3944,10 @@ wait_for_inferior (inferior *inf)
 
   SCOPE_EXIT { delete_just_stopped_threads_infrun_breakpoints (); };
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - focus */
+  cuda_coords_get_current (&previous_cuda_coords);
+#endif
   /* If an error happens while handling the event, propagate GDB's
      knowledge of the executing state to the frontend/user running
      state.  */
@@ -3888,6 +3983,13 @@ wait_for_inferior (inferior *inf)
   /* No error, don't finish the state yet.  */
   finish_state.release ();
 }
+#ifdef NVIDIA_CUDA_GDB
+void
+cuda_wait_for_inferior (void)
+{
+  wait_for_inferior (current_inferior ());
+}
+#endif
 
 /* Cleanup that reinstalls the readline callback handler, if the
    target is running in the background.  If while handling the target
@@ -3937,12 +4039,20 @@ clean_up_just_stopped_threads_fsms (struct execution_control_state *ecs)
 	  if (thr == ecs->event_thread)
 	    continue;
 
+#ifdef NVIDIA_CUDA_GDB
+	  switch_to_thread_keep_cuda_focus (thr);
+#else
 	  switch_to_thread (thr);
+#endif
 	  thr->thread_fsm ()->clean_up (thr);
 	}
 
       if (ecs->event_thread != nullptr)
+#ifdef NVIDIA_CUDA_GDB
+	switch_to_thread_keep_cuda_focus (ecs->event_thread);
+#else
 	switch_to_thread (ecs->event_thread);
+#endif
     }
 }
 
@@ -3996,6 +4106,11 @@ all_uis_on_sync_execution_starting (void)
    report to the user that the inferior has stopped, and do the
    necessary cleanups.  */
 
+#ifdef NVIDIA_CUDA_GDB
+/* 0 if we received no valid event in the last call to fetch_inferior_event
+   1 otherwise.  */
+static int valid_event = 0;
+#endif
 void
 fetch_inferior_event ()
 {
@@ -4020,6 +4135,10 @@ fetch_inferior_event ()
   {
     SCOPE_EXIT { reinstall_readline_callback_handler_cleanup (); };
 
+#ifdef NVIDIA_CUDA_GDB
+    if (valid_event)
+      cuda_coords_get_current (&previous_cuda_coords);
+#endif
     /* We're handling a live event, so make sure we're doing live
        debugging.  If we're looking at traceframes while the target is
        running, we're going to need to get back to that mode after
@@ -4065,6 +4184,10 @@ fetch_inferior_event ()
        target calls.  */
     switch_to_target_no_thread (ecs->target);
 
+#ifdef NVIDIA_CUDA_GDB
+    /* Check if we got a valid event from the inferior.  */
+    valid_event = ecs->ptid != minus_one_ptid;
+#endif
     if (debug_infrun)
       print_target_wait_results (minus_one_ptid, ecs->ptid, ecs->ws);
 
@@ -4246,6 +4369,26 @@ context_switch (execution_control_state *ecs)
 			   ecs->ptid.to_string ().c_str ());
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - focus */
+  if (cuda_focus_is_device ())
+    {
+      /* Let the host thread context switch happen, but restore the focus to
+         the CUDA thread afterwards. */
+      cuda_coords_t cuda_coords = CUDA_INVALID_COORDS;
+      cuda_coords_get_current (&cuda_coords);
+      switch_to_thread (ecs->event_thread);
+      switch_to_cuda_thread (&cuda_coords);
+    }
+  else if (ecs->event_thread->need_cuda_context_switch)
+    {
+      switch_to_thread(ecs->event_thread);
+      switch_to_cuda_thread (&ecs->event_thread->new_cuda_coords);
+      ecs->event_thread->need_cuda_context_switch = false;
+      ecs->event_thread->new_cuda_coords = CUDA_INVALID_COORDS;
+    }
+  else
+#endif
   switch_to_thread (ecs->event_thread);
 }
 
@@ -5372,18 +5515,29 @@ handle_inferior_event (struct execution_control_state *ecs)
 	   Call the switch_to_xxx routine as appropriate.  */
 	thread_info *thr = find_thread_ptid (ecs->target, ecs->ptid);
 	if (thr != nullptr)
+#ifdef NVIDIA_CUDA_GDB
+	  /* CUDA: When exiting we cannot reset the pc. */
+	  switch_to_thread_no_regs (thr);
+#else
 	  switch_to_thread (thr);
+#endif
 	else
 	  {
 	    inferior *inf = find_inferior_ptid (ecs->target, ecs->ptid);
+#ifdef NVIDIA_CUDA_GDB
+	    /* CUDA: bugfix for remote debugging */
+	  if (inf)
+#endif
 	    switch_to_inferior_no_thread (inf);
 	  }
       }
       handle_vfork_child_exec_or_exit (0);
       target_terminal::ours ();	/* Must do this before mourn anyway.  */
 
+#ifndef NVIDIA_CUDA_GDB
       /* Clearing any previous state of convenience variables.  */
       clear_exit_convenience_vars ();
+#endif
 
       if (ecs->ws.kind () == TARGET_WAITKIND_EXITED)
 	{
@@ -5546,6 +5700,14 @@ handle_inferior_event (struct execution_control_state *ecs)
 	{
 	  bool follow_child
 	    = (follow_fork_mode_string == follow_fork_mode_child);
+#ifdef NVIDIA_CUDA_GDB
+	  /* Disallow follow-fork child if we already started initialization of the CUDA debug API */
+	  if (follow_child && cuda_api_get_state () != CUDA_API_STATE_UNINITIALIZED)
+	    {
+	      warning (_("Unable to follow child process when debugging CUDA process."));
+	      follow_child = false;
+	    }
+#endif
 
 	  ecs->event_thread->set_stop_signal (GDB_SIGNAL_0);
 
@@ -6265,7 +6427,11 @@ handle_signal_stop (struct execution_control_state *ecs)
 				 ecs->event_thread->stop_pc () + decr_pc);
 	    }
 	}
+#ifdef NVIDIA_CUDA_GDB
+      else if (!cuda_focus_is_device ())
+#else
       else
+#endif
 	{
 	  /* A delayed software breakpoint event.  Ignore the trap.  */
 	  infrun_debug_printf ("delayed software breakpoint trap, ignoring");
@@ -6306,6 +6472,21 @@ handle_signal_stop (struct execution_control_state *ecs)
       infrun_debug_printf ("user-requested stop");
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - autostep
+     Check if we just finished autostepping and should resume from
+     this point on.  */
+  /* If we're handling CUDA autostep, update its state.  */
+  int finished_autostepping = 0;
+  if (!random_signal && cuda_get_autostep_pending ())
+    {
+      /* Update the autostep state.  */
+      cuda_update_autostep_state (ecs->event_thread->stop_pc ());
+      finished_autostepping = !cuda_get_autostep_pending ();
+    }
+  if (random_signal)
+    random_signal = !finished_autostepping;
+#endif
   /* For the program's own signals, act according to
      the signal handling tables.  */
 
@@ -6699,6 +6880,31 @@ process_event_stop_test (struct execution_control_state *ecs)
       return;
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - next */
+  /* Stop stepping during a 'next' command if the cuda coordinates have
+     changed focus to ensure that control properly moves to the next warp
+     when the previous one runs to completion. */
+  if (cuda_focus_is_device ()
+      && ecs->event_thread->control.step_over_calls == STEP_OVER_ALL)
+    {
+      /* FIXME: This ignores the valid state for previous. We shouldn't
+       * be capturing previous_cuda_coords and instead rely on coords stored
+       * in the ecs thread. */
+      cuda_coords_t cur;
+      cuda_coords_get_current (&cur);
+      bool new_coords = cuda_options_software_preemption ()
+	      ? cuda_coords_compare_logical (&previous_cuda_coords, &cur)
+	      : !cuda_coords_equal (&previous_cuda_coords, &cur);
+      if (new_coords)
+	{
+	  ecs->event_thread->control.stop_step = 1;
+	  print_end_stepping_range_reason (current_uiout);
+	  stop_waiting (ecs);
+	  return;
+	}
+    }
+#endif
   /* Re-fetch current thread's frame in case the code above caused
      the frame cache to be re-initialized, making our FRAME variable
      a dangling pointer.  */
@@ -7068,6 +7274,10 @@ process_event_stop_test (struct execution_control_state *ecs)
      inline_skipped_frames.  */
   stop_pc_sal = find_pc_line (ecs->event_thread->stop_pc (), 0);
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA : The PC that the line belongs to may need to be adjusted */
+  cuda_adjust_device_code_address (stop_pc_sal.pc, &stop_pc_sal.pc);
+#endif
   /* NOTE: tausq/2004-05-24: This if block used to be done before all
      the trampoline processing logic, however, there are some trampolines 
      that have no names, so we should do trampoline handling first.  */
@@ -7104,6 +7314,23 @@ process_event_stop_test (struct execution_control_state *ecs)
 	}
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - stepping */
+  /* we want to continue stepping if this thread is still not active. */
+  if (ecs->event_thread->control.step_range_end == 1 &&
+      cuda_focus_is_device ())
+  {
+    cuda_coords_t c;
+    cuda_coords_get_current (&c);
+    if (!lane_is_active (c.dev, c.sm, c.wp, c.ln))
+    {
+      if (debug_infrun)
+        fprintf_unfiltered (gdb_stdlog, "infrun: cuda thread still not active\n");
+      keep_going (ecs);
+      return;
+    }
+  }
+#endif
   if (ecs->event_thread->control.step_range_end == 1)
     {
       /* It is stepi or nexti.  We always want to stop stepping after
@@ -7347,7 +7574,12 @@ switch_back_to_stepped_thread (struct execution_control_state *ecs)
 	  return true;
 	}
 
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA: Hack to avoid changing focus away from device. */
+      context_switch (ecs);
+#else
       switch_to_thread (ecs->event_thread);
+#endif
     }
 
   return false;
@@ -7784,6 +8016,14 @@ insert_step_resume_breakpoint_at_caller (struct frame_info *next_frame)
 					frame_unwind_caller_id (next_frame));
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - external linkage for insert_step_resume_breakpoint_at_caller */
+void
+cuda_insert_step_resume_breakpoint_at_caller (struct frame_info *next_frame)
+{
+  return insert_step_resume_breakpoint_at_caller (next_frame);
+}
+#endif
 /* Insert a "longjmp-resume" breakpoint at PC.  This is used to set a
    new breakpoint at the target of a jmp_buf.  The handling of
    longjmp-resume uses the same mechanisms used for handling
@@ -7957,7 +8197,18 @@ stop_waiting (struct execution_control_state *ecs)
   /* If all-stop, but there exists a non-stop target, stop all
      threads now that we're presenting the stop to the user.  */
   if (!non_stop && exists_non_stop_target ())
+#ifdef NVIDIA_CUDA_GDB
+    {
+      /* Save information about the current context.  */
+      scoped_restore_current_thread restore_thread;
+      stop_all_threads ();
+      /* CUDA - Make sure we re-select the CUDA thread we had before since
+	 the code above may have switched the context away from the CUDA
+	 thread.  */
+    }
+#else
     stop_all_threads ();
+#endif
 }
 
 /* Like keep_going, but passes the signal to the inferior, even if the
@@ -8472,7 +8723,19 @@ normal_stop (void)
   update_thread_list ();
 
   if (last.kind () == TARGET_WAITKIND_STOPPED && stopped_by_random_signal)
+#ifdef NVIDIA_CUDA_GDB
+    {
+      gdb::observers::signal_received.notify (inferior_thread ()->stop_signal ());
+
+      /* CUDA - autostep
+	 Check if this random signal stopped autostepping.  If so, print its
+	 report.  */
+      if (cuda_get_autostep_pending ())
+	cuda_autostep_print_exception ();
+    }
+#else
     gdb::observers::signal_received.notify (inferior_thread ()->stop_signal ());
+#endif
 
   /* As with the notification of thread events, we want to delay
      notifying the user that we've switched thread context until
@@ -8491,7 +8754,9 @@ normal_stop (void)
      after this event is handled, so we're not really switching, only
      informing of a stop.  */
   if (!non_stop
+#ifndef NVIDIA_CUDA_GDB
       && previous_inferior_ptid != inferior_ptid
+#endif
       && target_has_execution ()
       && last.kind () != TARGET_WAITKIND_SIGNALLED
       && last.kind () != TARGET_WAITKIND_EXITED
@@ -8500,11 +8765,27 @@ normal_stop (void)
       SWITCH_THRU_ALL_UIS ()
 	{
 	  target_terminal::ours_for_output ();
+#ifdef NVIDIA_CUDA_GDB
+	  /* CUDA - focus */
+	  if (cuda_focus_is_device () && (current_uiout->is_mi_like_p () ||
+					  (!previous_cuda_coords.valid ||
+					   !cuda_coords_is_current (&previous_cuda_coords))))
+	    cuda_print_message_focus (true);
+	  /* CUDA - focus */
+	  if (!cuda_focus_is_device () && previous_inferior_ptid != inferior_ptid)
+	    printf_filtered (_("[Switching to %s]\n"),
+			     target_pid_to_str (inferior_ptid).c_str ());
+#else
 	  printf_filtered (_("[Switching to %s]\n"),
 			   target_pid_to_str (inferior_ptid).c_str ());
+#endif
 	  annotate_thread_changed ();
 	}
       previous_inferior_ptid = inferior_ptid;
+#ifdef NVIDIA_CUDA_GDB
+      cuda_coords_get_current (&previous_cuda_coords);
+      kernels_update_args ();
+#endif
     }
 
   if (last.kind () == TARGET_WAITKIND_NO_RESUMED)
@@ -8995,6 +9276,25 @@ siginfo_value_read (struct value *v)
 
   if (transferred != TYPE_LENGTH (value_type (v)))
     error (_("Unable to read siginfo"));
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - managed memory access
+   * If CUDA signal number is set to invalid managed memory access
+   * replace signal number read from target's OBJECT_SIGNAL_INFO segment.
+   */
+  if ( cuda_get_signo() == GDB_SIGNAL_CUDA_INVALID_MANAGED_MEMORY_ACCESS &&
+       value_offset(v) == 0)
+    {
+      gdb_byte *contents = value_contents_all_raw(v).data ();
+      int signo;
+      memcpy (&signo, contents, sizeof(int));
+      /* Map signo from OS specific to GDBs encoding */
+      signo = gdb_signal_from_host (signo);
+      if (signo != GDB_SIGNAL_SEGV && signo != GDB_SIGNAL_BUS)
+        return;
+      signo = cuda_get_signo();
+      memcpy(contents,&signo, sizeof(int));
+    }
+#endif
 }
 
 /* This function implements the lval_computed support for writing a

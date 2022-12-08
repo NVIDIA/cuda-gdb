@@ -32,6 +32,12 @@
 const struct bfd_build_id *
 build_id_bfd_get (bfd *abfd)
 {
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Our built-in objfile can have a null abfd.
+   * Handle that here. */
+  if (abfd == NULL)
+    return NULL;
+#endif
   if (!bfd_check_format (abfd, bfd_object)
       && !bfd_check_format (abfd, bfd_core))
     return NULL;

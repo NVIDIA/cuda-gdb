@@ -37,7 +37,7 @@ struct py_insn_obj {
 static PyObject *
 py_insn_getter (PyObject *self, void *closure)
 {
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Instruction members.  */

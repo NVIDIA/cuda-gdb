@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2022 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "arch-utils.h"
 #include "symtab.h"
@@ -55,6 +60,11 @@
 #include "gdbsupport/gdb_optional.h"
 #include "source.h"
 #include "cli/cli-style.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-exceptions.h"
+#include "cuda/cuda-utils.h"
+#include "cuda/cuda-tdep.h"
+#endif
 
 /* Local functions: */
 
@@ -244,6 +254,12 @@ post_create_inferior (int from_tty)
      don't need to.  */
   target_find_description ();
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - for cudacore-dump files, inferior_ptid==null_ptid here,
+     which triggers an assert in inferior_thread(), so skip */
+  if (inferior_ptid != null_ptid)
+    {
+#endif
   /* Now that we know the register layout, retrieve current PC.  But
      if the PC is unavailable (e.g., we're opening a core file with
      missing registers info), ignore it.  */
@@ -260,6 +276,9 @@ post_create_inferior (int from_tty)
       if (ex.error != NOT_AVAILABLE_ERROR)
 	throw;
     }
+#ifdef NVIDIA_CUDA_GDB
+    }
+#endif
 
   if (current_program_space->exec_bfd ())
     {
@@ -325,6 +344,11 @@ kill_if_already_running (int from_tty)
 	  && !query (_("The program being debugged has been started already.\n\
 Start it from the beginning? ")))
 	error (_("Program not restarted."));
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - cleanup CUDA exception state */
+      if (cuda_exception_is_valid (cuda_exception))
+        cuda_exception_reset (cuda_exception);
+#endif
       target_kill ();
     }
 }
@@ -926,6 +950,9 @@ prepare_one_step (thread_info *tp, struct step_command_fsm *sm)
      inferior_ptid value.  */
   gdb_assert (inferior_ptid == tp->ptid);
 
+#ifdef NVIDIA_CUDA_GDB
+  cuda_ptx_cache_refresh ();
+#endif
   if (sm->count > 0)
     {
       struct frame_info *frame = get_current_frame ();
@@ -1617,8 +1644,16 @@ finish_command_fsm::should_stop (struct thread_info *tp)
 
       rv->type = TYPE_TARGET_TYPE (function->type ());
       if (rv->type == NULL)
+#ifdef NVIDIA_CUDA_GDB
+	/* CUDA - if the function has no target type, don't try to retrieve its return value
+	   gdb otherwise needlessly bails out */
+	return 1;
+      /* CUDA: Resolve typedef before comparing the type to void */
+      rv->type = check_typedef (rv->type);
+#else
 	internal_error (__FILE__, __LINE__,
 			_("finish_command: function has no target type"));
+#endif
 
       if (check_typedef (rv->type)->code () != TYPE_CODE_VOID)
 	{
@@ -1740,6 +1775,12 @@ finish_forward (struct finish_command_fsm *sm, struct frame_info *frame)
 					     get_stack_frame_id (frame),
 					     bp_finish);
 
+#ifdef NVIDIA_CUDA_GDB
+  /* Don't break on specific thread when device has focus as the
+     thread focus may be incorrect. */
+  if (cuda_focus_is_device() && sm->breakpoint != 0)
+    sm->breakpoint->thread = -1;
+#endif
   /* set_momentary_breakpoint invalidates FRAME.  */
   frame = NULL;
 
@@ -2396,6 +2437,10 @@ kill_command (const char *arg, int from_tty)
   std::string pid_str = target_pid_to_str (ptid_t (pid));
   int infnum = current_inferior ()->num;
 
+#ifdef NVIDIA_CUDA_GDB
+  if (cuda_exception_is_valid (cuda_exception))
+    cuda_exception_reset (cuda_exception);
+#endif
   target_kill ();
   bfd_cache_close_all ();
 
@@ -2540,6 +2585,10 @@ attach_post_wait (int from_tty, enum attach_post_wait_mode mode)
       if (deprecated_attach_hook)
 	deprecated_attach_hook ();
     }
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - attach */
+  cuda_nat_attach ();
+#endif
 }
 
 /* "attach" command entry point.  Takes a program started up outside

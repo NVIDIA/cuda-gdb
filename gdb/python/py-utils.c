@@ -40,18 +40,18 @@ python_string_to_unicode (PyObject *obj)
 
   /* If obj is already a unicode string, just return it.
      I wish life was always that simple...  */
-  if (PyUnicode_Check (obj))
+  if (gdbpy_UnicodeCheck (obj))
     {
       unicode_str = obj;
       Py_INCREF (obj);
     }
 #ifndef IS_PY3K
-  else if (PyString_Check (obj))
+  else if (gdbpy_StringCheck (obj))
     unicode_str = PyUnicode_FromEncodedObject (obj, host_charset (), NULL);
 #endif
   else
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Expected a string or unicode object."));
       unicode_str = NULL;
     }
@@ -167,9 +167,9 @@ int
 gdbpy_is_string (PyObject *obj)
 {
 #ifdef IS_PY3K
-  return PyUnicode_Check (obj);
+  return gdbpy_UnicodeCheck (obj);
 #else
-  return PyString_Check (obj) || PyUnicode_Check (obj);
+  return gdbpy_StringCheck (obj) || gdbpy_UnicodeCheck (obj);
 #endif
 }
 
@@ -212,7 +212,7 @@ gdbpy_err_fetch::to_string () const
      Using str (aka PyObject_Str) will fetch the error message from
      gdb.GdbError ("message").  */
 
-  if (m_error_value && m_error_value != Py_None)
+  if (m_error_value && m_error_value != gdbpy_None)
     return gdbpy_obj_to_string (m_error_value);
   else
     return gdbpy_obj_to_string (m_error_type);
@@ -236,13 +236,13 @@ gdbpy_convert_exception (const struct gdb_exception &exception)
   PyObject *exc_class;
 
   if (exception.reason == RETURN_QUIT)
-    exc_class = PyExc_KeyboardInterrupt;
+    exc_class = gdbpyExc_KeyboardInterrupt;
   else if (exception.error == MEMORY_ERROR)
     exc_class = gdbpy_gdb_memory_error;
   else
     exc_class = gdbpy_gdb_error;
 
-  PyErr_Format (exc_class, "%s", exception.what ());
+  gdbpy_ErrFormat (exc_class, "%s", exception.what ());
 }
 
 /* Converts OBJ to a CORE_ADDR value.
@@ -279,7 +279,7 @@ get_addr_from_python (PyObject *obj, CORE_ADDR *addr)
 
       if (sizeof (val) > sizeof (CORE_ADDR) && ((CORE_ADDR) val) != val)
 	{
-	  PyErr_SetString (PyExc_ValueError,
+	  PyErr_SetString (gdbpyExc_ValueError,
 			   _("Overflow converting to address."));
 	  return -1;
 	}
@@ -428,7 +428,7 @@ gdbpy_handle_exception ()
      for user errors.  However, a missing message for gdb.GdbError
      exceptions is arguably a bug, so we flag it as such.  */
 
-  if (fetched_error.type_matches (PyExc_KeyboardInterrupt))
+  if (fetched_error.type_matches (gdbpyExc_KeyboardInterrupt))
     throw_quit ("Quit");
   else if (! fetched_error.type_matches (gdbpy_gdberror_exc)
 	   || msg == NULL || *msg == '\0')

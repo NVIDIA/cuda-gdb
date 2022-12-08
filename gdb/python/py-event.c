@@ -100,8 +100,8 @@ evpy_emit_event (PyObject *event,
       if (func == NULL)
 	return -1;
 
-      gdbpy_ref<> func_result (PyObject_CallFunctionObjArgs (func, event,
-							     NULL));
+      gdbpy_ref<> func_result (gdbpy_PyObject_CallFunctionObjArgs (func, event,
+								   NULL));
 
       if (func_result == NULL)
 	{

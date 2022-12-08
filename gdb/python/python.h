@@ -25,6 +25,9 @@
 /* This is all that python exports to gdb.  */
 extern const struct extension_language_defn extension_language_python;
 
+const char *get_python_init_error (void);
+bool is_python_available (void);
+
 /* Command element for the 'python' command.  */
 extern cmd_list_element *python_cmd_element;
 

@@ -20,6 +20,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2022 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* To regenerate this file, run:
    ./gdbarch.py
 */
@@ -54,6 +59,18 @@ struct gdbarch
   int int_bit;
   int long_bit;
   int long_long_bit;
+#ifdef NVIDIA_CUDA_GDB
+  int nv_fp8_e5m2_bit;
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  const struct floatformat ** nv_fp8_e5m2_format;
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  int nv_fp8_e4m3_bit;
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  const struct floatformat ** nv_fp8_e4m3_format;
+#endif
   int bfloat16_bit;
   const struct floatformat ** bfloat16_format;
   int half_bit;
@@ -282,6 +299,12 @@ gdbarch_alloc (const struct gdbarch_info *info,
   gdbarch->int_bit = 4*TARGET_CHAR_BIT;
   gdbarch->long_bit = 4*TARGET_CHAR_BIT;
   gdbarch->long_long_bit = 2*gdbarch->long_bit;
+#ifdef NVIDIA_CUDA_GDB
+  gdbarch->nv_fp8_e5m2_bit = TARGET_CHAR_BIT;
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  gdbarch->nv_fp8_e4m3_bit = TARGET_CHAR_BIT;
+#endif
   gdbarch->bfloat16_bit = 2*TARGET_CHAR_BIT;
   gdbarch->half_bit = 2*TARGET_CHAR_BIT;
   gdbarch->float_bit = 4*TARGET_CHAR_BIT;
@@ -395,6 +418,20 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of int_bit, invalid_p == 0 */
   /* Skip verify of long_bit, invalid_p == 0 */
   /* Skip verify of long_long_bit, invalid_p == 0 */
+#ifdef NVIDIA_CUDA_GDB
+  /* Skip verify of nv_fp8_e5m2_bit, invalid_p == 0 */
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  if (gdbarch->nv_fp8_e5m2_format == 0)
+    gdbarch->nv_fp8_e5m2_format = floatformats_nv_fp8_e5m2;
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  /* Skip verify of nv_fp8_e4m3_bit, invalid_p == 0 */
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  if (gdbarch->nv_fp8_e4m3_format == 0)
+    gdbarch->nv_fp8_e4m3_format = floatformats_nv_fp8_e4m3;
+#endif
   /* Skip verify of bfloat16_bit, invalid_p == 0 */
   if (gdbarch->bfloat16_format == 0)
     gdbarch->bfloat16_format = floatformats_bfloat16;
@@ -652,6 +689,26 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   fprintf_filtered (file,
                       "gdbarch_dump: long_long_bit = %s\n",
                       plongest (gdbarch->long_long_bit));
+#ifdef NVIDIA_CUDA_GDB
+  fprintf_filtered (file,
+                      "gdbarch_dump: nv_fp8_e5m2_bit = %s\n",
+                      plongest (gdbarch->nv_fp8_e5m2_bit));
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  fprintf_filtered (file,
+                      "gdbarch_dump: nv_fp8_e5m2_format = %s\n",
+                      pformat (gdbarch->nv_fp8_e5m2_format));
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  fprintf_filtered (file,
+                      "gdbarch_dump: nv_fp8_e4m3_bit = %s\n",
+                      plongest (gdbarch->nv_fp8_e4m3_bit));
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  fprintf_filtered (file,
+                      "gdbarch_dump: nv_fp8_e4m3_format = %s\n",
+                      pformat (gdbarch->nv_fp8_e4m3_format));
+#endif
   fprintf_filtered (file,
                       "gdbarch_dump: bfloat16_bit = %s\n",
                       plongest (gdbarch->bfloat16_bit));
@@ -1537,6 +1594,80 @@ set_gdbarch_long_long_bit (struct gdbarch *gdbarch,
 {
   gdbarch->long_long_bit = long_long_bit;
 }
+
+#ifdef NVIDIA_CUDA_GDB
+int
+gdbarch_nv_fp8_e5m2_bit (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of nv_fp8_e5m2_bit, invalid_p == 0 */
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_nv_fp8_e5m2_bit called\n");
+  return gdbarch->nv_fp8_e5m2_bit;
+}
+
+void
+set_gdbarch_nv_fp8_e5m2_bit (struct gdbarch *gdbarch,
+                             int nv_fp8_e5m2_bit)
+{
+  gdbarch->nv_fp8_e5m2_bit = nv_fp8_e5m2_bit;
+}
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
+const struct floatformat **
+gdbarch_nv_fp8_e5m2_format (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_nv_fp8_e5m2_format called\n");
+  return gdbarch->nv_fp8_e5m2_format;
+}
+
+void
+set_gdbarch_nv_fp8_e5m2_format (struct gdbarch *gdbarch,
+                                const struct floatformat ** nv_fp8_e5m2_format)
+{
+  gdbarch->nv_fp8_e5m2_format = nv_fp8_e5m2_format;
+}
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
+int
+gdbarch_nv_fp8_e4m3_bit (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of nv_fp8_e4m3_bit, invalid_p == 0 */
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_nv_fp8_e4m3_bit called\n");
+  return gdbarch->nv_fp8_e4m3_bit;
+}
+
+void
+set_gdbarch_nv_fp8_e4m3_bit (struct gdbarch *gdbarch,
+                             int nv_fp8_e4m3_bit)
+{
+  gdbarch->nv_fp8_e4m3_bit = nv_fp8_e4m3_bit;
+}
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
+const struct floatformat **
+gdbarch_nv_fp8_e4m3_format (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  if (gdbarch_debug >= 2)
+    fprintf_unfiltered (gdb_stdlog, "gdbarch_nv_fp8_e4m3_format called\n");
+  return gdbarch->nv_fp8_e4m3_format;
+}
+
+void
+set_gdbarch_nv_fp8_e4m3_format (struct gdbarch *gdbarch,
+                                const struct floatformat ** nv_fp8_e4m3_format)
+{
+  gdbarch->nv_fp8_e4m3_format = nv_fp8_e4m3_format;
+}
+#endif
 
 int
 gdbarch_bfloat16_bit (struct gdbarch *gdbarch)

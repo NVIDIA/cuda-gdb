@@ -106,7 +106,7 @@ fnpy_init (PyObject *self, PyObject *args, PyObject *kwds)
   const char *name;
   gdb::unique_xmalloc_ptr<char> docstring;
 
-  if (! PyArg_ParseTuple (args, "s", &name))
+  if (! gdbpy_PyArg_ParseTuple (args, "s", &name))
     return -1;
 
   gdbpy_ref<> self_ref = gdbpy_ref<>::new_reference (self);

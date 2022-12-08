@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2022 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "arch-utils.h"
 #include "mi-cmds.h"
@@ -185,6 +190,9 @@ mi_cmd_break_insert_1 (int dprintf, const char *command, char **argv, int argc)
   struct explicit_location explicit_loc;
   std::string extra_string;
   bool force_condition = false;
+#ifdef NVIDIA_CUDA_GDB
+  bool parse_extra = false;
+#endif
 
   enum opt
     {
@@ -358,6 +366,28 @@ mi_cmd_break_insert_1 (int dprintf, const char *command, char **argv, int argc)
 	error (_("Garbage '%s' at end of location"), address);
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - pending conditional breakpoints*/
+  if (condition != NULL)
+    {
+      if (thread > -1)
+	extra_string = std::string {"if " + std::string {condition} + " thread " + 
+				std::to_string (thread)};
+      else
+	extra_string = std::string {"if " + std::string {condition}};
+      parse_extra = true;
+      condition = NULL;
+      thread = -1;
+    }
+  create_breakpoint (get_current_arch (), location.get (), condition, thread, 
+		     extra_string.c_str (), 
+		     force_condition, 
+		     parse_extra,
+		     temp_p, type_wanted, 
+		     ignore_count, 
+		     pending ? AUTO_BOOLEAN_TRUE : AUTO_BOOLEAN_FALSE, 
+		     ops, 0, enabled, 0, 0); 
+#else
   create_breakpoint (get_current_arch (), location.get (), condition, thread,
 		     extra_string.c_str (),
 		     force_condition,
@@ -366,6 +396,7 @@ mi_cmd_break_insert_1 (int dprintf, const char *command, char **argv, int argc)
 		     ignore_count,
 		     pending ? AUTO_BOOLEAN_TRUE : AUTO_BOOLEAN_FALSE,
 		     ops, 0, enabled, 0, 0);
+#endif
 }
 
 /* Implements the -break-insert command.

@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2022 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -567,6 +572,11 @@ iterate_over_some_symtabs (const char *name,
 	     this symtab and use its absolute path.  */
 	  if (real_path != NULL)
 	    {
+#ifdef NVIDIA_CUDA_GDB
+	      const int realpath_len = strlen (real_path);
+	      const int dirname_len = s->dirname () ? strlen(s->dirname ()) : 0;
+	      const int filename_len = s->filename ? strlen(s->filename) : 0;
+#endif
 	      const char *fullname = symtab_to_fullname (s);
 
 	      gdb_assert (IS_ABSOLUTE_PATH (real_path));
@@ -580,6 +590,20 @@ iterate_over_some_symtabs (const char *name,
 		    return true;
 		  continue;
 		}
+#ifdef NVIDIA_CUDA_GDB
+	      /* And finally check if real_path equals to SYMTAB_DIRNAME (s) concatenated
+		 with s->filename */
+	      if (s->dirname () != NULL && s->filename != NULL &&
+		  realpath_len == dirname_len + filename_len + 1 &&
+		  filename_ncmp (real_path, s->dirname (), dirname_len) == 0 &&
+		  real_path [dirname_len] == '/' &&
+		  filename_ncmp (real_path + dirname_len + 1, s->filename, filename_len) == 0)
+		{
+		  if (callback (s))
+		    return 1;
+		  continue;
+		}
+#endif
 	    }
 	}
     }
@@ -1171,6 +1195,14 @@ expand_symtab_containing_pc (CORE_ADDR pc, struct obj_section *section)
   /* If we know that this is not a text address, return failure.  This is
      necessary because we loop based on texthigh and textlow, which do
      not include the data ranges.  */
+#ifdef NVIDIA_CUDA_GDB
+  if (section == NULL)
+    {
+      struct obj_section *obj_section = find_pc_section (pc);
+      msymbol = lookup_minimal_symbol_by_pc_section (pc, obj_section);
+    }
+  else
+#endif
   msymbol = lookup_minimal_symbol_by_pc_section (pc, section);
   if (msymbol.minsym && msymbol.minsym->data_p ())
     return;
@@ -2265,6 +2297,105 @@ lookup_symbol_in_block (const char *name, symbol_name_match_type match_type,
   return NULL;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - duplicate extern symbols */
+/* When the CUDA application is compiled in separate compilation mode, the
+   same device extern global appears in both the host and device code. The
+   device variable symbol should have priority.
+   It is safe to do so because if there was an actual host global variable
+   with the same name, the host linker would have complained about it. */
+static struct block_symbol
+cuda_lookup_symbol_in_objfile (struct objfile *objfile,
+			       int block_index,
+			       const char *name,
+			       const domain_enum domain)
+{
+  struct symbol *sym;
+  struct block_symbol result;
+  if (domain != VAR_DOMAIN)
+    return (struct block_symbol) {NULL, NULL};
+  if (!objfile->cuda_objfile)
+    return (struct block_symbol) {NULL, NULL};
+  if (symbol_lookup_debug)
+    fprintf_unfiltered (gdb_stdlog, "cuda_lookup_symbol_in_objfile(%s, %d, %s)\n",
+			objfile_debug_name (objfile),
+			block_index,
+			name);
+  for (compunit_symtab *s : objfile->compunits ())
+    {
+      const struct blockvector *bv = s->blockvector ();
+      struct block *block = BLOCKVECTOR_BLOCK (bv, block_index);
+      result.block = block;
+      sym = block_lookup_symbol (block, name,
+				 symbol_name_match_type::FULL,
+				 domain);
+      if (sym)
+	{
+	  result.symbol = fixup_symbol_section (sym, objfile);
+	  if (symbol_lookup_debug)
+	    fprintf_unfiltered (gdb_stdlog, "cuda_lookup_symbol_in_objfile(%s, %d, %s) = %p\n",
+				objfile_debug_name (objfile),
+				block_index,
+				name,
+				host_address_to_string (result.symbol));
+	  return result;
+	}
+    }
+  if (symbol_lookup_debug)
+    fprintf_unfiltered (gdb_stdlog, "cuda_lookup_symbol_in_objfile(%s, %d, %s) = NULL\n",
+			objfile_debug_name (objfile),
+			block_index,
+			name);
+  return (struct block_symbol) {NULL, NULL};
+}
+static struct block_symbol
+cuda_lookup_symbol_in_block (struct objfile *main_objfile,
+			     int block_index,
+			     const char *name,
+			     const domain_enum domain)
+{
+  struct block_symbol result;
+  if (domain != VAR_DOMAIN)
+    return (struct block_symbol) {NULL, NULL};
+  if (main_objfile)
+    {
+      if (symbol_lookup_debug)
+	fprintf_unfiltered (gdb_stdlog, "cuda_lookup_symbol_in_block(%s, %d, %s)\n",
+			    main_objfile ? objfile_debug_name (main_objfile) : "NULL",
+			    block_index,
+			    name);
+      result = cuda_lookup_symbol_in_objfile (main_objfile,
+					      block_index,
+					      name,
+					      domain);
+      if (symbol_lookup_debug)
+	fprintf_unfiltered (gdb_stdlog, "cuda_lookup_symbol_in_block(%s, %d, %s) = %s\n",
+			    objfile_debug_name (main_objfile),
+			    block_index,
+			    result.symbol ? result.symbol->linkage_name () : "NULL",
+			    host_address_to_string (result.symbol));
+      return result;
+    }
+  for (objfile *objfile : current_program_space->objfiles ())
+    {
+      result = cuda_lookup_symbol_in_objfile (objfile,
+					      block_index,
+					      name,
+					      domain);
+      if (result.symbol)
+	{
+	  if (symbol_lookup_debug)
+	    fprintf_unfiltered (gdb_stdlog, "cuda_lookup_symbol_in_block(%s, %d, %s) = %s\n",
+				objfile_debug_name (main_objfile),
+				block_index,
+				result.symbol->linkage_name (),
+				host_address_to_string (result.symbol));
+	  return result;
+	}
+    }
+  return (struct block_symbol) {NULL, NULL};
+}
+#endif
 /* See symtab.h.  */
 
 struct block_symbol
@@ -2398,6 +2529,42 @@ lookup_symbol_in_objfile_from_linkage_name (struct objfile *objfile,
 
   return {};
 }
+
+#ifdef NVIDIA_CUDA_GDB
+/* Like lookup_symbol_in_objfile_from_linkage_name(), but takes an
+   explicit language argument. */
+struct block_symbol
+cuda_lookup_symbol_in_objfile_from_linkage_name (struct objfile *objfile,
+						 const char *linkage_name,
+						 enum language lang,
+						 domain_enum domain)
+{
+  struct objfile *main_objfile;
+
+  demangle_result_storage storage;
+  const char *modified_name = demangle_for_lookup (linkage_name, lang, storage);
+
+  if (objfile->separate_debug_objfile_backlink)
+    main_objfile = objfile->separate_debug_objfile_backlink;
+  else
+    main_objfile = objfile;
+
+  for (::objfile *cur_objfile : main_objfile->separate_debug_objfiles ())
+    {
+      struct block_symbol result;
+
+      result = lookup_symbol_in_objfile_symtabs (cur_objfile, GLOBAL_BLOCK,
+						 modified_name, domain);
+      if (result.symbol == NULL)
+	result = lookup_symbol_in_objfile_symtabs (cur_objfile, STATIC_BLOCK,
+						   modified_name, domain);
+      if (result.symbol != NULL)
+	return result;
+    }
+
+  return {};
+}
+#endif
 
 /* A helper function that throws an exception when a symbol was found
    in a psymtab but not in a symtab.  */
@@ -2573,6 +2740,21 @@ lookup_symbol_in_objfile (struct objfile *objfile, enum block_enum block_index,
 			  name, domain_name (domain));
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - symbols */
+  result = cuda_lookup_symbol_in_block (objfile, block_index, name, domain);
+  if (result.symbol != NULL)
+    {
+      if (symbol_lookup_debug)
+	{
+	  fprintf_unfiltered (gdb_stdlog,
+			      "lookup_symbol_in_objfile (...) = %s"
+			      " (in CUDA symtabs)\n",
+			      host_address_to_string (result.symbol));
+	}
+      return result;
+    }
+#endif
   result = lookup_symbol_in_objfile_symtabs (objfile, block_index,
 					     name, domain);
   if (result.symbol != NULL)
@@ -2634,6 +2816,9 @@ struct global_or_static_sym_lookup_data
   /* The field where the callback should store the symbol if found.
      It should be initialized to {NULL, NULL} before the search is started.  */
   struct block_symbol result;
+#ifdef NVIDIA_CUDA_GDB
+  struct block_symbol cuda_result;
+#endif
 };
 
 /* A callback function for gdbarch_iterate_over_objfiles_in_search_order.
@@ -2648,15 +2833,38 @@ lookup_symbol_global_or_static_iterator_cb (struct objfile *objfile,
   struct global_or_static_sym_lookup_data *data =
     (struct global_or_static_sym_lookup_data *) cb_data;
 
+/* CUDA needs to check for multiple symbols. */
+#ifndef NVIDIA_CUDA_GDB
   gdb_assert (data->result.symbol == NULL
 	      && data->result.block == NULL);
+#endif
 
+#ifdef NVIDIA_CUDA_GDB
+  if (objfile->cuda_objfile)
+    {
+      auto cuda_res = cuda_lookup_symbol_in_objfile (objfile, data->block_index,
+						     data->name, data->domain);
+      if (cuda_res.symbol != NULL)
+	data->cuda_result = cuda_res;
+    }
+  else if (data->result.symbol != NULL)
+    {
+      return 0;
+    }
+  else
+#endif
   data->result = lookup_symbol_in_objfile (objfile, data->block_index,
 					   data->name, data->domain);
 
   /* If we found a match, tell the iterator to stop.  Otherwise,
      keep going.  */
+#ifdef NVIDIA_CUDA_GDB
+  /* Only breakout if we find a cuda symbol. We expect overlap between both
+     host and device symbols and want the device symbol to take precedent. */
+  return (data->cuda_result.symbol != NULL);
+#else
   return (data->result.symbol != NULL);
+#endif
 }
 
 /* This function contains the common code of lookup_{global,static}_symbol.
@@ -2701,6 +2909,11 @@ lookup_global_or_static_symbol (const char *name,
 	 lookup_symbol_global_or_static_iterator_cb, &lookup_data, objfile);
       result = lookup_data.result;
     }
+#ifdef NVIDIA_CUDA_GDB
+  /* Device symbols always take preference for lookups */
+  if (lookup_data.cuda_result.symbol != NULL)
+     result = lookup_data.cuda_result;
+#endif
 
   if (result.symbol != NULL)
     symbol_cache_mark_found (bsc, slot, objfile, result.symbol, result.block);
@@ -2732,6 +2945,13 @@ lookup_global_symbol (const char *name,
   symbol *sym = NULL;
   if (global_block != nullptr)
     {
+#ifdef NVIDIA_CUDA_GDB
+      struct block_symbol result = cuda_lookup_symbol_in_block (block_objfile (block),
+					GLOBAL_BLOCK, name, domain);
+      if (result.symbol != NULL)
+	sym = result.symbol;
+      else
+#endif
       sym = lookup_symbol_in_block (name,
 				    symbol_name_match_type::FULL,
 				    global_block, domain);
@@ -2947,6 +3167,14 @@ find_pc_sect_compunit_symtab (CORE_ADDR pc, struct obj_section *section)
      addresses, which do not include the data ranges, and because
      we call find_pc_sect_psymtab which has a similar restriction based
      on the partial_symtab's texthigh and textlow.  */
+#ifdef NVIDIA_CUDA_GDB
+  if (section == NULL)
+    {
+      struct obj_section *obj_section = find_pc_section (pc);
+      msymbol = lookup_minimal_symbol_by_pc_section (pc, obj_section);
+    }
+  else
+#endif
   msymbol = lookup_minimal_symbol_by_pc_section (pc, section);
   if (msymbol.minsym && msymbol.minsym->data_p ())
     return NULL;
@@ -2966,6 +3194,10 @@ find_pc_sect_compunit_symtab (CORE_ADDR pc, struct obj_section *section)
      It also happens for objfiles that have their functions reordered.
      For these, the symtab we are looking for is not necessarily read in.  */
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - query if this is a code address */
+  bool is_device_code_address = cuda_is_device_code_address (pc);
+#endif
   for (objfile *obj_file : current_program_space->objfiles ())
     {
       for (compunit_symtab *cust : obj_file->compunits ())
@@ -2992,6 +3224,30 @@ find_pc_sect_compunit_symtab (CORE_ADDR pc, struct obj_section *section)
 	      && range >= best_cust_range)
 	    /* Cust doesn't have a smaller range than best_cust, skip it.  */
 	    continue;
+#ifdef NVIDIA_CUDA_GDB
+          /* CUDA - interleaving */
+          /* CUDA objfiles are not allocated as a single block of memory. Instead of
+             erroneously getting the GLOBAL_BLOCK for those objfiles, we find the
+             innermost block containing the PC for that symtab. */
+          if (obj_file->cuda_objfile)
+            {
+              const struct blockvector *found = blockvector_for_pc_sect (pc, section, &global_block,
+                                                                   cust);
+              if (!found)
+                continue;
+            }
+          /* CUDA - overlapping objfiles */
+          /* For reasons yet not fully understood, it sometimes happens that the PC
+             passed as argument appears to belong to the wrong objfile. In other
+             words, two objfiles overlap in memory. Obviously that should not happen.
+             In my case, a CUDA objfile and a host objfile appear as overlapping, and
+             the device PC is seen as belonging to a non-cuda objfile.
+             Until I can dig deeper, here is an easy workaround. When dealing with a
+             CUDA device PC, consider CUDA objfiles. And vice-versa. */
+          if ((!obj_file->cuda_objfile && is_device_code_address) ||
+              (obj_file->cuda_objfile && !is_device_code_address))
+            continue;
+#endif
 	
 	  /* For an objfile that has its functions reordered,
 	     find_pc_psymtab will find the proper partial symbol table
@@ -3048,8 +3304,18 @@ find_pc_sect_compunit_symtab (CORE_ADDR pc, struct obj_section *section)
 
   for (objfile *objf : current_program_space->objfiles ())
     {
+#ifdef NVIDIA_CUDA_GDB
+    /* CUDA - no psymtab-based optimization */
+    /* Because the optimization above has been turned off for CUDA objfiles,
+       it is now possible to call this function when the partial symbol table
+       has already been read in. We must take it into account when deciding to
+       emit a warning about it. */
+      struct compunit_symtab *result
+	= objf->find_pc_sect_compunit_symtab (msymbol, pc, section, !objf->cuda_objfile);
+#else
       struct compunit_symtab *result
 	= objf->find_pc_sect_compunit_symtab (msymbol, pc, section, 1);
+#endif
       if (result != NULL)
 	return result;
     }
@@ -3140,8 +3406,19 @@ find_symbol_at_address (CORE_ADDR address)
    find the one whose first PC is closer than that of the next line in this
    symtab.  */
 
+#ifdef NVIDIA_CUDA_GDB
 struct symtab_and_line
 find_pc_sect_line (CORE_ADDR pc, struct obj_section *section, int notcurrent)
+{
+  return find_pc_sect_line (pc, section, notcurrent, NULL);
+}
+struct symtab_and_line
+find_pc_sect_line (CORE_ADDR pc, struct obj_section *section, int notcurrent,
+		   struct cuda_debug_inline_info **inline_info)
+#else
+struct symtab_and_line
+find_pc_sect_line (CORE_ADDR pc, struct obj_section *section, int notcurrent)
+#endif
 {
   struct compunit_symtab *cust;
   struct linetable *l;
@@ -3167,6 +3444,10 @@ find_pc_sect_line (CORE_ADDR pc, struct obj_section *section, int notcurrent)
 
   struct linetable_entry *prev;
 
+#ifdef NVIDIA_CUDA_GDB
+  if (inline_info)
+    *inline_info = NULL;
+#endif
   /* If this pc is not from the current frame,
      it is the address of the end of a call instruction.
      Quite likely that is the start of the following statement.
@@ -3336,6 +3617,16 @@ find_pc_sect_line (CORE_ADDR pc, struct obj_section *section, int notcurrent)
 	 save prev if it represents the end of a function (i.e. line number
 	 0) instead of a real line.  */
 
+#ifdef NVIDIA_CUDA_GDB
+      /* Walk backward as long as we're finding inline information. */
+      while (prev && (prev != first))
+	{
+	  struct linetable_entry *prior = prev - 1;
+	  if ((prior->pc != prev->pc) || !prior->inline_info)
+	    break;
+	  prev = prior;
+	}
+#endif
       if (prev && prev->line && (!best || prev->pc > best->pc))
 	{
 	  best = prev;
@@ -3398,6 +3689,10 @@ find_pc_sect_line (CORE_ADDR pc, struct obj_section *section, int notcurrent)
 	val.end = alt->pc;
       else
 	val.end = BLOCK_END (BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK));
+#ifdef NVIDIA_CUDA_GDB
+      if (inline_info)
+	*inline_info = best->inline_info;
+#endif
     }
   val.section = section;
   return val;
@@ -3608,13 +3903,30 @@ find_line_pc (struct symtab *symtab, int line, CORE_ADDR *pc)
    Returns true to indicate success.
    Returns false if could not find the specified line.  */
 
+#ifdef NVIDIA_CUDA_GDB
 bool
 find_line_pc_range (struct symtab_and_line sal, CORE_ADDR *startptr,
 		    CORE_ADDR *endptr)
 {
+  return find_line_pc_range (sal, startptr, endptr, NULL);
+}
+bool
+find_line_pc_range (struct symtab_and_line sal, CORE_ADDR *startptr,
+		    CORE_ADDR *endptr,
+		    struct cuda_debug_inline_info **inline_info)
+#else
+bool
+find_line_pc_range (struct symtab_and_line sal, CORE_ADDR *startptr,
+		    CORE_ADDR *endptr)
+#endif
+{
   CORE_ADDR startaddr;
   struct symtab_and_line found_sal;
 
+#ifdef NVIDIA_CUDA_GDB
+  if (inline_info)
+    *inline_info = NULL;
+#endif
   startaddr = sal.pc;
   if (startaddr == 0 && !find_line_pc (sal.symtab, sal.line, &startaddr))
     return false;
@@ -3626,7 +3938,11 @@ find_line_pc_range (struct symtab_and_line sal, CORE_ADDR *startptr,
      This also insures that we never give a range like "starts at 0x134
      and ends at 0x12c".  */
 
+#ifdef NVIDIA_CUDA_GDB
+  found_sal = find_pc_sect_line (startaddr, sal.section, 0, inline_info);
+#else
   found_sal = find_pc_sect_line (startaddr, sal.section, 0);
+#endif
   if (found_sal.line != sal.line)
     {
       /* The specified line (sal) has zero bytes.  */
@@ -3908,6 +4224,10 @@ skip_prologue_sal (struct symtab_and_line *sal)
 
       /* Skip "first line" of function (which is actually its prologue).  */
       pc += gdbarch_deprecated_function_start_offset (gdbarch);
+#ifdef NVIDIA_CUDA_GDB
+      if (gdbarch_skip_entrypoint_p (gdbarch))
+        pc = gdbarch_skip_entrypoint (gdbarch, pc);
+#endif
       if (gdbarch_skip_entrypoint_p (gdbarch))
 	pc = gdbarch_skip_entrypoint (gdbarch, pc);
       if (skip)
@@ -6236,6 +6556,35 @@ make_source_files_completion_list (const char *text, const char *word)
   return list;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* Maintain the list of all possible names of MAIN routine throughout the gdb's lifetime */
+/* Because, pointers returned by main_name() should never become invalid */
+struct names_of_main_st {
+  char *name;
+  struct names_of_main_st *next;
+};
+static struct names_of_main_st *names_of_main = NULL;
+static char *find_or_alloc_names_of_main(const char *name)
+{
+  struct names_of_main_st *ptr = names_of_main;
+  /* No point in caching NULLs*/
+  if (name == NULL)
+    return (char *)name;
+  /* Search for the copy of name in the existing list of pointers */
+  while (ptr)
+    {
+      if (strcmp(ptr->name, name) == 0)
+        return ptr->name;
+      ptr = ptr->next;
+    }
+  /* If name was not found in the list, allocate new entry in names_of_main list */
+  ptr = (struct names_of_main_st *) xmalloc (sizeof (struct names_of_main_st));
+  ptr->name = xstrdup (name);
+  ptr->next = names_of_main;
+  names_of_main = ptr;
+  return ptr->name;
+}
+#endif
 /* Track MAIN */
 
 /* Return the "main_info" object for the current program space.  If
@@ -6268,13 +6617,23 @@ set_main_name (const char *name, enum language lang)
 
   if (info->name_of_main != NULL)
     {
+#ifndef NVIDIA_CUDA_GDB
       xfree (info->name_of_main);
+#endif
       info->name_of_main = NULL;
       info->language_of_main = language_unknown;
     }
+#ifdef NVIDIA_CUDA_GDB
+  if (info->name_of_main == NULL && name != NULL)
+#else
   if (name != NULL)
+#endif
     {
+#ifdef NVIDIA_CUDA_GDB
+      info->name_of_main = find_or_alloc_names_of_main (name);
+#else
       info->name_of_main = xstrdup (name);
+#endif
       info->language_of_main = lang;
     }
 }
@@ -6576,11 +6935,21 @@ get_symbol_address (const struct symbol *sym)
   gdb_assert (sym->aclass () == LOC_STATIC);
 
   const char *linkage_name = sym->linkage_name ();
+#ifdef NVIDIA_CUDA_GDB
+  bool is_cuda_focus = cuda_focus_is_device ();
+#endif
 
   for (objfile *objfile : current_program_space->objfiles ())
     {
       if (objfile->separate_debug_objfile_backlink != nullptr)
 	continue;
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA: Skip mismatched objfiles. */
+      if (is_cuda_focus && !objfile->cuda_objfile)
+	continue;
+      if (!is_cuda_focus && objfile->cuda_objfile)
+	continue;
+#endif
 
       bound_minimal_symbol minsym
 	= lookup_minimal_symbol_linkage (linkage_name, objfile);
@@ -6599,9 +6968,19 @@ get_msymbol_address (struct objfile *objf, const struct minimal_symbol *minsym)
   gdb_assert ((objf->flags & OBJF_MAINLINE) == 0);
 
   const char *linkage_name = minsym->linkage_name ();
+#ifdef NVIDIA_CUDA_GDB
+  bool is_cuda_focus = cuda_focus_is_device ();
+#endif
 
   for (objfile *objfile : current_program_space->objfiles ())
     {
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA: Skip mismatched objfiles. */
+      if (is_cuda_focus && !objfile->cuda_objfile)
+	continue;
+      if (!is_cuda_focus && objfile->cuda_objfile)
+	continue;
+#endif
       if (objfile->separate_debug_objfile_backlink == nullptr
 	  && (objfile->flags & OBJF_MAINLINE) != 0)
 	{

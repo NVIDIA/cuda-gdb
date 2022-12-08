@@ -460,7 +460,7 @@ instantiate_pretty_printer (PyObject *constructor, struct value *value)
   if (val_obj == nullptr)
     return NULL;
 
-  return PyObject_CallFunctionObjArgs (constructor, val_obj.get (), NULL);
+  return gdbpy_PyObject_CallFunctionObjArgs (constructor, val_obj.get (), NULL);
 }
 
 #endif
@@ -1061,7 +1061,7 @@ install_default_visualizer (struct varobj *var)
 	    }
 	}
 
-      if (pretty_printer == Py_None)
+      if (pretty_printer == gdbpy_None)
 	pretty_printer.reset (nullptr);
   
       install_visualizer (var->dynamic, NULL, pretty_printer.release ());
@@ -1081,7 +1081,7 @@ construct_visualizer (struct varobj *var, PyObject *constructor)
     return;
 
   Py_INCREF (constructor);
-  if (constructor == Py_None)
+  if (constructor == gdbpy_None)
     pretty_printer = NULL;
   else
     {
@@ -1091,11 +1091,11 @@ construct_visualizer (struct varobj *var, PyObject *constructor)
 	{
 	  gdbpy_print_stack ();
 	  Py_DECREF (constructor);
-	  constructor = Py_None;
+	  constructor = gdbpy_None;
 	  Py_INCREF (constructor);
 	}
 
-      if (pretty_printer == Py_None)
+      if (pretty_printer == gdbpy_None)
 	{
 	  Py_DECREF (pretty_printer);
 	  pretty_printer = NULL;
@@ -1119,7 +1119,7 @@ install_new_value_visualizer (struct varobj *var)
   if (!gdb_python_initialized)
     return;
 
-  if (var->dynamic->constructor != Py_None && var->value != NULL)
+  if (var->dynamic->constructor != gdbpy_None && var->value != NULL)
     {
       gdbpy_enter_varobj enter_py (var);
 

@@ -77,7 +77,7 @@ recpy_method (PyObject *self, void* closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_method (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Implementation of record.format.  */
@@ -93,7 +93,7 @@ recpy_format (PyObject *self, void* closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_format (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Implementation of record.goto (instruction) -> None.  */
@@ -106,7 +106,7 @@ recpy_goto (PyObject *self, PyObject *value)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_goto (self, value);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Implementation of record.replay_position [instruction]  */
@@ -119,7 +119,7 @@ recpy_replay_position (PyObject *self, void *closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_replay_position (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Implementation of record.instruction_history [list].  */
@@ -132,7 +132,7 @@ recpy_instruction_history (PyObject *self, void* closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_instruction_history (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Implementation of record.function_call_history [list].  */
@@ -145,7 +145,7 @@ recpy_function_call_history (PyObject *self, void* closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_function_call_history (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Implementation of record.begin [instruction].  */
@@ -158,7 +158,7 @@ recpy_begin (PyObject *self, void* closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_begin (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Implementation of record.end [instruction].  */
@@ -171,7 +171,7 @@ recpy_end (PyObject *self, void* closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_end (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Create a new gdb.RecordInstruction object.  */
@@ -202,7 +202,7 @@ recpy_insn_sal (PyObject *self, void *closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_insn_sal (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Implementation of RecordInstruction.pc [int].  */
@@ -215,7 +215,7 @@ recpy_insn_pc (PyObject *self, void *closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_insn_pc (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Implementation of RecordInstruction.data [buffer].  */
@@ -228,7 +228,7 @@ recpy_insn_data (PyObject *self, void *closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_insn_data (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Implementation of RecordInstruction.decoded [str].  */
@@ -241,7 +241,7 @@ recpy_insn_decoded (PyObject *self, void *closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_insn_decoded (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Implementation of RecordInstruction.size [int].  */
@@ -254,7 +254,7 @@ recpy_insn_size (PyObject *self, void *closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_insn_size (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Implementation of RecordInstruction.is_speculative [bool].  */
@@ -267,7 +267,7 @@ recpy_insn_is_speculative (PyObject *self, void *closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_insn_is_speculative (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Create a new gdb.RecordFunctionSegment object.  */
@@ -298,7 +298,7 @@ recpy_func_level (PyObject *self, void *closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_func_level (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Implementation of RecordFunctionSegment.symbol [gdb.Symbol].  */
@@ -311,7 +311,7 @@ recpy_func_symbol (PyObject *self, void *closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_func_symbol (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Implementation of RecordFunctionSegment.instructions [list].  */
@@ -324,7 +324,7 @@ recpy_func_instructions (PyObject *self, void *closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_func_instructions (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Implementation of RecordFunctionSegment.up [RecordFunctionSegment].  */
@@ -337,7 +337,7 @@ recpy_func_up (PyObject *self, void *closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_func_up (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Implementation of RecordFunctionSegment.prev [RecordFunctionSegment].  */
@@ -350,7 +350,7 @@ recpy_func_prev (PyObject *self, void *closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_func_prev (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Implementation of RecordFunctionSegment.next [RecordFunctionSegment].  */
@@ -363,7 +363,7 @@ recpy_func_next (PyObject *self, void *closure)
   if (obj->method == RECORD_METHOD_BTRACE)
     return recpy_bt_func_next (self, closure);
 
-  return PyErr_Format (PyExc_NotImplementedError, _("Not implemented."));
+  return gdbpy_ErrFormat (*pgdbpyExc_NotImplementedError, _("Not implemented."));
 }
 
 /* Implementation of RecordInstruction.number [int] and
@@ -374,7 +374,11 @@ recpy_element_number (PyObject *self, void* closure)
 {
   const recpy_element_object * const obj = (recpy_element_object *) self;
 
+#ifndef NVIDIA_CUDA_GDB
   return gdb_py_object_from_longest (obj->number).release ();
+#else
+  return gdbpy_PyInt_FromSize_t (obj->number);
+#endif
 }
 
 /* Implementation of RecordInstruction.__hash__ [int] and
@@ -399,8 +403,8 @@ recpy_element_richcompare (PyObject *self, PyObject *other, int op)
 
   if (Py_TYPE (self) != Py_TYPE (other))
     {
-      Py_INCREF (Py_NotImplemented);
-      return Py_NotImplemented;
+      Py_INCREF (gdbpy_NotImplemented);
+      return gdbpy_NotImplemented;
     }
 
   switch (op)
@@ -409,24 +413,24 @@ recpy_element_richcompare (PyObject *self, PyObject *other, int op)
       if (obj1->thread == obj2->thread
 	  && obj1->method == obj2->method
 	  && obj1->number == obj2->number)
-	Py_RETURN_TRUE;
+	GDB_PY_RETURN_TRUE;
       else
-	Py_RETURN_FALSE;
+	GDB_PY_RETURN_FALSE;
 
     case Py_NE:
       if (obj1->thread != obj2->thread
 	  || obj1->method != obj2->method
 	  || obj1->number != obj2->number)
-	Py_RETURN_TRUE;
+	GDB_PY_RETURN_TRUE;
       else
-	Py_RETURN_FALSE;
+	GDB_PY_RETURN_FALSE;
 
     default:
       break;
   }
 
-  Py_INCREF (Py_NotImplemented);
-  return Py_NotImplemented;
+  Py_INCREF (gdbpy_NotImplemented);
+  return gdbpy_NotImplemented;
 }
 
 /* Create a new gdb.RecordGap object.  */
@@ -454,7 +458,11 @@ recpy_gap_number (PyObject *self, void *closure)
 {
   const recpy_gap_object * const obj = (const recpy_gap_object *) self;
 
+#ifndef NVIDIA_CUDA_GDB
   return gdb_py_object_from_longest (obj->number).release ();
+#else
+  return gdbpy_PyInt_FromSize_t (obj->number);
+#endif
 }
 
 /* Implementation of RecordGap.error_code [int].  */
@@ -464,7 +472,11 @@ recpy_gap_reason_code (PyObject *self, void *closure)
 {
   const recpy_gap_object * const obj = (const recpy_gap_object *) self;
 
+#ifndef NVIDIA_CUDA_GDB
   return gdb_py_object_from_longest (obj->reason_code).release ();
+#else
+  return gdbpy_PyInt_FromLong (obj->reason_code);
+#endif
 }
 
 /* Implementation of RecordGap.error_string [str].  */
@@ -599,7 +611,7 @@ gdbpy_start_recording (PyObject *self, PyObject *args)
   const char *format = NULL;
   PyObject *ret = NULL;
 
-  if (!PyArg_ParseTuple (args, "|ss", &method, &format))
+  if (!gdbpy_PyArg_ParseTuple (args, "|ss", &method, &format))
     return NULL;
 
   try
@@ -623,7 +635,7 @@ gdbpy_current_recording (PyObject *self, PyObject *args)
   recpy_record_object *ret = NULL;
 
   if (find_record_target () == NULL)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   ret = PyObject_New (recpy_record_object, &recpy_record_type);
   ret->thread = inferior_thread ();
@@ -646,5 +658,5 @@ gdbpy_stop_recording (PyObject *self, PyObject *args)
       GDB_PY_HANDLE_EXCEPTION (except);
     }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }

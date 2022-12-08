@@ -16,6 +16,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2022 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "arch-utils.h"
 #include "symtab.h"
@@ -52,6 +57,10 @@
 #include "debuginfod-support.h"
 #include "gdbsupport/buildargv.h"
 
+#ifdef NVIDIA_CUDA_GDB
+#include "demangle.h"
+#include "symtab.h"
+#endif
 #define OPEN_MODE (O_RDONLY | O_BINARY)
 #define FDOPEN_MODE FOPEN_RB
 
@@ -349,8 +358,15 @@ select_source_symtab (struct symtab *s)
 	      const char *name = symtab->filename;
 	      int len = strlen (name);
 
+#ifdef NVIDIA_CUDA_GDB
+	      /* CUDA: Also ignore our built-in <cuda-builtins> objfile */
+	      if (!(len > 2 && (strcmp (&name[len - 2], ".h") == 0
+				|| strcmp (name, "<<C++-namespaces>>") == 0
+				|| strcmp (name, "<cuda-builtins>") == 0)))
+#else
 	      if (!(len > 2 && (strcmp (&name[len - 2], ".h") == 0
 				|| strcmp (name, "<<C++-namespaces>>") == 0)))
+#endif
 		new_symtab = symtab;
 	    }
 	}
@@ -713,8 +729,27 @@ info_source_command (const char *ignore, int from_tty)
 
   cust = s->compunit ();
   printf_filtered (_("Current source file is %s\n"), s->filename);
+#ifdef NVIDIA_CUDA_GDB
+  if (s->dirname () != NULL)
+    {
+      /* CUDA - filenames */
+      const char *lastsep;
+      int dirnamelen;
+      lastsep = strrchr(s->filename, '/');
+      dirnamelen = strlen(s->dirname ());
+      if (lastsep)
+        {
+          if (s->dirname ()[dirnamelen-1]=='/') dirnamelen--;
+          while (s->dirname ()[dirnamelen-1]==*(--lastsep)) dirnamelen--;
+          if (s->dirname ()[dirnamelen-1]=='/') dirnamelen--;
+        }
+      printf_filtered (_("Compilation directory is %.*s\n"), dirnamelen,
+		       s->dirname ());
+    }
+#else
   if (s->dirname () != NULL)
     printf_filtered (_("Compilation directory is %s\n"), s->dirname ());
+#endif
   if (s->fullname)
     printf_filtered (_("Located in %s\n"), s->fullname);
   const std::vector<off_t> *offsets;
@@ -1349,6 +1384,9 @@ print_source_lines_base (struct symtab *s, int line, int stopline,
 
   if (noprint)
     {
+#ifdef NVIDIA_CUDA_GDB
+      last_line_listed = line;
+#endif
       if (!(flags & PRINT_SOURCE_LINES_NOERROR))
 	{
 	  const char *filename = symtab_to_filename_for_display (s);
@@ -1538,6 +1576,9 @@ info_line_command (const char *arg, int from_tty)
       if (sal.pspace != current_program_space)
 	continue;
 
+#ifdef NVIDIA_CUDA_GDB
+      struct cuda_debug_inline_info *inline_info = NULL;
+#endif
       if (sal.symtab == 0)
 	{
 	  struct gdbarch *gdbarch = get_current_arch ();
@@ -1556,8 +1597,13 @@ info_line_command (const char *arg, int from_tty)
 	    printf_filtered (".");
 	  printf_filtered ("\n");
 	}
+#ifdef NVIDIA_CUDA_GDB
+      else if (sal.line > 0
+	       && find_line_pc_range (sal, &start_pc, &end_pc, &inline_info))
+#else
       else if (sal.line > 0
 	       && find_line_pc_range (sal, &start_pc, &end_pc))
+#endif
 	{
 	  struct gdbarch *gdbarch = sal.symtab->objfile ()->arch ();
 
@@ -1569,6 +1615,18 @@ info_line_command (const char *arg, int from_tty)
 	      gdb_stdout->wrap_here (2);
 	      printf_filtered (" is at address ");
 	      print_address (gdbarch, start_pc, gdb_stdout);
+#ifdef NVIDIA_CUDA_GDB
+	      if (inline_info)
+		{
+		  auto demangled = language_demangle (language_def (current_language->la_language),
+						      inline_info->function,
+						      DMGL_ANSI);
+		  printf_filtered (" inlined from %s",
+				   demangled ? demangled.get () : inline_info->function);
+		  printf_filtered (" at line %d of %s",
+				   inline_info->line, lbasename (inline_info->filename));
+		}
+#endif
 	      gdb_stdout->wrap_here (2);
 	      printf_filtered (" but contains no code.\n");
 	    }
@@ -1583,6 +1641,18 @@ info_line_command (const char *arg, int from_tty)
 	      gdb_stdout->wrap_here (2);
 	      printf_filtered (" and ends at ");
 	      print_address (gdbarch, end_pc, gdb_stdout);
+#ifdef NVIDIA_CUDA_GDB
+	      if (inline_info)
+		{
+		  auto demangled = language_demangle (language_def (current_language->la_language),
+						      inline_info->function,
+						      DMGL_ANSI);
+		  printf_filtered (" inlined from %s",
+				   demangled ? demangled.get () : inline_info->function);
+		  printf_filtered (" at line %d of %s",
+				   inline_info->line, lbasename (inline_info->filename));
+		}
+#endif
 	      printf_filtered (".\n");
 	    }
 

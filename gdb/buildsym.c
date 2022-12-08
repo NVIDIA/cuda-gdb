@@ -16,6 +16,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2022 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "buildsym-legacy.h"
 #include "bfd.h"
@@ -35,6 +40,10 @@
 #include "addrmap.h"
 #include <algorithm>
 
+#ifdef NVIDIA_CUDA_GDB
+#include "source.h"
+static int buildsym_line_debug = 0;
+#endif
 /* For cleanup_undefined_stabs_types and finish_global_stabs (somewhat
    questionable--see comment where we call them).  */
 
@@ -96,6 +105,13 @@ buildsym_compunit::~buildsym_compunit ()
     {
       nextsub = subfile->next;
       xfree (subfile->name);
+#ifdef NVIDIA_CUDA_GDB
+      if (subfile->line_vector)
+	{
+	  for (int i = 0; i < subfile->line_vector->nitems; ++i)
+	    xfree (subfile->line_vector->item[i].inline_info);
+	}
+#endif
       xfree (subfile->line_vector);
       xfree (subfile);
     }
@@ -665,9 +681,24 @@ buildsym_compunit::pop_subfile ()
 /* Add a linetable entry for line number LINE and address PC to the
    line vector for SUBFILE.  */
 
+#ifdef NVIDIA_CUDA_GDB
+/* FIXME */
+void 
+buildsym_compunit::record_line (struct subfile *subfile, int line, 
+				CORE_ADDR pc, bool is_stmt) 
+{
+  record_line (subfile, line, pc, is_stmt, NULL, NULL, 0);
+}
+void
+buildsym_compunit::record_line (struct subfile *subfile, int line,
+				CORE_ADDR pc, bool is_stmt,
+				const char *inline_function,
+				const char *context_filename, int context_line)
+#else
 void
 buildsym_compunit::record_line (struct subfile *subfile, int line,
 				CORE_ADDR pc, bool is_stmt)
+#endif
 {
   struct linetable_entry *e;
 
@@ -713,6 +744,13 @@ buildsym_compunit::record_line (struct subfile *subfile, int line,
 	  last = subfile->line_vector->item + subfile->line_vector->nitems - 1;
 	  if (last->pc != pc)
 	    break;
+#ifdef NVIDIA_CUDA_GDB
+	  if (buildsym_line_debug)
+	    fprintf_unfiltered (gdb_stdlog, "Discarding line entry for PC 0x%lx at line %d\n",
+				last->pc, last->line);
+	  xfree (last->inline_info);
+	  last->inline_info = NULL;
+#endif
 	  subfile->line_vector->nitems--;
 	}
 
@@ -725,6 +763,31 @@ buildsym_compunit::record_line (struct subfile *subfile, int line,
   e->line = line;
   e->is_stmt = is_stmt ? 1 : 0;
   e->pc = pc;
+#ifdef NVIDIA_CUDA_GDB
+  e->inline_info = NULL;
+  if (context_line)
+    {
+      struct cuda_debug_inline_info *inline_info =
+	(struct cuda_debug_inline_info *)
+	xmalloc (sizeof (struct cuda_debug_inline_info));
+      inline_info->line = context_line;
+      inline_info->filename = lbasename (context_filename);
+      inline_info->function = inline_function;
+      e->inline_info = inline_info;
+    }
+  if (buildsym_line_debug)
+    {
+      if (e->inline_info)
+	fprintf_unfiltered (gdb_stdlog, "Lineinfo PC 0x%lx at line %d inlined at %s:%d by %s\n",
+			    e->pc, e->line,
+			    e->inline_info->filename,
+			    e->inline_info->line,
+			    e->inline_info->function);
+      else
+	fprintf_unfiltered (gdb_stdlog, "Lineinfo PC 0x%lx at line %d\n",
+			    e->pc, e->line);
+    }
+#endif
 }
 
 
@@ -1054,6 +1117,10 @@ buildsym_compunit::end_symtab_with_blockvector (struct block *static_block,
 
   add_compunit_symtab_to_objfile (cu);
 
+#ifdef NVIDIA_CUDA_GDB
+  /* Will early out if we've already scanned the objfile */
+  cuda_find_objfile_host_shadow_functions (m_objfile);
+#endif
   return cu;
 }
 

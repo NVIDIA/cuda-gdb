@@ -59,7 +59,7 @@ struct block_syms_iterator_object {
     block = block_object_to_block (block_obj);		\
     if (block == NULL)					\
       {							\
-	PyErr_SetString (PyExc_RuntimeError,		\
+	PyErr_SetString (gdbpyExc_RuntimeError,		\
 			 _("Block is invalid."));	\
 	return NULL;					\
       }							\
@@ -71,7 +71,7 @@ struct block_syms_iterator_object {
   do {									\
     if (block_obj->block == NULL)					\
       {									\
-	PyErr_SetString (PyExc_RuntimeError,				\
+	PyErr_SetString (gdbpyExc_RuntimeError,				\
 			 _("Source block for iterator is invalid."));	\
 	return NULL;							\
       }									\
@@ -134,7 +134,7 @@ blpy_get_function (PyObject *self, void *closure)
   if (sym)
     return symbol_to_symbol_object (sym);
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 static PyObject *
@@ -150,7 +150,7 @@ blpy_get_superblock (PyObject *self, void *closure)
   if (super_block)
     return block_to_block_object (super_block, self_obj->objfile);
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Return the global block associated to this block.  */
@@ -184,7 +184,7 @@ blpy_get_static_block (PyObject *self, void *closure)
   BLPY_REQUIRE_VALID (self, block);
 
   if (BLOCK_SUPERBLOCK (block) == NULL)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   static_block = block_static_block (block);
 
@@ -202,9 +202,9 @@ blpy_is_global (PyObject *self, void *closure)
   BLPY_REQUIRE_VALID (self, block);
 
   if (BLOCK_SUPERBLOCK (block))
-    Py_RETURN_FALSE;
+    GDB_PY_RETURN_FALSE;
 
-  Py_RETURN_TRUE;
+  GDB_PY_RETURN_TRUE;
 }
 
 /* Implementation of gdb.Block.is_static (self) -> Boolean.
@@ -219,9 +219,9 @@ blpy_is_static (PyObject *self, void *closure)
 
   if (BLOCK_SUPERBLOCK (block) != NULL
      && BLOCK_SUPERBLOCK (BLOCK_SUPERBLOCK (block)) == NULL)
-    Py_RETURN_TRUE;
+    GDB_PY_RETURN_TRUE;
 
-  Py_RETURN_FALSE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Given a string, returns the gdb.Symbol representing that symbol in this
@@ -255,7 +255,7 @@ blpy_getitem (PyObject *self, PyObject *key)
 
   if (sym == nullptr)
     {
-      PyErr_SetObject (PyExc_KeyError, key);
+      PyErr_SetObject (gdbpyExc_KeyError, key);
       return nullptr;
     }
   return symbol_to_symbol_object (sym);
@@ -358,7 +358,7 @@ blpy_block_syms_iternext (PyObject *self)
 
   if (sym == NULL)
     {
-      PyErr_SetString (PyExc_StopIteration, _("Symbol is null."));
+      PyErr_SetString (gdbpyExc_StopIteration, _("Symbol is null."));
       return NULL;
     }
 
@@ -384,9 +384,9 @@ blpy_is_valid (PyObject *self, PyObject *args)
 
   block = block_object_to_block (self);
   if (block == NULL)
-    Py_RETURN_FALSE;
+    GDB_PY_RETURN_FALSE;
 
-  Py_RETURN_TRUE;
+  GDB_PY_RETURN_TRUE;
 }
 
 /* Implementation of gdb.BlockIterator.is_valid (self) -> Boolean.
@@ -399,9 +399,9 @@ blpy_iter_is_valid (PyObject *self, PyObject *args)
     (block_syms_iterator_object *) self;
 
   if (iter_obj->source->block == NULL)
-    Py_RETURN_FALSE;
+    GDB_PY_RETURN_FALSE;
 
-  Py_RETURN_TRUE;
+  GDB_PY_RETURN_TRUE;
 }
 
 /* This function is called when an objfile is about to be freed.

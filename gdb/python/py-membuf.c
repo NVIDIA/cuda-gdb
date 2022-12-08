@@ -81,11 +81,19 @@ mbpy_str (PyObject *self)
 {
   membuf_object *membuf_obj = (membuf_object *) self;
 
+#ifdef NVIDIA_CUDA_GDB
+  return gdbpy_StringFromFormat (_("Memory buffer for address %s, \
+which is %s bytes long."),
+			      paddress (gdbpy_enter::get_gdbarch (),
+					membuf_obj->addr),
+			      pulongest (membuf_obj->length));
+#else
   return PyString_FromFormat (_("Memory buffer for address %s, \
 which is %s bytes long."),
 			      paddress (gdbpy_enter::get_gdbarch (),
 					membuf_obj->addr),
 			      pulongest (membuf_obj->length));
+#endif
 }
 
 #ifdef IS_PY3K

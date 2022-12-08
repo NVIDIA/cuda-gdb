@@ -30,7 +30,7 @@ extern PyTypeObject thread_object_type
   do {								\
     if (!Thread->thread)					\
       {								\
-	PyErr_SetString (PyExc_RuntimeError,			\
+	PyErr_SetString (gdbpyExc_RuntimeError,			\
 			 _("Thread no longer exists."));	\
 	return NULL;						\
       }								\
@@ -71,7 +71,7 @@ thpy_get_name (PyObject *self, void *ignore)
 
   const char *name = thread_name (thread_obj->thread);
   if (name == NULL)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   return PyString_FromString (name);
 }
@@ -99,7 +99,14 @@ thpy_get_details (PyObject *self, void *ignore)
       GDB_PY_HANDLE_EXCEPTION (except);
     }
   if (extra_info == nullptr)
+#ifdef NVIDIA_CUDA_GDB
+    {
+      Py_INCREF (gdbpy_None);
+      return gdbpy_None;
+    }
+#else
     Py_RETURN_NONE;
+#endif
 
   return PyString_FromString (extra_info);
 }
@@ -112,23 +119,23 @@ thpy_set_name (PyObject *self, PyObject *newvalue, void *ignore)
 
   if (! thread_obj->thread)
     {
-      PyErr_SetString (PyExc_RuntimeError, _("Thread no longer exists."));
+      PyErr_SetString (gdbpyExc_RuntimeError, _("Thread no longer exists."));
       return -1;
     }
 
   if (newvalue == NULL)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Cannot delete `name' attribute."));
       return -1;
     }
-  else if (newvalue == Py_None)
+  else if (newvalue == gdbpy_None)
     {
       /* Nothing.  */
     }
   else if (! gdbpy_is_string (newvalue))
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("The value of `name' must be a string."));
       return -1;
     }
@@ -217,7 +224,7 @@ thpy_switch (PyObject *self, PyObject *args)
       GDB_PY_HANDLE_EXCEPTION (except);
     }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Implementation of InferiorThread.is_stopped () -> Boolean.
@@ -231,9 +238,9 @@ thpy_is_stopped (PyObject *self, PyObject *args)
   THPY_REQUIRE_VALID (thread_obj);
 
   if (thread_obj->thread->state == THREAD_STOPPED)
-    Py_RETURN_TRUE;
+    GDB_PY_RETURN_TRUE;
 
-  Py_RETURN_FALSE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Implementation of InferiorThread.is_running () -> Boolean.
@@ -247,9 +254,9 @@ thpy_is_running (PyObject *self, PyObject *args)
   THPY_REQUIRE_VALID (thread_obj);
 
   if (thread_obj->thread->state == THREAD_RUNNING)
-    Py_RETURN_TRUE;
+    GDB_PY_RETURN_TRUE;
 
-  Py_RETURN_FALSE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Implementation of InferiorThread.is_exited () -> Boolean.
@@ -263,9 +270,9 @@ thpy_is_exited (PyObject *self, PyObject *args)
   THPY_REQUIRE_VALID (thread_obj);
 
   if (thread_obj->thread->state == THREAD_EXITED)
-    Py_RETURN_TRUE;
+    GDB_PY_RETURN_TRUE;
 
-  Py_RETURN_FALSE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Implementation of gdb.InfThread.is_valid (self) -> Boolean.
@@ -278,9 +285,9 @@ thpy_is_valid (PyObject *self, PyObject *args)
   thread_object *thread_obj = (thread_object *) self;
 
   if (! thread_obj->thread)
-    Py_RETURN_FALSE;
+    GDB_PY_RETURN_FALSE;
 
-  Py_RETURN_TRUE;
+  GDB_PY_RETURN_TRUE;
 }
 
 /* Implementation of gdb.InferiorThread.handle (self) -> handle. */
@@ -304,12 +311,17 @@ thpy_thread_handle (PyObject *self, PyObject *args)
 
   if (hv.size () == 0)
     {
-      PyErr_SetString (PyExc_RuntimeError, _("Thread handle not found."));
+      PyErr_SetString (gdbpyExc_RuntimeError, _("Thread handle not found."));
       return NULL;
     }
 
+#ifndef NVIDIA_CUDA_GDB
   PyObject *object = PyBytes_FromStringAndSize ((const char *) hv.data (),
 						hv.size());
+#else
+  PyObject *object = gdbpy_PyBytes_FromStringAndSize ((const char *) hv.data (),
+				                hv.size());
+#endif
   return object;
 }
 
@@ -358,7 +370,7 @@ gdbpy_selected_thread (PyObject *self, PyObject *args)
   if (inferior_ptid != null_ptid)
     return thread_to_thread_object (inferior_thread ()).release ();
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 int

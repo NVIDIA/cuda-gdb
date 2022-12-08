@@ -145,7 +145,7 @@ convert_buffer_and_type_to_value (PyObject *obj, struct type *type)
   Py_buffer py_buf;
 
   if (PyObject_CheckBuffer (obj) 
-      && PyObject_GetBuffer (obj, &py_buf, PyBUF_SIMPLE) == 0)
+      && gdbpy_PyObject_GetBuffer (obj, &py_buf, PyBUF_SIMPLE) == 0)
     {
       /* Got a buffer, py_buf, out of obj.  Cause it to be released
 	 when it goes out of scope.  */
@@ -153,14 +153,14 @@ convert_buffer_and_type_to_value (PyObject *obj, struct type *type)
     }
   else
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Object must support the python buffer protocol."));
       return nullptr;
     }
 
   if (TYPE_LENGTH (type) > py_buf.len)
     {
-      PyErr_SetString (PyExc_ValueError,
+      PyErr_SetString (gdbpyExc_ValueError,
 		       _("Size of type is larger than that of buffer object."));
       return nullptr;
     }
@@ -182,12 +182,20 @@ valpy_init (PyObject *self, PyObject *args, PyObject *kwds)
     return -1;
 
   struct type *type = nullptr;
+#ifdef NVIDIA_CUDA_GDB
+  if (type_obj != nullptr && type_obj != gdbpy_None)
+#else
   if (type_obj != nullptr && type_obj != Py_None)
+#endif
     {
       type = type_object_to_type (type_obj);
       if (type == nullptr)
 	{
+#ifndef NVIDIA_CUDA_GDB
 	  PyErr_SetString (PyExc_TypeError,
+#else
+	  PyErr_SetString (gdbpyExc_TypeError,
+#endif
 			   _("type argument must be a gdb.Type."));
 	  return -1;
 	}
@@ -373,8 +381,8 @@ valpy_get_address (PyObject *self, void *closure)
 	}
       catch (const gdb_exception &except)
 	{
-	  val_obj->address = Py_None;
-	  Py_INCREF (Py_None);
+	  val_obj->address = gdbpy_None;
+	  Py_INCREF (gdbpy_None);
 	}
     }
 
@@ -496,7 +504,7 @@ valpy_lazy_string (PyObject *self, PyObject *args, PyObject *kw)
 
   if (length < -1)
     {
-      PyErr_SetString (PyExc_ValueError, _("Invalid length."));
+      PyErr_SetString (gdbpyExc_ValueError, _("Invalid length."));
       return NULL;
     }
 
@@ -657,7 +665,7 @@ valpy_format_string (PyObject *self, PyObject *args, PyObject *kw)
      Python 3.3 and later have a way to specify it (both in C and Python
      itself), but we could be compiled with older versions, so we just
      check that the args tuple is empty.  */
-  Py_ssize_t positional_count = PyObject_Length (args);
+  Py_ssize_t positional_count = gdbpy_PyObject_Length (args);
   if (positional_count < 0)
     return NULL;
   else if (positional_count > 0)
@@ -665,7 +673,7 @@ valpy_format_string (PyObject *self, PyObject *args, PyObject *kw)
       /* This matches the error message that Python 3.3 raises when
 	 passing positionals to functions expecting keyword-only
 	 arguments.  */
-      PyErr_Format (PyExc_TypeError,
+      gdbpy_ErrFormat (gdbpyExc_TypeError,
 		    "format_string() takes 0 positional arguments but %zu were given",
 		    positional_count);
       return NULL;
@@ -684,7 +692,11 @@ valpy_format_string (PyObject *self, PyObject *args, PyObject *kw)
   PyObject *symbols_obj = NULL;
   PyObject *unions_obj = NULL;
   PyObject *address_obj = NULL;
+#ifdef NVIDIA_CUDA_GDB
+  PyObject *styling_obj = gdbpy_False;
+#else
   PyObject *styling_obj = Py_False;
+#endif
   PyObject *deref_refs_obj = NULL;
   PyObject *actual_objects_obj = NULL;
   PyObject *static_members_obj = NULL;
@@ -693,6 +705,7 @@ valpy_format_string (PyObject *self, PyObject *args, PyObject *kw)
 					kw,
 					"|O!O!O!O!O!O!O!O!O!O!O!IIIs",
 					keywords,
+#ifndef NVIDIA_CUDA_GDB
 					&PyBool_Type, &raw_obj,
 					&PyBool_Type, &pretty_arrays_obj,
 					&PyBool_Type, &pretty_structs_obj,
@@ -704,6 +717,17 @@ valpy_format_string (PyObject *self, PyObject *args, PyObject *kw)
 					&PyBool_Type, &deref_refs_obj,
 					&PyBool_Type, &actual_objects_obj,
 					&PyBool_Type, &static_members_obj,
+#else
+					&gdbpy_BoolType, &raw_obj,
+					&gdbpy_BoolType, &pretty_arrays_obj,
+					&gdbpy_BoolType, &pretty_structs_obj,
+					&gdbpy_BoolType, &array_indexes_obj,
+					&gdbpy_BoolType, &symbols_obj,
+					&gdbpy_BoolType, &unions_obj,
+					&gdbpy_BoolType, &deref_refs_obj,
+					&gdbpy_BoolType, &actual_objects_obj,
+					&gdbpy_BoolType, &static_members_obj,
+#endif
 					&opts.print_max,
 					&opts.max_depth,
 					&opts.repeat_count_threshold,
@@ -749,7 +773,7 @@ valpy_format_string (PyObject *self, PyObject *args, PyObject *kw)
 	{
 	  /* Mimic the message on standard Python ones for similar
 	     errors.  */
-	  PyErr_SetString (PyExc_ValueError,
+	  PyErr_SetString (gdbpyExc_ValueError,
 			   "a single character is required");
 	  return NULL;
 	}
@@ -778,13 +802,13 @@ valpy_do_cast (PyObject *self, PyObject *args, enum exp_opcode op)
   PyObject *type_obj, *result = NULL;
   struct type *type;
 
-  if (! PyArg_ParseTuple (args, "O", &type_obj))
+  if (! gdbpy_PyArg_ParseTuple (args, "O", &type_obj))
     return NULL;
 
   type = type_object_to_type (type_obj);
   if (! type)
     {
-      PyErr_SetString (PyExc_RuntimeError,
+      PyErr_SetString (gdbpyExc_RuntimeError,
 		       _("Argument must be a type."));
       return NULL;
     }
@@ -843,7 +867,7 @@ static Py_ssize_t
 valpy_length (PyObject *self)
 {
   /* We don't support getting the number of elements in a struct / class.  */
-  PyErr_SetString (PyExc_NotImplementedError,
+  PyErr_SetString (gdbpyExc_NotImplementedError,
 		   _("Invalid operation on gdb.Value."));
   return -1;
 }
@@ -865,7 +889,7 @@ value_has_field (struct value *v, PyObject *field)
   parent_type = type_object_to_type (type_object.get ());
   if (parent_type == NULL)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("'parent_type' attribute of gdb.Field object is not a"
 			 "gdb.Type object."));
       return -1;
@@ -921,7 +945,7 @@ get_field_type (PyObject *field)
     return NULL;
   ftype = type_object_to_type (ftype_obj.get ());
   if (ftype == NULL)
-    PyErr_SetString (PyExc_TypeError,
+    PyErr_SetString (gdbpyExc_TypeError,
 		     _("'type' attribute of gdb.Field object is not a "
 		       "gdb.Type object."));
 
@@ -957,7 +981,7 @@ valpy_getitem (PyObject *self, PyObject *key)
 	return NULL;
       else if (valid_field == 0)
 	{
-	  PyErr_SetString (PyExc_TypeError,
+	  PyErr_SetString (gdbpyExc_TypeError,
 			   _("Invalid lookup for a field not contained in "
 			     "the value."));
 
@@ -980,7 +1004,7 @@ valpy_getitem (PyObject *self, PyObject *key)
 	  if (name_obj == NULL)
 	    return NULL;
 
-	  if (name_obj != Py_None)
+	  if (name_obj != gdbpy_None)
 	    {
 	      field = python_string_to_host_string (name_obj.get ());
 	      if (field == NULL)
@@ -990,7 +1014,7 @@ valpy_getitem (PyObject *self, PyObject *key)
 	    {
 	      if (!PyObject_HasAttrString (key, "bitpos"))
 		{
-		  PyErr_SetString (PyExc_AttributeError,
+		  PyErr_SetString (gdbpyExc_AttributeError,
 				   _("gdb.Field object has no name and no "
 				     "'bitpos' attribute."));
 
@@ -1076,7 +1100,7 @@ valpy_getitem (PyObject *self, PyObject *key)
 static int
 valpy_setitem (PyObject *self, PyObject *key, PyObject *value)
 {
-  PyErr_Format (PyExc_NotImplementedError,
+  gdbpy_ErrFormat (gdbpyExc_NotImplementedError,
 		_("Setting of struct elements is not currently supported."));
   return -1;
 }
@@ -1103,14 +1127,14 @@ valpy_call (PyObject *self, PyObject *args, PyObject *keywords)
 
   if (ftype->code () != TYPE_CODE_FUNC)
     {
-      PyErr_SetString (PyExc_RuntimeError,
+      PyErr_SetString (gdbpyExc_RuntimeError,
 		       _("Value is not callable (not TYPE_CODE_FUNC)."));
       return NULL;
     }
 
-  if (! PyTuple_Check (args))
+  if (! gdbpy_TupleCheck (args))
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       _("Inferior arguments must be provided in a tuple."));
       return NULL;
     }
@@ -1193,9 +1217,9 @@ valpy_get_is_optimized_out (PyObject *self, void *closure)
     }
 
   if (opt)
-    Py_RETURN_TRUE;
+    GDB_PY_RETURN_TRUE;
 
-  Py_RETURN_FALSE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Implements gdb.Value.is_lazy.  */
@@ -1215,9 +1239,9 @@ valpy_get_is_lazy (PyObject *self, void *closure)
     }
 
   if (opt)
-    Py_RETURN_TRUE;
+    GDB_PY_RETURN_TRUE;
 
-  Py_RETURN_FALSE;
+  GDB_PY_RETURN_FALSE;
 }
 
 /* Implements gdb.Value.fetch_lazy ().  */
@@ -1236,7 +1260,7 @@ valpy_fetch_lazy (PyObject *self, PyObject *args)
       GDB_PY_HANDLE_EXCEPTION (except);
     }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Calculate and return the address of the PyObject as the value of
@@ -1446,9 +1470,9 @@ valpy_power (PyObject *self, PyObject *other, PyObject *unused)
   /* We don't support the ternary form of pow.  I don't know how to express
      that, so let's just throw NotImplementedError to at least do something
      about it.  */
-  if (unused != Py_None)
+  if (unused != gdbpy_None)
     {
-      PyErr_SetString (PyExc_NotImplementedError,
+      PyErr_SetString (gdbpyExc_NotImplementedError,
 		       "Invalid operation on gdb.Value.");
       return NULL;
     }
@@ -1640,7 +1664,7 @@ valpy_richcompare_throw (PyObject *self, PyObject *other, int op)
       break;
     default:
       /* Can't happen.  */
-      PyErr_SetString (PyExc_NotImplementedError,
+      PyErr_SetString (gdbpyExc_NotImplementedError,
 		       _("Invalid operation on gdb.Value."));
       result = -1;
       break;
@@ -1657,21 +1681,21 @@ valpy_richcompare (PyObject *self, PyObject *other, int op)
 {
   int result = 0;
 
-  if (other == Py_None)
+  if (other == gdbpy_None)
     /* Comparing with None is special.  From what I can tell, in Python
        None is smaller than anything else.  */
     switch (op) {
       case Py_LT:
       case Py_LE:
       case Py_EQ:
-	Py_RETURN_FALSE;
+	GDB_PY_RETURN_FALSE;
       case Py_NE:
       case Py_GT:
       case Py_GE:
-	Py_RETURN_TRUE;
+	GDB_PY_RETURN_TRUE;
       default:
 	/* Can't happen.  */
-	PyErr_SetString (PyExc_NotImplementedError,
+	PyErr_SetString (gdbpyExc_NotImplementedError,
 			 _("Invalid operation on gdb.Value."));
 	return NULL;
     }
@@ -1690,9 +1714,9 @@ valpy_richcompare (PyObject *self, PyObject *other, int op)
     return NULL;
 
   if (result == 1)
-    Py_RETURN_TRUE;
+    GDB_PY_RETURN_TRUE;
 
-  Py_RETURN_FALSE;
+  GDB_PY_RETURN_FALSE;
 }
 
 #ifndef IS_PY3K
@@ -1869,7 +1893,7 @@ convert_value_from_python (PyObject *obj)
 
   try
     {
-      if (PyBool_Check (obj))
+      if (PyObject_TypeCheck (obj, gdbpy_BoolType))
 	{
 	  cmp = PyObject_IsTrue (obj);
 	  if (cmp >= 0)
@@ -1882,7 +1906,7 @@ convert_value_from_python (PyObject *obj)
 	 GDB, for Python 3.x, we #ifdef PyInt = PyLong.  This check has
 	 to be done first to ensure we do not lose information in the
 	 conversion process.  */
-      else if (PyLong_Check (obj))
+      else if (gdbpy_LongCheck (obj))
 	{
 	  LONGEST l = PyLong_AsLongLong (obj);
 
@@ -1890,7 +1914,11 @@ convert_value_from_python (PyObject *obj)
 	    {
 	      /* If the error was an overflow, we can try converting to
 		 ULONGEST instead.  */
+#ifndef NVIDIA_CUDA_GDB
 	      if (PyErr_ExceptionMatches (PyExc_OverflowError))
+#else
+	      if (PyErr_ExceptionMatches (gdbpyExc_OverflowError))
+#endif
 		{
 		  gdbpy_err_fetch fetched_error;
 		  gdbpy_ref<> zero = gdb_py_object_from_longest (0);
@@ -1915,7 +1943,7 @@ convert_value_from_python (PyObject *obj)
 	    value = value_from_longest (builtin_type_pylong, l);
 	}
 #if PY_MAJOR_VERSION == 2
-      else if (PyInt_Check (obj))
+      else if (gdbpy_IntCheck (obj))
 	{
 	  long l = PyInt_AsLong (obj);
 
@@ -1923,7 +1951,7 @@ convert_value_from_python (PyObject *obj)
 	    value = value_from_longest (builtin_type_pyint, l);
 	}
 #endif
-      else if (PyFloat_Check (obj))
+      else if (PyObject_TypeCheck (obj, gdbpy_FloatType))
 	{
 	  double d = PyFloat_AsDouble (obj);
 
@@ -1944,15 +1972,15 @@ convert_value_from_python (PyObject *obj)
 	{
 	  PyObject *result;
 
-	  result = PyObject_CallMethodObjArgs (obj, gdbpy_value_cst,  NULL);
+	  result = gdbpy_PyObject_CallMethodObjArgs (obj, gdbpy_value_cst,  NULL);
 	  value = value_copy (((value_object *) result)->value);
 	}
       else
 #ifdef IS_PY3K
-	PyErr_Format (PyExc_TypeError,
+	gdbpy_ErrFormat (gdbpyExc_TypeError,
 		      _("Could not convert Python object: %S."), obj);
 #else
-	PyErr_Format (PyExc_TypeError,
+	gdbpy_ErrFormat (gdbpyExc_TypeError,
 		      _("Could not convert Python object: %s."),
 		      PyString_AsString (PyObject_Str (obj)));
 #endif
@@ -1973,7 +2001,7 @@ gdbpy_history (PyObject *self, PyObject *args)
   int i;
   struct value *res_val = NULL;	  /* Initialize to appease gcc warning.  */
 
-  if (!PyArg_ParseTuple (args, "i", &i))
+  if (!gdbpy_PyArg_ParseTuple (args, "i", &i))
     return NULL;
 
   try
@@ -1995,7 +2023,11 @@ gdbpy_add_history (PyObject *self, PyObject *args)
 {
   PyObject *value_obj;
 
+#ifdef NVIDIA_CUDA_GDB
+  if (!gdbpy_PyArg_ParseTuple (args, "O", &value_obj))
+#else
   if (!PyArg_ParseTuple (args, "O", &value_obj))
+#endif
     return nullptr;
 
   struct value *value = convert_value_from_python (value_obj);
@@ -2030,7 +2062,7 @@ gdbpy_convenience_variable (PyObject *self, PyObject *args)
   const char *varname;
   struct value *res_val = NULL;
 
-  if (!PyArg_ParseTuple (args, "s", &varname))
+  if (!gdbpy_PyArg_ParseTuple (args, "s", &varname))
     return NULL;
 
   try
@@ -2050,7 +2082,7 @@ gdbpy_convenience_variable (PyObject *self, PyObject *args)
     }
 
   if (res_val == NULL)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
 
   return value_to_value_object (res_val);
 }
@@ -2063,11 +2095,11 @@ gdbpy_set_convenience_variable (PyObject *self, PyObject *args)
   PyObject *value_obj;
   struct value *value = NULL;
 
-  if (!PyArg_ParseTuple (args, "sO", &varname, &value_obj))
+  if (!gdbpy_PyArg_ParseTuple (args, "sO", &varname, &value_obj))
     return NULL;
 
   /* None means to clear the variable.  */
-  if (value_obj != Py_None)
+  if (value_obj != gdbpy_None)
     {
       value = convert_value_from_python (value_obj);
       if (value == NULL)
@@ -2095,7 +2127,7 @@ gdbpy_set_convenience_variable (PyObject *self, PyObject *args)
       GDB_PY_HANDLE_EXCEPTION (except);
     }
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Returns 1 in OBJ is a gdb.Value object, 0 otherwise.  */

@@ -18,6 +18,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2022 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "server.h"
 #include "tracepoint.h"
 #include "gdbsupport/byte-vector.h"
@@ -865,3 +870,10 @@ process_stratum_target::get_ipa_tdesc_idx ()
 {
   return 0;
 }
+#ifdef NVIDIA_CUDA_GDB
+void
+process_stratum_target::unexpected_stop ()
+{
+  /* Nop.  */
+}
+#endif

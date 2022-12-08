@@ -64,7 +64,7 @@ static const struct program_space_data *pspy_pspace_data_key;
   do {								\
     if (pspace_obj->pspace == nullptr)				\
       {								\
-	PyErr_SetString (PyExc_RuntimeError,			\
+	PyErr_SetString (gdbpyExc_RuntimeError,			\
 			 _("Program space no longer exists."));	\
 	return NULL;						\
       }								\
@@ -85,7 +85,7 @@ pspy_get_filename (PyObject *self, void *closure)
 	return (host_string_to_python_string (objfile_name (objfile))
 		.release ());
     }
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 static void
@@ -167,14 +167,14 @@ pspy_set_printers (PyObject *o, PyObject *value, void *ignore)
 
   if (! value)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       "cannot delete the pretty_printers attribute");
       return -1;
     }
 
-  if (! PyList_Check (value))
+  if (! gdbpy_ListCheck (value))
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       "the pretty_printers attribute must be a list");
       return -1;
     }
@@ -206,14 +206,14 @@ pspy_set_frame_filters (PyObject *o, PyObject *frame, void *ignore)
 
   if (! frame)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       "cannot delete the frame filter attribute");
       return -1;
     }
 
   if (! PyDict_Check (frame))
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       "the frame filter attribute must be a dictionary");
       return -1;
     }
@@ -246,14 +246,14 @@ pspy_set_frame_unwinders (PyObject *o, PyObject *unwinders, void *ignore)
 
   if (!unwinders)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       "cannot delete the frame unwinders list");
       return -1;
     }
 
-  if (!PyList_Check (unwinders))
+  if (!gdbpy_ListCheck (unwinders))
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       "the frame unwinders attribute must be a list");
       return -1;
     }
@@ -297,14 +297,14 @@ pspy_set_type_printers (PyObject *o, PyObject *value, void *ignore)
 
   if (! value)
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       "cannot delete the type_printers attribute");
       return -1;
     }
 
-  if (! PyList_Check (value))
+  if (! gdbpy_ListCheck (value))
     {
-      PyErr_SetString (PyExc_TypeError,
+      PyErr_SetString (gdbpyExc_TypeError,
 		       "the type_printers attribute must be a list");
       return -1;
     }
@@ -357,12 +357,12 @@ pspy_solib_name (PyObject *o, PyObject *args)
 
   PSPY_REQUIRE_VALID (self);
 
-  if (!PyArg_ParseTuple (args, GDB_PY_LLU_ARG, &pc))
+  if (!gdbpy_PyArg_ParseTuple (args, GDB_PY_LLU_ARG, &pc))
     return NULL;
 
   soname = solib_name_from_address (self->pspace, pc);
   if (soname == nullptr)
-    Py_RETURN_NONE;
+    GDB_PY_RETURN_NONE;
   return host_string_to_python_string (soname).release ();
 }
 
@@ -378,7 +378,7 @@ pspy_block_for_pc (PyObject *o, PyObject *args)
 
   PSPY_REQUIRE_VALID (self);
 
-  if (!PyArg_ParseTuple (args, GDB_PY_LLU_ARG, &pc))
+  if (!gdbpy_PyArg_ParseTuple (args, GDB_PY_LLU_ARG, &pc))
     return NULL;
 
   try
@@ -397,12 +397,16 @@ pspy_block_for_pc (PyObject *o, PyObject *args)
     }
 
   if (cust == NULL || cust->objfile () == NULL)
+#ifndef NVIDIA_CUDA_GDB
     Py_RETURN_NONE;
+#else
+    GDB_PY_RETURN_NONE;
+#endif
 
   if (block)
     return block_to_block_object (block, cust->objfile ());
 
-  Py_RETURN_NONE;
+  GDB_PY_RETURN_NONE;
 }
 
 /* Implementation of the find_pc_line function.
@@ -417,7 +421,7 @@ pspy_find_pc_line (PyObject *o, PyObject *args)
 
   PSPY_REQUIRE_VALID (self);
 
-  if (!PyArg_ParseTuple (args, GDB_PY_LLU_ARG, &pc_llu))
+  if (!gdbpy_PyArg_ParseTuple (args, GDB_PY_LLU_ARG, &pc_llu))
     return NULL;
 
   try
@@ -449,9 +453,9 @@ pspy_is_valid (PyObject *o, PyObject *args)
   pspace_object *self = (pspace_object *) o;
 
   if (self->pspace == NULL)
-    Py_RETURN_FALSE;
+    GDB_PY_RETURN_FALSE;
 
-  Py_RETURN_TRUE;
+  GDB_PY_RETURN_TRUE;
 }
 
 

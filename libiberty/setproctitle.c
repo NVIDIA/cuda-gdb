@@ -43,6 +43,10 @@ setproctitle (const char *name ATTRIBUTE_UNUSED, ...)
 #ifdef PR_SET_NAME
   /* On GNU/Linux this sets the top visible "comm", but not
      necessarily the name visible in ps. */
+#if defined(NVIDIA_CUDA_GDB) && defined(__ANDROID__)
+  prctl (PR_SET_NAME, (unsigned long)name, 0, 0, 0);
+#else
   prctl (PR_SET_NAME, name);
+#endif
 #endif
 }

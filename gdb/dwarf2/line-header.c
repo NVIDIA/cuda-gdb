@@ -336,6 +336,9 @@ dwarf_decode_line_header  (sect_offset sect_off, bool is_dwz,
     }
   lh->header_length = read_offset (abfd, line_ptr, offset_size);
   line_ptr += offset_size;
+#ifdef NVIDIA_CUDA_GDB
+  const gdb_byte *header_end = line_ptr + lh->header_length;
+#endif
   lh->statement_program_start = line_ptr + lh->header_length;
   lh->minimum_instruction_length = read_1_byte (abfd, line_ptr);
   line_ptr += 1;
@@ -421,6 +424,22 @@ dwarf_decode_line_header  (sect_offset sect_off, bool is_dwz,
 	}
       line_ptr += bytes_read;
     }
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: read in extra lineinfo */
+  if (line_ptr < header_end)
+    {
+      LONGEST debug_str_offset = read_offset (abfd, line_ptr, 4);
+      line_ptr += 4;
+
+      dwarf2_section_info *strtab = &per_objfile->per_bfd->str;
+      const char *buffer = strtab->read_string (per_objfile->objfile, debug_str_offset, "CUDA lineinfo");
+      if (buffer)
+	{
+	  lh->debug_str_base = buffer + lh->debug_str_offset;
+	  lh->debug_str_offset = read_offset (abfd, line_ptr, 4);
+	}
+    }
+#endif
 
   if (line_ptr > (section->buffer + section->size))
     complaint (_("line number info header doesn't "

@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2022 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #if !defined (FRAME_H)
 #define FRAME_H 1
 
@@ -517,6 +522,9 @@ extern CORE_ADDR get_frame_base (struct frame_info *);
 extern struct frame_id get_frame_id (struct frame_info *fi);
 extern struct frame_id get_stack_frame_id (struct frame_info *fi);
 extern struct frame_id frame_unwind_caller_id (struct frame_info *next_frame);
+#ifdef NVIDIA_CUDA_GDB
+extern bool get_frame_id_p (struct frame_info *fi);
+#endif
 
 /* Assuming that a frame is `normal', return its base-address, or 0 if
    the information isn't available.  NOTE: This address is really only
@@ -806,6 +814,10 @@ extern void print_frame_info (const frame_print_options &fp_opts,
 			      enum print_what print_what, int args,
 			      int set_current_sal);
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - print_args_frame */
+extern void print_args_frame (struct frame_info *frame);
+#endif
 extern struct frame_info *block_innermost_frame (const struct block *);
 
 extern bool deprecated_frame_register_read (frame_info *frame, int regnum,

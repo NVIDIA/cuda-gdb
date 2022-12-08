@@ -365,13 +365,23 @@ mi_command_py::invoke (struct mi_parse *parse) const
 
   gdb_assert (this->m_pyobj != nullptr);
   gdb_assert (PyErr_Occurred () == nullptr);
+#ifdef NVIDIA_CUDA_GDB
+  gdbpy_ref<> result
+    (gdbpy_PyObject_CallMethodObjArgs ((PyObject *) this->m_pyobj.get (), invoke_cst,
+				 argobj.get (), nullptr));
+#else
   gdbpy_ref<> result
     (PyObject_CallMethodObjArgs ((PyObject *) this->m_pyobj.get (), invoke_cst,
 				 argobj.get (), nullptr));
+#endif
   if (result == nullptr)
     gdbpy_handle_exception ();
 
+#ifdef NVIDIA_CUDA_GDB
+  if (result != gdbpy_None)
+#else
   if (result != Py_None)
+#endif
     serialize_mi_result (result.get ());
 }
 
@@ -453,8 +463,13 @@ micmdpy_install_command (micmdpy_object *obj)
     {
       /* There is already an MI command registered with that name, and it's not
          a Python one.  Forbid replacing a non-Python MI command.  */
+#ifdef NVIDIA_CUDA_GDB
+      PyErr_SetString (gdbpyExc_RuntimeError,
+		       _("unable to add command, name is already in use"));
+#else
       PyErr_SetString (PyExc_RuntimeError,
 		       _("unable to add command, name is already in use"));
+#endif
       return -1;
     }
 
@@ -499,14 +514,24 @@ micmdpy_init (PyObject *self, PyObject *args, PyObject *kwargs)
   const int name_len = strlen (name);
   if (name_len == 0)
     {
+#ifdef NVIDIA_CUDA_GDB
+      PyErr_SetString (gdbpyExc_ValueError, _("MI command name is empty."));
+#else
       PyErr_SetString (PyExc_ValueError, _("MI command name is empty."));
+#endif
       return -1;
     }
   else if ((name_len < 2) || (name[0] != '-') || !isalnum (name[1]))
     {
+#ifdef NVIDIA_CUDA_GDB
+      PyErr_SetString (gdbpyExc_ValueError,
+		       _("MI command name does not start with '-'"
+			 " followed by at least one letter or digit."));
+#else
       PyErr_SetString (PyExc_ValueError,
 		       _("MI command name does not start with '-'"
 			 " followed by at least one letter or digit."));
+#endif
       return -1;
     }
   else
@@ -515,10 +540,17 @@ micmdpy_init (PyObject *self, PyObject *args, PyObject *kwargs)
 	{
 	  if (!isalnum (name[i]) && name[i] != '-')
 	    {
+#ifdef NVIDIA_CUDA_GDB
+	      gdbpy_ErrFormat
+		(gdbpyExc_ValueError,
+		 _("MI command name contains invalid character: %c."),
+		 name[i]);
+#else
 	      PyErr_Format
 		(PyExc_ValueError,
 		 _("MI command name contains invalid character: %c."),
 		 name[i]);
+#endif
 	      return -1;
 	    }
 	}
@@ -542,9 +574,15 @@ micmdpy_init (PyObject *self, PyObject *args, PyObject *kwargs)
 	 an excessive restriction.  */
       if (strcmp (cmd->mi_command_name, name) != 0)
 	{
+#ifdef NVIDIA_CUDA_GDB
+	  PyErr_SetString
+	    (gdbpyExc_ValueError,
+	     _("can't reinitialize object with a different command name"));
+#else
 	  PyErr_SetString
 	    (PyExc_ValueError,
 	     _("can't reinitialize object with a different command name"));
+#endif
 	  return -1;
 	}
 
@@ -649,8 +687,20 @@ micmdpy_get_installed (PyObject *self, void *closure)
   struct micmdpy_object *micmd_obj = (struct micmdpy_object *) self;
 
   if (micmd_obj->mi_command == nullptr)
+#ifdef NVIDIA_CUDA_GDB
+    {
+      Py_INCREF (gdbpy_False);
+      return gdbpy_False;
+    }
+#else
     Py_RETURN_FALSE;
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  Py_INCREF (gdbpy_True);
+  return gdbpy_True;
+#else
   Py_RETURN_TRUE;
+#endif
 }
 
 /* Set the gdb.MICommand.installed property.  The property can be set to

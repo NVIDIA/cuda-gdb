@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2022 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -33,6 +38,9 @@
 #include "gdbsupport/gdb_obstack.h"
 #include "charset.h"
 #include "typeprint.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "regcache.h"
+#endif
 #include <ctype.h>
 #include <algorithm>
 #include "gdbsupport/byte-vector.h"
@@ -85,8 +93,13 @@ struct cmd_list_element *showprintrawlist;
 
 /* Prototypes for local functions */
 
+#ifdef NVIDIA_CUDA_GDB
+static int partial_memory_read (CORE_ADDR memaddr, gdb_byte *myaddr,
+				int len, int *errptr, struct type *type);
+#else
 static int partial_memory_read (CORE_ADDR memaddr, gdb_byte *myaddr,
 				int len, int *errptr);
+#endif
 
 static void set_input_radix_1 (int, unsigned);
 
@@ -1997,6 +2010,70 @@ value_print_array_elements (struct value *val, struct ui_file *stream,
 /* FIXME: cagney/1999-10-14: Only used by val_print_string.  Can this
    function be eliminated.  */
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - Fix read_string */
+/* Added the type parameter so that this function, which is called only
+   by read_string, can correctly read the device memory.
+ */
+static int
+partial_memory_read (CORE_ADDR memaddr, gdb_byte *myaddr,
+		     int len, int *errptr, struct type *type)
+{
+  int nread;			/* Number of bytes actually read.  */
+  int errcode;			/* Error from last read.  */
+  /* CUDA - Fix read_string */
+  /* Call cuda_read_memory_partial if it's device code.
+   */
+  /* First try a complete read with CUDA.  */
+  try
+    {
+      errcode = cuda_read_memory_partial (memaddr, myaddr, len, type);
+    }
+  catch (const gdb_exception_error &except)
+    {
+        errcode = -1;
+    }
+  /* If it didn't work, try out the non-CUDA variant.  */
+  if (errcode != 0)
+    {
+      errcode = target_read_memory (memaddr, myaddr, len);
+    }
+  if (errcode == 0)
+    {
+      /* Got it all.  */
+      *errptr = errcode;
+      return len;
+    }
+  /* Loop, reading one byte at a time until we get as much as we can.  */
+  bool is_device_address;
+  for (nread = 0, errcode = 0; nread < len; nread++)
+    {
+      /* CUDA - on the first loop iteration, pick between CUDA and non-cuda memory */
+      if (nread == 0)
+	{
+	  errcode = cuda_read_memory_partial (memaddr++, myaddr++, 1, type);
+	  if (errcode == 0)
+	    {
+	      is_device_address = true;
+	      continue;
+	    }
+
+	  is_device_address = false;
+	}
+      if (is_device_address)
+	errcode = cuda_read_memory_partial (memaddr++, myaddr++, 1, type);
+      else
+	errcode = target_read_memory (memaddr++, myaddr++, 1);
+      if (errcode != 0)
+	{
+	  break;
+	}
+    }
+  /* If an error, the last read was unsuccessful, so adjust count.  */
+  *errptr = errcode;
+  return (nread);
+}
+#else
 static int
 partial_memory_read (CORE_ADDR memaddr, gdb_byte *myaddr,
 		     int len, int *errptr)
@@ -2030,6 +2107,7 @@ partial_memory_read (CORE_ADDR memaddr, gdb_byte *myaddr,
     }
   return (nread);
 }
+#endif
 
 /* Read a string from the inferior, at ADDR, with LEN characters of
    WIDTH bytes each.  Fetch at most FETCHLIMIT characters.  BUFFER
@@ -2049,10 +2127,17 @@ partial_memory_read (CORE_ADDR memaddr, gdb_byte *myaddr,
    failure.  In this case, some characters might have been read before the
    failure happened.  Check BYTES_READ to recognize this situation.  */
 
+#ifdef NVIDIA_CUDA_GDB
+int
+read_string_by_type (CORE_ADDR addr, int len, int width, unsigned int fetchlimit,
+		     enum bfd_endian byte_order, gdb::unique_xmalloc_ptr<gdb_byte> *buffer,
+		     int *bytes_read, type *string_type)
+#else
 int
 read_string (CORE_ADDR addr, int len, int width, unsigned int fetchlimit,
 	     enum bfd_endian byte_order, gdb::unique_xmalloc_ptr<gdb_byte> *buffer,
 	     int *bytes_read)
+#endif
 {
   int errcode;			/* Errno returned from bad reads.  */
   unsigned int nfetch;		/* Chars to fetch / chars fetched.  */
@@ -2073,7 +2158,11 @@ read_string (CORE_ADDR addr, int len, int width, unsigned int fetchlimit,
       buffer->reset ((gdb_byte *) xmalloc (fetchlen * width));
       bufptr = buffer->get ();
 
+#ifdef NVIDIA_CUDA_GDB
+      nfetch = partial_memory_read (addr, bufptr, len * width, &errcode, string_type)
+#else
       nfetch = partial_memory_read (addr, bufptr, fetchlen * width, &errcode)
+#endif
 	/ width;
       addr += nfetch * width;
       bufptr += nfetch * width;
@@ -2109,7 +2198,11 @@ read_string (CORE_ADDR addr, int len, int width, unsigned int fetchlimit,
 	  bufsize += nfetch;
 
 	  /* Read as much as we can.  */
+#ifdef NVIDIA_CUDA_GDB
+	  nfetch = partial_memory_read (addr, bufptr, nfetch * width, &errcode, string_type)
+#else
 	  nfetch = partial_memory_read (addr, bufptr, nfetch * width, &errcode)
+#endif
 		    / width;
 
 	  /* Scan this chunk for the null character that terminates the string
@@ -2157,6 +2250,19 @@ read_string (CORE_ADDR addr, int len, int width, unsigned int fetchlimit,
   return errcode;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - Fix read_string */
+/* This function now wraps around read_string_by_type
+ */
+int
+read_string (CORE_ADDR addr, int len, int width, unsigned int fetchlimit,
+	     enum bfd_endian byte_order, gdb::unique_xmalloc_ptr<gdb_byte> *buffer,
+	     int *bytes_read)
+{
+  return read_string_by_type (addr, len, width, fetchlimit, byte_order, buffer,
+                              bytes_read, NULL);
+}
+#endif
 /* Return true if print_wchar can display W without resorting to a
    numeric escape, false otherwise.  */
 
@@ -2734,8 +2840,13 @@ val_print_string (struct type *elttype, const char *encoding,
   fetchlimit = (len == -1 ? options->print_max : std::min ((unsigned) len,
 							   options->print_max));
 
+#ifdef NVIDIA_CUDA_GDB
+  err = read_string_by_type (addr, len, width, fetchlimit, byte_order,
+			     &buffer, &bytes_read, elttype);
+#else
   err = read_string (addr, len, width, fetchlimit, byte_order,
 		     &buffer, &bytes_read);
+#endif
 
   addr += bytes_read;
 
@@ -2745,7 +2856,11 @@ val_print_string (struct type *elttype, const char *encoding,
 
   /* Determine found_nul by looking at the last character read.  */
   found_nul = 0;
+#ifdef NVIDIA_CUDA_GDB
+  if (bytes_read >= 0)
+#else
   if (bytes_read >= width)
+#endif
     found_nul = extract_unsigned_integer (buffer.get () + bytes_read - width,
 					  width, byte_order) == 0;
   if (len == -1 && !found_nul)
