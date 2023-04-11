@@ -30,7 +30,7 @@ not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Flo
 Boston, MA 02110-1301, USA.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2022 NVIDIA Corporation
+   Copyright (C) 2007-2023 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 

@@ -18,7 +18,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2022 NVIDIA Corporation
+   Copyright (C) 2007-2023 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -45,6 +45,7 @@
 #include "maint.h"
 #ifdef NVIDIA_CUDA_GDB
 #include "cuda/cuda-gdb.h"
+#include "cuda/cuda-env-vars.h"
 #endif
 
 #include "filenames.h"
@@ -1347,6 +1348,10 @@ captured_main_1 (struct captured_main_args *context)
 
   /* Error messages should no longer be distinguished with extra output.  */
   warning_pre_print = _("warning: ");
+
+#ifdef NVIDIA_CUDA_GDB
+  ret = catch_command_errors (cuda_check_env_vars, NULL, !batch_flag);
+#endif
 
   /* Read the .gdbinit file in the current directory, *if* it isn't
      the same as the $HOME/.gdbinit file (it should exist, also).  */

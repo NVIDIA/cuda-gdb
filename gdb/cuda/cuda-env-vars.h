@@ -16,20 +16,11 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _CUDA_EVENTS_H
-#define _CUDA_EVENTS_H 1
+#ifndef _CUDA_ENV_VARS_H
+#define _CUDA_ENV_VARS_H 1
 
-#include "cudadebugger.h"
-
-typedef enum {
-    CUDA_EVENT_INVALID,
-    CUDA_EVENT_SYNC,
-    CUDA_EVENT_ASYNC,
-    CUDA_EVENT_MAX,
-} cuda_event_kind_t;
-
-void cuda_process_events (CUDBGEvent *event, cuda_event_kind_t kind);
-void cuda_process_event  (CUDBGEvent *event);
-void cuda_event_post_process (bool reset_bpt);
+void cuda_check_env_vars (const char *ignored, int from_tty);
 
 #endif
+
+

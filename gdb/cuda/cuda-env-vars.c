@@ -16,20 +16,25 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _CUDA_EVENTS_H
-#define _CUDA_EVENTS_H 1
+#include "defs.h"
+#include "ui-out.h"
+#include "cuda-env-vars.h"
 
-#include "cudadebugger.h"
+void
+cuda_check_env_vars (const char *ignored, int from_tty)
+{
+  const char *injectionPath;
+  const char *forceLegacy;
+  
+  injectionPath = getenv ("CUDBG_INJECTION_PATH");
+  if (injectionPath)
+    {
+      struct stat sb;
+      if (stat(injectionPath, &sb) == -1)
+        error (_("Cannot open library %s pointed by CUDBG_INJECTION_PATH: file does not exist!"), injectionPath);
 
-typedef enum {
-    CUDA_EVENT_INVALID,
-    CUDA_EVENT_SYNC,
-    CUDA_EVENT_ASYNC,
-    CUDA_EVENT_MAX,
-} cuda_event_kind_t;
-
-void cuda_process_events (CUDBGEvent *event, cuda_event_kind_t kind);
-void cuda_process_event  (CUDBGEvent *event);
-void cuda_event_post_process (bool reset_bpt);
-
-#endif
+      forceLegacy = getenv ("CUDBG_USE_LEGACY_DEBUGGER");
+      if (forceLegacy && forceLegacy[0] == '1')
+        warning ("Both CUDBG_USE_LEGACY_DEBUGGER and CUDBG_INJECTION_PATH are set - will use legacy debugger\n");  
+    }
+}

@@ -17,7 +17,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2022 NVIDIA Corporation
+   Copyright (C) 2007-2023 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -1337,6 +1337,16 @@ single_qualifier:
 		  cpstate->type_stack.insert (pstate,
 					      copy_name ($2.stoken).c_str ());
 		}
+/* CUDA */
+	/* We support address space identifiers in typecasts via @global, @generic,
+	   @local etc. We need to handle the case where the address space identifier
+	   conflicts with a typename in the inferior. */
+	|	'@' TYPENAME
+		{
+		  cpstate->type_stack.insert (pstate,
+					      copy_name ($2.stoken).c_str ());
+		}
+/* END CUDA */
 	;
 
 qualifier_seq_noopt:

@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2022 NVIDIA Corporation
+ * Copyright (C) 2007-2023 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -324,15 +324,22 @@ cuda_elf_image_load (elf_image_t elf_image, bool is_system)
               objfile->original_name, elf_image->module,
               elf_image->uses_abi, objfile);
 
-  /* In case the CUDA ELF file defines device symbols that
-     overlap/replace existing objfile symtabs in the search order. 
-     This might reset breakpoints for addresses contained in this cubin.
-     We must call this after we have initialized the elf_image object.
-     FIXME: We probably shouldn't allow use of the elf_image we are constructing
-     until after we are certain it has been fully initialized. */
-  clear_symtab_users (0);
+  /* FIXME: We probably shouldn't allow use of the elf_image we are constructing
+   * until after we are certain it has been fully initialized. */
 
-    /* CUDA - line info. This must happen after the clear_symtab_users above. */
+  /* This might change our ideas about frames already looked at.  */
+  reinit_frame_cache ();
+
+  /* CUDA - parse .debug_line if .debug_info doesn't exist.
+   * This is to support -lineinfo compilation.
+   * This requires a special case, as GDB's .debug_line parser is
+   * deeply intertwined with the .debug_info parser.
+   * See the bottom of dwarf2/read.c for cuda_decode_line_table()
+   * where we hand-craft the datastructures to allow us to use
+   * the embedded .debug_line parser.
+   * 
+   * This must happen after the reinit_frame_cache above.
+   */
   if (!objfile->compunit_symtabs)
     cuda_decode_line_table (objfile);
   

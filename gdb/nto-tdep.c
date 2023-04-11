@@ -20,7 +20,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2022 NVIDIA Corporation
+   Copyright (C) 2007-2023 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -721,6 +721,13 @@ nto_elf_osabi_sniffer (bfd *abfd)
   return osabi;
 }
 
+#ifndef NVIDIA_CUDA_GDB
+/* CUDA FIXME: Getting the remote thread state is 
+ * broken/not implemented with cuda-gdb qnx. 
+ * It looks like this may happen in nto-procfs.c
+ * but we don't use that interface for remote debugging.
+ * We use pdebug.
+ */
 static const char * const nto_thread_state_str[] =
 {
   "DEAD",		/* 0  0x00 */
@@ -758,6 +765,7 @@ nto_extra_thread_info (struct target_ops *self, struct thread_info *ti)
     }
   return "";
 }
+#endif
 
 void
 nto_initialize_signals (void)

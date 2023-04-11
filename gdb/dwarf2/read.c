@@ -25,7 +25,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2022 NVIDIA Corporation
+   Copyright (C) 2007-2023 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -16692,20 +16692,19 @@ static type *
 make_segmented_type_aux (type *t, type_instance_flags flags, htab_t marked_types)
 {
   type_instance_flags old_flags = flags;
-  /* Bail out if sym_type has already been handled. Otherwise mark it as handled
-     before processing its FIELDS. */
+  /* Bail out if sym_type has already been handled. */
   void **slot = htab_find_slot (marked_types, t, INSERT);
   if (*slot != NULL)
     return (type *)*slot;
-  else
-    *slot = t;
   /* If this is a pointer type, save off the current flags. */
   if (t->code () == TYPE_CODE_PTR)
     {
       flags = t->instance_flags ();
     }
-  /* create the address class for this symbol's type. */
+  /* Create the address class for this symbol's type and add the updated type
+   * to the hash table slot. */
   type *result = make_type_with_address_space (t, old_flags);
+  *slot = result;
   /* CUDA Fix. If it's an enum type, we're done processing it. The 'type' of
      its TYPE_FIELDS is undetermined, therefore there is no need to parse the
      TYPE_FIELDS.  Enum types have no TARGET_TYPEs either. */
@@ -16740,9 +16739,7 @@ make_segmented_type (cuda_sti_t &sti)
   if (!sti.objfile || !sti.sym)
     return;
   /* Create required hash tables */
-  htab_up copied_types (htab_create_alloc (1, htab_hash_pointer,
-			  		   htab_eq_pointer,
-					   NULL, xcalloc, xfree));
+  htab_up copied_types = create_temp_copied_types_hash ();
   htab_up marked_types (htab_create_alloc (1, htab_hash_pointer,
 					   htab_eq_pointer,
 					   NULL, xcalloc, xfree));

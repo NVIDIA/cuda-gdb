@@ -39,7 +39,7 @@
    Boston, MA 02111-1307, USA.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2017-2022 NVIDIA Corporation
+   Copyright (C) 2017-2023 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -304,7 +304,9 @@ public:
 
   virtual const char *thread_name (struct thread_info *ti) override;
 
+#ifndef NVIDIA_CUDA_GDB
   virtual const char *extra_thread_info (thread_info *arg0) override;
+#endif
 
   virtual int insert_fork_catchpoint (int arg0) override;
 
@@ -3815,6 +3817,13 @@ qnx_remote_target<parent>::thread_name (struct thread_info *ti)
   return NULL;
 }
 
+#ifndef NVIDIA_CUDA_GDB
+/* CUDA FIXME: Getting the remote thread state is
+ * broken/not implemented with cuda-gdb qnx.
+ * It looks like this may happen in nto-procfs.c
+ * but we don't use that interface for remote debugging.
+ * We use pdebug.
+ */
 static const char *nto_thread_state_str[] =
 {
   "DEAD",		/* 0  0x00 */
@@ -3853,6 +3862,7 @@ qnx_remote_target<parent>::extra_thread_info (struct thread_info *ti)
     }
   return "";
 }
+#endif
 
 template <class parent>
 std::string

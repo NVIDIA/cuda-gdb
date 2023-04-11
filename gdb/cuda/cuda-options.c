@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2022 NVIDIA Corporation
+ * Copyright (C) 2007-2023 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -1124,37 +1124,6 @@ cuda_options_software_preemption (void)
 }
 
 /*
- * set cuda gpu_busy_check
- */
-static enum auto_boolean cuda_gpu_busy_check = AUTO_BOOLEAN_TRUE;
-
-static void
-cuda_show_cuda_gpu_busy_check (struct ui_file *file, int from_tty,
-                         struct cmd_list_element *c, const char *value)
-{
-  fprintf_filtered (file, _("GPU busy check is %s.\n"), value);
-}
-
-static void
-cuda_options_initialize_gpu_busy_check (void)
-{
-  add_setshow_auto_boolean_cmd ("gpu_busy_check", class_cuda, &cuda_gpu_busy_check,
-                                _("Turn on/off GPU busy check the next time the inferior application is run. (Mac only)"),
-                                _("Show if GPU busy check on Darwin is turned on/off."),
-                                _("When enabled, cuda-gdb will attempt to detect if any GPU to be used is already used for graphics."),
-                                NULL, cuda_show_cuda_gpu_busy_check,
-                                &setcudalist, &showcudalist);
-}
-
-bool
-cuda_options_gpu_busy_check (void)
-{
-  return cuda_gpu_busy_check == AUTO_BOOLEAN_TRUE ||
-         cuda_gpu_busy_check == AUTO_BOOLEAN_AUTO;
-}
-
-
-/*
  * set cuda variable_value_cache
  */
 static enum auto_boolean cuda_variable_value_cache_enabled = AUTO_BOOLEAN_TRUE;
@@ -1454,7 +1423,6 @@ cuda_options_initialize (void)
   cuda_options_initialize_copyright ();
   cuda_options_initialize_notify ();
   cuda_options_initialize_software_preemption ();
-  cuda_options_initialize_gpu_busy_check ();
   cuda_options_initialize_variable_value_cache_enabled ();
   cuda_options_initialize_stats ();
   cuda_options_initialize_value_extrapolation ();

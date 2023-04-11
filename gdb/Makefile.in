@@ -16,7 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 # NVIDIA CUDA Debugger CUDA-GDB
-# Copyright (C) 2007-2022 NVIDIA Corporation
+# Copyright (C) 2007-2023 NVIDIA Corporation
 # Modified from the original GDB file referenced above by the CUDA-GDB 
 # team at NVIDIA <cudatools@nvidia.com>.
 
@@ -295,7 +295,8 @@ SUBDIR_CUDA_SRCS = \
 	cuda/cuda-version.c \
 	cuda/self-bt.c \
 	cuda/libcudbg.c \
-	cuda/libcudbgipc.c
+	cuda/libcudbgipc.c \
+	cuda/cuda-env-vars.c
 
 @ENABLE_CUDA_TRUE@SUBDIR_CUDA_SFILE_SRCS = cuda/cuda-parser.exp.y cuda/cuda-parser.lex.l
 @ENABLE_CUDA_FALSE@SUBDIR_CUDA_SFILE_SRCS =
@@ -1387,6 +1388,7 @@ HFILES_NO_SRCDIR = \
 	cuda/libcudbgtrace.h \
 	cuda/remote-cuda.h \
 	cuda/self-bt.h \
+	cuda/cuda-env-vars.h \
 	d-lang.h \
 	darwin-nat.h \
 	dcache.h \

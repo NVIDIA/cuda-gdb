@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2022 NVIDIA Corporation.
+ * Copyright (C) 2007-2023 NVIDIA Corporation.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without

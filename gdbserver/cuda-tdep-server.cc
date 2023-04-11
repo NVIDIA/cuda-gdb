@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2013-2022 NVIDIA Corporation
+ * Copyright (C) 2013-2023 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -438,9 +438,11 @@ cuda_initialize_injection ()
   CORE_ADDR injectionPathAddr;
   char *injectionPathEnv;
   void *injectionLib;
+  const char *forceLegacy;
 
+  forceLegacy = getenv ("CUDBG_USE_LEGACY_DEBUGGER");
   injectionPathEnv = getenv ("CUDBG_INJECTION_PATH");
-  if (!injectionPathEnv)
+  if ((forceLegacy && forceLegacy[0] == '1') || !injectionPathEnv)
     {
       /* No injection - cuda-gdb is the API client */
       return true;

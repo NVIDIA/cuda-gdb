@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2022 NVIDIA Corporation
+ * Copyright (C) 2007-2023 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -229,7 +229,7 @@ int cuda_breakpoint_address_match (struct gdbarch *gdbarch,
                                    const address_space *aspace2, CORE_ADDR addr2);
 void cuda_adjust_host_pc (ptid_t r);
 void cuda_adjust_device_code_address (CORE_ADDR original_addr, CORE_ADDR *adjusted_addr);
-uint64_t cuda_find_next_control_flow_instruction (uint64_t pc, uint64_t range_end_pc, bool skip_subroutines, uint32_t *inst_size);
+uint64_t cuda_find_next_control_flow_instruction (uint64_t pc, uint64_t range_start_pc, uint64_t range_end_pc, bool skip_subroutines, uint32_t *inst_size);
 
 /* Linux vs. Mac OS X */
 bool cuda_platform_supports_tid (void);

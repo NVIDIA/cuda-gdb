@@ -18,7 +18,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2022 NVIDIA Corporation
+   Copyright (C) 2007-2023 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -3344,7 +3344,7 @@ static const char *const cuda_cdp_names[] =
 #define NUM_CUDA_CDP_NAMES ARRAY_SIZE(cuda_cdp_names)
 static const char *const cuda_graph_names[] =
   {
-    "cudaGraphLaunch"
+    "cudaGraphLaunch", "cuGraphLaunch",
   };
 #define NUM_CUDA_GRAPH_NAMES ARRAY_SIZE(cuda_graph_names)
 #endif
@@ -3825,7 +3825,7 @@ create_cuda_cdp_breakpoint (void)
 
 	      addr = BMSYMBOL_VALUE_ADDRESS (bp_objfile_data->cuda_cdp_msym[i]);
 	      /* Skip prologue, get the function name and adjust breakpoint address */
-	      addr = gdbarch_skip_prologue (objfile->arch (), addr);
+	      addr = gdbarch_skip_prologue_noexcept (objfile->arch (), addr);
 	      addr = adjust_breakpoint_address (objfile->arch (), addr, bp_cuda_cdp);
 	      b = create_internal_breakpoint (objfile->arch (), addr, bp_cuda_cdp, &internal_breakpoint_ops);
 	      initialize_explicit_location (&explicit_loc);
@@ -3890,7 +3890,7 @@ create_cuda_graph_breakpoint (void)
 
 	      addr = BMSYMBOL_VALUE_ADDRESS (bp_objfile_data->cuda_graph_msym[i]);
 	      /* Skip prologue, get the function name and adjust breakpoint address */
-	      addr = gdbarch_skip_prologue (objfile->arch (), addr);
+	      addr = gdbarch_skip_prologue_noexcept (objfile->arch (), addr);
 	      addr = adjust_breakpoint_address (objfile->arch (), addr, bp_cuda_graph);
 	      b = create_internal_breakpoint (objfile->arch (), addr, bp_cuda_graph, &internal_breakpoint_ops);
 	      initialize_explicit_location (&explicit_loc);
@@ -8288,7 +8288,7 @@ create_cuda_uvm_breakpoint (struct gdbarch *gdbarch)
     }
   CORE_ADDR addr = BMSYMBOL_VALUE_ADDRESS (msym);
   /* Skip prologue, get the function name and adjust breakpoint address */
-  addr = gdbarch_skip_prologue (gdbarch, addr);
+  addr = gdbarch_skip_prologue_noexcept (gdbarch, addr);
   addr = adjust_breakpoint_address (gdbarch, addr, bp_cuda_uvm);
   struct breakpoint *b = create_internal_breakpoint (gdbarch, addr, bp_cuda_uvm, &internal_breakpoint_ops);
   b->enable_state = bp_enabled;
@@ -8374,7 +8374,7 @@ cuda_add_location (struct breakpoint *b, elf_image_t elf_image)
   if (!cuda_is_device_code_address (addr))
     return false;
   /* slide the address past the function prolog */
-  addr = gdbarch_skip_prologue (arch, addr);
+  addr = gdbarch_skip_prologue_noexcept (arch, addr);
   /* Continue if there are already breakpoint location at the given address */
   for (loc = b->loc; loc; loc = loc->next)
     if (loc->address == addr || loc->requested_address == addr)
@@ -8440,7 +8440,7 @@ cuda_promote_location (struct bp_location* loc, elf_image_t elf_image)
 	return NULL;
     }
   /* Skip prologue, get the function name and adjust breakpoint address */
-  addr   = gdbarch_skip_prologue (arch, addr);
+  addr   = gdbarch_skip_prologue_noexcept (arch, addr);
   addr   = adjust_breakpoint_address (arch, addr, b->type);
   /* Remove breakpoint from specified location if address is about to be changed */
   if (loc->address != addr)
@@ -16190,7 +16190,7 @@ cuda_auto_breakpoints_forced_add_location (elf_image_t elf_image, CORE_ADDR addr
   if (!cuda_is_device_code_address (addr))
     return;
   /* Skip prologue, get the function name and adjust breakpoint address */
-  addr = gdbarch_skip_prologue (cuda_gdbarch, addr);
+  addr = gdbarch_skip_prologue_noexcept (cuda_gdbarch, addr);
   addr = adjust_breakpoint_address (cuda_gdbarch, addr, bp_cuda_auto);
   if (!*bp)
     {
@@ -16373,7 +16373,7 @@ cuda_auto_breakpoints_event_add_break (elf_image_t elf_image, CORE_ADDR addr)
       return;
     }
   /* Skip prologue, get the function name and adjust breakpoint address */
-  addr = gdbarch_skip_prologue (cuda_gdbarch, addr);
+  addr = gdbarch_skip_prologue_noexcept (cuda_gdbarch, addr);
   addr = adjust_breakpoint_address (cuda_gdbarch, addr, bp_cuda_auto);
   /* Create an internal temporary breakpoint. */
   struct breakpoint *bp = create_internal_breakpoint (cuda_gdbarch, addr, bp_cuda_auto,

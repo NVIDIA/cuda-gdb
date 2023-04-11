@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2022 NVIDIA Corporation
+ * Copyright (C) 2022-2023 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -55,20 +55,32 @@ cuda_apply_function_load_updates (char *buffer, CUDBGLoadedFunctionInfo *info, u
 
   /* Update section table addresses */
 
-  auto shoff = *(uint64_t *)e_hdr->e_shoff;
-  auto shnum = *(uint16_t *)e_hdr->e_shnum;
-  auto shentsize = *(uint16_t *)e_hdr->e_shentsize;
+  uint64_t shoff = *(uint64_t *)e_hdr->e_shoff;
+  uint64_t shnum = *(uint16_t *)e_hdr->e_shnum;
+  uint16_t shentsize = *(uint16_t *)e_hdr->e_shentsize;
+  gdb_assert (shentsize > 0);
+
+  /* Handle the case where shnum == 0 due to there being more than
+   * SHN_LORESERVE sections. */
+  if (shnum == 0)
+    {
+      /* The number of sections is stored in the sh_size field of the section
+       * header at index 0. */
+      Elf64_External_Shdr *section = (Elf64_External_Shdr *)&buffer[shoff];
+      shnum = *(uint64_t *)section->sh_size;
+    }
 
   cuda_trace_loading ("%d sections", shnum);
 
   std::vector<uint64_t> section_addresses;
-  for (int i = 0; i < shnum; ++i)
-    section_addresses.push_back (0);
+  section_addresses.resize (shnum);
+  gdb_assert (count <= shnum);
 
   /* Only update section_addresses for newly loaded functions.
      We detect these by looking for a value of 0 in the section table. */
 
-  /* Find the functions (sections) that are newly loaded this time */
+  /* Find the functions (sections) that are newly loaded this time.
+   * This is based on the count of updated sections passed in. */
   for (int i = 0; i < count; ++i)
     {
       section_addresses[info[i].sectionIndex] = info[i].address;
@@ -79,10 +91,10 @@ cuda_apply_function_load_updates (char *buffer, CUDBGLoadedFunctionInfo *info, u
   /* Relocate the sections */
   for (int sectionidx = 0; sectionidx < shnum; ++sectionidx)
     {
-      auto section = (Elf64_External_Shdr *)&buffer[shoff + sectionidx * shentsize];
+      Elf64_External_Shdr *section = (Elf64_External_Shdr *)&buffer[shoff + sectionidx * shentsize];
 
       /* Check for newly relocated section */
-      auto section_address = *(uint64_t *)section->sh_addr;
+      uint64_t section_address = *(uint64_t *)section->sh_addr;
       if (section_addresses[sectionidx])
 	{
 	  if (section_address)
@@ -99,26 +111,35 @@ cuda_apply_function_load_updates (char *buffer, CUDBGLoadedFunctionInfo *info, u
 	}
     }
 
-
   /* Find the symtab and strtab sections */
-  auto shstrndx = *(uint16_t *)e_hdr->e_shstrndx;
-  auto shstrtab_section = (Elf64_External_Shdr *)&buffer[shoff + shstrndx * shentsize];
-  auto shstrtab_offset = *(uint64_t *)shstrtab_section->sh_offset;
-  auto shstrtab = (char *)&buffer[shstrtab_offset];
+  uint64_t shstrndx = *(uint16_t *)e_hdr->e_shstrndx;
+  if (shstrndx == SHN_XINDEX)
+    {
+      /* The actual index of the section name string table section is contained in the
+       * sh_link field of the section header at index 0. */
+      Elf64_External_Shdr *section = (Elf64_External_Shdr *)&buffer[shoff];
+      shstrndx = *(uint64_t *)section->sh_link;
+    }
+  Elf64_External_Shdr *shstrtab_section = (Elf64_External_Shdr *)&buffer[shoff + shstrndx * shentsize];
+  uint64_t shstrtab_offset = *(uint64_t *)shstrtab_section->sh_offset;
+  char *shstrtab = (char *)&buffer[shstrtab_offset];
 
+  /* Locate the strtab, symtab, and symtab section index sections. */
   Elf64_External_Shdr *strtab = nullptr;
   Elf64_External_Shdr *symtab = nullptr;
+  Elf64_External_Shdr *symtab_shndx = nullptr;
   for (int sectionidx = 0; sectionidx < shnum; ++sectionidx)
     {
-      auto section = (Elf64_External_Shdr *)&buffer[shoff + sectionidx * shentsize];
-      auto section_type = *(uint32_t *)section->sh_type;
-
-      auto shstr_offset = *(uint32_t *)section->sh_name;
-      auto section_name = &shstrtab[shstr_offset];
+      Elf64_External_Shdr *section = (Elf64_External_Shdr *)&buffer[shoff + sectionidx * shentsize];
+      uint32_t section_type = *(uint32_t *)section->sh_type;
+      uint32_t shstr_offset = *(uint32_t *)section->sh_name;
+      const char *section_name = &shstrtab[shstr_offset];
 
       if (section_type == SHT_SYMTAB)
 	symtab = section;
-      else if (!strcmp (section_name, ".strtab"))
+      else if (section_type == SHT_SYMTAB_SHNDX)
+	symtab_shndx = section;
+      else if (section_type == SHT_STRTAB && !strcmp (section_name, ".strtab"))
 	strtab = section;
     }
 
@@ -127,55 +148,73 @@ cuda_apply_function_load_updates (char *buffer, CUDBGLoadedFunctionInfo *info, u
   gdb_assert (symtab);
 
   /* Found the string table */
-  auto strtab_offset = *(uint64_t *)strtab->sh_offset;
+  uint64_t strtab_offset = *(uint64_t *)strtab->sh_offset;
 
   /* Found the symbol table */
-  auto symtab_size = *(uint64_t *)symtab->sh_size;
-  auto symtab_entsize = *(uint32_t *)symtab->sh_entsize;
-  auto symtab_offset = *(uint64_t *)symtab->sh_offset;
+  uint64_t symtab_size = *(uint64_t *)symtab->sh_size;
+  uint32_t symtab_entsize = *(uint32_t *)symtab->sh_entsize;
+  uint64_t symtab_offset = *(uint64_t *)symtab->sh_offset;
+  gdb_assert (symtab_entsize > 0);
+
+  /* Symbol table section index */
+  uint64_t symtab_shndx_entsize = 0;
+  uint64_t symtab_shndx_offset = 0; 
+  /* The symbol table section index table is optional */
+  if (symtab_shndx)
+    {
+      symtab_shndx_entsize = *(uint32_t *)symtab_shndx->sh_entsize;
+      symtab_shndx_offset = *(uint64_t *)symtab_shndx->sh_offset; 
+      gdb_assert (symtab_shndx_entsize > 0);
+    }
 
   /* Update symbol table values based on section addresses. */
   std::vector<uint64_t> symbol_updated_address;
-  for (int symidx = 0; symidx < symtab_size/symtab_entsize; ++symidx)
+  symbol_updated_address.resize (symtab_size/symtab_entsize);
+  for (int symidx = 0; symidx < symbol_updated_address.size (); ++symidx)
     {
-      auto symbol = (Elf64_External_Sym *)&buffer[symtab_offset + symidx * symtab_entsize];
+      Elf64_External_Sym *symbol = (Elf64_External_Sym *)&buffer[symtab_offset + symidx * symtab_entsize];
 
       /* Only relocate symbols which belong to newly located sections */
-      auto sym_shndx = *(uint16_t *)symbol->st_shndx;
+      uint32_t sym_shndx = *(uint16_t *)symbol->st_shndx;
+      /* Check for st_shndx overflow. */
+      if (sym_shndx == SHN_XINDEX)
+	{ 
+	  /* This requires a symbol table section index table. */
+	  gdb_assert (symtab_shndx);
+	  sym_shndx = *(uint32_t *)&buffer[symtab_shndx_offset + symidx * symtab_shndx_entsize];
+	}
+
       if (section_addresses[sym_shndx])
 	{
-	  auto value = *(uint64_t *)symbol->st_value;
+	  uint64_t value = *(uint64_t *)symbol->st_value;
 	  value += section_addresses[sym_shndx];
 
-	  auto symbol_name = &buffer[strtab_offset + *(uint32_t *)symbol->st_name];
+	  const char *symbol_name = &buffer[strtab_offset + *(uint32_t *)symbol->st_name];
 	  cuda_trace_loading ("relocating symbol %d section %d address 0x%lx name %s",
 			      sym_shndx, (uint32_t)sym_shndx, value, symbol_name);
 
 	  *(uint64_t *)symbol->st_value = value;
-
-	  symbol_updated_address.push_back (value);
+	  symbol_updated_address[symidx] = value;
 	}
-      else
-	symbol_updated_address.push_back (0);
     }
 
   /* Apply relocations based on symbols just relocated */
   for (int sectionidx = 0; sectionidx < shnum; ++sectionidx)
     {
-      auto reloc_section = (Elf64_External_Shdr *)&buffer[shoff + sectionidx * shentsize];
-      auto reloc_section_type = *(uint32_t *)reloc_section->sh_type;
-      auto reloc_section_name = &shstrtab[*(uint32_t *)reloc_section->sh_name];
+      Elf64_External_Shdr *reloc_section = (Elf64_External_Shdr *)&buffer[shoff + sectionidx * shentsize];
+      uint32_t reloc_section_type = *(uint32_t *)reloc_section->sh_type;
+      const char *reloc_section_name = &shstrtab[*(uint32_t *)reloc_section->sh_name];
 
       if ((reloc_section_type == SHT_RELA) || (reloc_section_type == SHT_REL))
 	{
 	  bool is_rela = (reloc_section_type == SHT_RELA) ? true : false;
 
 	  /* The section we are relocating */
-	  auto target_section_idx = *(uint32_t *)reloc_section->sh_info;
-	  auto target_section = (Elf64_External_Shdr *)&buffer[shoff + target_section_idx * shentsize];
-	  auto target_section_ptr = &buffer[*(uint64_t *)target_section->sh_offset];
+	  uint32_t target_section_idx = *(uint32_t *)reloc_section->sh_info;
+	  Elf64_External_Shdr *target_section = (Elf64_External_Shdr *)&buffer[shoff + target_section_idx * shentsize];
+	  char *target_section_ptr = &buffer[*(uint64_t *)target_section->sh_offset];
 
-	  auto target_section_name = &shstrtab[*(uint32_t *)target_section->sh_name];
+	  const char *target_section_name = &shstrtab[*(uint32_t *)target_section->sh_name];
 	  cuda_trace_loading ("relocate section %s %d %s with %s",
 			      is_rela ? "RELA" : "REL ",
 			      sectionidx,
@@ -192,7 +231,7 @@ cuda_apply_function_load_updates (char *buffer, CUDBGLoadedFunctionInfo *info, u
 
 	      if (is_rela)
 		{
-		  auto rela = (Elf64_External_Rela *)&buffer[offset];
+		  Elf64_External_Rela *rela = (Elf64_External_Rela *)&buffer[offset];
 
 		  r_offset = *(uint64_t *)rela->r_offset;
 		  r_info = *(uint64_t *)rela->r_info;
@@ -202,7 +241,7 @@ cuda_apply_function_load_updates (char *buffer, CUDBGLoadedFunctionInfo *info, u
 		}
 	      else
 		{
-		  auto rel = (Elf64_External_Rel *)&buffer[offset];
+		  Elf64_External_Rel *rel = (Elf64_External_Rel *)&buffer[offset];
 
 		  r_offset = *(uint64_t *)rel->r_offset;
 		  r_info = *(uint64_t *)rel->r_info;
@@ -222,8 +261,8 @@ cuda_apply_function_load_updates (char *buffer, CUDBGLoadedFunctionInfo *info, u
 		  continue;
 		}
 	      
-	      auto symbol = (Elf64_External_Sym *)&buffer[symtab_offset + symidx * symtab_entsize];
-	      auto symbol_name = &buffer[strtab_offset + *(uint32_t *)symbol->st_name];
+	      Elf64_External_Sym *symbol = (Elf64_External_Sym *)&buffer[symtab_offset + symidx * symtab_entsize];
+	      const char *symbol_name = &buffer[strtab_offset + *(uint32_t *)symbol->st_name];
 
 	      if (!symbol_updated_address[symidx])
 		{
@@ -237,7 +276,7 @@ cuda_apply_function_load_updates (char *buffer, CUDBGLoadedFunctionInfo *info, u
 				  symbol_updated_address[symidx] + r_addend,
 				  symbol_name);
 
-	      auto target_ptr = (char *)&target_section_ptr[r_offset];
+	      char *target_ptr = (char *)&target_section_ptr[r_offset];
 	      switch (reltype)
 		{
 		case R_CUDA_32:

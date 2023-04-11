@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2022 NVIDIA Corporation
+ * Copyright (C) 2007-2023 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -1397,9 +1397,11 @@ cuda_initialize_injection ()
   CORE_ADDR injectionPathAddr;
   char *injectionPathEnv;
   void *injectionLib;
+  const char *forceLegacy;
 
+  forceLegacy = getenv ("CUDBG_USE_LEGACY_DEBUGGER");
   injectionPathEnv = getenv ("CUDBG_INJECTION_PATH");
-  if (!injectionPathEnv) {
+  if ((forceLegacy && forceLegacy[0] == '1') || !injectionPathEnv) {
     /* No injection - cuda-gdb is the API client */
     return true;
   }
@@ -2162,6 +2164,7 @@ cuda_control_flow_instruction (const char *inst, bool skip_subroutines)
 
 uint64_t
 cuda_find_next_control_flow_instruction (uint64_t pc,
+                                         uint64_t range_start_pc,
                                          uint64_t range_end_pc, /* Exclusive */
                                          bool skip_subroutines,
                                          uint32_t *inst_size)
@@ -2170,13 +2173,35 @@ cuda_find_next_control_flow_instruction (uint64_t pc,
   const char *inst = NULL;
   kernel_t kernel = cuda_current_kernel ();
 
-  end_pc = pc;
+  cuda_trace_domain (CUDA_TRACE_BREAKPOINT, "find next at pc=%llx start=%llx end=%llx",
+                     (long long)pc, (long long)range_start_pc, (long long)range_end_pc);
+
+  /* Check to see if we are not in the original source line range.
+   * This can happen when branching to an inlined call.
+   * In that case, lookup the start and end range for the new source line. */
+  *inst_size = 0;
+  if ((pc < range_start_pc) || (pc >= range_end_pc))
+    {
+      struct symtab_and_line sal;
+
+      sal = find_pc_line (pc, 0);
+      range_start_pc = sal.pc;
+      range_end_pc = sal.end;
+      cuda_trace_domain (CUDA_TRACE_BREAKPOINT, "adjust range start=%llx end=%llx",
+                        (long long)range_start_pc, (long long)range_end_pc);
+    }
 
   /* Iterate over instructions until the end of the step/next line range.
    * Break if instruction that can potentially alter program counter has been encountered. */
+  end_pc = pc;
   while (end_pc <= range_end_pc)
     {
       inst = kernel_disassemble (kernel, end_pc, inst_size);
+      if (!inst)
+        {
+          cuda_trace_domain (CUDA_TRACE_BREAKPOINT, "could not disassemble pc=0x%llx", (long long)end_pc);
+          break;
+        }
 
       cuda_trace_domain (CUDA_TRACE_BREAKPOINT, "%s: pc=0x%llx inst %.*s",
                          __func__, (long long) end_pc, 20, inst);
@@ -2200,12 +2225,17 @@ cuda_find_next_control_flow_instruction (uint64_t pc,
                                         to just before SHINT */
          : adj_pc;
 
-  cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
-                     "%s: next control point after %llx (up to %llx) is at %llx (inst %.*s)",
-                     __func__, (long long)pc, (long long)range_end_pc, (long long)end_pc,
-                     (inst == NULL || strlen(inst)> 20) ? 20 : (int)strlen(inst), inst);
-
-  return end_pc; /* end_pc is very close to range_end_pc if no control flow instruction was found */
+  /* Will have stopped short if a control flow instruction is found */
+  if (end_pc != range_end_pc)
+    cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
+                      "%s: next control point after %llx (up to %llx) is at %llx (inst %.*s)",
+                      __func__, (long long)pc, (long long)range_end_pc, (long long)end_pc,
+                      (inst == NULL || strlen(inst)> 20) ? 20 : (int)strlen(inst), inst);
+  else
+    cuda_trace_domain (CUDA_TRACE_BREAKPOINT, "no control point found at end_pc=%llx", (long long)end_pc);
+  
+  /* end_pc is very close to range_end_pc if no control flow instruction was found */
+  return end_pc;
 }
 
 static bool
@@ -2237,10 +2267,13 @@ cuda_sstep_fast (ptid_t ptid)
   pc = get_frame_pc (get_current_frame ());
 
   skip_subroutines = tp->control.step_over_calls == STEP_OVER_ALL;
-  end_pc = cuda_find_next_control_flow_instruction (pc, tp->control.step_range_end, skip_subroutines, &inst_size);
+  end_pc = cuda_find_next_control_flow_instruction (pc,
+                                                    tp->control.step_range_start,
+                                                    tp->control.step_range_end,
+                                                    skip_subroutines, &inst_size);
 
   /* Do not attempt to accelerate if stepping over less than 3 instructions */
-  if (end_pc <= pc || end_pc - pc < 3 * inst_size)
+  if ((end_pc <= pc) || ((end_pc - pc) < (3 * inst_size)))
     {
       cuda_trace_domain(CUDA_TRACE_BREAKPOINT,
                         "%s: advantage is not big enough: pc=0x%llx end_pc=0x%llx inst_size = %u",

@@ -20,7 +20,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2022 NVIDIA Corporation
+   Copyright (C) 2007-2023 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -5612,6 +5612,17 @@ create_copied_types_hash (struct objfile *objfile)
 					hashtab_obstack_allocate,
 					dummy_obstack_deallocate));
 }
+#ifdef NVIDIA_CUDA_GDB
+/* Same as create_copied_types_hash but allocs the htab since we
+ * are not discarding the objfile. */
+htab_up
+create_temp_copied_types_hash ()
+{
+  return htab_up (htab_create_alloc (1, type_pair_hash,
+				     type_pair_eq,
+				     NULL, xcalloc, xfree));
+}
+#endif
 
 /* Recursively copy (deep copy) a dynamic attribute list of a type.  */
 
@@ -5676,22 +5687,7 @@ copy_type_recursive (struct objfile *objfile,
   /* Copy the common fields of types.  For the main type, we simply
      copy the entire thing and then update specific fields as needed.  */
   *TYPE_MAIN_TYPE (new_type) = *TYPE_MAIN_TYPE (type);
-#ifdef NVIDIA_CUDA_GDB
-  /* For CUDA objfiles we want to make sure we set the type's objfile ownership
-     information, otherwise, if GDB tries to copy this type, we will run into
-     an assertion above because the ownership of the type is going to be
-     attached to the architecture rather than the objfile.  */
-  if (objfile->cuda_objfile && !objfile->discarding)
-    {
-      new_type->set_owner (objfile);
-    }
-  else
-    {
-      new_type->set_owner (type->arch ());
-    }
-#else
   new_type->set_owner (type->arch ());
-#endif
 
   if (type->name ())
     new_type->set_name (xstrdup (type->name ()));

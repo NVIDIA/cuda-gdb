@@ -18,7 +18,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2022 NVIDIA Corporation
+   Copyright (C) 2007-2023 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -552,20 +552,35 @@ struct general_symbol_info
      section_offsets for this objfile.  Negative means that the symbol
      does not get relocated relative to a section.  */
 
+#ifdef NVIDIA_CUDA_GDB
+  /* NVIDIA: We need to support elf images with more than SHRT_MAX sections. */
+  int m_section;
+#else
   short m_section;
+#endif
 
   /* Set the index into the obj_section list (within the containing
      objfile) for the section that contains this symbol.  See M_SECTION
      for more details.  */
 
+#ifdef NVIDIA_CUDA_GDB
+  /* NVIDIA: We need to support elf images with more than SHRT_MAX sections. */
+  void set_section_index (int idx)
+#else
   void set_section_index (short idx)
+#endif
   { m_section = idx; }
 
   /* Return the index into the obj_section list (within the containing
      objfile) for the section that contains this symbol.  See M_SECTION
      for more details.  */
 
+#ifdef NVIDIA_CUDA_GDB
+  /* NVIDIA: We need to support elf images with more than SHRT_MAX sections. */
+  int section_index () const
+#else
   short section_index () const
+#endif
   { return m_section; }
 
   /* Return the obj_section from OBJFILE for this symbol.  The symbol

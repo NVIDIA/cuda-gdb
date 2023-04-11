@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2022 NVIDIA Corporation
+ * Copyright (C) 2007-2023 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -2326,10 +2326,8 @@ info_cuda_managed_command (const char *arg)
 
       for (minimal_symbol *msym : obj->msymbols ())
         {
-	  struct bound_minimal_symbol minsym;
-
-	  minsym = lookup_minimal_symbol (msym->linkage_name (), NULL, obj);
-
+	  /* Create a bound minsym based on the msym and the obj file. */
+	  struct bound_minimal_symbol minsym {msym, obj};
           if (!cuda_managed_msymbol_p (minsym))
             continue;
           print_managed_msymbol (gdb_stdout, minsym);

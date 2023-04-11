@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2022 NVIDIA Corporation
+ * Copyright (C) 2007-2023 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -426,7 +426,7 @@ set_next_device_iteration (void)
 
   /* Calculate how many steps should be taken */
   if (cuda_options_single_stepping_optimizations_enabled ())
-    end_pc = cuda_find_next_control_flow_instruction (cur_pc, end_pc, false, &inst_size);
+    end_pc = cuda_find_next_control_flow_instruction (cur_pc, cur_sal.pc, end_pc, false, &inst_size);
   if (end_pc == cur_pc)
     nsteps = 1; /* Currently at control flow instruction */
   else

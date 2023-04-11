@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2022 NVIDIA Corporation
+ * Copyright (C) 2007-2023 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  * 
  * This program is free software; you can redistribute it and/or modify
@@ -53,7 +53,6 @@ void cuda_options_disable_break_on_launch (void);
 bool cuda_options_notify_youngest (void);
 bool cuda_options_notify_random (void);
 bool cuda_options_software_preemption (void);
-bool cuda_options_gpu_busy_check (void);
 bool cuda_options_variable_value_cache_enabled (void);
 bool cuda_options_statistics_collection_enabled (void);
 bool cuda_options_value_extrapolation_enabled (void);

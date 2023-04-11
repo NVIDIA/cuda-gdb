@@ -17,7 +17,7 @@ dnl along with this program; see the file COPYING3.  If not see
 dnl <http://www.gnu.org/licenses/>.
 dnl
 dnl NVIDIA CUDA Debugger CUDA-GDB
-dnl Copyright (C) 2007-2022 NVIDIA Corporation
+dnl Copyright (C) 2007-2023 NVIDIA Corporation
 dnl Modified from the original GDB file referenced above by the CUDA-GDB
 dnl team at NVIDIA <cudatools@nvidia.com>.
 
