@@ -3187,7 +3187,9 @@ insert_breakpoint_locations (void)
 	  error_flag = -1;
 	}
     }
-
+/* CUDA - This was causing issues with lazy loading and setting
+ * breakpoints on unrelocated addresses. */
+#ifndef NVIDIA_CUDA_GDB
   if (error_flag)
     {
       /* If a hardware breakpoint or watchpoint was inserted, add a
@@ -3200,6 +3202,7 @@ You may have requested too many hardware breakpoints/watchpoints.\n");
       target_terminal::ours_for_output ();
       error_stream (tmp_error_stream);
     }
+#endif
 }
 
 /* Used when the program stops.

@@ -19,6 +19,9 @@
 #include "defs.h"
 #include "breakpoint.h"
 #include "remote.h"
+
+#include "cuda-defs.h"
+#include "cuda-asm.h"
 #include "cuda-state.h"
 
 /* GPU register cache */
@@ -440,6 +443,22 @@ device_state::invalidate ()
   cuda_state::instance ().invalidate_kernels ();
 
   m_valid_p = false;
+
+  m_insn_size_p = false;
+  m_num_sms_p = false;
+  m_num_warps_p = false;
+  m_num_lanes_p = false;
+  m_num_registers_p = false;
+  m_num_predicates_p = false;
+  m_num_uregisters_p = false;
+  m_num_upredicates_p = false;
+  m_pci_bus_info_p = false;
+  m_dev_type_p = false;
+  m_dev_name_p = false;
+  m_sm_exception_mask_valid_p = false;
+  m_sm_version_p = false;
+  m_sm_type[0] = '\0';
+
 }
 
 void
@@ -451,12 +470,16 @@ device_invalidate (uint32_t dev_id)
 static void
 device_flush_disasm_cache (uint32_t dev_id)
 {
-  cuda_trace ("device %u: flush disassembly cache", dev_id);
+  cuda_trace ("device %u: flush disassembly caches", dev_id);
 
   gdb_assert (dev_id < cuda_system_get_num_devices ());
 
+  /* This is less than ideal, we want to iternate on modules, not on kernels */
   for (auto kernel = kernels_get_first_kernel (); kernel; kernel = kernels_get_next_kernel (kernel))
-    kernel_flush_disasm_cache (kernel);
+    {
+      module_t module = kernel_get_module (kernel);
+      module->disassembler->flush_device_cache ();
+    }
 }
 
 static void
@@ -489,13 +512,28 @@ device_get_sm_type (uint32_t dev_id)
 {
   auto dev = cuda_state::instance ().device (dev_id);
 
-  if (dev->m_sm_type_p)
-    return dev->m_sm_type;
-
-  cuda_api_get_sm_type (dev_id, dev->m_sm_type, sizeof (dev->m_sm_type));
-  dev->m_sm_type_p = CACHED;
+  if (!strlen (dev->m_sm_type))
+    cuda_api_get_sm_type (dev_id, dev->m_sm_type, sizeof (dev->m_sm_type));
 
   return dev->m_sm_type;
+}
+
+uint32_t
+device_get_sm_version (uint32_t dev_id)
+{
+  auto dev = cuda_state::instance ().device (dev_id);
+
+  if (dev->m_sm_version_p)
+    return dev->m_sm_version;
+
+  auto sm_type = device_get_sm_type (dev_id);
+  if (strlen (sm_type) < 4 || strncmp (sm_type, "sm_", 3) != 0)
+    error ("unknown sm_type %s", sm_type);
+
+  dev->m_sm_version = atoi (&sm_type[3]);
+
+  dev->m_sm_version_p = CACHED;
+  return dev->m_sm_version;
 }
 
 const char *
@@ -516,20 +554,18 @@ device_get_device_name (uint32_t dev_id)
  * longer supports FERMI as of 9.0 toolkit, this assumption is valid.
  */
 uint32_t
-device_get_inst_size (uint32_t dev_id)
+device_get_insn_size (uint32_t dev_id)
 {
   auto dev = cuda_state::instance ().device (dev_id);
 
-  return dev->m_inst_size_p ? dev->m_inst_size : 0;
-}
+  if (dev->m_insn_size_p)
+    return dev->m_insn_size;
 
-void
-device_set_inst_size (uint32_t dev_id, uint32_t inst_size)
-{
-  auto dev = cuda_state::instance ().device (dev_id);
+  auto sm_version = device_get_sm_version (dev_id);
+  dev->m_insn_size = (sm_version < 70) ? 8 : 16;
+  dev->m_insn_size_p = CACHED;
 
-  dev->m_inst_size = inst_size;
-  dev->m_inst_size_p = true;
+  return dev->m_insn_size;
 }
 
 uint32_t
@@ -846,8 +882,8 @@ device_update_exception_state (uint32_t dev_id)
 void
 cuda_system_set_device_spec (uint32_t dev_id, uint32_t num_sms,
 			     uint32_t num_warps, uint32_t num_lanes,
-			     uint32_t num_registers, char *dev_type,
-			     char *sm_type)
+			     uint32_t num_registers,
+			     const char *dev_type, const char *sm_type)
 {
   auto dev = cuda_state::instance ().device (dev_id);
 
@@ -856,21 +892,27 @@ cuda_system_set_device_spec (uint32_t dev_id, uint32_t num_sms,
   gdb_assert (num_warps <= CUDBG_MAX_WARPS);
   gdb_assert (num_lanes <= CUDBG_MAX_LANES);
 
-  dev->m_num_sms		= num_sms;
+  dev->m_num_sms	= num_sms;
   dev->m_num_warps	= num_warps;
   dev->m_num_lanes	= num_lanes;
   dev->m_num_registers	= num_registers;
   strcpy (dev->m_dev_type, dev_type);
   strcpy (dev->m_sm_type, sm_type);
 
+  if (strlen (dev->m_sm_type) < 4 || strncmp (dev->m_sm_type, "sm_", 3) != 0)
+    error ("unknown sm_type %s", dev->m_sm_type);
+  dev->m_sm_version = atoi (&dev->m_sm_type[3]);
+  dev->m_insn_size = (dev->m_sm_version < 70) ? 8 : 16;
+
   dev->m_num_sms_p	 = CACHED;
   dev->m_num_warps_p	 = CACHED;
   dev->m_num_lanes_p	 = CACHED;
-  dev->m_num_registers_p	 = CACHED;
+  dev->m_num_registers_p = CACHED;
   dev->m_dev_type_p	 = CACHED;
   dev->m_dev_name_p	 = CACHED;
-  dev->m_sm_type_p	 = CACHED;
   dev->m_num_predicates_p = false;
+  dev->m_sm_version_p	 = CACHED;
+  dev->m_insn_size_p	 = CACHED;
 }
 
 /******************************************************************************

@@ -31,6 +31,7 @@
 
 #include <array>
 #include <bitset>
+#include <string>
 #include <vector>
 
 #ifdef __ANDROID__
@@ -174,6 +175,7 @@ public:
   void resume ();
 
   bool	   m_valid_p = false;
+  bool	   m_insn_size_p = false;
   bool	   m_num_sms_p = false;
   bool	   m_num_warps_p = false;
   bool	   m_num_lanes_p = false;
@@ -183,19 +185,19 @@ public:
   bool	   m_num_upredicates_p = false;
   bool	   m_pci_bus_info_p = false;
   bool	   m_dev_type_p = false;
-  bool	   m_sm_type_p = false;
-  bool	   m_inst_size_p = false;
   bool	   m_dev_name_p = false;
   bool	   m_sm_exception_mask_valid_p = false;
-  bool	   m_valid;		// at least one active lane
+  bool	   m_sm_version_p = false;
+
   /* the above fields are invalidated on resume */
 
-
-  bool	   m_suspended = false;		// true if the device is suspended
+  bool	   m_valid = false;	// at least one active lane
+  bool	   m_suspended = false;	// true if the device is suspended
   char	   m_dev_type[256] = { 0 };
   char	   m_dev_name[256] = { 0 };
-  char	   m_sm_type[16];
-  uint32_t m_inst_size = 0;
+  char	   m_sm_type[64] = { 0 };
+  uint32_t m_sm_version = 0;
+  uint32_t m_insn_size = 0;
   uint32_t m_num_sms = 0;
   uint32_t m_num_warps = 0;
   uint32_t m_num_lanes = 0;
@@ -243,7 +245,7 @@ public:
   void flush_disasm_cache ();
 
   void set_device_spec (uint32_t, uint32_t, uint32_t,
-			uint32_t, uint32_t, char *, char *);
+			uint32_t, uint32_t, const char *, const char *);
 
   context_t find_context_by_addr (CORE_ADDR addr);
 
@@ -272,7 +274,7 @@ uint32_t cuda_system_get_suspended_devices_mask	  (void);
 void	 cuda_system_flush_disasm_cache		  (void);
 
 void	 cuda_system_set_device_spec	(uint32_t, uint32_t, uint32_t,
-					 uint32_t, uint32_t, char *, char *);
+					 uint32_t, uint32_t, const char *, const char *);
 
 context_t cuda_system_find_context_by_addr     (CORE_ADDR addr);
 
@@ -280,7 +282,8 @@ context_t cuda_system_find_context_by_addr     (CORE_ADDR addr);
 const char* device_get_device_name	   (uint32_t dev_id);
 const char* device_get_device_type	   (uint32_t dev_id);
 const char* device_get_sm_type		   (uint32_t dev_id);
-uint32_t    device_get_inst_size	   (uint32_t dev_id);
+uint32_t    device_get_sm_version          (uint32_t dev_id);
+uint32_t    device_get_insn_size	   (uint32_t dev_id);
 uint32_t    device_get_num_sms		   (uint32_t dev_id);
 uint32_t    device_get_num_warps	   (uint32_t dev_id);
 uint32_t    device_get_num_lanes	   (uint32_t dev_id);
@@ -291,7 +294,6 @@ uint32_t    device_get_num_upredicates	   (uint32_t dev_id);
 uint32_t    device_get_num_kernels	   (uint32_t dev_id);
 uint32_t    device_get_pci_bus_id	   (uint32_t dev_id);
 uint32_t    device_get_pci_dev_id	   (uint32_t dev_id);
-void	    device_set_inst_size	   (uint32_t dev_id, uint32_t inst_size);
 
 bool	    device_is_valid		   (uint32_t dev_id);
 bool	    device_is_any_context_present  (uint32_t dev_id);

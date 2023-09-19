@@ -29,6 +29,7 @@
 #if !defined(__ANDROID__) && !defined(__QNX__)
 #include <execinfo.h>
 #endif
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -377,6 +378,9 @@ cuda_vtrace_domain (cuda_trace_domain_t domain, const char *fmt, va_list ap)
     return;
   switch (domain)
     {
+      case CUDA_TRACE_GENERAL:
+        fprintf (stderr, "[CUDAGDB-GEN] ");
+        break;
       case CUDA_TRACE_EVENT:
         fprintf (stderr, "[CUDAGDB-EVT] ");
         break;
@@ -386,8 +390,11 @@ cuda_vtrace_domain (cuda_trace_domain_t domain, const char *fmt, va_list ap)
       case CUDA_TRACE_API:
         fprintf (stderr, "[CUDAGDB-API] ");
         break;
-      case CUDA_TRACE_GENERAL:
-        fprintf (stderr, "[CUDAGDB-GEN] ");
+      case CUDA_TRACE_SIGINFO:
+        fprintf (stderr, "[CUDAGDB-SIG] ");
+        break;
+      case CUDA_TRACE_DISASSEMBLER:
+        fprintf (stderr, "[CUDAGDB-DISASM] ");
         break;
       default:
         fprintf (stderr, "[CUDAGDB] ");
@@ -1027,10 +1034,6 @@ cuda_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 static int
 cuda_print_insn (bfd_vma pc, disassemble_info *info)
 {
-  uint32_t inst_size;
-  kernel_t kernel;
-  const char * inst;
-
   if (!cuda_focus_is_device ())
     return 1;
 
@@ -1039,13 +1042,16 @@ cuda_print_insn (bfd_vma pc, disassemble_info *info)
     return 1;
 
   /* decode the instruction at the pc */
-  kernel = cuda_current_kernel ();
-  inst = kernel_disassemble (kernel, pc, &inst_size);
+  auto kernel = cuda_current_kernel ();
 
-  if (inst)
-    info->fprintf_func (info->stream, "%s", inst);
+  std::string inst;
+  uint32_t inst_size;
+  module_t module = kernel_get_module (kernel);
+  auto found = module->disassembler->disassemble (pc, inst, inst_size);
+  if (!found)
+    info->fprintf_func (info->stream, "Cannot disassemble instruction at pc 0x%lx", pc);
   else
-    info->fprintf_func (info->stream, "Cannot disassemble instruction");
+    info->fprintf_func (info->stream, "%s", inst.c_str ());
 
   return inst_size;
 }
@@ -1376,17 +1382,22 @@ cuda_initialize (void)
 
   cuda_initialized = !cuda_api_initialize ();
   if (cuda_initialized)
-  {
-    cuda_system_initialize ();
-    useExtDebuggerAddr = cuda_get_symbol_address (_STRING_(CUDBG_USE_EXTERNAL_DEBUGGER));
+    {
+      cuda_system_initialize ();
+      useExtDebuggerAddr = cuda_get_symbol_address (_STRING_(CUDBG_USE_EXTERNAL_DEBUGGER));
 
-    if (useExtDebuggerAddr) {
-      target_read_memory (useExtDebuggerAddr, (gdb_byte *)&useExtDebugger, sizeof(useExtDebugger));
+      if (useExtDebuggerAddr)
+        {
+          target_read_memory (useExtDebuggerAddr, (gdb_byte *)&useExtDebugger, sizeof(useExtDebugger));
 
-      if (!useExtDebugger)
-        printf ("Running on legacy stack.\n");
+          /* Value can either be 0 or 1, anything else is likely an invalid read. */
+          if (useExtDebugger > 1)
+            error (_("Invalid value read for %s: %u\n"), _STRING_(CUDBG_USE_EXTERNAL_DEBUGGER), useExtDebugger);
+
+          if (!useExtDebugger)
+            printf ("Running on legacy stack.\n");
+        }
     }
-  }
 }
 
 /* Can be removed when exposed through cudadebugger.h */
@@ -2123,63 +2134,70 @@ cuda_sstep_set_ptid (ptid_t ptid)
 }
 
 static bool
-cuda_control_flow_instruction (const char *inst, bool skip_subroutines)
+cuda_control_flow_instruction (const std::string &inst, bool skip_subroutines)
 {
-  if (!inst) return true;
+  /* Assume emptry instructions are control-flow */
+  if (!inst.size ())
+    return true;
+
+  const char *inst_str = inst.c_str ();
+
   /* Maxwell+: https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#maxwell-pascal */
-  if (strstr(inst, "BRA") != 0) return true;
-  if (strstr(inst, "BRX") != 0) return true;
-  if (strstr(inst, "JMP") != 0) return true;
-  if (strstr(inst, "JMX") != 0) return true;
-  if (strstr(inst, "CAL") != 0 && !skip_subroutines) return true;
+  if (strstr(inst_str, "BRA") != 0) return true;
+  if (strstr(inst_str, "BRX") != 0) return true;
+  if (strstr(inst_str, "JMP") != 0) return true;
+  if (strstr(inst_str, "JMX") != 0) return true;
+  if (strstr(inst_str, "CAL") != 0 && !skip_subroutines) return true;
   // JCAL - covered with CAL
-  if (strstr(inst, "RET") != 0) return true;
-  if (strstr(inst, "BRK") != 0) return true;
-  if (strstr(inst, "CONT") != 0) return true;
-  if (strstr(inst, "SSY") != 0) return true;
-  if (strstr(inst, "BPT") != 0) return true;
-  if (strstr(inst, "EXIT") != 0) return true;
-  if (strstr(inst, "BAR") != 0) return true;
-  if (strstr(inst, "SYNC") != 0) return true;
+  if (strstr(inst_str, "RET") != 0) return true;
+  if (strstr(inst_str, "BRK") != 0) return true;
+  if (strstr(inst_str, "CONT") != 0) return true;
+  if (strstr(inst_str, "SSY") != 0) return true;
+  if (strstr(inst_str, "BPT") != 0) return true;
+  if (strstr(inst_str, "EXIT") != 0) return true;
+  if (strstr(inst_str, "BAR") != 0) return true;
+  if (strstr(inst_str, "SYNC") != 0) return true;
   /* Volta+: https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#volta */
-  if (strstr(inst, "BREAK") != 0) return true;
+  if (strstr(inst_str, "BREAK") != 0) return true;
   /* BSYNC - covered with SYNC */
   /* CALL - covered with CAL */
-  if (strstr(inst, "KILL") != 0) return true;
-  if (strstr(inst, "NANOSLEEP") != 0) return true;
-  if (strstr(inst, "RTT") != 0) return true;
-  if (strstr(inst, "WARPSYNC") != 0) return true;
-  if (strstr(inst, "YIELD") != 0) return true;
-  if (strstr(inst, "BMOV") != 0) return true;
-  if (strstr(inst, "RPCMOV") != 0) return true;
+  if (strstr(inst_str, "KILL") != 0) return true;
+  if (strstr(inst_str, "NANOSLEEP") != 0) return true;
+  if (strstr(inst_str, "RTT") != 0) return true;
+  if (strstr(inst_str, "WARPSYNC") != 0) return true;
+  if (strstr(inst_str, "YIELD") != 0) return true;
+  if (strstr(inst_str, "BMOV") != 0) return true;
+  if (strstr(inst_str, "RPCMOV") != 0) return true;
   /* Turing+: https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#turing */
   /* BRXU - covered with BRX */
   /* JMXU - covered with JMX */
   /* Hopper+: https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#hopper */
-  if (strstr(inst, "ACQBULK") != 0) return true;
-  if (strstr(inst, "ENDCOLLECTIVE") != 0) return true;
+  if (strstr(inst_str, "ACQBULK") != 0) return true;
+  if (strstr(inst_str, "ENDCOLLECTIVE") != 0) return true;
   /* UCGABAR_* - covered with BAR */
   return false;
 }
 
-uint64_t
+bool
 cuda_find_next_control_flow_instruction (uint64_t pc,
                                          uint64_t range_start_pc,
                                          uint64_t range_end_pc, /* Exclusive */
                                          bool skip_subroutines,
-                                         uint32_t *inst_size)
+					 uint64_t& end_pc,
+                                         uint32_t& inst_size)
 {
-  uint64_t end_pc, adj_pc;
-  const char *inst = NULL;
+  uint64_t adj_pc;
   kernel_t kernel = cuda_current_kernel ();
+  std::string inst;
 
-  cuda_trace_domain (CUDA_TRACE_BREAKPOINT, "find next at pc=%llx start=%llx end=%llx",
-                     (long long)pc, (long long)range_start_pc, (long long)range_end_pc);
+  inst_size = 0;
+
+  cuda_trace_domain (CUDA_TRACE_BREAKPOINT, "find next at pc=%lx start=%lx end=%lx",
+                     pc, range_start_pc, range_end_pc);
 
   /* Check to see if we are not in the original source line range.
    * This can happen when branching to an inlined call.
    * In that case, lookup the start and end range for the new source line. */
-  *inst_size = 0;
   if ((pc < range_start_pc) || (pc >= range_end_pc))
     {
       struct symtab_and_line sal;
@@ -2187,8 +2205,8 @@ cuda_find_next_control_flow_instruction (uint64_t pc,
       sal = find_pc_line (pc, 0);
       range_start_pc = sal.pc;
       range_end_pc = sal.end;
-      cuda_trace_domain (CUDA_TRACE_BREAKPOINT, "adjust range start=%llx end=%llx",
-                        (long long)range_start_pc, (long long)range_end_pc);
+      cuda_trace_domain (CUDA_TRACE_BREAKPOINT, "adjust range start=%lx end=%lx",
+			 range_start_pc, range_end_pc);
     }
 
   /* Iterate over instructions until the end of the step/next line range.
@@ -2196,20 +2214,21 @@ cuda_find_next_control_flow_instruction (uint64_t pc,
   end_pc = pc;
   while (end_pc <= range_end_pc)
     {
-      inst = kernel_disassemble (kernel, end_pc, inst_size);
-      if (!inst)
+      module_t module = kernel_get_module (kernel);
+      bool found = module->disassembler->disassemble (end_pc, inst, inst_size);
+      if (!found)
         {
-          cuda_trace_domain (CUDA_TRACE_BREAKPOINT, "could not disassemble pc=0x%llx", (long long)end_pc);
+          cuda_trace_domain (CUDA_TRACE_BREAKPOINT, "could not disassemble pc=0x%lx", end_pc);
           break;
         }
 
-      cuda_trace_domain (CUDA_TRACE_BREAKPOINT, "%s: pc=0x%llx inst %.*s",
-                         __func__, (long long) end_pc, 20, inst);
+      cuda_trace_domain (CUDA_TRACE_BREAKPOINT, "%s: pc=0x%lx inst %.*s",
+                         __func__, end_pc, 20, inst.c_str ());
 
       if (cuda_control_flow_instruction (inst, skip_subroutines))
         break;
 
-      end_pc += *inst_size;
+      end_pc += inst_size;
     }
 
   /* The above loop might increment end_pc beyond step_range_end.
@@ -2220,22 +2239,21 @@ cuda_find_next_control_flow_instruction (uint64_t pc,
   /* Adjust the end_pc to the exact instruction address */
   adj_pc = gdbarch_adjust_breakpoint_address (cuda_get_gdbarch(), end_pc);
   end_pc = adj_pc > range_end_pc
-         ? range_end_pc - *inst_size /* end_pc was pointing at SHINT and was
-                                        adjusted beyond range_end_pc - reset
-                                        to just before SHINT */
+         ? range_end_pc - inst_size /* end_pc was pointing at SHINT and was
+				       adjusted beyond range_end_pc - reset
+				       to just before SHINT */
          : adj_pc;
 
   /* Will have stopped short if a control flow instruction is found */
   if (end_pc != range_end_pc)
     cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
-                      "%s: next control point after %llx (up to %llx) is at %llx (inst %.*s)",
-                      __func__, (long long)pc, (long long)range_end_pc, (long long)end_pc,
-                      (inst == NULL || strlen(inst)> 20) ? 20 : (int)strlen(inst), inst);
+                      "%s: next control point after %lx (up to %lx) is at %lx (inst %s)",
+		       __func__, pc, range_end_pc, end_pc, inst.c_str ());
   else
-    cuda_trace_domain (CUDA_TRACE_BREAKPOINT, "no control point found at end_pc=%llx", (long long)end_pc);
+    cuda_trace_domain (CUDA_TRACE_BREAKPOINT, "no control point found at end_pc=%lx", end_pc);
   
   /* end_pc is very close to range_end_pc if no control flow instruction was found */
-  return end_pc;
+  return true;
 }
 
 static bool
@@ -2267,23 +2285,25 @@ cuda_sstep_fast (ptid_t ptid)
   pc = get_frame_pc (get_current_frame ());
 
   skip_subroutines = tp->control.step_over_calls == STEP_OVER_ALL;
-  end_pc = cuda_find_next_control_flow_instruction (pc,
-                                                    tp->control.step_range_start,
-                                                    tp->control.step_range_end,
-                                                    skip_subroutines, &inst_size);
+  auto found = cuda_find_next_control_flow_instruction (pc,
+							tp->control.step_range_start,
+							tp->control.step_range_end,
+							skip_subroutines, end_pc, inst_size);
+  if (!found)
+    return false;
 
   /* Do not attempt to accelerate if stepping over less than 3 instructions */
   if ((end_pc <= pc) || ((end_pc - pc) < (3 * inst_size)))
     {
       cuda_trace_domain(CUDA_TRACE_BREAKPOINT,
-                        "%s: advantage is not big enough: pc=0x%llx end_pc=0x%llx inst_size = %u",
-                        __func__, (long long)pc, (long long)end_pc, (unsigned)inst_size);
+                        "%s: advantage is not big enough: pc=0x%lx end_pc=0x%lx inst_size = %u",
+                        __func__, pc, end_pc, inst_size);
       return false;
     }
 
   cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
-                     "%s: trying to step from %llx to %llx",
-                     __func__, (long long)pc, (long long)end_pc);
+                     "%s: trying to step from %lx to %lx",
+                     __func__, pc, end_pc);
 
   /* If breakpoint is set at the current (or current active) PC - temporarily unset it*/
   aspace = target_thread_address_space (ptid);
@@ -3229,30 +3249,59 @@ cuda_update_report_driver_api_error_flags (void)
   Example: _Z38__device_stub__Z9acos_main10acosParamsR10acosParams
   */
 
-static std::string
-cuda_is_kernel_launch_stub (const char *linkage_name)
+static bool
+cuda_is_kernel_launch_stub (const std::string& linkage_name, std::string& bare_name, std::string& mangled_name)
 {
-  std::string name {linkage_name};
-  /* We only want __device_stub_ functions, and not the wrapper ones */
-  if (name.find ("__device_stub_") == std::string::npos)
-    return std::string {};
-  if (name.find ("__wrapper__device_stub_") != std::string::npos)
-    return std::string {};
+  bare_name.clear ();
+  mangled_name.clear ();
 
-  auto demangled = language_demangle (language_def (language_cplus), linkage_name, DMGL_ANSI);
-  if (!demangled)
-    return std::string {};
-
+  /* We only want __device_stub_ functions, and not the wrapper ones
+     Check early here to avoid expensive demangling */
   const char *find = "__device_stub_";
   auto len = strlen (find);
+  if (linkage_name.find (find) == std::string::npos)
+    {
+      if (cuda_host_shadow_debug > 2)
+	cuda_trace ("shadow: failed to find __device_stub_ %s", linkage_name.c_str ());
+      return false;
+    }
+
+  /* Demangle to get the mangled name of the CUDA kernel/function */
+  auto demangled = language_demangle (language_def (language_cplus), linkage_name.c_str (), DMGL_ANSI);
+  if (!demangled)
+    {
+      if (cuda_host_shadow_debug)
+	cuda_trace ("shadow: failed to demangle %s", linkage_name.c_str ());
+      return false;
+    }
+
   std::string demangled_str {demangled.get ()};
+
+  if (cuda_host_shadow_debug)
+    cuda_trace ("shadow: checking %s in %s", linkage_name.c_str (), demangled_str.c_str ());
+
   /* Find the first instance of find */
   auto pos = demangled_str.find (find);
   if (pos == std::string::npos)
-    return std::string {};
-  /* return a substring past find */
-  pos += len;
-  return demangled_str.substr (pos);
+    {
+      if (cuda_host_shadow_debug)
+	cuda_trace ("shadow: failed to find %s in %s", find, demangled_str.c_str ());
+      return false;
+    }
+
+  // Return the mangled kernel name extracted from the linkage_name
+  mangled_name = demangled_str.substr (pos + len);
+
+  // Try to demangle again to get the bare name
+  auto demangled2 = language_demangle (language_def (language_cplus), mangled_name.c_str (), DMGL_ANSI);
+  if (demangled2)
+    bare_name = demangled2.get ();
+
+  if (cuda_host_shadow_debug)
+    cuda_trace ("shadow: bare %s mangled %s",
+		bare_name.c_str (), mangled_name.c_str ());
+
+  return true;
 }
 
 /* Search the given objfile to find host shadow functions.
@@ -3262,27 +3311,65 @@ cuda_find_objfile_host_shadow_minsyms (struct objfile *objfile,
 				       std::vector<std::string>& cuda_device_stubs)
 {
   if (cuda_host_shadow_debug)
-    cuda_trace ("host shadow scanning %s", objfile->original_name);
+    cuda_trace ("shadow: scanning %s", objfile->original_name);
 
   for (auto msymbol : objfile->msymbols ())
     {
-      auto symbol_name = cuda_is_kernel_launch_stub (msymbol->linkage_name ());
-      if (!symbol_name.empty ())
+      auto linkage_name = msymbol->linkage_name ();
+      gdb_assert (linkage_name);
+
+      std::string bare_name;
+      std::string mangled_name;
+      auto has_symbol_name = cuda_is_kernel_launch_stub (linkage_name,
+							 bare_name,
+							 mangled_name);
+      if (has_symbol_name)
 	{
 	  if (cuda_host_shadow_debug)
-	    cuda_trace ("host shadow minsym '%s' demangled '%s'",
-			msymbol->linkage_name (), symbol_name.c_str ());
+	    cuda_trace ("shadow: update minsym '%s' bare '%s' mangled '%s'",
+			msymbol->linkage_name (),
+			bare_name.c_str (),
+			mangled_name.c_str ());
 
-	  auto shadow_minsym = lookup_minimal_symbol_text (symbol_name.c_str (), objfile);
-	  if (shadow_minsym.minsym && !shadow_minsym.minsym->cuda_host_shadow_checked)
+	  if (msymbol && !msymbol->cuda_host_shadow_checked)
 	    {
-	      shadow_minsym.minsym->cuda_host_shadow = 1;
-	      if (cuda_host_shadow_debug)
-		cuda_trace ("host shadow minsym found %s", symbol_name.c_str ());
-	      /* Only check the minsym once once */
-	      shadow_minsym.minsym->cuda_host_shadow_checked = 1;
+	      msymbol->cuda_host_shadow = 1;
+	      msymbol->cuda_host_shadow_checked = 1;
+	    }	  
+
+	  if (!mangled_name.empty ())
+	    {
+	      auto mangled_minsym = lookup_minimal_symbol_text (mangled_name.c_str (), objfile);
+	      if (mangled_minsym.minsym)
+		{
+		  if (!mangled_minsym.minsym->cuda_host_shadow_checked)
+		    {
+		      mangled_minsym.minsym->cuda_host_shadow = 1;
+		      if (cuda_host_shadow_debug)
+			cuda_trace ("shadow: host mangled minsym found %s", mangled_name.c_str ());
+		      // Only check the minsym once
+		      mangled_minsym.minsym->cuda_host_shadow_checked = 1;
+		    }
+		}
+	      cuda_device_stubs.push_back (mangled_name);
 	    }
-	  cuda_device_stubs.push_back (std::move (symbol_name));
+
+	  if (!bare_name.empty ())
+	    {
+	      auto bare_minsym = lookup_minimal_symbol_text (bare_name.c_str (), objfile);
+	      if (bare_minsym.minsym)
+		{
+		  if (!bare_minsym.minsym->cuda_host_shadow_checked)
+		    {
+		      bare_minsym.minsym->cuda_host_shadow = 1;
+		      if (cuda_host_shadow_debug)
+			cuda_trace ("shadow: host bare minsym found %s", bare_name.c_str ());
+		      /* Only check the minsym once once */
+		      bare_minsym.minsym->cuda_host_shadow_checked = 1;
+		    }
+		}
+	      cuda_device_stubs.push_back (bare_name);
+	    }
 	}
     }
 }
@@ -3293,7 +3380,7 @@ void
 cuda_find_objfile_host_shadow_functions (struct objfile *objfile)
 {
   if (cuda_host_shadow_debug > 1)
-    cuda_trace ("host shadow checking %s", objfile->original_name);
+    cuda_trace ("shadow: checking objfile %s", objfile->original_name);
 
   /* If we've alreasdy scanned, we're done */
   if (objfile->cuda_host_shadow_scan_complete)
@@ -3309,6 +3396,8 @@ cuda_find_objfile_host_shadow_functions (struct objfile *objfile)
   /* If no matching minsyms were found, we're done scanning this objfile */
   if (!cuda_device_stubs.size ())
     {
+      if (cuda_host_shadow_debug)
+	cuda_trace ("shadow: no cuda_device_stubs");
       objfile->cuda_host_shadow_scan_complete = true;
       return;
     }
@@ -3317,7 +3406,7 @@ cuda_find_objfile_host_shadow_functions (struct objfile *objfile)
   objfile->cuda_host_shadow_found = true;
 
   if (cuda_host_shadow_debug)
-    cuda_trace ("processing host shadow queue %d", (int)cuda_device_stubs.size ());
+    cuda_trace ("shadow: processing host queue %d", (int)cuda_device_stubs.size ());
 
   bool all_symbols_found = true;
   for (auto& host_shadow_name : cuda_device_stubs)
@@ -3327,14 +3416,14 @@ cuda_find_objfile_host_shadow_functions (struct objfile *objfile)
 	{
 	  host_shadow_sym.symbol->cuda_host_shadow = 1;
 	  if (cuda_host_shadow_debug)
-	    cuda_trace ("cuda host shadow symbol %s", host_shadow_name.c_str());
+	    cuda_trace ("shadow: cuda host symbol %s", host_shadow_name.c_str());
 	  continue;
 	}
       else
 	{
 	  all_symbols_found = false;
 	  if (cuda_host_shadow_debug)
-	    cuda_trace ("cuda host shadow symbol %s not found", host_shadow_name.c_str());
+	    cuda_trace ("shadow: cuda host symbol %s not found", host_shadow_name.c_str());
 	}
     }
 

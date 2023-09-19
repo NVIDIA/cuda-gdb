@@ -175,6 +175,9 @@ typedef enum {
     CUDBGAPIREQ_getClusterDim,
     CUDBGAPIREQ_readWarpState,
     CUDBGAPIREQ_readClusterIdx,
+
+    /* 12.2 extensions */
+    CUDBGAPIREQ_getErrorStringEx,
 } CUDBGAPIREQ_t;
 
 typedef enum {

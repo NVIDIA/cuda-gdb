@@ -21,6 +21,7 @@
 #include "gdbcore.h"
 #include "remote.h"
 
+#include "cuda/cuda-version.h"
 #include "cuda-api.h"
 #include "cuda-options.h"
 #include "cuda-tdep.h"
@@ -38,9 +39,9 @@
 #include <tuple>
 #include <unordered_map>
 
-
+/* Globals */
 cuda_debugapi cuda_debugapi::m_debugapi {};
-
+extern cuda_api_version cuda_backend_api_version;
 
 std::size_t coordinates::key (uint32_t extra) const noexcept
 {
@@ -83,14 +84,16 @@ void
 cuda_debugapi::cuda_api_error(CUDBGResult res, const char *fmt, ...)
 {
   va_list args;
-  char errStr[512];
+  char errStr[cuda_debugapi::ErrorStringMaxLength] = {0};
+  char errStrEx[cuda_debugapi::ErrorStringExMaxLength] = {0};
 
   va_start (args, fmt);
   vsnprintf (errStr, sizeof(errStr), fmt, args);
   va_end (args);
 
-  throw_error (GENERIC_ERROR, "Error: %s, error=%s(0x%x).\n",
-               errStr, cudbgGetErrorString(res), res);
+  cuda_api_get_error_string_ex(errStrEx, sizeof(errStrEx), nullptr);
+  throw_error (GENERIC_ERROR, "Error: %s, error=%s(0x%x), error message=%s.\n",
+               errStr, cudbgGetErrorString(res), res, errStrEx);
 }
 
 
@@ -118,8 +121,11 @@ cuda_debugapi::cuda_devsmwpln_api_error(const char *msg, uint32_t dev, uint32_t 
 void
 cuda_debugapi::cuda_api_print_api_call_result (int res)
 {
-  if (res != CUDBG_SUCCESS)
-    cuda_api_trace ("API call received result: %s(0x%x)", cudbgGetErrorString((CUDBGResult) res), res);
+  if (res != CUDBG_SUCCESS) {
+    char errStrEx[cuda_debugapi::ErrorStringExMaxLength] = {0};
+    get_error_string_ex(errStrEx, sizeof(errStrEx), nullptr);
+    cuda_api_trace ("API call received result: %s(0x%x), error message=%s", cudbgGetErrorString((CUDBGResult) res), res, errStrEx);
+  }
 }
 
 
@@ -165,6 +171,7 @@ cuda_debugapi::initialize ()
 
   /* Save the inferior_ptid that we are initializing. */
   m_api_ptid = cuda_gdb_get_tid_or_pid (inferior_ptid);
+  // TODO: get the minor, major, and revision
   CUDBGResult res = m_cudbgAPI->initialize ();
   cuda_api_print_api_call_result (res);
   cuda_api_handle_initialization_error (res);
@@ -286,8 +293,11 @@ cuda_api_trace (const char *fmt, ...)
 static void
 cuda_api_print_api_call_result (int res)
 {
+  char errStrEx[cuda_debugapi::ErrorStringExMaxLength] = {0};
+  cuda_api_get_error_string_ex(errStrEx, sizeof(errStrEx), nullptr);
   if (res != CUDBG_SUCCESS)
-    cuda_api_trace ("API call received result: %s(0x%x)", cudbgGetErrorString((CUDBGResult) res), res);
+    cuda_api_trace ("API call received result: %s(0x%x), error message=%s",
+                    cudbgGetErrorString((CUDBGResult) res), res, errStrEx);
 }
 
 static void cuda_api_error(CUDBGResult, const char *, ...) ATTRIBUTE_PRINTF (2, 3);
@@ -296,14 +306,16 @@ static void
 cuda_api_error(CUDBGResult res, const char *fmt, ...)
 {
   va_list args;
-  char errStr[512];
+  char errStr[cuda_debugapi::cuda_debugapi::ErrorStringMaxLength] = {0};
+  char errStrEx[cuda_debugapi::ErrorStringExMaxLength] = {0};
 
   va_start (args, fmt);
   vsnprintf (errStr,sizeof(errStr), fmt, args);
   va_end (args);
 
-  throw_error (GENERIC_ERROR, "Error: %s, error=%s(0x%x).\n",
-               errStr, cudbgGetErrorString(res), res);
+  cuda_api_get_error_string_ex(errStrEx, sizeof(errStrEx), nullptr);
+  throw_error (GENERIC_ERROR, "Error: %s, error=%s(0x%x), error message=%s.\n",
+               errStr, cudbgGetErrorString(res), res, errStrEx);
 }
 
 cuda_debugapi::cuda_debugapi ()
@@ -2447,3 +2459,30 @@ void cuda_api_get_loaded_function_info (uint32_t dev, uint64_t handle, CUDBGLoad
   cuda_debugapi::instance ().get_loaded_function_info (dev, handle, info, numEntries);
 }
 #endif
+
+void
+cuda_debugapi::get_error_string_ex (char *buf, uint32_t bufSz, uint32_t *msgSz)
+{
+  if (get_state () != CUDA_API_STATE_INITIALIZED)
+    return;
+
+  if (cuda_backend_api_version.m_revision >= 134)
+    {
+      CUDBGResult res = m_cudbgAPI->getErrorStringEx (buf, bufSz, msgSz);
+      if (res != CUDBG_SUCCESS && res != CUDBG_ERROR_BUFFER_TOO_SMALL && res != CUDBG_ERROR_NOT_SUPPORTED)
+        throw_error (GENERIC_ERROR, "Error: getErrorStringEx, error=%s.\n", cudbgGetErrorString(res));
+    }
+  else
+    {
+      buf[0] = 0;
+      if (msgSz)
+        *msgSz = 0;
+    }
+
+}
+
+void
+cuda_api_get_error_string_ex (char *buf, uint32_t bufSz, uint32_t *msgSz)
+{
+  cuda_debugapi::instance ().get_error_string_ex (buf, bufSz, msgSz);
+}

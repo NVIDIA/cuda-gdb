@@ -28,6 +28,7 @@
 #include "cuda/cuda-options.h"
 #include "cuda/cuda-tdep.h"
 #endif
+#include "cuda/cuda-version.h"
 
 #include <stdio.h>
 #include <signal.h>
@@ -45,6 +46,7 @@ static void cudbg_trace(const char *fmt, ...) ATTRIBUTE_PRINTF(1, 2);
 
 /* Globals */
 extern CUDBGNotifyNewEventCallback cudbgDebugClientCallback;
+extern cuda_api_version cuda_backend_api_version;
 
 static CUDBGResult
 cudbgInitialize(void)
@@ -104,6 +106,9 @@ cudbgInitialize(void)
             CUDBG_IPC_RECEIVE(&revision, &ipc_buf);
         }
     }
+
+    cuda_backend_api_version = cuda_api_version (major, minor, revision);
+
     return result;
 }
 
@@ -2217,6 +2222,42 @@ cudbgReadClusterIdx (uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 *clusterIdx)
     return result;
 }
 
+static CUDBGResult
+cudbgGetErrorStringEx (char *buf, uint32_t buf_size, uint32_t *msg_size)
+{
+    char *ipc_buf;
+    CUDBGResult result;
+    uint32_t err_msg_size;
+
+    CUDBG_IPC_PROFILE_START();
+
+    CUDBG_IPC_BEGIN(CUDBGAPIREQ_getErrorStringEx);
+
+    CUDBG_IPC_REQUEST((void **)&ipc_buf);
+    CUDBG_IPC_RECEIVE(&result, &ipc_buf);
+    /* The err_msg_size could be in range from 0 to a positive number greater than buf_size */
+    CUDBG_IPC_RECEIVE(&err_msg_size, &ipc_buf);
+    /* The array size in the packet equals to the err_msg_size */
+    CUDBG_IPC_RECEIVE_ARRAY(buf, buf_size > err_msg_size ? err_msg_size : buf_size, &ipc_buf);
+
+    if (result != CUDBG_SUCCESS && result != CUDBG_ERROR_BUFFER_TOO_SMALL)
+        err_msg_size = 0;
+
+    if (msg_size)
+        *msg_size = err_msg_size;
+
+    if (buf_size > err_msg_size) {
+        buf[err_msg_size > 0 ? err_msg_size - 1 : 0] = 0;
+    }
+    else {
+        buf[buf_size > 0 ? buf_size - 1 : 0] = 0;
+        ipc_buf += (err_msg_size - buf_size);
+    }
+
+    CUDBG_IPC_PROFILE_END(CUDBGAPIREQ_getErrorStringEx, "getErrorStringEx");
+
+    return result;
+}
 
 static const struct CUDBGAPI_st cudbgCurrentApi={
     /* Initialization */
@@ -2391,6 +2432,9 @@ static const struct CUDBGAPI_st cudbgCurrentApi={
     cudbgGetClusterDim,
     cudbgReadWarpState,
     cudbgReadClusterIdx,
+
+    /* 12.2 Extensions */
+    cudbgGetErrorStringEx,
 };
 
 CUDBGResult

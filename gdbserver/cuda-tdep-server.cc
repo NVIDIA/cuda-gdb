@@ -66,6 +66,7 @@ struct cuda_sym cuda_symbol_list[] =
   CUDA_SYM(CUDBG_ENABLE_PREEMPTION_DEBUGGING),
   /* This symbol is not exposed through cudadebugger.h yet */
   CUDA_SYM(cudbgInjectionPath),
+  CUDA_SYM(CUDBG_DEBUGGER_CAPABILITIES),
 };
 
 CUDBGAPI cudbgAPI = NULL;
@@ -551,6 +552,22 @@ cuda_initialize_target (void)
   write_memory (sessionIdAddr, (unsigned char*)&sessionId, sizeof(sessionId));
   write_memory (preemptionAddr, cuda_options_software_preemption () ? &one : &zero, 1);
   write_memory (launchblockingAddr, cuda_options_launch_blocking () ? &one : &zero, 1);
+
+  /* We may be compiling against an older version of cudadebugger.h,
+     so guard this code with #if checks. */
+#if CUDBG_API_VERSION_REVISION >= 132
+  CORE_ADDR capability_addr = cuda_get_symbol_address_from_cache (_STRING_(CUDBG_DEBUGGER_CAPABILITIES));
+  if (capability_addr)
+    {
+      uint32_t capabilities = CUDBG_DEBUGGER_CAPABILITY_NONE;
+
+      cuda_trace ("requesting CUDA lazy function loading support\n");
+      capabilities |= CUDBG_DEBUGGER_CAPABILITY_LAZY_FUNCTION_LOADING;
+
+      write_memory (capability_addr, (const gdb_byte *)&capabilities, sizeof (capabilities));
+    }
+#endif
+
   inferior_in_debug_mode = true;
   return true;
 }

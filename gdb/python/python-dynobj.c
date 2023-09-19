@@ -109,7 +109,11 @@ int	   (*gdbpy_PyBytes_AsStringAndSize) (PyObject *obj, char **buffer, Py_ssize_
 #endif
 
 #ifdef IS_PY3K
+#if (PY_MAJOR_VERSION == 3) && (PY_MINOR_VERSION == 6)
 void (*gdbpy_SetProgramName) (wchar_t *) = NULL;
+#else
+void (*gdbpy_SetProgramName) (const wchar_t *) = NULL;
+#endif
 #else
 void (*gdbpy_SetProgramName) (char *) = NULL;
 #endif
@@ -278,7 +282,11 @@ static void (*gdb_Py_Finalize) (void) = NULL;
 static void (*gdb_Py_Initialize) (void) = NULL;
 #ifdef IS_PY3K
 static PyObject * (*gdb_PyModule_Create2)(PyModuleDef *, int) = NULL;
+#if (PY_MAJOR_VERSION == 3) && (PY_MINOR_VERSION == 6)
 static void (*gdb_Py_SetProgramName) (wchar_t *) = NULL;
+#else
+static void (*gdb_Py_SetProgramName) (const wchar_t *) = NULL;
+#endif
 #else
 static void (*gdb_Py_SetProgramName) (char *) = NULL;
 static int (*gdb_Py_FlushLine) (void) = NULL;
@@ -303,157 +311,143 @@ static PyObject* (*gdb_PyUnicode_AsASCIIString)(PyObject *uni) = NULL;
 #endif
 static void (*gdb_PyBuffer_Release) (Py_buffer *buf) = NULL;
 
-#ifdef IS_PY3K
+#if (PY_MAJOR_VERSION > 3) || ((PY_MAJOR_VERSION == 3) && (PY_MINOR_VERSION >= 8))
+static int (*gdbpy_PyObject_CheckBuffer) (PyObject *arg1) = nullptr;
+
+static void (*gdbpy_Py_Dealloc) (PyObject *arg1);
+#endif
+
+/* Allow user to disable dlopen of python. */
+bool cuda_disable_python = false;
+
+/* Name of the library we were able to find/dlopen */
+std::string libpython_full_name;
+
+static std::string python_internal_error {};
+
+const char *
+get_python_init_error ()
+{
+  if (python_internal_error.length() == 0)
+    return nullptr;
+  return python_internal_error.c_str();
+}
+
 /* base libpython name */
-static const std::string libpython3_base = "libpython";
+static const std::string libpython_base = "libpython";
 
 /* Possible PEP-3149 flag names */
-static const std::vector<std::string> libpython3_flags = {
-  "", "d", "m", "u",
+static const std::vector<std::string> libpython_flags = {
+  "",
+  "d", "m", "u",
   "dm", "du", "mu",
   "dmu"
 };
 
 /* Possible soname endings */
-static const std::vector<std::string> libpython3_end = {
+static const std::vector<std::string> libpython_endings = {
   ".so", ".so.1", ".so.1.0"
 };
 
-static const char py_vers_error[] = "Unable to determine python3 interpreter version. Python integration disabled.";
-static std::string python_internal_error{};
-#endif
+/* Scans through the know list of PEP-3149 flags looking for
+ * a libpython*.so* file based on the passed in libname.
+ * return nullptr if none of the derived library names are found.
+ * If the library is found, save it's name for later printing.
+ */
+static void *
+load_libpython (const std::string& libname)
+{
+  libpython_full_name.clear ();
 
-const char *
-get_python_init_error (void) {
-#ifdef IS_PY3K
-  if (python_internal_error.length() == 0)
-    return nullptr;
-  return python_internal_error.c_str();
-#else
+  /* Start with the possible flags. We also include the empty string here. */
+  for (const auto& it : libpython_flags)
+    {
+      const auto fname = libname + it;
+      /* Add each possible ending - This is probably overkill. */
+      for (const auto& it2 : libpython_endings)
+	{
+	  const auto qualified_name = fname + it2;
+	  void *handle = dlopen (qualified_name.c_str (), RTLD_NOW | RTLD_GLOBAL);
+	  /* Return the handle if we were able to open the library */
+	  if (handle)
+	    {
+	      libpython_full_name = qualified_name;
+	      return handle;
+	    }
+	}
+    }
   return nullptr;
-#endif
 }
 
-/* Allow user to disable dlopen of python. */
-bool cuda_disable_python = false;
+void
+python_print_library ()
+{
+  static bool libpython_name_printed = false;
+
+  if (libpython_handle && !libpython_name_printed)
+    {
+      extern std::string libpython_full_name;
+      printf_unfiltered ("Using python library %s\n", libpython_full_name.c_str ());
+      libpython_name_printed = true;
+    }
+}
 
 bool
-is_python_available (void) {
+is_python_available (void)
+{
   /* Check to see if python is explicitly disabled via command line. */
   if (cuda_disable_python)
     return false;
 
-#ifndef IS_PY3K
-  int i;
-  static const char *libpython_names[] = {
-#if HAVE_LIBPYTHON2_4
-                     "libpython2.4.so.1.0", "libpython2.4.so.1",
-#elif !defined(__APPLE__)
-                     "libpython2.7.so.1.0", "libpython2.7.so.1",
-                     "libpython2.6.so.1.0", "libpython2.6.so.1",
-                     "libpython2.5.so.1.0", "libpython2.5.so.1",
-#else
-                     "libpython2.7.dylib",
-                     "Python.framework/Versions/2.7/Python",
-                     "/System/Library/Frameworks/Python.framework/Versions/2.7/Python",
-#endif
-                     NULL };
-#endif
-
   if (python_initialized)
     return libpython_handle != NULL;
 
-#if IS_PY3K
-  /* Determine the python version by calling out to python3 */
-  FILE *py_vers_file = popen ("python3 -V 2> /dev/null", "r");
-  if (!py_vers_file)
-    {
-      python_initialized = true;
-      python_internal_error = py_vers_error;
-      return false;
-    }
-  /* Cleanup for me please. */
-  auto cleanup = make_scope_exit ([&] ()
-    {
-      pclose (py_vers_file);
-    });
+  python_initialized = true;
 
-  /* Read the version string */
-  char py_vers_buf[BUFSIZ] = {};
-  if (!fgets (py_vers_buf, BUFSIZ, py_vers_file))
+#if PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION == 6
+  // Special hack for python3.6 to search for
+  // "compatible enough" later minor versions if 3.6
+  // can't be found. We know 3.10 is incompatible, so
+  // stop at 3.9
+  std::string libpython_name;
+  const auto major = std::to_string (PY_MAJOR_VERSION);
+  for (auto minor = PY_MINOR_VERSION; minor <= 9; ++minor)
     {
-      python_initialized = true;
-      python_internal_error = py_vers_error;
-      return false;
-    }
-
-  /* Capture the major.minor version we are interested in and get the key string. */
-  const std::string py_vers_str{py_vers_buf};
-  const std::regex py_vers_regex{"Python ([0-9]+\\.[0-9]+)"};
-  std::smatch py_vers_match;
-  std::string py_vers;
-  if (std::regex_search (py_vers_str.begin(), py_vers_str.end(), py_vers_match, py_vers_regex) && 
-      py_vers_match.size() == 2)
-    {
-      /* First result is the entire string, we want the second one. */
-      auto sub_match = py_vers_match[1];
-      py_vers = sub_match.str();
-    }
-  else
-    {
-      /* Failed to parse the version. */
-      python_initialized = true;
-      python_internal_error = py_vers_error;
-      return false;
-    }
-
-  /* Try to dlopen the appropraite libraries based on the python interpreter version.
-   * We will construct the possible libpython name from parts. */
-  const auto libpython3_libname = libpython3_base + py_vers;
-  /* Start with the possible flags. We also include the empty string here. */
-  for ( const auto& it : libpython3_flags )
-    {
-      const auto fname = libpython3_libname + it;
-      /* Add each possible ending - This is probably overkill. */
-      for ( const auto& it2 : libpython3_end )
-	{
-	  const auto full_name = fname + it2;
-	  libpython_handle = dlopen (full_name.c_str(), RTLD_NOW | RTLD_GLOBAL);
-	  /* Short circuit if we dlopened it. */
-	  if (libpython_handle)
-	    break;
-	}
-      /* Final short circuit if we found the library. */
+      const auto name = libpython_base + major + "." + std::to_string (minor);
+      libpython_handle = load_libpython (name);
       if (libpython_handle)
-	break;
+	{
+	  libpython_name = name;
+	  break;
+	}
     }
-  /* If we didn't find a library - try to dlopen libpython3.so as a final check. This exists on some distros. */
-  if (libpython_handle == NULL)
-    libpython_handle = dlopen ("libpython3.so", RTLD_NOW | RTLD_GLOBAL);
-#else
-  /* Python 2 tries to dlopen everything - not a good idea but python2 support has been removed from cuda-gdb. */
-  for ( i = 0; libpython_names[i] && !libpython_handle ; ++i)
-    libpython_handle = dlopen ( libpython_names[i], RTLD_NOW | RTLD_GLOBAL);
+
+  // Print the not-found message for the version we compiled with
+  if (!libpython_handle)
+    libpython_name = libpython_base + major + "." + std::to_string (PY_MINOR_VERSION);
+#else    
+
+  // Only check for the python we built against
+  const auto major = std::to_string (PY_MAJOR_VERSION);
+  const auto minor = std::to_string (PY_MINOR_VERSION);
+  auto libpython_name = libpython_base + major + "." + minor;
+  libpython_handle = load_libpython (libpython_name);
+
 #endif
 
-  python_initialized = true;
   if (!libpython_handle)
     {
-#if IS_PY3K
-      /* Failed to locate a matching libpython for the python3 interpreter. */
-      python_internal_error = std::string{"Unable to locate matching libpython"} + py_vers + \
-			      std::string{" for the installed python3 interpreter. Python integration disabled."};
-#endif
+      /* Failed to locate a compatible libpython. */
+      python_internal_error = std::string{"Unable to locate compatible " + libpython_name + " library. Python integration disabled."};
       return false;
     }
 
-#define RESOLVE_AND_CHECK(varname,type,symname)			\
-  varname = (type) dlsym (libpython_handle, symname);	\
-  if (!varname)							\
-    {								\
-      fprintf (stderr, "Symbol %s could not be found"		\
-	       " in python library!\n", symname);		\
-      goto err_out;						\
+#define RESOLVE_AND_CHECK(varname, type, symname)				\
+  varname = (type) dlsym (libpython_handle, symname);			\
+  if (!varname)								\
+    {									\
+      python_internal_error = "Failed to find " symname " in " + libpython_full_name; \
+      goto err_out;							\
     }
 
   /* Resolve types and exceptions */
@@ -519,6 +513,11 @@ is_python_available (void) {
   RESOLVE_AND_CHECK(gdbpy_StringFromFormat, PyObject * (*)  (const char *, ...), "PyString_FromFormat");
 #endif
 
+#if (PY_MAJOR_VERSION > 3) || ((PY_MAJOR_VERSION == 3) && (PY_MINOR_VERSION >= 8))
+  RESOLVE_AND_CHECK(gdbpy_Py_Dealloc, void (*) (PyObject *arg1), "_Py_Dealloc");;
+  RESOLVE_AND_CHECK(gdbpy_PyObject_CheckBuffer, int (*) (PyObject *arg1), "PyObject_CheckBuffer");
+#endif
+
 #define RESOLVE(varname,type,symname)				\
   varname = (type) dlsym (libpython_handle, symname);
 
@@ -552,7 +551,12 @@ is_python_available (void) {
   RESOLVE(gdb_PyBytes_FromString, PyObject * (*) (const char *), "PyBytes_FromString");
   RESOLVE(gdb_PyMemoryView_FromObject, PyObject * (*) (PyObject *), "PyMemoryView_FromObject");
   RESOLVE(gdbpy_PySlice_GetIndicesEx, int (*) (PyObject *slice, Py_ssize_t length, Py_ssize_t *start, Py_ssize_t *stop, Py_ssize_t *step, Py_ssize_t *slicelength), "PySlice_GetIndiciesEx");
+#if (PY_MAJOR_VERSION == 3) && (PY_MINOR_VERSION == 6)
   RESOLVE(gdbpy_SetProgramName, void (*) (wchar_t *), "Py_SetProgramName");
+#else
+  // Note this is deprecated in python3.11
+  RESOLVE(gdbpy_SetProgramName, void (*) (const wchar_t *), "Py_SetProgramName");
+#endif
 #else
   RESOLVE(gdbpy_PyBuffer_FromObject, PyObject * (*) (PyObject *, Py_ssize_t offset, Py_ssize_t size), "PyBuffer_FromObject");
   RESOLVE(gdbpy_PySlice_GetIndicesEx, int (*) (PySliceObject *slice, Py_ssize_t length, Py_ssize_t *start, Py_ssize_t *stop, Py_ssize_t *step, Py_ssize_t *slicelength), "PySlice_GetIndiciesEx");
@@ -695,7 +699,11 @@ is_python_available (void) {
   RESOLVE(gdb_PyObject_Call, PyObject * (*) (PyObject *callable_object, PyObject *args, PyObject *kw), "PyObject_Call");
   RESOLVE(gdb_PyObject_CallObject, PyObject * (*) (PyObject *callable_object, PyObject *args), "PyObject_CallObject");
 #ifdef IS_PY3K
+#if (PY_MAJOR_VERSION == 3) && (PY_MINOR_VERSION == 6)
   RESOLVE(gdb_Py_SetProgramName, void (*) (wchar_t *), "Py_SetProgramName");
+#else
+  RESOLVE(gdb_Py_SetProgramName, void (*) (const wchar_t *), "Py_SetProgramName");
+#endif
 #else
   RESOLVE(gdb_Py_SetProgramName, void (*) (char *), "Py_SetProgramName");
   RESOLVE(gdb_Py_FlushLine, int (*) (void), "Py_FlushLine");
@@ -725,6 +733,7 @@ is_python_available (void) {
 #endif
 #endif
   RESOLVE(gdb_Py_DontWriteBytecodeFlag, int *, "Py_DontWriteBytecodeFlag");
+
   return true;
 err_out:
   dlclose (libpython_handle);
@@ -960,7 +969,11 @@ PYWRAPPER_ARG2(int, PyType_IsSubtype, PyTypeObject *, PyTypeObject *)
 PYWRAPPER_ARG1(int, PyType_Ready, PyTypeObject *)
 PYWRAPPERVOID(Py_Finalize)
 #ifdef IS_PY3K
+#if (PY_MAJOR_VERSION == 3) && (PY_MINOR_VERSION == 6)
 PYWRAPPERVOID_ARG1(Py_SetProgramName, wchar_t *)
+#else
+PYWRAPPERVOID_ARG1(Py_SetProgramName, const wchar_t *)
+#endif
 #else
 PYWRAPPERVOID_ARG1(Py_SetProgramName, char *)
 PYWRAPPER(int, Py_FlushLine)
@@ -994,7 +1007,7 @@ Py_Initialize(void)
 {
   if (!is_python_available () || gdb_Py_Initialize == NULL)
     {
-        warning ("%s: called while Python is not available!", __FUNCTION__);
+      warning ("%s: called while Python is not available!", __FUNCTION__);
       return;
     }
   if (gdb_Py_DontWriteBytecodeFlag != NULL)
@@ -1055,6 +1068,30 @@ PyImport_AppendInittab(const char *name, PyObject *(*initfunc)(void))
       return -1;
     }
   return gdb_PyImport_AppendInittab(name, initfunc);
+}
+#endif
+
+#if (PY_MAJOR_VERSION > 3) || ((PY_MAJOR_VERSION == 3) && (PY_MINOR_VERSION >= 8))
+void
+_Py_Dealloc (PyObject *arg1)
+{
+  if (!is_python_available () || gdbpy_Py_Dealloc == nullptr)
+    {
+      warning ("%s: called while Python is not available!", __FUNCTION__);
+      return;
+    }
+  gdbpy_Py_Dealloc (arg1);
+}
+
+int
+PyObject_CheckBuffer (PyObject *arg1)
+{
+  if (!is_python_available () || gdbpy_PyObject_CheckBuffer == nullptr)
+    {
+      warning ("%s: called while Python is not available!", __FUNCTION__);
+      return 0;
+    }
+  return gdbpy_PyObject_CheckBuffer (arg1);
 }
 #endif
 

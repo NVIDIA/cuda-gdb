@@ -101,6 +101,9 @@ struct cuda_api_warpmask_t {
 class cuda_debugapi final
 {
 public:
+  static constexpr size_t ErrorStringMaxLength = 512;
+  static constexpr size_t ErrorStringExMaxLength = 4096;
+
   cuda_debugapi ();
   ~cuda_debugapi () = default;
 
@@ -231,6 +234,9 @@ public:
 #if CUDBG_API_VERSION_REVISION >= 132
   void get_loaded_function_info (uint32_t dev, uint64_t handle, CUDBGLoadedFunctionInfo *info, uint32_t numEntries);
 #endif
+
+  /* Error string */
+  void get_error_string_ex (char *buf, uint32_t bufSz, uint32_t *msgSz);
   
 private:
   // This function needs updating whenever a new cache map is added.
@@ -395,6 +401,11 @@ void cuda_api_set_kernel_launch_notification_mode (CUDBGKernelLaunchNotifyMode m
 #if CUDBG_API_VERSION_REVISION >= 132
 /* Lazy function loading */
 void cuda_api_get_loaded_function_info (uint32_t dev, uint64_t handle, CUDBGLoadedFunctionInfo *info, uint32_t numEntries);
+#endif
+
+#if CUDBG_API_VERSION_REVISION >= 134
+/* Error string */
+void cuda_api_get_error_string_ex (char *buf, uint32_t bufSz, uint32_t *msgSz);
 #endif
 
 #endif

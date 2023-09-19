@@ -19,7 +19,18 @@
 #ifndef _CUDA_MODULES_H
 #define _CUDA_MODULES_H 1
 
+#include "defs.h"
 #include "cuda-defs.h"
+
+class cuda_disassembler;
+
+struct module_st {
+  uint64_t           module_id;            /* the CUmodule handle */
+  context_t          context;              /* the parent context state */
+  elf_image_t        elf_image;            /* the ELF image object for the module */
+  module_t           next;                 /* next module in the list */
+  cuda_disassembler* disassembler;         /* the disassembler for this module */
+};
 
 module_t    module_new    (context_t context, uint64_t module_id,
                            void *elf_image, uint64_t elf_image_size);

@@ -1622,6 +1622,19 @@ DEF_API_CALL(readClusterIdx)(uint32_t dev, uint32_t sm, uint32_t wp,
 	return CUDBG_SUCCESS;
 }
 
+DEF_API_CALL(getErrorStringEx)(char *buf, uint32_t bufSz, uint32_t *msgSz)
+{
+	TRACE_FUNC("buf=%p bufSz=%u msgSz=%p", buf, bufSz, msgSz);
+
+	if (buf && bufSz)
+		buf[0] = 0;
+
+	if (msgSz)
+		*msgSz = 1;
+
+	return CUDBG_SUCCESS;
+}
+
 static const struct CUDBGAPI_st cudbgCoreApi = {
     /* Initialization */
     API_CALL(doNothing),
@@ -1794,6 +1807,9 @@ static const struct CUDBGAPI_st cudbgCoreApi = {
     API_CALL(getClusterDim),
     API_CALL(readWarpState),
     API_CALL(readClusterIdx),
+
+    /* 12.2 Extensions */
+    API_CALL(getErrorStringEx),
 };
 
 CUDBGAPI cuCoreGetApi(CudaCore *cc)

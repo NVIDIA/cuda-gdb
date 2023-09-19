@@ -22136,36 +22136,20 @@ new_symbol (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 
       /* Cache this symbol's name and the name's demangled form (if any).  */
       sym->set_language (cu->per_cu->lang, &objfile->objfile_obstack);
-#ifdef NVIDIA_CUDA_GDB
-      /* CUDA - DW_AT_name hack for nvcc. This is emitted as a mangled name. */
-      const char *cuda_old_name = NULL;
-      if (die->tag == DW_TAG_subprogram &&
-          cuda_is_bfd_cuda (cu->per_objfile->objfile->obfd) &&
-	  cu->per_cu->lang == language_cplus)
-        {
-	  char *cuda_demangled = cplus_demangle (name, /*DMGL_PARAMS |*/ DMGL_ANSI | DMGL_VERBOSE);
-	  if (cuda_demangled)
-	    {
-	      cuda_old_name = name;
-	      name = cuda_demangled;
-	    }
-        }
-#endif
       /* Fortran does not have mangling standard and the mangling does differ
 	 between gfortran, iFort etc.  */
       const char *physname
 	= (cu->per_cu->lang == language_fortran
 	   ? dwarf2_full_name (name, die, cu)
 	   : dwarf2_physname (name, die, cu));
-#ifdef NVIDIA_CUDA_GDB
-      /* CUDA - restore name */
-      if (cuda_old_name)
-	name = cuda_old_name;
-#endif
       const char *linkagename = dw2_linkage_name (die, cu);
 
       if (linkagename == nullptr || cu->per_cu->lang == language_ada)
+#ifdef NVIDIA_CUDA_GDB
+	sym->set_linkage_name (name);
+#else
 	sym->set_linkage_name (physname);
+#endif
       else
 	{
 	  sym->set_demangled_name (physname, &objfile->objfile_obstack);
@@ -25052,8 +25036,12 @@ dwarf2_find_containing_comp_unit (sect_offset sect_off,
     {
       if (low == per_bfd->all_comp_units.size () - 1
 	  && sect_off >= this_cu->sect_off + this_cu->length)
+#ifdef NVIDIA_CUDA_GDB
+	complaint (_("invalid dwarf2 offset %s"), sect_offset_str (sect_off));
+#else
 	error (_("invalid dwarf2 offset %s"), sect_offset_str (sect_off));
       gdb_assert (sect_off < this_cu->sect_off + this_cu->length);
+#endif
       return this_cu;
     }
 }

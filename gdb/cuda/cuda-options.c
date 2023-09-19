@@ -115,6 +115,7 @@ static struct {
   {"breakpoint", CUDA_TRACE_BREAKPOINT, "show/hide CUDA-specific breakpoint handling trace messages"},
   {"api", CUDA_TRACE_API, "show/hide CUDA Debugger API trace messages"},
   {"siginfo", CUDA_TRACE_SIGINFO, "When enabled, update $_siginfo if the application is signalled by a CUDA exception"},
+  {"disasm", CUDA_TRACE_DISASSEMBLER, "When enabled trace GPU disassembly operations"},
   {NULL, (cuda_trace_domain_t) 0, NULL},
 };
 

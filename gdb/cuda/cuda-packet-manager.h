@@ -69,6 +69,7 @@ typedef enum {
     GET_GRID_INFO,
     GET_ADJUSTED_CODE_ADDRESS,
     GET_HOST_ADDR_FROM_DEVICE_ADDR,
+    GET_ERROR_STRING_EX,
 
     /* notification */
     NOTIFICATION_ANALYZE,

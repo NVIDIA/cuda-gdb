@@ -34,14 +34,18 @@ static uint64_t cuda_coords_distance_physical (cuda_coords_t *c1, cuda_coords_t 
 // set of current coordinates to which to apply the debugger api commands
 static cuda_coords_t current_coords = CUDA_INVALID_COORDS;
 
-/*indicate the current coordinates are _not_ valid */
+/* indicate the current coordinates are _not_ valid */
 void
 cuda_coords_invalidate_current (void)
 {
+  if (current_coords.valid)
+    cuda_trace ("focus changed from %u/%u/%u/%u to invalid",
+		current_coords.dev, current_coords.sm, current_coords.wp, current_coords.ln);
+  else
+    cuda_trace ("focus invalidated");
   current_coords.valid = false;
   current_coords.clusterIdx_p = false;
   current_coords.clusterIdx_valid = false;
-  cuda_trace ("focus set to invalid");
 }
 
 /* Scrub the current coordinates */
@@ -49,27 +53,30 @@ void
 cuda_coords_reset_current (void)
 {
   current_coords = CUDA_INVALID_COORDS;
+  cuda_trace ("focus reset");
 }
 
 static void
-cuda_ensure_cluster_idx (cuda_coords_t *c)
+cuda_read_cluster_idx (cuda_coords_t *c)
 {
-  if (!c->clusterIdx_p)
-  {
-    kernel_t kernel = warp_get_kernel (c->dev, c->sm, c->wp);
-    if (!kernel)
-    {
-      return;
-    }
+  gdb_assert (c != nullptr);
 
-    CuDim3 clusterDim = kernel_get_cluster_dim (kernel);
-    if (clusterDim.x != 0 && clusterDim.y != 0 && clusterDim.z != 0)
+  if (c->valid && !c->clusterIdx_p)
     {
-      c->clusterIdx = warp_get_cluster_idx (c->dev, c->sm, c->wp);
-      c->clusterIdx_valid = true;
+      c->clusterIdx_valid = false;
+      c->clusterIdx = { CUDA_INVALID, CUDA_INVALID, CUDA_INVALID };
+      kernel_t kernel = warp_get_kernel (c->dev, c->sm, c->wp);
+      if (!kernel)
+	return;
+
+      CuDim3 clusterDim = kernel_get_cluster_dim (kernel);
+      if (clusterDim.x != 0 && clusterDim.y != 0 && clusterDim.z != 0)
+	{
+	  c->clusterIdx = warp_get_cluster_idx (c->dev, c->sm, c->wp); 
+	  c->clusterIdx_valid = true;
+	}
+      c->clusterIdx_p = true;
     }
-    c->clusterIdx_p = true;
-  }
 }
 
 bool
@@ -89,6 +96,8 @@ cuda_coords_set_current (cuda_coords_t *c)
   CuDim3 blockIdx;
   CuDim3 threadIdx;
 
+  gdb_assert (c != nullptr);
+  
   if (!c->valid ||
       !device_is_any_context_present (c->dev) ||
       c->sm >= device_get_num_sms (c->dev) ||
@@ -114,7 +123,23 @@ cuda_coords_set_current (cuda_coords_t *c)
       c->threadIdx.z != threadIdx.z)
     return 1;
 
+  if (current_coords.valid)
+    cuda_trace ("focus changed from %u/%u/%u/%u to %u/%u/%u/%u",
+		current_coords.dev, current_coords.sm, current_coords.wp, current_coords.ln,
+		c->dev, c->sm, c->wp, c->ln);
+  else
+    cuda_trace ("focus changed from invalid to %u/%u/%u/%u", c->dev, c->sm, c->wp, c->ln);
+
   current_coords = *c;
+
+  /* Do not re-read the cluster index on focus change. Focus changes
+     happen a lot behind the scenes, and often in a context where
+     we're not in a position to make a debugAPI call. So, just
+     invalidate the fields, and we'll read them in later if/when
+     needed. */
+  current_coords.clusterIdx_p = false;
+  current_coords.clusterIdx_valid = false;
+  current_coords.clusterIdx = { CUDA_INVALID, CUDA_INVALID, CUDA_INVALID };
 
   cuda_trace ("focus set to dev %u sm %u wp %u ln %u "
               "kernel %llu grid %lld, block (%u,%u,%u), thread (%u,%u,%u)",
@@ -136,7 +161,7 @@ cuda_coords_set_current_no_verify (cuda_coords_t *c)
 int
 cuda_coords_set_current_logical (uint64_t kernelId, uint64_t gridId, CuDim3 blockIdx, CuDim3 threadIdx)
 {
-  cuda_coords_t c;
+  cuda_coords_t c = CUDA_INVALID_COORDS;
 
   c.kernelId = kernelId;
   c.gridId = gridId;
@@ -157,7 +182,7 @@ cuda_coords_set_current_logical (uint64_t kernelId, uint64_t gridId, CuDim3 bloc
 int
 cuda_coords_set_current_physical (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln)
 {
-  cuda_coords_t c;
+  cuda_coords_t c = CUDA_INVALID_COORDS;
 
   c.dev = dev;
   c.sm = sm;
@@ -393,7 +418,7 @@ cuda_coords_to_fancy_string (cuda_coords_t *c, char *string, uint32_t size)
       s += sprintf (s, "grid ");
       SPRINTF_COORD (s, c, gridId);
     }
-  if (c->clusterIdx_valid)
+  if (c->clusterIdx_p && c->clusterIdx_valid)
     {
       SPRINTF_SEPARATOR (s, first);
       s += sprintf (s, "cluster (");
@@ -459,129 +484,6 @@ cuda_coords_to_fancy_string (cuda_coords_t *c, char *string, uint32_t size)
 #undef SPRINTF_COORD
 #undef SPRINTF_SEPARATOR
 }
-
-static bool
-pulloff (char **input, unsigned *result, bool last)
-{
-  unsigned n;
-  char *e;
-  char *s = *input;
-
-  if (!s)
-    return true;
-
-  n = strtol (s, &e, 0);
-
-  if (s != e)
-    {
-      s = e;
-      *result = n;
-    }
-
-  while (*s == ' ' || *s == '\t')
-    s++;
-
-  if (*s)
-    {
-      if (last || *s != ',')
-        return false;
-      s++;
-    }
-
-  *input = s;
-
-  return true;
-}
-
-// XXX what about gridId and kernelId? how can the user specify it? If current
-// is set, use the grid from the current coordinates
-void
-cuda_string_to_coords (bool is_mask,
-                       char *block_repr,
-                       char *thread_repr,
-                       cuda_coords_t *current,
-                       cuda_coords_t *mask)
-{
-  cuda_coords_t result;
-  int default_index = is_mask ? -1 : 0;
-
-  if (current)
-    {
-      result.kernelId = current->kernelId;
-      result.gridId = current->gridId;
-
-      if (!block_repr)
-        {
-          /* We're not updating block coords, so keep them
-           * to what they currently are */
-          result.blockIdx.x = current->blockIdx.x;
-          result.blockIdx.y = current->blockIdx.y;
-          result.blockIdx.z = current->blockIdx.z;
-        }
-      else
-        {
-          /* We have current block coords, but we're updating them
-           * so set them to the default before processing */
-          result.blockIdx.x = default_index;
-          result.blockIdx.y = default_index;
-          result.blockIdx.z = default_index;
-        }
-
-      if (!thread_repr)
-        {
-          /* We're not updating thread coords, so keep them
-           * to what they currently are */
-          result.threadIdx.x = current->threadIdx.x;
-          result.threadIdx.y = current->threadIdx.y;
-          result.threadIdx.z = current->threadIdx.z;
-        }
-      else
-        {
-          /* We have current thread coords, but we're updating them
-           * so set them to the default before processing */
-          result.threadIdx.x = default_index;
-          result.threadIdx.y = default_index;
-          result.threadIdx.z = default_index;
-        }
-    }
-  else
-    {
-      /* We have no current coordinates, set all to default */
-      cuda_coords_get_current_logical (&result.kernelId, &result.gridId, NULL, NULL);
-      result.blockIdx.x = default_index;
-      result.blockIdx.y = default_index;
-      result.blockIdx.z = default_index;
-      result.threadIdx.x = default_index;
-      result.threadIdx.y = default_index;
-      result.threadIdx.z = default_index;
-    }
-
-  if (!pulloff (&block_repr,  &result.blockIdx.x, false) ||
-      !pulloff (&block_repr,  &result.blockIdx.y, false) ||
-      !pulloff (&block_repr,  &result.blockIdx.z, true ) ||
-      !pulloff (&thread_repr, &result.threadIdx.x, false) ||
-      !pulloff (&thread_repr, &result.threadIdx.y, false) ||
-      !pulloff (&thread_repr, &result.threadIdx.z, true ))
-    error (_("Error: Error in CUDA block/thread specification."));
-
-  if (is_mask
-      && result.blockIdx.x == -1
-      && result.blockIdx.y == -1
-      && result.blockIdx.z == -1
-      && result.threadIdx.x == -1
-      && result.threadIdx.y == -1
-      && result.threadIdx.z == -1)
-    {
-      mask->valid = false;
-    }
-  else
-    {
-      mask->valid = true;
-      *mask = result;
-      cuda_coords_complete_physical (mask);
-    }
-}
-
 
 /*Given logical coordinates (valid or wild), fill up the physical
    coordinates that can be derived from the logical coordinates. Use
@@ -828,7 +730,7 @@ cuda_coords_find_valid (cuda_coords_t wished, cuda_coords_t found[CK_MAX], cuda_
   gdb_assert (found);
 
   for (kind = 0; kind < CK_MAX; ++kind)
-    found[kind].valid = false;
+    found[kind] = CUDA_INVALID_COORDS;
 
   cuda_coords_initialized_wished_coords (&wished);
   iter = cuda_iterator_create (CUDA_ITERATOR_TYPE_THREADS, &filter,
@@ -914,8 +816,12 @@ void
 cuda_coords_update_current (bool breakpoint_hit /*= false*/)
 {
   int kind;
+  cuda_coords_t coords[CK_MAX];
   cuda_coords_t result = CUDA_INVALID_COORDS;
-  cuda_coords_t coords[CK_MAX] = { CUDA_INVALID_COORDS };
+
+  /* Initialize the coordinate array */
+  for (kind = 0; kind < CK_MAX; ++kind)
+    coords[kind] = CUDA_INVALID_COORDS;
 
   /* first try the previous set of current coordinates (fast). Note,
      current_coords may be invalid at this point. */
@@ -967,11 +873,9 @@ cuda_print_message_focus (bool switching)
   string = (char *) xmalloc (size);
   cuda_coords_get_current (&current);
 
-  /* At the moment we only need the cluster index when we print the coords */
-  if (!current.clusterIdx_p)
-  {
-    cuda_ensure_cluster_idx (&current);
-  }
+  /* For valid coordinates this call will retrieve the clusterIdx info if it hasn't been
+     collected already. */
+  cuda_read_cluster_idx (&current);
 
   cuda_coords_to_fancy_string (&current, string, size);
 
@@ -985,10 +889,10 @@ cuda_print_message_focus (bool switching)
       uiout->field_signed ("lane"      , current.ln);
       uiout->field_signed ("kernel"    , current.kernelId);
       uiout->field_signed ("grid"      , current.gridId);
-      if (current.clusterIdx_valid)
-        {
-          uiout->field_fmt ("clusterIdx", "(%u,%u,%u)", current.clusterIdx.x, current.clusterIdx.y, current.clusterIdx.z);
-        }
+
+      if (current.clusterIdx_p && current.clusterIdx_valid)
+	uiout->field_fmt ("clusterIdx", "(%u,%u,%u)", current.clusterIdx.x, current.clusterIdx.y, current.clusterIdx.z);
+
       uiout->field_fmt ("blockIdx"  , "(%u,%u,%u)", current.blockIdx.x, current.blockIdx.y, current.blockIdx.z);
       uiout->field_fmt ("threadIdx" , "(%u,%u,%u)", current.threadIdx.x, current.threadIdx.y, current.threadIdx.z);
     }

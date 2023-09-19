@@ -20,13 +20,75 @@
 #ifndef _CUDA_ASM_H
 #define _CUDA_ASM_H 1
 
+#include "defs.h"
 #include "cuda-defs.h"
 
-disasm_cache_t disasm_cache_create           (void);
-void           disasm_cache_destroy          (disasm_cache_t disasm_cache);
-void           disasm_cache_flush            (disasm_cache_t disasm_cache);
-const char *   disasm_cache_find_instruction (disasm_cache_t disasm_cache,
-                                              uint64_t pc, uint32_t
-                                              *inst_size);
+#include <regex>
+#include <string>
+#include <unordered_map>
+
+/******************************************************************************
+ *
+ *                             Disassembly Cache
+ *
+ *****************************************************************************/
+
+class cuda_disassembler
+{
+public:
+  cuda_disassembler ();
+  
+  bool disassemble (uint64_t pc, std::string& insn, uint32_t& insn_size);
+
+  void flush_elf_cache (void) { m_elf_map.clear (); }
+  void flush_device_cache (void) { m_device_map.clear (); }
+
+ private:
+  enum line_type
+  {
+    LINE_TYPE_UNKNOWN,
+    LINE_TYPE_FUNC_HEADER,
+    LINE_TYPE_OFFSET_INSN,
+    LINE_TYPE_CODE_ONLY,
+    LINE_TYPE_EOF
+  };
+
+  /* parser state */
+  FILE *m_sass;
+  struct objfile *m_objfile;
+  uint64_t m_current_offset;
+
+  std::string m_current_func;
+  std::string m_current_insn;
+  std::string m_current_line;
+
+  /* Holder for pc->insn mappings from the cubin/ELF file.
+     These may be updated by lazy function loading, so
+     clear on resume. */
+  std::unordered_map<uint64_t, std::string> m_elf_map;
+
+  /* Holder for pc->insn mappings from the device.
+     These are flushed before resuming the GPU, as the
+     code may be modified after resuming. */
+  std::unordered_map<uint64_t, std::string> m_device_map;
+
+  /* regex for parsing various line types */
+  std::regex m_offset_insn_line;
+  std::regex m_code_line;
+  std::regex m_func_header_line;
+
+  std::string m_cuobjdump_path;
+
+  void parse_disasm_output ();
+  enum line_type parse_next_line ();
+
+  bool populate_from_elf_image (uint64_t pc, std::string& insn);
+  bool populate_from_device_memory (uint64_t pc, std::string& insn);
+
+  const std::string find_cuobjdump ();
+  const std::string find_executable (const std::string& name);
+
+  static bool exists(const std::string& fname);
+};
 
 #endif

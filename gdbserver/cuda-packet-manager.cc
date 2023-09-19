@@ -210,6 +210,32 @@ cuda_process_get_host_addr_from_device_addr_packet (char *buf)
   p = append_bin ((unsigned char *) &hostaddr, p, sizeof (hostaddr), false);
 }
 
+static void
+cuda_process_get_error_string_ex_packet (char *buf)
+{
+  CUDBGResult res;
+  char *p;
+  uint32_t err_str_len;
+  const ptrdiff_t packet_hdr_sz = buf - buf_head;
+  const uint32_t max_err_str_len = (uint32_t) (PBUFSIZ - ((size_t) packet_hdr_sz + sizeof (res) + sizeof (err_str_len)));
+  void *error_str_buf = xmalloc (max_err_str_len);
+  res = cudbgAPI->getErrorStringEx ((char *) error_str_buf, max_err_str_len, &err_str_len);
+  if (res != CUDBG_SUCCESS)
+    {
+      if (res == CUDBG_ERROR_BUFFER_TOO_SMALL)
+        {
+          err_str_len = max_err_str_len;
+        }
+      else
+        {
+          err_str_len = 0;
+        }
+    }
+  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
+  p = append_bin ((unsigned char *) &err_str_len, p, sizeof (err_str_len), true);
+  p = append_string ((char *) error_str_buf, p, false);
+}
+
 #ifndef __QNXHOST__
 template <typename TValue>
 using FnGetValueFromAPI = CUDBGResult (*)(uint32_t dev, uint32_t sm, uint32_t wp, TValue *value);
@@ -1422,6 +1448,9 @@ handle_cuda_packet (char *buf)
       break;
     case GET_HOST_ADDR_FROM_DEVICE_ADDR:
       cuda_process_get_host_addr_from_device_addr_packet (buf);
+      break;
+    case GET_ERROR_STRING_EX:
+      cuda_process_get_error_string_ex_packet (buf);
       break;
     case NOTIFICATION_ANALYZE:
       cuda_process_notification_analyze_packet (buf);

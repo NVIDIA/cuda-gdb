@@ -23,6 +23,7 @@
 #include "cuda-defs.h"
 
 #include <bitset>
+#include <string>
 
 uint64_t            kernel_get_id                       (kernel_t kernel);
 uint32_t            kernel_get_dev_id                   (kernel_t kernel);
@@ -52,9 +53,6 @@ void                kernel_set_module         (kernel_t kernel, module_t module)
 void                kernel_invalidate         (kernel_t kernel);
 void                kernel_compute_sms_mask   (kernel_t kernel, std::bitset<CUDBG_MAX_SMS> &sms_mask);
 void                kernel_print              (kernel_t kernel);
-void                kernel_flush_disasm_cache (kernel_t kernel);
-const char*         kernel_disassemble        (kernel_t kernel, uint64_t pc,
-                                           uint32_t *inst_size);
 
 void      kernels_start_kernel     (uint32_t dev_id, uint64_t grid_id,
                                     uint64_t virt_code_base,

@@ -314,6 +314,10 @@ eval_python_command (const char *command)
 {
   PyObject *m, *d;
 
+#ifdef NVIDIA_CUDA_GDB
+  python_print_library ();
+#endif
+
   m = PyImport_AddModule ("__main__");
   if (m == NULL)
     return -1;
@@ -340,6 +344,10 @@ python_interactive_command (const char *arg, int from_tty)
 {
   struct ui *ui = current_ui;
   int err;
+
+#ifdef NVIDIA_CUDA_GDB
+  python_print_library ();
+#endif
 
   scoped_restore save_async = make_scoped_restore (&current_ui->async, 0);
 
@@ -383,6 +391,9 @@ python_interactive_command (const char *arg, int from_tty)
 static void
 python_run_simple_file (FILE *file, const char *filename)
 {
+#ifdef NVIDIA_CUDA_GDB
+  python_print_library ();
+#endif
 #ifndef _WIN32
 
   PyRun_SimpleFile (file, filename);
@@ -436,6 +447,10 @@ gdbpy_eval_from_control_command (const struct extension_language_defn *extlang,
 {
   int ret;
 
+#ifdef NVIDIA_CUDA_GDB
+  python_print_library ();
+#endif
+
   if (cmd->body_list_1 != nullptr)
     error (_("Invalid \"python\" block structure."));
 
@@ -453,6 +468,10 @@ static void
 python_command (const char *arg, int from_tty)
 {
   gdbpy_enter enter_py;
+
+#ifdef NVIDIA_CUDA_GDB
+  python_print_library ();
+#endif
 
   scoped_restore save_async = make_scoped_restore (&current_ui->async, 0);
 

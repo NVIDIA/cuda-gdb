@@ -17,6 +17,9 @@
  */
 
 #include "defs.h"
+
+#include <string>
+
 #include "inferior.h"
 #include "gdbthread.h"
 #include "arch-utils.h"
@@ -25,6 +28,7 @@
 #include <block.h>
 
 #include "cuda-autostep.h"
+#include "cuda-asm.h"
 #include "cuda-state.h"
 #include "cuda-iterator.h"
 #include "cuda-frame.h"
@@ -177,18 +181,18 @@ find_end_pc (uint64_t pc)
 static int
 count_instructions (uint64_t pc, uint64_t end_pc)
 {
-  const char *inst;
-  uint32_t inst_size;
-  kernel_t kernel = cuda_current_kernel ();
   int count = 0;
+  uint32_t inst_size = 0;
+  kernel_t kernel = cuda_current_kernel ();
+  module_t module = kernel_get_module (kernel);
 
   for (; pc < end_pc; pc += inst_size)
     {
-      inst = kernel_disassemble (kernel, pc, &inst_size);
-      if (!inst)
-        break; /* Abort the loop if pc is outside of the routine boundary */
-      if (inst[0] == 0)
-        continue; /* Ignore empty instructions */
+      std::string inst;
+      auto found = module->disassembler->disassemble (pc, inst, inst_size);
+      /* Stop counting if pc is outside of the routine boundary */
+      if (!found)
+        return count;
       ++count;
     }
 
@@ -388,7 +392,15 @@ set_next_device_iteration (void)
   else if (!(cur_sal.symtab && cur_sal.line) || single_inst)
     {
       /* Get instruction size */
-      kernel_disassemble (cuda_current_kernel (), cur_pc, &inst_size);
+      kernel_t kernel = cuda_current_kernel ();
+      module_t module = kernel_get_module (kernel);
+      std::string inst;
+      auto found = module->disassembler->disassemble (cur_pc, inst, inst_size);
+      if (!found || !inst_size)
+	{
+	  warning ("Could not determine instruction size of PC 0x%lx", cur_pc);
+	  return false;
+	}
       end_pc = cur_pc + remaining * inst_size;
     }
   else
@@ -426,7 +438,13 @@ set_next_device_iteration (void)
 
   /* Calculate how many steps should be taken */
   if (cuda_options_single_stepping_optimizations_enabled ())
-    end_pc = cuda_find_next_control_flow_instruction (cur_pc, cur_sal.pc, end_pc, false, &inst_size);
+    {
+      auto found = cuda_find_next_control_flow_instruction (cur_pc, cur_sal.pc, end_pc, false,
+							    end_pc, inst_size);
+      /* Stop autostepping if instruction scanning failed */
+      if (!found)
+	return 1;
+    }
   if (end_pc == cur_pc)
     nsteps = 1; /* Currently at control flow instruction */
   else

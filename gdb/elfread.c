@@ -1216,6 +1216,10 @@ elf_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
     }
 
   elf_read_minimal_symbols (objfile, symfile_flags, &ei);
+#ifdef NVIDIA_CUDA_GDB
+  /* Will early out if we've already scanned the objfile */
+  cuda_find_objfile_host_shadow_functions (objfile);
+#endif
 
   /* ELF debugging information is inserted into the psymtab in the
      order of least informative first - most informative last.  Since

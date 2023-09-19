@@ -65,6 +65,13 @@
 #include "observable.h"
 #include "serial.h"
 
+#ifdef NVIDIA_CUDA_GDB
+#ifdef HAVE_PYTHON
+/* Print the version of the libpython library loaded by the dynlib code */
+extern void python_print_library ();
+#endif
+#endif
+
 /* The selected interpreter.  This will be used as a set command
    variable, so it should always be malloc'ed - since
    do_setshow_command will free it.  */
@@ -1188,6 +1195,11 @@ captured_main_1 (struct captured_main_args *context)
       print_gdb_version (gdb_stdout, false);
       gdb_stdout->wrap_here (0);
       printf_filtered ("\n");
+#ifdef NVIDIA_CUDA_GDB
+#ifdef HAVE_PYTHON
+      python_print_library ();
+#endif
+#endif
       exit (0);
     }
 
@@ -1202,6 +1214,11 @@ captured_main_1 (struct captured_main_args *context)
       print_gdb_configuration (gdb_stdout);
       gdb_stdout->wrap_here (0);
       printf_filtered ("\n");
+#ifdef NVIDIA_CUDA_GDB
+#ifdef HAVE_PYTHON
+      python_print_library ();
+#endif
+#endif
       exit (0);
     }
 
@@ -1218,6 +1235,11 @@ captured_main_1 (struct captured_main_args *context)
 	printf_filtered ("..");
       gdb_stdout->wrap_here (0);
       printf_filtered ("\n");
+#ifdef NVIDIA_CUDA_GDB
+#ifdef HAVE_PYTHON
+      python_print_library ();
+#endif
+#endif
       gdb_flush (gdb_stdout);	/* Force to screen during slow
 				   operations.  */
     }
@@ -1239,6 +1261,11 @@ captured_main_1 (struct captured_main_args *context)
 	printf_filtered ("..");
       gdb_stdout->wrap_here (0);
       printf_filtered ("\n");
+#ifdef NVIDIA_CUDA_GDB
+#ifdef HAVE_PYTHON
+      python_print_library ();
+#endif
+#endif
       gdb_flush (gdb_stdout);	/* Force to screen during slow
 				   operations.  */
     }

@@ -134,7 +134,6 @@ bool  cuda_coords_equal (cuda_coords_t *c1, cuda_coords_t *c2);
 int   cuda_coords_compare_logical (cuda_coords_t *c1, cuda_coords_t *c2);
 int   cuda_coords_compare_physical (cuda_coords_t *c1, cuda_coords_t *c2);
 void  cuda_coords_to_fancy_string (cuda_coords_t *c, char *string, uint32_t size);
-void  cuda_string_to_coords (bool is_mask, char *block_repr, char *thread_repr, cuda_coords_t *current, cuda_coords_t *mask);
 int   cuda_parse_thread(char **ptok, char **pcuda_block_mask_repr, char** pcuda_thread_mask_repr, int *pFoundEntry);
 int   cuda_coords_complete_logical (cuda_coords_t *c);
 int   cuda_coords_complete_physical (cuda_coords_t *c);

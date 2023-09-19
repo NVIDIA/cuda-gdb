@@ -22,6 +22,7 @@
 #include "source.h"
 
 #include "cuda-defs.h"
+#include "cuda-asm.h"
 #include "cuda-elf-image.h"
 #include "cuda-options.h"
 #include "cuda-tdep.h"
@@ -33,13 +34,6 @@
  *
  *****************************************************************************/
 
-struct module_st {
-  uint64_t    module_id;            /* the CUmodule handle */
-  context_t   context;              /* the parent context state */
-  elf_image_t elf_image;            /* the ELF image object for the module */
-  module_t    next;                 /* next module in the list */
-};
-
 module_t
 module_new (context_t context, uint64_t module_id, void *elf_image, uint64_t elf_image_size)
 {
@@ -49,6 +43,7 @@ module_new (context_t context, uint64_t module_id, void *elf_image, uint64_t elf
   module->context    = context;
   module->module_id  = module_id;
   module->elf_image  = cuda_elf_image_new (elf_image, elf_image_size, module);
+  module->disassembler = new cuda_disassembler ();
   module->next       = NULL;
 
   return module;
@@ -63,6 +58,8 @@ module_delete (module_t module)
     cuda_elf_image_unload (module->elf_image);
 
   cuda_elf_image_delete (module->elf_image);
+
+  delete module->disassembler;
 
   xfree (module);
 }

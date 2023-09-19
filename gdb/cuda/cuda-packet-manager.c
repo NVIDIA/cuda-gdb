@@ -369,7 +369,7 @@ cuda_remote_set_symbols (remote_target *ops, bool set_extra_symbols, bool *symbo
   cuda_packet_type_t packet_type = SET_SYMBOLS;
   CORE_ADDR address;
   constexpr unsigned char CORE_SYMBOLS_COUNT = 13;
-  constexpr unsigned char EXTRA_SYMBOLS_COUNT = 1;
+  constexpr unsigned char EXTRA_SYMBOLS_COUNT = 2;
   unsigned char symbols_count = CORE_SYMBOLS_COUNT;
 
   *symbols_are_set = false;
@@ -426,6 +426,8 @@ cuda_remote_set_symbols (remote_target *ops, bool set_extra_symbols, bool *symbo
   if (set_extra_symbols)
     {
       address = cuda_get_symbol_address (_STRING_(cudbgInjectionPath));
+      p = append_bin ((gdb_byte *) &address, p, sizeof (address), true);
+      address = cuda_get_symbol_address (_STRING_(CUDBG_DEBUGGER_CAPABILITIES));
       p = append_bin ((gdb_byte *) &address, p, sizeof (address), false);
       /* NOTE: When adding new symbols, change `false` in the previous
          line to `true` and update `EXTRA_SYMBOLS_COUNT`. */

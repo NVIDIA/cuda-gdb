@@ -216,8 +216,12 @@ extern PyObject * (*gdbpy_PyBuffer_FromObject) (PyObject *base, Py_ssize_t offse
 extern void (*gdbpy_PyBuffer_Release) (Py_buffer *buf);
 extern int (*gdbpy_PyErr_GivenExceptionMatches) (PyObject *, PyObject *);
 #ifdef IS_PY3K
-extern int (*gdbpy_PyBuffer_FillInfo) (Py_buffer *view, PyObject *exporter, void *buf, Py_ssize_t len, int readonly, int flags);
+extern int (*gdbpy_PyBuffer_FillInfo) (Py_buffer *view, PyObject *exporter, void *buf, Py_ssize_t ylen, int readonly, int flags);
+#if (PY_MAJOR_VERSION == 3) && (PY_MINOR_VERSION == 6)
 extern void (*gdbpy_SetProgramName) (wchar_t *);
+#else
+extern void (*gdbpy_SetProgramName) (const wchar_t *);
+#endif
 #else
 extern void (*gdbpy_SetProgramName) (char *);
 #endif
@@ -1000,5 +1004,10 @@ typedef std::unique_ptr<Py_buffer, Py_buffer_deleter> Py_buffer_up;
 
 extern bool gdbpy_parse_register_id (struct gdbarch *gdbarch,
 				     PyObject *pyo_reg_id, int *reg_num);
+
+#ifdef NVIDIA_CUDA_GDB
+/* Used to print the version of the libpython library loaded by the dynlib code */
+extern void python_print_library ();
+#endif
 
 #endif /* PYTHON_PYTHON_INTERNAL_H */

@@ -264,7 +264,7 @@ cuda_abi_frame_id_build (struct frame_info *this_frame, void **this_cache,
          as the API will always return only the PC to the first non syscall
          frame. Thus all frames less the syscall_call_depth will be identical
          to the frame at the syscall call depth */
-      if (this_level < syscall_call_depth)
+      if ((this_level < syscall_call_depth) && !cuda_options_hide_internal_frames())
         return frame_id_build_special (cache->base, cache->pc,
                                        syscall_call_depth + this_level);
       else

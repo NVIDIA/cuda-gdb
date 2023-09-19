@@ -17,6 +17,9 @@
  */
 
 #include "defs.h"
+
+#include <string>
+
 #include "frame.h"
 #include "ui-out.h"
 
@@ -69,7 +72,6 @@ struct kernel_st {
   char                          dimensions[128]; /* A string repr. of the kernel dimensions. */
   CUDBGKernelType               type;            /* The kernel type: system or application. */
   CUDBGKernelOrigin             origin;          /* The kernel origin: CPU or GPU */
-  disasm_cache_t                disasm_cache;    /* the cached disassembled instructions */
   kernel_t                      next;            /* next kernel on the same device */
   unsigned int                  depth;           /* kernel nest level (0 - host launched kernel) */
 };
@@ -160,7 +162,6 @@ kernel_new (uint32_t dev_id, uint64_t grid_id, uint64_t virt_code_base,
   kernel->block_dim                = block_dim;
   kernel->type                     = type;
   kernel->origin                   = origin;
-  kernel->disasm_cache             = disasm_cache_create ();
   kernel->next                     = NULL;
   kernel->depth                    = !parent_kernel ? 0 : parent_kernel->depth + 1;
 
@@ -191,7 +192,6 @@ kernel_delete (kernel_t kernel)
                        (unsigned long long)kernel->id, kernel->name.get (), kernel->dimensions,
                        kernel->dev_id, kernel->depth);
 
-  disasm_cache_destroy (kernel->disasm_cache);
   delete kernel;
 }
 
@@ -469,23 +469,6 @@ kernel_compute_sms_mask (kernel_t kernel, std::bitset<CUDBG_MAX_SMS> &sms_mask)
       current = cuda_iterator_get_current (itr);
       sms_mask.set (current.sm);
     }
-}
-
-const char*
-kernel_disassemble (kernel_t kernel, uint64_t pc, uint32_t *inst_size)
-{
-  gdb_assert (kernel);
-  gdb_assert (inst_size);
-
-  return disasm_cache_find_instruction (kernel->disasm_cache, pc, inst_size);
-}
-
-void
-kernel_flush_disasm_cache (kernel_t kernel)
-{
-  gdb_assert (kernel);
-
-  disasm_cache_flush (kernel->disasm_cache);
 }
 
 void

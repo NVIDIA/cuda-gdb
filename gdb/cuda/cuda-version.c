@@ -31,6 +31,9 @@
 
 static const char nvidia_copyright_currrent_year[] = "2023";
 
+/* Globals */
+cuda_api_version cuda_backend_api_version;
+
 const int cuda_major_version (void)
 {
   return CUDA_VERSION / 1000;
