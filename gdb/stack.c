@@ -1420,7 +1420,7 @@ print_frame (const frame_print_options &fp_opts,
     /* CUDA - kernel dimensions */
     if (cuda_frame_outermost_p (frame))
       {
-	kernel_t kernel = cuda_current_kernel ();
+	kernel_t kernel = cuda_current_focus::get ().logical ().kernel ();
 	uiout->text (kernel_get_dimensions (kernel));
       }
 #endif

@@ -549,7 +549,7 @@ public:
   /* CUDA: Used when we need to update the cuda coordinates during
    * cuda_wait (). Handled during context_switch (). */
   bool need_cuda_context_switch = false;
-  cuda_coords_t new_cuda_coords = CUDA_INVALID_COORDS;
+  cuda_coords new_cuda_coords {};
 #endif
   /* Step-over chain.  A thread is in the step-over queue if this node is
      linked.  */
@@ -895,7 +895,7 @@ private:
      language auto".  */
   enum language m_lang;
 #ifdef NVIDIA_CUDA_GDB
-  cuda_coords_t m_cuda_coords;
+  cuda_coords m_cuda_coords;
 #endif
 };
 

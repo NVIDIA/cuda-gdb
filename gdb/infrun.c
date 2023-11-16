@@ -79,6 +79,7 @@
 #include "gdbsupport/common-debug.h"
 #include "gdbsupport/buildargv.h"
 #ifdef NVIDIA_CUDA_GDB
+#include "nat/linux-waitpid.h"
 #include "cuda/cuda-state.h"
 #include "cuda/cuda-iterator.h"
 #include "cuda/cuda-autostep.h"
@@ -165,7 +166,7 @@ static ptid_t previous_inferior_ptid;
 #ifdef NVIDIA_CUDA_GDB
 /* CUDA - focus */
 /* Same as previous_inferior_ptid with CUDA coordinates */
-static cuda_coords_t previous_cuda_coords;
+static cuda_coords previous_cuda_coords;
 /* CUDA - host singlestep*/
 int cuda_host_want_singlestep = 0;
 #endif
@@ -709,7 +710,7 @@ follow_fork ()
   bool follow_child = (follow_fork_mode_string == follow_fork_mode_child);
 #ifdef NVIDIA_CUDA_GDB
   /* Disallow follow-fork child if we already started initialization of the CUDA debug API */
-  if (follow_child && cuda_api_get_state () != CUDA_API_STATE_UNINITIALIZED)
+  if (follow_child && !cuda_debugapi::api_state_uninitialized ())
     {
       warning (_("Unable to follow child process when debugging CUDA process."));
       follow_child = false;
@@ -2264,7 +2265,7 @@ resume_1 (enum gdb_signal sig)
 #ifdef NVIDIA_CUDA_GDB
   /* CUDA - since host resume is faked during single-stepping thru
      device code it's safe to ignore quit flag */
-  if (!(step && cuda_focus_is_device()))
+  if (!(step && cuda_current_focus::isDevice ()))
     QUIT;
 #endif
   if (tp->has_pending_waitstatus ())
@@ -3419,7 +3420,7 @@ init_wait_for_inferior (void)
   previous_inferior_ptid = inferior_ptid;
 #ifdef NVIDIA_CUDA_GDB
   /* CUDA - focus */
-  previous_cuda_coords = CUDA_INVALID_COORDS;
+  previous_cuda_coords = cuda_coords {};
 #endif
 }
 
@@ -3946,7 +3947,7 @@ wait_for_inferior (inferior *inf)
 
 #ifdef NVIDIA_CUDA_GDB
   /* CUDA - focus */
-  cuda_coords_get_current (&previous_cuda_coords);
+  previous_cuda_coords = cuda_current_focus::get ();
 #endif
   /* If an error happens while handling the event, propagate GDB's
      knowledge of the executing state to the frontend/user running
@@ -4137,7 +4138,7 @@ fetch_inferior_event ()
 
 #ifdef NVIDIA_CUDA_GDB
     if (valid_event)
-      cuda_coords_get_current (&previous_cuda_coords);
+      previous_cuda_coords = cuda_current_focus::get ();
 #endif
     /* We're handling a live event, so make sure we're doing live
        debugging.  If we're looking at traceframes while the target is
@@ -4371,21 +4372,19 @@ context_switch (execution_control_state *ecs)
 
 #ifdef NVIDIA_CUDA_GDB
   /* CUDA - focus */
-  if (cuda_focus_is_device ())
+  if (cuda_current_focus::isDevice ())
     {
       /* Let the host thread context switch happen, but restore the focus to
          the CUDA thread afterwards. */
-      cuda_coords_t cuda_coords = CUDA_INVALID_COORDS;
-      cuda_coords_get_current (&cuda_coords);
+      cuda_focus_restore r;
       switch_to_thread (ecs->event_thread);
-      switch_to_cuda_thread (&cuda_coords);
     }
   else if (ecs->event_thread->need_cuda_context_switch)
     {
       switch_to_thread(ecs->event_thread);
-      switch_to_cuda_thread (&ecs->event_thread->new_cuda_coords);
+      switch_to_cuda_thread (ecs->event_thread->new_cuda_coords);
       ecs->event_thread->need_cuda_context_switch = false;
-      ecs->event_thread->new_cuda_coords = CUDA_INVALID_COORDS;
+      ecs->event_thread->new_cuda_coords = cuda_coords ();
     }
   else
 #endif
@@ -5702,7 +5701,7 @@ handle_inferior_event (struct execution_control_state *ecs)
 	    = (follow_fork_mode_string == follow_fork_mode_child);
 #ifdef NVIDIA_CUDA_GDB
 	  /* Disallow follow-fork child if we already started initialization of the CUDA debug API */
-	  if (follow_child && cuda_api_get_state () != CUDA_API_STATE_UNINITIALIZED)
+	  if (follow_child && !cuda_debugapi::api_state_uninitialized ())
 	    {
 	      warning (_("Unable to follow child process when debugging CUDA process."));
 	      follow_child = false;
@@ -6428,7 +6427,7 @@ handle_signal_stop (struct execution_control_state *ecs)
 	    }
 	}
 #ifdef NVIDIA_CUDA_GDB
-      else if (!cuda_focus_is_device ())
+      else if (!cuda_current_focus::isDevice ())
 #else
       else
 #endif
@@ -6885,17 +6884,16 @@ process_event_stop_test (struct execution_control_state *ecs)
   /* Stop stepping during a 'next' command if the cuda coordinates have
      changed focus to ensure that control properly moves to the next warp
      when the previous one runs to completion. */
-  if (cuda_focus_is_device ()
+  if (cuda_current_focus::isDevice ()
       && ecs->event_thread->control.step_over_calls == STEP_OVER_ALL)
     {
       /* FIXME: This ignores the valid state for previous. We shouldn't
        * be capturing previous_cuda_coords and instead rely on coords stored
        * in the ecs thread. */
-      cuda_coords_t cur;
-      cuda_coords_get_current (&cur);
+      const auto& cur = cuda_current_focus::get ();
       bool new_coords = cuda_options_software_preemption ()
-	      ? cuda_coords_compare_logical (&previous_cuda_coords, &cur)
-	      : !cuda_coords_equal (&previous_cuda_coords, &cur);
+	      ? cur.logical () != previous_cuda_coords.logical () :
+	        cur != previous_cuda_coords;
       if (new_coords)
 	{
 	  ecs->event_thread->control.stop_step = 1;
@@ -7318,11 +7316,10 @@ process_event_stop_test (struct execution_control_state *ecs)
   /* CUDA - stepping */
   /* we want to continue stepping if this thread is still not active. */
   if (ecs->event_thread->control.step_range_end == 1 &&
-      cuda_focus_is_device ())
+      cuda_current_focus::isDevice ())
   {
-    cuda_coords_t c;
-    cuda_coords_get_current (&c);
-    if (!lane_is_active (c.dev, c.sm, c.wp, c.ln))
+    const auto& p = cuda_current_focus::get ().physical ();
+    if (!cuda_state::lane_is_active (p.dev (), p.sm (), p.wp (), p.ln ()))
     {
       if (debug_infrun)
         fprintf_unfiltered (gdb_stdlog, "infrun: cuda thread still not active\n");
@@ -8767,12 +8764,12 @@ normal_stop (void)
 	  target_terminal::ours_for_output ();
 #ifdef NVIDIA_CUDA_GDB
 	  /* CUDA - focus */
-	  if (cuda_focus_is_device () && (current_uiout->is_mi_like_p () ||
-					  (!previous_cuda_coords.valid ||
-					   !cuda_coords_is_current (&previous_cuda_coords))))
-	    cuda_print_message_focus (true);
+	  if (cuda_current_focus::isDevice () && 
+		(current_uiout->is_mi_like_p () ||
+		 previous_cuda_coords != cuda_current_focus::get ()))
+	    cuda_current_focus::printFocus (true);
 	  /* CUDA - focus */
-	  if (!cuda_focus_is_device () && previous_inferior_ptid != inferior_ptid)
+	  if (!cuda_current_focus::isDevice () && previous_inferior_ptid != inferior_ptid)
 	    printf_filtered (_("[Switching to %s]\n"),
 			     target_pid_to_str (inferior_ptid).c_str ());
 #else
@@ -8783,7 +8780,7 @@ normal_stop (void)
 	}
       previous_inferior_ptid = inferior_ptid;
 #ifdef NVIDIA_CUDA_GDB
-      cuda_coords_get_current (&previous_cuda_coords);
+      previous_cuda_coords = cuda_current_focus::get ();
       kernels_update_args ();
 #endif
     }

@@ -2037,11 +2037,7 @@ target_read (struct target_ops *ops,
       else if (status == TARGET_XFER_OK)
 	{
 	  xfered_total += xfered_partial;
-#ifdef NVIDIA_CUDA_GDB
-	  QUIT2;
-#else
 	  QUIT;
-#endif
 	}
       else
 	return TARGET_XFER_E_IO;
@@ -2231,11 +2227,7 @@ read_memory_robust (struct target_ops *ops,
 				   std::move (buffer));
 	      xfered_total += xfered_partial;
 	    }
-#ifdef NVIDIA_CUDA_GDB
-	  QUIT2;
-#else
 	  QUIT;
-#endif
 	}
     }
 
@@ -2284,11 +2276,7 @@ target_write_with_progress (struct target_ops *ops,
 	(*progress) (xfered_partial, baton);
 
       xfered_total += xfered_partial;
-#ifdef NVIDIA_CUDA_GDB
-      QUIT2;
-#else
       QUIT;
-#endif
     }
   return len;
 }
@@ -3569,11 +3557,7 @@ target_fileio_read_alloc_1 (struct inferior *inf, const char *filename,
 	  buf = (gdb_byte *) xrealloc (buf, buf_alloc);
 	}
 
-#ifdef NVIDIA_CUDA_GDB
-      QUIT2;
-#else
       QUIT;
-#endif
     }
 }
 
@@ -4027,11 +4011,7 @@ simple_verify_memory (struct target_ops *ops,
 	  && memcmp (data + total_xfered, buf, xfered_len) == 0)
 	{
 	  total_xfered += xfered_len;
-#ifdef NVIDIA_CUDA_GDB
-	  QUIT2;
-#else
 	  QUIT;
-#endif
 	}
       else
 	return 0;

@@ -168,7 +168,11 @@ typedef enum {
     CUDBGAPIREQ_writeUniformPredicates,
 
     /* 11.8 extensions */
+#if CUDBG_API_VERSION_REVISION >= 138
+    CUDBGAPIREQ_getLoadedFunctionInfo118,
+#else
     CUDBGAPIREQ_getLoadedFunctionInfo,
+#endif
 
     /* 12.0 extensions */
     CUDBGAPIREQ_getGridInfo,
@@ -178,6 +182,13 @@ typedef enum {
 
     /* 12.2 extensions */
     CUDBGAPIREQ_getErrorStringEx,
+
+#if CUDBG_API_VERSION_REVISION >= 138
+    /* 12.3 Extensions */
+    CUDBGAPIREQ_getLoadedFunctionInfo,
+    CUDBGAPIREQ_generateCoredump,
+    CUDBGAPIREQ_getConstBankAddress,
+#endif
 } CUDBGAPIREQ_t;
 
 typedef enum {

@@ -473,16 +473,8 @@ static struct internal_problem internal_error_problem = {
 void
 internal_verror (const char *file, int line, const char *fmt, va_list ap)
 {
-#ifdef NVIDIA_CUDA_GDB
-  va_list apc;
-  va_copy (apc,ap);
-  internal_vproblem (&internal_error_problem, file, line, fmt, apc);
-  va_end (apc);
-  throw_verror (GENERIC_ERROR, fmt, ap);
-#else
   internal_vproblem (&internal_error_problem, file, line, fmt, ap);
   throw_quit (_("Command aborted."));
-#endif
 }
 
 static struct internal_problem internal_warning_problem = {

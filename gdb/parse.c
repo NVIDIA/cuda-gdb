@@ -105,6 +105,9 @@ find_minsym_type_and_address (minimal_symbol *msymbol,
   enum minimal_symbol_type type = MSYMBOL_TYPE (msymbol);
 
   bool is_tls = (section != NULL
+#ifdef NVIDIA_CUDA_GDB
+		 && section->the_bfd_section
+#endif
 		 && section->the_bfd_section->flags & SEC_THREAD_LOCAL);
 
   /* The minimal symbol might point to a function descriptor;

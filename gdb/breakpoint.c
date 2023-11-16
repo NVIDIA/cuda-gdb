@@ -5111,54 +5111,50 @@ breakpoint_cond_eval (expression *exp)
 /* CUDA - conditional breakpoints */
 /* Same as breakpoint_cond_eval, but iterate over all the lanes that have hit
    a breakpoint in hardware as the frame is different every time. */
-static int
+static bool
 cuda_breakpoint_cond_eval (void *data)
 {
-  cuda_iterator iter;
-  struct expression *exp = (struct expression *) data;
+  /* Make sure we switch back to the current focus when done. */
+  cuda_focus_restore r;
+  struct expression *exp = (struct expression *)data;
   struct value *mark = value_mark ();
-  cuda_coords_t coords = CUDA_INVALID_COORDS, current = CUDA_INVALID_COORDS;
-  cuda_coords_t filter = CUDA_WILDCARD_COORDS;
-  cuda_focus_t focus;
-  cuda_focus_init (&focus);
-  cuda_focus_save (&focus);
-  iter = cuda_iterator_create (CUDA_ITERATOR_TYPE_THREADS, &filter,
-                               (cuda_select_t) (CUDA_SELECT_VALID | CUDA_SELECT_BKPT));
-  for (cuda_iterator_start (iter);
-       !cuda_iterator_end (iter);
-       cuda_iterator_next (iter))
+  /* Find the thread that hit the breakpoint */
+  cuda_iterator<cuda_iterator_type::threads, select_valid | select_bkpt>
+      coords{ cuda_coords::wild () };
+  auto itr = coords.cbegin ();
+  for (; itr != coords.cend (); ++itr)
     {
-      current = cuda_iterator_get_current (iter);
-      switch_to_cuda_thread (&current);
+      switch_to_cuda_thread (*itr);
       if (!value_true (evaluate_expression (exp)))
         continue;
-      coords = cuda_iterator_get_current (iter);
       break;
     }
-  cuda_iterator_destroy (iter);
-  cuda_focus_restore (&focus);
-  if (coords.valid)
+  /* Restore focus back to what it was previously. */
+  r.restore ();
+  /* If the breakpoint evaluated true, we want to switch focus to that thread */
+  if (itr != coords.cend ())
     {
-      cuda_trace_breakpoint ("conditional breakpoint expression evaluated to true for "
-                  "dev %u sm %u wp %u ln %u.",
-                  coords.dev, coords.sm, coords.wp, coords.ln);
+      cuda_trace_breakpoint (
+          "conditional breakpoint expression evaluated to true for "
+          "dev %u sm %u wp %u ln %u.",
+          itr->physical ().dev (), itr->physical ().sm (),
+          itr->physical ().wp (), itr->physical ().ln ());
       cuda_update_convenience_variables ();
       cuda_update_cudart_symbols ();
-      switch_to_cuda_thread (&coords);
+      switch_to_cuda_thread (*itr);
     }
   value_free_to_mark (mark);
-  return coords.valid;
+  return itr != coords.cend ();
 }
 /* CUDA - breakpoints */
 /* For a valid thread, check if it hits a cuda breakpoint B_NUMBER.
    It checks all cuda breakpoints when B_NUMBER == 0  */
 bool
-cuda_eval_thread_at_breakpoint (uint64_t pc, cuda_coords_t *c, int b_number)
+cuda_eval_thread_at_breakpoint (uint64_t pc, const cuda_coords& c, int b_number)
 {
   struct address_space *aspace = target_thread_address_space (inferior_ptid);
-  cuda_coords_t prev_coords;
   bool cond_eval_result = false;
-  gdb_assert (lane_is_valid (c->dev, c->sm, c->wp, c->ln));
+  gdb_assert (c.valid ());
   for (bp_location *loc : all_bp_locations ())
     {
       if (!breakpoint_enabled (loc->owner) ||
@@ -5172,11 +5168,10 @@ cuda_eval_thread_at_breakpoint (uint64_t pc, cuda_coords_t *c, int b_number)
       /* Hit a non-conditional breakpoint. */
       if (!loc->cond)
         return true;
-      /* Hit a conditional breakpoint. Evaluate the condition for this thread. */
-      cuda_coords_get_current (&prev_coords);
+      /* Hit a conditional breakpoint. Evaluate the condition in the context of this thread. */
+      cuda_focus_restore r;
       switch_to_cuda_thread (c);
       cond_eval_result = value_true (evaluate_expression (loc->cond.get ()));
-      switch_to_cuda_thread (&prev_coords);
       if (cond_eval_result)
         return true;
     }
@@ -5848,12 +5843,11 @@ build_bpstat_chain (const address_space *aspace, CORE_ADDR bp_addr,
           /* The PC of a divergent thread may be the PC of a breakpoint.
              Because the divergent thread is not active, that breakpoint cannot
              have been hit. */
-          if (cuda_focus_is_device ())
+          if (cuda_current_focus::isDevice ())
             {
-              cuda_coords_t c;
-              cuda_coords_get_current (&c);
-              if (!lane_is_valid (c.dev, c.sm, c.wp, c.ln) ||
-                  !lane_is_active (c.dev, c.sm, c.wp, c.ln))
+              const auto& c = cuda_current_focus::get ().physical ();
+              if (!cuda_state::lane_is_valid (c.dev (), c.sm (), c.wp (), c.ln ()) ||
+                  !cuda_state::lane_is_active (c.dev (), c.sm (), c.wp (), c.ln ()))
                 continue;
             }
 #endif
@@ -8208,8 +8202,8 @@ print_cuda_driver_internal_error (bpstat *bs)
 {
   uint64_t res;
   res = cuda_get_last_driver_internal_error_code ();
-  if (cuda_api_get_attach_state () == CUDA_ATTACH_STATE_DETACHING ||
-      cuda_api_get_attach_state () == CUDA_ATTACH_STATE_IN_PROGRESS)
+  if (cuda_debugapi::get_attach_state () == CUDA_ATTACH_STATE_DETACHING ||
+      cuda_debugapi::get_attach_state () == CUDA_ATTACH_STATE_IN_PROGRESS)
     {
       if ((unsigned int)res == CUDBG_ERROR_INVALID_DEVICE)
         error (_("The CUDA driver does not support attaching to a "
@@ -9343,7 +9337,7 @@ set_momentary_breakpoint (struct gdbarch *gdbarch, struct symtab_and_line sal,
 
 #ifdef NVIDIA_CUDA_GDB
   /* CUDA - breakpoints */
-  if (cuda_focus_is_device ())
+  if (cuda_current_focus::isDevice ())
     {
       b->loc->cuda_breakpoint = true;
       b->cuda_breakpoint      = true;
@@ -10551,7 +10545,7 @@ break_command_1 (const char *arg, int flag, int from_tty)
 #ifdef NVIDIA_CUDA_GDB
   /* All breakpoints with number greater than old_bp_count must have been
      created by create_breakpoint */
-  cuda_system_resolve_breakpoints (old_bp_count);
+  cuda_state::resolve_breakpoints (old_bp_count);
 #endif
 }
 

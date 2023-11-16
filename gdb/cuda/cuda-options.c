@@ -111,11 +111,13 @@ static struct {
   const char *description;
 } cuda_debug_trace_names[] = {
   {"general", CUDA_TRACE_GENERAL, "show/hide general debug trace of the internal CUDA-specific functions"},
+  {"disasm", CUDA_TRACE_DISASSEMBLER, "When enabled trace GPU disassembly operations"},
+  {"elf", CUDA_TRACE_ELF, "show/hide CUDA ELF file processing trace messages"},
   {"event", CUDA_TRACE_EVENT, "show/hide CUDA event trace messages"},
   {"breakpoint", CUDA_TRACE_BREAKPOINT, "show/hide CUDA-specific breakpoint handling trace messages"},
   {"api", CUDA_TRACE_API, "show/hide CUDA Debugger API trace messages"},
   {"siginfo", CUDA_TRACE_SIGINFO, "When enabled, update $_siginfo if the application is signalled by a CUDA exception"},
-  {"disasm", CUDA_TRACE_DISASSEMBLER, "When enabled trace GPU disassembly operations"},
+  {"state", CUDA_TRACE_STATE, "show/hide CUDA state trace messages"},
   {NULL, (cuda_trace_domain_t) 0, NULL},
 };
 
@@ -640,7 +642,7 @@ cuda_show_disassemble_from (struct ui_file *file, int from_tty,
 static void
 cuda_set_disassemble_from (const char *args, int from_tty, struct cmd_list_element *c)
 {
-  cuda_system_flush_disasm_cache ();
+  cuda_state::flush_disasm_caches ();
 }
 
 static void
@@ -794,9 +796,9 @@ cuda_options_force_set_launch_notification_update (void)
   if ((cuda_options_auto_breakpoints_needed () ||
        (cuda_show_kernel_events != cuda_show_kernel_events_none)) &&
       (!cuda_options_auto_breakpoints_forced_needed ()))
-    cuda_api_set_kernel_launch_notification_mode (CUDBG_KNL_LAUNCH_NOTIFY_EVENT);
+    cuda_debugapi::set_kernel_launch_notification_mode (CUDBG_KNL_LAUNCH_NOTIFY_EVENT);
   else
-    cuda_api_set_kernel_launch_notification_mode (CUDBG_KNL_LAUNCH_NOTIFY_DEFER);
+    cuda_debugapi::set_kernel_launch_notification_mode (CUDBG_KNL_LAUNCH_NOTIFY_DEFER);
 }
 
 static void

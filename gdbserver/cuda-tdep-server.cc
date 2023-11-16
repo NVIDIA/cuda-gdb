@@ -49,6 +49,8 @@ CUDBGResult set_callback_api_res;
 
 struct cuda_sym cuda_symbol_list[] =
 {
+  /* Old fields are left to maintain the binary compatibility with legacy CUDA
+   * GDB server binaries */
   CUDA_SYM(CUDBG_IPC_FLAG_NAME),
   CUDA_SYM(CUDBG_RPC_ENABLED),
   CUDA_SYM(CUDBG_APICLIENT_PID),
@@ -58,9 +60,9 @@ struct cuda_sym cuda_symbol_list[] =
   CUDA_SYM(CUDBG_DEBUGGER_INITIALIZED),
   CUDA_SYM(CUDBG_REPORTED_DRIVER_API_ERROR_CODE),
   CUDA_SYM(CUDBG_REPORTED_DRIVER_INTERNAL_ERROR_CODE),
+  /* CUDBG_DETACH_SUSPENDED_DEVICES_MASK is deprecated */
   CUDA_SYM(CUDBG_DETACH_SUSPENDED_DEVICES_MASK),
-  /* CUDA MEMCHECK support is removed from CUDA GDB: this field is left to maintain
-   * the binary compatibility with legacy CUDA GDB server binaries */
+  /* CUDA MEMCHECK support is removed from CUDA GDB */
   CUDA_SYM(CUDBG_ENABLE_INTEGRATED_MEMCHECK),
   CUDA_SYM(CUDBG_ENABLE_LAUNCH_BLOCKING),
   CUDA_SYM(CUDBG_ENABLE_PREEMPTION_DEBUGGING),
@@ -501,11 +503,6 @@ cuda_initialize_target (void)
   uint32_t apiClientRev = CUDBG_API_VERSION_REVISION;
   uint32_t sessionId;
 
-#ifndef __QNXHOST__
-  sessionId = cuda_gdb_session_get_id ();
-#endif /* __QNXHOST__ */
-
-
   cuda_initialize ();
   if (cuda_inferior_in_debug_mode())
     return true;
@@ -514,10 +511,8 @@ cuda_initialize_target (void)
   if (!debugFlagAddr)
     return true;
 
-#ifdef __QNXHOST__
   /* cuda_initialize might modify sessionId */
   sessionId = cuda_gdb_session_get_id ();
-#endif /* __QNXHOST__ */
 
 #ifdef __QNXHOST__
   /* FIXME: current_process() is not available, assume the process has been spawned */

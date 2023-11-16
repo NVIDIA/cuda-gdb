@@ -46,6 +46,20 @@ extern struct target_waitstatus cuda_last_ws;
 #endif
 char *buf_head = NULL;
 
+static uint32_t cuda_debugapi_version_major;
+static uint32_t cuda_debugapi_version_minor;
+static uint32_t cuda_debugapi_version_revision;
+
+extern void
+cuda_gdbserver_set_api_version (uint32_t major, uint32_t minor, uint32_t revision);
+
+void
+cuda_gdbserver_set_api_version (uint32_t major, uint32_t minor, uint32_t revision)
+{
+  cuda_debugapi_version_major = major;
+  cuda_debugapi_version_minor = minor;
+  cuda_debugapi_version_revision = revision;
+}
 
 static char *
 append_string (const char *src, char *dest, bool sep)
@@ -96,7 +110,7 @@ extract_bin (char *src, unsigned char *dest, int size)
 
   p = extract_string (src);
   if (!p)
-    error ("The data in the cuda packet is not complete.\n");
+    error ("The data in the cuda packet is not complete (cuda-gdbserver).\n");
   hex2bin (p, dest, size);
   return p;
 }
@@ -465,7 +479,16 @@ cuda_process_initialize_target_packet (char *buf)
   p = append_bin ((unsigned char *) &api_initialize_res, p, sizeof (api_initialize_res), true);
   p = append_bin ((unsigned char *) &cuda_initialized, p, sizeof (cuda_initialized), true);
   p = append_bin ((unsigned char *) &cuda_debugging_enabled, p, sizeof (cuda_debugging_enabled), true);
-  p = append_bin ((unsigned char *) &driver_is_compatible, p, sizeof (driver_is_compatible), false);
+  p = append_bin ((unsigned char *) &driver_is_compatible, p, sizeof (driver_is_compatible), true);
+
+  p = append_bin ((unsigned char *) &cuda_debugapi_version_major, p,
+		  sizeof (cuda_debugapi_version_major), true);
+
+  p = append_bin ((unsigned char *) &cuda_debugapi_version_minor, p,
+		  sizeof (cuda_debugapi_version_minor), true);
+
+  p = append_bin ((unsigned char *) &cuda_debugapi_version_revision, p,
+		  sizeof (cuda_debugapi_version_revision), false);
 }
 
 static void

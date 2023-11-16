@@ -344,11 +344,6 @@ kill_if_already_running (int from_tty)
 	  && !query (_("The program being debugged has been started already.\n\
 Start it from the beginning? ")))
 	error (_("Program not restarted."));
-#ifdef NVIDIA_CUDA_GDB
-      /* CUDA - cleanup CUDA exception state */
-      if (cuda_exception_is_valid (cuda_exception))
-        cuda_exception_reset (cuda_exception);
-#endif
       target_kill ();
     }
 }
@@ -1778,7 +1773,7 @@ finish_forward (struct finish_command_fsm *sm, struct frame_info *frame)
 #ifdef NVIDIA_CUDA_GDB
   /* Don't break on specific thread when device has focus as the
      thread focus may be incorrect. */
-  if (cuda_focus_is_device() && sm->breakpoint != 0)
+  if (cuda_current_focus::isDevice () && sm->breakpoint != 0)
     sm->breakpoint->thread = -1;
 #endif
   /* set_momentary_breakpoint invalidates FRAME.  */
@@ -2437,10 +2432,6 @@ kill_command (const char *arg, int from_tty)
   std::string pid_str = target_pid_to_str (ptid_t (pid));
   int infnum = current_inferior ()->num;
 
-#ifdef NVIDIA_CUDA_GDB
-  if (cuda_exception_is_valid (cuda_exception))
-    cuda_exception_reset (cuda_exception);
-#endif
   target_kill ();
   bfd_cache_close_all ();
 

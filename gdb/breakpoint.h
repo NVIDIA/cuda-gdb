@@ -1856,7 +1856,7 @@ extern void print_breakpoint (breakpoint *bp);
 /* CUDA - autostep */
 struct breakpoint *cuda_find_autostep_by_addr (CORE_ADDR address);
 /* CUDA - breakpoint */
-bool cuda_eval_thread_at_breakpoint (uint64_t pc, cuda_coords_t *c, int b_number);
+bool cuda_eval_thread_at_breakpoint (uint64_t pc, const cuda_coords& c, int b_number);
 /* CUDA - auto breakpoints */
 void cuda_auto_breakpoints_forced_add_location (elf_image_t elf_image, CORE_ADDR addr);
 void cuda_auto_breakpoints_remove_locations (elf_image_t elf_image);

@@ -25,6 +25,7 @@
 #include <ansidecl.h>
 #else
 #include "defs.h"
+#include "cuda/cuda-api.h"
 #include "cuda/cuda-options.h"
 #include "cuda/cuda-tdep.h"
 #endif
@@ -44,9 +45,12 @@
 /*Forward declarations */
 static void cudbg_trace(const char *fmt, ...) ATTRIBUTE_PRINTF(1, 2);
 
+#ifdef GDBSERVER
+extern void cuda_gdbserver_set_api_version (uint32_t major, uint32_t minor, uint32_t revision);
+#endif
+
 /* Globals */
 extern CUDBGNotifyNewEventCallback cudbgDebugClientCallback;
-extern cuda_api_version cuda_backend_api_version;
 
 static CUDBGResult
 cudbgInitialize(void)
@@ -107,7 +111,11 @@ cudbgInitialize(void)
         }
     }
 
-    cuda_backend_api_version = cuda_api_version (major, minor, revision);
+#ifdef GDBSERVER
+    cuda_gdbserver_set_api_version (major, minor, revision);
+#else
+    cuda_debugapi::set_api_version (major, minor, revision);
+#endif
 
     return result;
 }
@@ -2091,14 +2099,22 @@ cudbgGetDeviceName (uint32_t dev, char *buf, uint32_t buf_size)
 
 #if CUDBG_API_VERSION_REVISION >= 132
 static CUDBGResult
+#if CUDBG_API_VERSION_REVISION >= 138
+cudbgGetLoadedFunctionInfo118 (uint32_t dev, uint64_t handle, CUDBGLoadedFunctionInfo *info, uint32_t numEntries)
+#else
 cudbgGetLoadedFunctionInfo (uint32_t dev, uint64_t handle, CUDBGLoadedFunctionInfo *info, uint32_t numEntries)
+#endif
 {
     char *ipc_buf;
     CUDBGResult result;
 
     CUDBG_IPC_PROFILE_START();
 
+#if CUDBG_API_VERSION_REVISION >= 138
+    CUDBG_IPC_BEGIN(CUDBGAPIREQ_getLoadedFunctionInfo118);
+#else
     CUDBG_IPC_BEGIN(CUDBGAPIREQ_getLoadedFunctionInfo);
+#endif
     CUDBG_IPC_APPEND(&dev, sizeof(dev));
     CUDBG_IPC_APPEND(&handle, sizeof(handle));
     CUDBG_IPC_APPEND(&numEntries, sizeof(numEntries));
@@ -2107,7 +2123,11 @@ cudbgGetLoadedFunctionInfo (uint32_t dev, uint64_t handle, CUDBGLoadedFunctionIn
     CUDBG_IPC_RECEIVE(&result, &ipc_buf);
     CUDBG_IPC_RECEIVE_ARRAY(info, numEntries, &ipc_buf);
 
+#if CUDBG_API_VERSION_REVISION >= 138
+    CUDBG_IPC_PROFILE_END(CUDBGAPIREQ_getLoadedFunctionInfo118, "getLoadedFunctionInfo118");
+#else
     CUDBG_IPC_PROFILE_END(CUDBGAPIREQ_getLoadedFunctionInfo, "getLoadedFunctionInfo");
+#endif
 
     return result;
 }
@@ -2258,6 +2278,55 @@ cudbgGetErrorStringEx (char *buf, uint32_t buf_size, uint32_t *msg_size)
 
     return result;
 }
+
+#if CUDBG_API_VERSION_REVISION >= 138
+static CUDBGResult
+cudbgGetLoadedFunctionInfo (uint32_t dev, uint64_t handle, CUDBGLoadedFunctionInfo *info, uint32_t startIndex, uint32_t numEntries)
+{
+    char *ipc_buf;
+    CUDBGResult result;
+
+    CUDBG_IPC_PROFILE_START();
+
+    CUDBG_IPC_BEGIN(CUDBGAPIREQ_getLoadedFunctionInfo);
+    CUDBG_IPC_APPEND(&dev, sizeof(dev));
+    CUDBG_IPC_APPEND(&handle, sizeof(handle));
+    CUDBG_IPC_APPEND(&startIndex, sizeof(startIndex));
+    CUDBG_IPC_APPEND(&numEntries, sizeof(numEntries));
+
+    CUDBG_IPC_REQUEST((void **)&ipc_buf);
+    CUDBG_IPC_RECEIVE(&result, &ipc_buf);
+    CUDBG_IPC_RECEIVE_ARRAY(info, numEntries, &ipc_buf);
+
+    CUDBG_IPC_PROFILE_END(CUDBGAPIREQ_getLoadedFunctionInfo, "getLoadedFunctionInfo");
+
+    return result;
+}
+
+static CUDBGResult
+cudbgGetConstBankAddress (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t bank, uint32_t offset, uint64_t* address)
+{
+    char *ipc_buf;
+    CUDBGResult result;
+
+    CUDBG_IPC_PROFILE_START();
+
+    CUDBG_IPC_BEGIN(CUDBGAPIREQ_getConstBankAddress);
+    CUDBG_IPC_APPEND(&dev, sizeof(dev));
+    CUDBG_IPC_APPEND(&sm, sizeof(sm));
+    CUDBG_IPC_APPEND(&wp, sizeof(wp));
+    CUDBG_IPC_APPEND(&bank, sizeof(bank));
+    CUDBG_IPC_APPEND(&offset, sizeof(offset));
+
+    CUDBG_IPC_REQUEST((void **)&ipc_buf);
+    CUDBG_IPC_RECEIVE(&result, &ipc_buf);
+    CUDBG_IPC_RECEIVE(address, &ipc_buf);
+
+    CUDBG_IPC_PROFILE_END(CUDBGAPIREQ_getConstBankAddress, "getConstBankAddress");
+
+    return result;
+}
+#endif
 
 static const struct CUDBGAPI_st cudbgCurrentApi={
     /* Initialization */
@@ -2423,8 +2492,10 @@ static const struct CUDBGAPI_st cudbgCurrentApi={
     cudbgReadUniformPredicates,
     cudbgWriteUniformPredicates,
 
-#if CUDBG_API_VERSION_REVISION >= 132
     /* 11.8 Extensions */
+#if CUDBG_API_VERSION_REVISION >= 138
+    cudbgGetLoadedFunctionInfo118,
+#elif CUDBG_API_VERSION_REVISION >= 132
     cudbgGetLoadedFunctionInfo,
 #endif
 
@@ -2435,6 +2506,13 @@ static const struct CUDBGAPI_st cudbgCurrentApi={
 
     /* 12.2 Extensions */
     cudbgGetErrorStringEx,
+
+#if CUDBG_API_VERSION_REVISION >= 138
+    /* 12.3 Extensions */
+    cudbgGetLoadedFunctionInfo,
+    NULL, // generateCoredump
+    cudbgGetConstBankAddress,
+#endif
 };
 
 CUDBGResult

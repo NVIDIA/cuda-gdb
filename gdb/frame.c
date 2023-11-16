@@ -2133,7 +2133,7 @@ get_prev_frame_maybe_check_cycle (struct frame_info *this_frame)
 	 it in the cache, but if it is a duplicate and CYCLE_DETECTION_P is
 	 false, then we don't want to unlink it.  */
 #ifdef NVIDIA_CUDA_GDB
-      if (!frame_stash_add (prev_frame) && cycle_detection_p && !cuda_focus_is_device ())
+      if (!frame_stash_add (prev_frame) && cycle_detection_p && !cuda_current_focus::isDevice ())
 #else
       if (!frame_stash_add (prev_frame) && cycle_detection_p)
 #endif
@@ -2250,7 +2250,7 @@ get_prev_frame_always_1 (struct frame_info *this_frame)
   /* CUDA - frames */
   /* Stop unwinding if the current frame is the outermost CUDA device frame */
   if (this_frame->level >= 0
-      && cuda_focus_is_device ()
+      && cuda_current_focus::isDevice ()
       && cuda_frame_outermost_p (this_frame))
     {
       frame_debug_printf ("-> %s // Outermost CUDA frame", this_frame->to_string ().c_str ());
@@ -2543,7 +2543,7 @@ get_prev_frame (struct frame_info *this_frame)
   /* CUDA - frames */
   /* Stop unwinding if the current frame is the outermost CUDA device frame */
   if (this_frame->level >= 0
-      && cuda_focus_is_device ()
+      && cuda_current_focus::isDevice ()
       && cuda_frame_outermost_p (this_frame->next))
     {
       frame_debug_got_null_frame (this_frame, "outermost CUDA device frame");

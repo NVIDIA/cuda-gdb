@@ -7918,8 +7918,8 @@ Packet: '%s'\n"),
                 p += sizeof ("cuda_finalize:") - 1;
                 unpack_varlen_hex (p, &ures);
                 res = (CUDBGResult) ures;
-                cuda_api_clear_state ();
-                cuda_api_handle_finalize_api_error (res);
+		cuda_debugapi::clear_state ();
+		cuda_debugapi::handle_finalize_api_error (res);
               }
 #else
 		unpack_varlen_hex (p, &upid);
@@ -11679,7 +11679,7 @@ remote_target::rcmd (const char *command, struct ui_file *outbuf)
   /* CUDA - cleanup on "monitor exit" command. */
   if (strcmp (command, "exit") == 0)
     {
-      cuda_api_finalize ();
+      cuda_debugapi::finalize ();
       cuda_cleanup ();
       cuda_gdb_session_destroy ();
       set_cuda_remote_flag (false);

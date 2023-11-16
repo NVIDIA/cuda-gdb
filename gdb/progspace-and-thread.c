@@ -34,7 +34,7 @@ switch_to_program_space_and_thread (program_space *pspace)
   /* This is a limitation. We assume that there is only one program space (for
      now). If the focus is already set on a CUDA device, we keep it there.
      Otherwise, we let GDB behave normally. */
-  if (cuda_focus_is_device ())
+  if (cuda_current_focus::isDevice ())
     {
       set_current_program_space (pspace);
       return;

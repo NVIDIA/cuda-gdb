@@ -1849,6 +1849,21 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 	case DW_OP_bregx:
 	  {
 	    op_ptr = safe_read_uleb128 (op_ptr, op_end, &reg);
+#ifdef NVIDIA_CUDA_GDB
+	  /* CUDA: PTX virtual registers are encoded as strings (e.g. "\04r%")
+	   * which will overflow an int. To work around this, we create an 
+	   * internal cache of dwarf2 regnum and obtain the offset of the string
+	   * or'ed with CUDA_PTX_VIRTUAL_TAG to be out-of-range of a normal 
+	   * register set size on cuda architectures.
+	   */
+	  if (cuda_is_cuda_gdbarch (arch) &&
+	      reg > 0xff)
+	    {
+	      /* Check if this is a ptx virtual address string and convert
+	       * to identifier via cuda-tdep. */
+	      reg = cuda_check_dwarf2_reg_ptx_virtual_register (reg);
+	    }
+#endif
 	    op_ptr = safe_read_sleb128 (op_ptr, op_end, &offset);
 	    ensure_have_frame (this->m_frame, "DW_OP_bregx");
 

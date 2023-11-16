@@ -362,7 +362,7 @@ cuda_notification_send (CUDBGEventCallbackData *data)
 #else
 #ifndef GDBSERVER
   // use the saved ptid used to init the debug API
-  int api_ptid = cuda_api_get_ptid ();
+  int api_ptid = cuda_debugapi::get_api_ptid ();
   if (!tid && api_ptid)
     {
       err = cuda_notification_notify_specific_thread (api_ptid);

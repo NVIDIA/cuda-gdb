@@ -131,12 +131,12 @@ cuda_remote_target<parent>::cuda_do_resume (ptid_t ptid, int sstep, int host_sst
   cuda_sstep_reset (sstep);
 
   // Is focus on host?
-  if (!cuda_focus_is_device())
+  if (!cuda_current_focus::isDevice ())
     {
       // If not sstep - resume devices
       if (!host_sstep)
-        for (dev = 0; dev < cuda_system_get_num_devices (); ++dev)
-            device_resume (dev);
+        for (dev = 0; dev < cuda_state::get_num_devices (); ++dev)
+	  cuda_state::device_resume (dev);
 
       // resume the host
       parent::resume (ptid, sstep, ts);
@@ -171,19 +171,20 @@ cuda_remote_target<parent>::cuda_do_resume (ptid_t ptid, int sstep, int host_sst
     }
 
   // resume the device
-  device_resume (cuda_current_device ());
+  const auto& cur = cuda_current_focus::get ().physical ();
+  cuda_state::device_resume (cur.dev ());
 
   // resume other devices
   if (!cuda_notification_pending ())
-    for (dev = 0; dev < cuda_system_get_num_devices (); ++dev)
-      if (dev != cuda_current_device ())
-        device_resume (dev);
+    for (dev = 0; dev < cuda_state::get_num_devices (); ++dev)
+      if (dev != cur.dev ())
+	cuda_state::device_resume (dev);
 
   // resume the host
   parent::resume (ptid, 0, ts);
 }
 
-static void
+static bool
 cuda_initialize_remote_target (struct target_ops *ops)
 {
   CUDBGResult get_debugger_api_res;
@@ -193,6 +194,7 @@ cuda_initialize_remote_target (struct target_ops *ops)
   uint32_t num_warps = 0;
   uint32_t num_lanes = 0;
   uint32_t num_registers = 0;
+  uint32_t num_uregisters = 0;
   uint32_t dev_id = 0;
   bool driver_is_compatible;
   char *dev_type;
@@ -205,7 +207,7 @@ cuda_initialize_remote_target (struct target_ops *ops)
 #endif
 
   if (cuda_initialized)
-    return;
+    return true;
 
 #ifdef __QNXTARGET__
   /* If shared objects haven't been loaded yet, we won't find any symbol. */
@@ -229,7 +231,7 @@ cuda_initialize_remote_target (struct target_ops *ops)
 
   /* libcuda isn't loaded yet, we won't find any symbol. */
   if (!found)
-    return;
+    return false;
 
   /* Ignore signals that we use for notification passing on QNX.
      See cuda-notifications.c for details. */
@@ -253,42 +255,50 @@ cuda_initialize_remote_target (struct target_ops *ops)
 	  cuda_remote_set_symbols ((struct remote_target *)ops, false, &symbols_are_set);
 	  if (!symbols_are_set)
 	    {
-	      return;
+	      return false;
 	    }
 	}
     }
 #endif
 
   /* Ask cuda-gdbserver to initialize. */
+  uint32_t debugapi_major = 0;
+  uint32_t debugapi_minor = 0;
+  uint32_t debugapi_revision = 0;
   cuda_remote_initialize (remote,
 			  &get_debugger_api_res, &set_callback_api_res, &api_initialize_res,
-                          &cuda_initialized, &cuda_debugging_enabled, &driver_is_compatible);
+                          &cuda_initialized, &cuda_debugging_enabled, &driver_is_compatible,
+			  &debugapi_major, &debugapi_minor, &debugapi_revision);
 
-  cuda_api_handle_get_api_error (get_debugger_api_res);
-  cuda_api_handle_initialization_error (api_initialize_res);
-  cuda_api_handle_set_callback_api_error (set_callback_api_res);
+  cuda_debugapi::print_get_api_error (get_debugger_api_res);
+  cuda_debugapi::handle_initialization_error (api_initialize_res);
+  cuda_debugapi::handle_set_callback_api_error (set_callback_api_res);
+  cuda_debugapi::set_api_version (debugapi_major, debugapi_minor, debugapi_revision);
+
   if (!driver_is_compatible)
     {
       target_kill ();
       error (_("CUDA application cannot be debugged. The CUDA driver is not compatible."));
     }
   if (!cuda_initialized)
-    return;
+    return false;
 
   cudbgipcInitialize ();
-  cuda_system_initialize ();
-  for (dev_id = 0; dev_id < cuda_system_get_num_devices (); dev_id++)
+  cuda_state::initialize ();
+  for (dev_id = 0; dev_id < cuda_state::get_num_devices (); dev_id++)
     {
       cuda_remote_query_device_spec (remote,
 				     dev_id, &num_sms, &num_warps, &num_lanes,
-                                     &num_registers, &dev_type, &sm_type);
-      cuda_system_set_device_spec (dev_id, num_sms, num_warps, num_lanes,
-                                   num_registers, dev_type, sm_type);
+                                     &num_registers, &num_uregisters, &dev_type, &sm_type);
+      cuda_state::set_device_spec (dev_id, num_sms, num_warps, num_lanes,
+                                   num_registers, num_uregisters, dev_type, sm_type);
     }
   cuda_remote_set_option (remote);
   cuda_gdb_session_create ();
   cuda_update_report_driver_api_error_flags ();
   cuda_create_driver_breakpoints ();
+  
+  return true;
 }
 
 #ifdef __QNXTARGET__
@@ -303,7 +313,7 @@ template <class parent>
 void
 cuda_remote_target<parent>::kill ()
 {
-  cuda_api_finalize ();
+  cuda_debugapi::finalize ();
   cuda_cleanup ();
   cuda_gdb_session_destroy ();
 
@@ -319,13 +329,10 @@ cuda_remote_target<parent>::mourn_inferior (void)
      fail, since the inferior is long gone).  */
   mark_breakpoints_out ();
 
-  if (!cuda_exception_is_valid (cuda_exception))
-  {
-    cuda_cleanup ();
-    cuda_gdb_session_destroy ();
+  cuda_cleanup ();
+  cuda_gdb_session_destroy ();
 
-    parent::mourn_inferior ();
-  }
+  parent::mourn_inferior ();
 }
 
 extern int cuda_host_want_singlestep;
@@ -360,19 +367,20 @@ cuda_remote_target<parent>::resume (ptid_t ptid, int sstep, enum gdb_signal ts)
      exception (i.e. printing the assert message) is done as part of the
      cuda_wait call.
   */
-  if (cuda_exception_is_valid (cuda_exception) &&
-      !cuda_exception_is_recoverable (cuda_exception))
+  cuda_exception ex;
+  if (ex.valid ())
     {
-      target_kill ();
-      cuda_trace ("cuda_resume: exception found");
-      return;
-    }
-
-  if (cuda_exception_is_valid (cuda_exception) &&
-      cuda_exception_is_recoverable (cuda_exception))
-    {
-      cuda_exception_reset (cuda_exception);
-      cuda_trace ("cuda_resume: recoverable exception found\n");
+      if (ex.recoverable ())
+	{
+	  cuda_trace ("cuda_resume: recoverable exception found\n");
+	}
+      else
+	{
+	  cuda_trace ("cuda_resume: exception found");
+	  cuda_cleanup ();
+	  parent::resume (ptid, 0, GDB_SIGNAL_KILL);
+	  return;
+	}
     }
 
   cuda_notification_mark_consumed ();
@@ -381,7 +389,7 @@ cuda_remote_target<parent>::resume (ptid_t ptid, int sstep, enum gdb_signal ts)
   if (cuda_notification_aliased_event ())
     {
       cuda_notification_reset_aliased_event ();
-      cuda_api_get_next_sync_event (&event);
+      cuda_debugapi::get_next_sync_event (&event);
       cuda_event_found = event.kind != CUDBG_EVENT_INVALID;
 
       if (cuda_event_found)
@@ -393,7 +401,7 @@ cuda_remote_target<parent>::resume (ptid_t ptid, int sstep, enum gdb_signal ts)
 
   if (sendAck)
     {
-      cuda_api_acknowledge_sync_events ();
+      cuda_debugapi::acknowledge_sync_events ();
       sendAck = false;
     }
 
@@ -418,96 +426,122 @@ cuda_remote_target<parent>::wait (ptid_t ptid, struct target_waitstatus *ws, tar
   bool cuda_event_found = false;
   CUDBGEvent event, asyncEvent;
   struct thread_info *tp;
-  cuda_coords_t c;
 
   cuda_trace ("cuda_wait");
 
-  if (cuda_exception_is_valid (cuda_exception))
+  if (cuda_sstep_is_active ())
     {
-      ws->set_signalled ((enum gdb_signal) cuda_exception_get_value (cuda_exception));
-      cuda_exception_reset (cuda_exception);
-      cuda_trace ("cuda_wait: exception found");
-      return ptid;
-    }
-  else if (cuda_sstep_is_active ())
-    {
-      /* Cook the ptid and wait_status if single-stepping a CUDA device. */
+      /* Cook the ptid and wait_status if single-stepping a CUDA device.
+       * This will avoid the call to host wait and we will be able to
+       * continue our handling code below. */
       cuda_trace ("cuda_wait: single-stepping");
       r = cuda_sstep_ptid ();
 
-      /* Check if C-c was sent to a remote application or if quit_flag is set.
-         quit_flag is set by gdb handle_sigint() signal handler */
-#ifdef __QNXTARGET__
-      if (cuda_remote_check_pending_sigint (this, r) || check_quit_flag())
-#else /* __QNXTARGET__ */
-      if (cuda_remote_check_pending_sigint (this) || check_quit_flag())
-#endif /* __QNXTARGET__ */
-        {
-	  ws->set_stopped (GDB_SIGNAL_INT);
-          cuda_set_signo (GDB_SIGNAL_INT);
-        }
+      /* Check if the device encountered an exception while stepping. */
+      cuda_exception ex;
+      if (ex.valid ())
+	{
+	  /* We will handle the exception printing below */
+	  cuda_trace ("cuda_wait: single-stepping encountered an exception");
+	}
       else
-        {
+	{
+	  /* Check if C-c was sent to a remote application or if quit_flag is set.
+	   * quit_flag is set by gdb handle_sigint() signal handler */
+#ifdef __QNXTARGET__
+	  if (cuda_remote_check_pending_sigint (this, r) || check_quit_flag())
+#else /* __QNXTARGET__ */
+	  if (cuda_remote_check_pending_sigint (this) || check_quit_flag())
+#endif /* __QNXTARGET__ */
+	    {
+	      ws->set_stopped (GDB_SIGNAL_INT);
+	      cuda_set_signo (GDB_SIGNAL_INT);
+	    }
+	  else
+	    {
+	      ws->set_stopped (GDB_SIGNAL_TRAP);
+	      cuda_set_signo (GDB_SIGNAL_TRAP);
 
-	  ws->set_stopped (GDB_SIGNAL_TRAP);
-          cuda_set_signo (GDB_SIGNAL_TRAP);
+	      /* If we single stepped the last warp on the device, then the
+	       * launch has completed.  However, we do not see the event for
+	       * kernel termination until we resume the application.  We must
+	       * explicitly handle this here by indicating the kernel has
+	       * terminated and switching to the remaining host thread. */
+	      if (cuda_sstep_kernel_has_terminated ())
+	        {
+		  cuda_trace ("cuda_wait: single stepped to kernel exit");
+		  /* Only destroy the kernel that has been stepped to its exit */
+		  dev_id  = cuda_sstep_dev_id ();
+		  grid_id = cuda_sstep_grid_id ();
+		  kernel = kernels_find_kernel_by_grid_id (dev_id, grid_id);
+		  kernels_terminate_kernel (kernel);
 
-          /* If we single stepped the last warp on the device, then the
-             launch has completed.  However, we do not see the event for
-             kernel termination until we resume the application.  We must
-             explicitly handle this here by indicating the kernel has
-             terminated and switching to the remaining host thread. */
+		  /* Invalidate current coordinates and device state */
+		  cuda_current_focus::invalidate ();
+		  cuda_state::device_invalidate_caches (dev_id);
 
-          if (cuda_sstep_kernel_has_terminated ())
-            {
-              /* Only destroy the kernel that has been stepped to its exit */
-              dev_id  = cuda_sstep_dev_id ();
-              grid_id = cuda_sstep_grid_id ();
-              kernel = kernels_find_kernel_by_grid_id (dev_id, grid_id);
-              kernels_terminate_kernel (kernel);
+		  /* Consume any asynchronous events, if necessary.  We need to do 
+		   * this explicitly here, since we're taking the quick path out of 
+		   * this routine (and bypassing the normal check for API events). */ 
+		  cuda_debugapi::get_next_async_event (&asyncEvent); 
+		  if (asyncEvent.kind != CUDBG_EVENT_INVALID) 
+		    cuda_process_events (&asyncEvent, CUDA_EVENT_ASYNC);
 
-              /* Invalidate current coordinates and device state */
-              cuda_coords_invalidate_current ();
-              device_invalidate (dev_id);
+		  /* Update device state/kernels */
+		  kernels_update_terminated ();
+		  cuda_update_convenience_variables ();
 
-              /* Consume any asynchronous events, if necessary.  We need to do
-                 this explicitly here, since we're taking the quick path out of
-                 this routine (and bypassing the normal check for API events). */
-              cuda_api_get_next_async_event (&asyncEvent);
-              if (asyncEvent.kind != CUDBG_EVENT_INVALID)
-                cuda_process_events (&asyncEvent, CUDA_EVENT_ASYNC);
+		  /* Update focus */
+		  cuda_current_focus::update ();
 
-              /* Update device state/kernels */
-              kernels_update_terminated ();
-              cuda_update_convenience_variables ();
-
-              tp = find_thread_ptid (this, r);
-	      gdb_assert (tp);
-	      tp->control.step_range_end = 1;
-              return r;
-            }
-        }
+		  tp = find_thread_ptid (this, r);
+		  gdb_assert (tp);
+		  tp->control.step_range_end = 1;
+		  /* Inform that we need to switch cuda focus if we are
+		   * still focused on the device. */
+		  if (cuda_current_focus::isDevice ())
+		    {
+		      tp->need_cuda_context_switch = true;
+		      tp->new_cuda_coords = cuda_current_focus::get ();
+		    }
+		  return r;
+	       	}
+              }
+	}
     }
-  else {
-    cuda_coords_invalidate_current ();
-    cuda_trace ("cuda_wait: host_wait\n");
-    r = parent::wait (ptid, ws, target_options);
-    cuda_trace ("cuda_wait: host_wait done");
+  else
+    {
+      cuda_current_focus::invalidate ();
+      cuda_trace ("cuda_wait: host_wait\n");
+      r = parent::wait (ptid, ws, target_options);
+      cuda_trace ("cuda_wait: host_wait done");
 
-    /* GDB reads events asynchronously without blocking. The remote may have
-       taken too long to reply and GDB did not get any events back.  Check if
-       this is the case and just return.  */
-    if (ws->kind () == TARGET_WAITKIND_IGNORE
-	|| ws->kind () == TARGET_WAITKIND_NO_RESUMED)
-      return r;
-  }
+      /* GDB reads events asynchronously without blocking. The remote may have
+         taken too long to reply and GDB did not get any events back.  Check if
+         this is the case and just return.  */
+      if (ws->kind () == TARGET_WAITKIND_IGNORE
+	  || ws->kind () == TARGET_WAITKIND_NO_RESUMED)
+	{
+	  cuda_trace ("cuda_wait: ignored wait");
+	  return r;
+	}
+      
+      if (ws->kind () == TARGET_WAITKIND_STOPPED &&
+	  ws->sig () == GDB_SIGNAL_0)
+	{
+	  /* GDB is trying to stop this thread. Let it do it. */
+	  cuda_trace ("cuda_wait: host is stopping thread");
+	  return r;
+	}
+    }
 
   /* Immediately detect if the inferior is exiting.
      In these situations, do not investigate the device. */
-  if (ws->kind () == TARGET_WAITKIND_EXITED) {
-    cuda_trace ("cuda_wait: target is exiting, avoiding device inspection");
-    return r;
-  }
+  if (ws->kind () == TARGET_WAITKIND_EXITED)
+    {
+      cuda_trace ("cuda_wait: target is exiting, avoiding device inspection");
+      return r;
+    }
 
   if (r != minus_one_ptid && r != null_ptid && find_thread_ptid (this, r) != nullptr)
     {
@@ -517,19 +551,36 @@ cuda_remote_target<parent>::wait (ptid_t ptid, struct target_waitstatus *ws, tar
       switch_to_thread (this,r);
     }
 
+  /* Try to initialize CUDA if we haven't done so already. This may throw an exception,
+   * in which case we want to ignore it. */
   if (!cuda_initialized)
-    cuda_initialize_remote_target (current_inferior ()->top_target ());
+    {
+      try
+	{
+	  auto res = cuda_initialize_remote_target (current_inferior ()->top_target ());
+	  if (!res)
+	    {
+	      cuda_trace ("cuda_wait: cuda_initialize_remote_target() failed, return pid %d", r.pid ());
+	      return r;
+	    }
+	}
+      catch (const gdb_exception_error &e)
+	{
+	  cuda_trace ("cuda_wait: ignoring exception during initialize.");
+	  return r;
+	}
+    }
 
   /* Suspend all the CUDA devices. */
   cuda_trace ("cuda_wait: suspend devices");
-  for (dev = 0; dev < cuda_system_get_num_devices (); ++dev)
-    device_suspend (dev);
+  for (dev = 0; dev < cuda_state::get_num_devices (); ++dev)
+    cuda_state::device_suspend (dev);
 
   cuda_remote_query_trace_message (this);
   /* Check for ansynchronous events.  These events do not require
      acknowledgement to the debug API, and may arrive at any time
      without an explicit notification. */
-  cuda_api_get_next_async_event (&asyncEvent);
+  cuda_debugapi::get_next_async_event (&asyncEvent);
   if (asyncEvent.kind != CUDBG_EVENT_INVALID)
     cuda_process_events (&asyncEvent, CUDA_EVENT_ASYNC);
 
@@ -538,7 +589,7 @@ cuda_remote_target<parent>::wait (ptid_t ptid, struct target_waitstatus *ws, tar
   if (cuda_notification_received ())
     {
       /* Check if there is any CUDA event to be processed */
-      cuda_api_get_next_sync_event (&event);
+      cuda_debugapi::get_next_sync_event (&event);
       cuda_event_found = event.kind != CUDBG_EVENT_INVALID;
      }
 
@@ -557,27 +608,29 @@ cuda_remote_target<parent>::wait (ptid_t ptid, struct target_waitstatus *ws, tar
   kernels_update_terminated ();
 
   /* Decide which thread/kernel to switch focus to. */
-  if (cuda_exception_hit_p (cuda_exception))
+  cuda_coords c;
+  cuda_exception exp;
+  if (exp.valid ())
     {
       cuda_trace ("cuda_wait: stopped because of an exception");
-      c = cuda_exception_get_coords (cuda_exception);
-      cuda_coords_set_current (&c);
-      cuda_exception_print_message (cuda_exception);
-      ws->set_stopped ((enum gdb_signal) cuda_exception_get_value (cuda_exception));
-      cuda_set_signo (cuda_exception_get_value (cuda_exception));
+      cuda_coords coord {exp.coords ()};
+      cuda_current_focus::set (coord);
+      exp.printMessage ();
+      ws->set_stopped (exp.gdbSignal ());
+      cuda_set_signo (exp.gdbSignal ());
       tp = find_thread_ptid (this, r);
       gdb_assert (tp);
       tp->need_cuda_context_switch = true;
-      cuda_coords_get_current (&tp->new_cuda_coords);
+      tp->new_cuda_coords = cuda_current_focus::get ();
     }
   else if (cuda_sstep_is_active ())
     {
       cuda_trace ("cuda_wait: stopped because we are single-stepping");
-      cuda_coords_update_current ();
+      cuda_current_focus::update ();
       tp = find_thread_ptid (this, r);
       gdb_assert (tp);
       tp->need_cuda_context_switch = true;
-      cuda_coords_get_current (&tp->new_cuda_coords);
+      tp->new_cuda_coords = cuda_current_focus::get ();
     }
   else if (cuda_breakpoint_hit_p (c))
     {
@@ -586,34 +639,34 @@ cuda_remote_target<parent>::wait (ptid_t ptid, struct target_waitstatus *ws, tar
       ws->set_stopped (GDB_SIGNAL_TRAP);
       /* Cannot trust the returned coords prior to ampere. */
       //cuda_coords_set_current (&c);
-      cuda_coords_update_current (true);
+      cuda_current_focus::update (true);
       tp = find_thread_ptid (this, r);
       gdb_assert (tp);
       tp->need_cuda_context_switch = true;
-      cuda_coords_get_current (&tp->new_cuda_coords);
+      tp->new_cuda_coords = cuda_current_focus::get ();
     }
-  else if (cuda_system_is_broken (c))
+  else if (cuda_state::is_broken (c))
     {
       cuda_trace ("cuda_wait: stopped because there are broken warps (induced trap?)");
       cuda_set_signo (GDB_SIGNAL_TRAP);
       ws->set_stopped (GDB_SIGNAL_TRAP);
-      cuda_coords_set_current (&c);
+      cuda_current_focus::set (c);
       tp = find_thread_ptid (this, r);
       gdb_assert (tp);
       tp->need_cuda_context_switch = true;
-      cuda_coords_get_current (&tp->new_cuda_coords);
+      tp->new_cuda_coords = cuda_current_focus::get ();
     }
-  else if (cuda_api_get_attach_state () == CUDA_ATTACH_STATE_APP_READY)
+  else if (cuda_debugapi::get_attach_state () == CUDA_ATTACH_STATE_APP_READY)
     {
       /* Finished attaching to the CUDA app.
          Preferably switch focus to a device if possible */
       struct inferior *inf = find_inferior_pid (this, r.pid ());
       cuda_trace ("cuda_wait: stopped because we attached to the CUDA app");
-      cuda_api_set_attach_state (CUDA_ATTACH_STATE_COMPLETE);
+      cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_COMPLETE);
       inf->control.stop_soon = STOP_QUIETLY;
-      cuda_coords_update_current ();
+      cuda_current_focus::update ();
     }
-  else if (cuda_api_get_attach_state () == CUDA_ATTACH_STATE_DETACH_COMPLETE)
+  else if (cuda_debugapi::get_attach_state () == CUDA_ATTACH_STATE_DETACH_COMPLETE)
     {
       /* Finished detaching from the CUDA app. */
       struct inferior *inf = find_inferior_pid (this, r.pid ());
@@ -624,11 +677,11 @@ cuda_remote_target<parent>::wait (ptid_t ptid, struct target_waitstatus *ws, tar
     {
       cuda_trace ("cuda_wait: stopped because of a CUDA event");
       cuda_sigtrap_set_silent ();
-      cuda_coords_update_current ();
+      cuda_current_focus::update ();
       tp = find_thread_ptid (this, r);
       gdb_assert (tp);
       tp->need_cuda_context_switch = true;
-      cuda_coords_get_current (&tp->new_cuda_coords);
+      tp->new_cuda_coords = cuda_current_focus::get ();
     }
   else if ((ws->kind () == TARGET_WAITKIND_STOPPED ||
 	    ws->kind () == TARGET_WAITKIND_SIGNALLED) &&
@@ -637,20 +690,20 @@ cuda_remote_target<parent>::wait (ptid_t ptid, struct target_waitstatus *ws, tar
       /* CTRL-C was hit. Preferably switch focus to a device if possible */
       cuda_trace ("cuda_wait: stopped because a SIGINT was received.");
       cuda_set_signo (GDB_SIGNAL_INT);
-      cuda_coords_update_current ();
+      cuda_current_focus::update ();
     }
   else if (cuda_notification_received ())
     {
       /* No reason found when actual reason was consumed in a previous iteration (timeout,...) */
       cuda_trace ("cuda_wait: stopped for no visible CUDA reason.");
       cuda_set_signo (GDB_SIGNAL_TRAP); /* Dummy signal. We stopped after all. */
-      cuda_coords_invalidate_current ();
+      cuda_current_focus::invalidate ();
     }
   else
     {
       cuda_trace ("cuda_wait: stopped for a non-CUDA reason.");
       cuda_set_signo (GDB_SIGNAL_TRAP);
-      cuda_coords_invalidate_current ();
+      cuda_current_focus::invalidate ();
     }
 
   cuda_adjust_host_pc (r);
@@ -692,9 +745,9 @@ cuda_remote_target<parent>::wait (ptid_t ptid, struct target_waitstatus *ws, tar
 
   /* Switch focus and update related data */
   cuda_update_convenience_variables ();
-  if (cuda_focus_is_device ())
+  if (cuda_current_focus::isDevice ())
     /* Must be last, once focus and elf images have been updated */
-    switch_to_cuda_thread (NULL);
+    switch_to_cuda_thread (cuda_current_focus::get ());
 
   cuda_trace ("cuda_wait: done");
   return r;
@@ -705,26 +758,25 @@ void
 cuda_remote_target<parent>::fetch_registers (struct regcache *regcache, int regno)
 {
   uint64_t val = 0;
-  cuda_coords_t c;
   struct gdbarch *gdbarch = regcache->arch ();
   uint32_t pc_regnum = gdbarch_pc_regnum (gdbarch);
   enum register_status status;
 
   /* delegate to the host routines when not on the device */
-  if (!cuda_focus_is_device ())
+  if (!cuda_current_focus::isDevice ())
     {
       parent::fetch_registers (regcache, regno);
       return;
     }
 
-  cuda_coords_get_current (&c);
+  const auto& c = cuda_current_focus::get ().physical ();
 
   /* if all the registers are wanted, then we need the host registers and the
      device PC */
   if (regno == -1)
     {
       parent::fetch_registers (regcache, regno);
-      val = lane_get_virtual_pc (c.dev, c.sm, c.wp, c.ln);
+      val = cuda_state::lane_get_virtual_pc (c.dev (), c.sm (), c.wp (), c.ln ());
       regcache->raw_supply (pc_regnum, &val);
       return;
     }
@@ -732,7 +784,7 @@ cuda_remote_target<parent>::fetch_registers (struct regcache *regcache, int regn
   /* get the PC */
   if (regno == pc_regnum )
     {
-      val = lane_get_virtual_pc (c.dev, c.sm, c.wp, c.ln);
+      val = cuda_state::lane_get_virtual_pc (c.dev (), c.sm (), c.wp (), c.ln ());
       regcache->raw_supply (pc_regnum, &val);
       return;
     }
@@ -740,7 +792,7 @@ cuda_remote_target<parent>::fetch_registers (struct regcache *regcache, int regn
   if (cuda_regular_register_p (gdbarch, regno))
     {
       /* raw register */
-      val = lane_get_register (c.dev, c.sm, c.wp, c.ln, regno);
+      val = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (), regno);
       regcache->raw_supply (regno, &val);
       return;
     }
@@ -762,7 +814,7 @@ cuda_remote_target<parent>::store_registers (struct regcache *regcache, int regn
 
   gdb_assert (regno >= 0 && regno < num_regs);
 
-  if (!cuda_focus_is_device ())
+  if (!cuda_current_focus::isDevice ())
     {
       parent::store_registers (regcache, regno);
       return;
@@ -792,9 +844,9 @@ cuda_remote_target<parent>::insert_breakpoint (struct gdbarch *gdbarch,
 
   /* Insert the breakpoint on whatever device accepts it (valid address). */
   inserted = false;
-  for (dev = 0; dev < cuda_system_get_num_devices (); ++dev)
+  for (dev = 0; dev < cuda_state::get_num_devices (); ++dev)
     {
-      inserted |= cuda_api_set_breakpoint (dev, bp_tgt->reqstd_address);
+      inserted |= cuda_debugapi::set_breakpoint (dev, bp_tgt->reqstd_address);
     }
 
   /* Make sure we save the address where the actual breakpoint was placed.  */
@@ -818,10 +870,10 @@ cuda_remote_target<parent>::remove_breakpoint (struct gdbarch *gdbarch,
 
   /* Removed the breakpoint on whatever device accepts it (valid address). */
   removed = false;
-  for (dev = 0; dev < cuda_system_get_num_devices (); ++dev)
+  for (dev = 0; dev < cuda_state::get_num_devices (); ++dev)
     {
       /* We need to remove breakpoints even if no kernels remain on the device */
-      removed |= cuda_api_unset_breakpoint (dev, bp_tgt->placed_address);
+      removed |= cuda_debugapi::unset_breakpoint (dev, bp_tgt->placed_address);
     }
   return !removed;
 }
@@ -848,7 +900,7 @@ cuda_remote_xfer_siginfo (remote_target *remote, enum target_object object,
   gdb_assert (object == TARGET_OBJECT_SIGNAL_INFO);
   gdb_assert (readbuf || writebuf);
 
-  if (!cuda_focus_is_device ())
+  if (!cuda_current_focus::isDevice ())
     return TARGET_XFER_E_IO ;
 
   if (offset >= sizeof (buf))
@@ -881,10 +933,9 @@ cuda_remote_target<parent>::xfer_partial (enum target_object object, const char 
 					  ULONGEST offset, ULONGEST len, ULONGEST *xfered_len)
 {
   enum target_xfer_status status = TARGET_XFER_OK;
-  uint32_t dev, sm, wp, ln;
 
   /* If focus set on device, call the host routines directly */
-  if (!cuda_focus_is_device ())
+  if (!cuda_current_focus::isDevice ())
     {
       status = parent::xfer_partial (object, annex, readbuf,
 				     writebuf, offset, len,
@@ -901,14 +952,14 @@ cuda_remote_target<parent>::xfer_partial (enum target_object object, const char 
 
       if (readbuf)
 	{
-	  if (cuda_api_read_pinned_memory (offset, readbuf, len))
+	  if (cuda_debugapi::read_pinned_memory (offset, readbuf, len))
 	    *xfered_len = len;
 	  else
 	    status = TARGET_XFER_E_IO;
 	}
       else if (writebuf)
 	{
-	  if (cuda_api_write_pinned_memory (offset, writebuf, len))
+	  if (cuda_debugapi::write_pinned_memory (offset, writebuf, len))
 	    *xfered_len = len;
 	  else
 	    status = TARGET_XFER_E_IO;
@@ -917,26 +968,28 @@ cuda_remote_target<parent>::xfer_partial (enum target_object object, const char 
 
     /* The stack lives in local memory for ABI compilations. */
     case TARGET_OBJECT_STACK_MEMORY:
-
-      if (cuda_coords_get_current_physical (&dev, &sm, &wp, &ln))
+    {
+      if (!cuda_current_focus::isDevice ())
 	return TARGET_XFER_E_IO;
+      
+      const auto& c = cuda_current_focus::get ().physical ();
 
       if (readbuf)
         {
-          if (cuda_api_read_local_memory (dev, sm, wp, ln, offset, readbuf, len))
+          if (cuda_debugapi::read_local_memory (c.dev (), c.sm (), c.wp (), c.ln (), offset, readbuf, len))
             *xfered_len = len;
 	  else
 	    status = TARGET_XFER_E_IO;
         }
       else if (writebuf)
         {
-          if (cuda_api_write_local_memory (dev, sm, wp, ln, offset, writebuf, len))
+          if (cuda_debugapi::write_local_memory (c.dev (), c.sm (), c.wp (), c.ln (), offset, writebuf, len))
             *xfered_len = len;
 	  else
 	    status = TARGET_XFER_E_IO;
         }
       break;
-
+    }
     /* When stopping on the device, build a simple siginfo object */
     case TARGET_OBJECT_SIGNAL_INFO:
 
@@ -959,7 +1012,7 @@ template <class parent>
 struct gdbarch *
 cuda_remote_target<parent>::thread_architecture (ptid_t ptid)
 {
-  if (cuda_focus_is_device ())
+  if (cuda_current_focus::isDevice ())
     return cuda_get_gdbarch ();
   else
     return target_gdbarch();
@@ -1004,15 +1057,20 @@ cuda_remote_attach (void)
   unsigned char *sigs = NULL;
   struct cuda_signal_info_st sigstop_save = {0};
 
-  if (cuda_api_get_attach_state() != CUDA_ATTACH_STATE_NOT_STARTED && 
-    cuda_api_get_attach_state() != CUDA_ATTACH_STATE_DETACH_COMPLETE)
+  if (cuda_debugapi::get_attach_state() != CUDA_ATTACH_STATE_NOT_STARTED && 
+    cuda_debugapi::get_attach_state() != CUDA_ATTACH_STATE_DETACH_COMPLETE)
     return;
 #ifndef __QNXTARGET__
   if (!cuda_get_current_remote_target ()->remote_query_attached (inferior_ptid.pid ()))
     return;
 #endif
 
-  cuda_initialize_remote_target (current_inferior ()->top_target ());
+  auto res = cuda_initialize_remote_target (current_inferior ()->top_target ());
+  if (!res)
+    {
+      /* FIXME: initialize is non-fatal. Investigate why this fails. */
+      cuda_trace ("Failed to initialize remote target.");
+    }
 
   debugFlagAddr = cuda_get_symbol_address (_STRING_(CUDBG_IPC_FLAG_NAME));
   sessionIdAddr = cuda_get_symbol_address (_STRING_(CUDBG_SESSION_ID));
@@ -1032,7 +1090,7 @@ cuda_remote_attach (void)
     error (_("Attaching to a running CUDA process with software preemption "
              "enabled in the debugger is not supported."));
 
-  cuda_api_set_attach_state (CUDA_ATTACH_STATE_IN_PROGRESS);
+  cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_IN_PROGRESS);
 
   if (!lookup_cmd_composition ("call", &alias, &prefix_cmd, &cmd))
     error (_("Failed to initiate attach."));
@@ -1099,7 +1157,7 @@ cuda_remote_attach (void)
   cuda_signal_restore_settings (SIGSTOP, &sigstop_save);
 
   /* Wait till the backend has started up and is ready to service API calls */
-  while (cuda_api_initialize () != CUDBG_SUCCESS)
+  while (cuda_debugapi::initialize () != CUDBG_SUCCESS)
     {
       if (timeElapsed < timeOut)
         usleep(sleepTime * 1000);
@@ -1120,7 +1178,7 @@ cuda_remote_attach (void)
 
       for (cnt=0;
 	   cnt < 1000
-	     && cuda_api_get_attach_state () == CUDA_ATTACH_STATE_IN_PROGRESS;
+	     && cuda_debugapi::get_attach_state () == CUDA_ATTACH_STATE_IN_PROGRESS;
            cnt++)
 	{
 	  prepare_execution_command (current_inferior ()->top_target (), true);
@@ -1142,7 +1200,7 @@ cuda_remote_attach (void)
       target_write_memory (debugFlagAddr, &one, 1);
 
       /* No data to collect, attach complete. */
-      cuda_api_set_attach_state (CUDA_ATTACH_STATE_COMPLETE);
+      cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_COMPLETE);
     }
 }
 
@@ -1152,7 +1210,7 @@ cuda_remote_target<parent>::detach (inferior *inf, int from_tty)
 {
   /* If attach wasn't completed,
      treat the inferior as a host-only process */
-  if (cuda_api_get_attach_state() == CUDA_ATTACH_STATE_COMPLETE &&
+  if (cuda_debugapi::get_attach_state() == CUDA_ATTACH_STATE_COMPLETE &&
       cuda_get_current_remote_target ()->remote_query_attached (inferior_ptid.pid ()))
     cuda_do_detach (inf, true);
 

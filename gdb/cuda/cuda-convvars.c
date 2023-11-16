@@ -16,30 +16,32 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 #include "defs.h"
-#include <time.h>
-#include <sys/stat.h>
 #include <ctype.h>
 #include <pthread.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <vector>
 
-#include "gdbtypes.h"
-#include "gdbarch.h"
-#include "value.h"
 #include "arch-utils.h"
 #include "command.h"
+#include "gdbarch.h"
+#include "gdbtypes.h"
+#include "value.h"
 
+#include "cuda-convvars.h"
 #include "cuda-iterator.h"
 #include "cuda-state.h"
 #include "cuda-tdep.h"
 #include "cuda-utils.h"
-#include "cuda-convvars.h"
-
 
 /* To update the convenience variable error code for api_failures.
- * cuda_get_last_driver_api_error_code and cuda_get_last_driver_api_error_func_name
- * are not used for updating convenience variables as they throw false errors.
- * convenience variable update can be called even if symbol values are not properly
- * initialized and can lead to false errors. cv_get_last_driver_api_error_code and
- * cv_get_last_driver_api_error_func_name ignore any such errors while updating variables.
+ * cuda_get_last_driver_api_error_code and
+ * cuda_get_last_driver_api_error_func_name are not used for updating
+ * convenience variables as they throw false errors. convenience variable
+ * update can be called even if symbol values are not properly initialized and
+ * can lead to false errors. cv_get_last_driver_api_error_code and
+ * cv_get_last_driver_api_error_func_name ignore any such errors while updating
+ * variables.
  * */
 static uint64_t
 cv_get_last_driver_api_error_code (void)
@@ -47,7 +49,8 @@ cv_get_last_driver_api_error_code (void)
   CORE_ADDR error_code_addr;
   uint64_t res;
 
-  error_code_addr = cuda_get_symbol_address (_STRING_(CUDBG_REPORTED_DRIVER_API_ERROR_CODE));
+  error_code_addr = cuda_get_symbol_address (
+      _STRING_ (CUDBG_REPORTED_DRIVER_API_ERROR_CODE));
   if (!error_code_addr)
     {
       return 0;
@@ -64,177 +67,139 @@ cv_get_last_driver_api_error_func_name (CORE_ADDR *name)
   uint64_t error_func_name_addr;
 
   error_func_name_core_addr = cuda_get_symbol_address (
-    _STRING_(CUDBG_REPORTED_DRIVER_API_ERROR_FUNC_NAME_ADDR));
+      _STRING_ (CUDBG_REPORTED_DRIVER_API_ERROR_FUNC_NAME_ADDR));
   if (!error_func_name_core_addr)
     {
       *name = 0;
       return;
     }
 
-  target_read_memory (error_func_name_core_addr, (gdb_byte *)&error_func_name_addr, sizeof (uint64_t));
+  target_read_memory (error_func_name_core_addr,
+                      (gdb_byte *)&error_func_name_addr, sizeof (uint64_t));
   *name = (CORE_ADDR)error_func_name_addr;
-}
-
-static struct value *
-cuda_convenience_convert_to_kernel_id_array_value (uint64_t *kernels,
-                                                   uint32_t num_kernels)
-{
-  struct type *type_uint32 = builtin_type (get_current_arch ())->builtin_uint32;
-  struct value *kernel_id_array_value;
-  struct value **kernel_id_values;
-  uint32_t i;
-
-  kernel_id_values = (struct value **) xmalloc (num_kernels * sizeof(*kernel_id_values));
-
-  for (i = 0; i < num_kernels; i++)
-    kernel_id_values[i] = (struct value *) value_from_longest (type_uint32, (LONGEST) kernels[i]);
-
-  kernel_id_array_value = value_array (1, num_kernels, kernel_id_values);
-
-  xfree (kernel_id_values);
-
-  return kernel_id_array_value;
-}
-
-static struct value *
-cuda_convenience_convert_to_block_idx_array_value (CuDim3 **blocks,
-                                                   uint32_t num_kernels,
-                                                   uint32_t max_blocks)
-{
-  struct type *type_uint32 = builtin_type (get_current_arch ())->builtin_uint32;
-  struct value **kernel_block_idx_array_value;
-  struct value *block_idx_array_value;
-  struct value **block_idx_values;
-  struct value *block_idx_value[3];
-  CuDim3 blockIdx;
-  uint32_t i, j;
-
-  kernel_block_idx_array_value = (struct value **) xmalloc (num_kernels * sizeof(*kernel_block_idx_array_value));
-
-  for (i = 0; i < num_kernels; i++)
-    {
-      block_idx_values = (struct value **) xmalloc (max_blocks * sizeof (*block_idx_values));
-
-      for (j = 0; j < max_blocks; j++)
-      {
-        blockIdx = blocks[i][j];
-        block_idx_value[0] = (struct value *) value_from_longest (type_uint32, (LONGEST) blockIdx.x);
-        block_idx_value[1] = (struct value *) value_from_longest (type_uint32, (LONGEST) blockIdx.y);
-        block_idx_value[2] = (struct value *) value_from_longest (type_uint32, (LONGEST) blockIdx.z);
-        block_idx_values[j] = (struct value *) value_array (1, 3, block_idx_value);
-      }
-
-      kernel_block_idx_array_value[i] = value_array (1, max_blocks, block_idx_values);
-      xfree (block_idx_values);
-    }
-
-  block_idx_array_value = value_array (1, num_kernels, kernel_block_idx_array_value);
-  xfree (kernel_block_idx_array_value);
-
-  return block_idx_array_value;
 }
 
 /* This function creates array values of present blocks and kernel IDs and
    returns a number of active kernels */
 static uint32_t
-cuda_convenience_get_present_blocks_kernels(struct value **kernel_id_array_value,
-                                            struct value **block_idx_array_value)
+cuda_convenience_get_present_blocks_kernels (
+    struct value **kernel_id_array_value, struct value **block_idx_array_value)
 {
-  struct type *type_uint32 = builtin_type (get_current_arch ())->builtin_uint32;
-  struct type *type_array = lookup_array_range_type (type_uint32, 1, 0);
-  CuDim3 invalid_blockIdx = (CuDim3) { CUDA_INVALID, CUDA_INVALID, CUDA_INVALID };
-
-  cuda_coords_t c, filter;
-  cuda_iterator block_iter, kernel_iter;
-  uint32_t num_blocks, max_blocks, num_kernels;
-  uint64_t kernel_id, i, j;
-
-  CuDim3 **blocks;
-  uint64_t *kernels;
-
   gdb_assert (kernel_id_array_value);
   gdb_assert (block_idx_array_value);
 
-  /* compute num kernels and max blocks across all the kernels */
-  max_blocks = 0;
-  filter = CUDA_WILDCARD_COORDS;
-  kernel_iter = cuda_iterator_create (CUDA_ITERATOR_TYPE_KERNELS, &filter, CUDA_SELECT_VALID);
-  num_kernels = cuda_iterator_get_size (kernel_iter);
-  for (cuda_iterator_start (kernel_iter); !cuda_iterator_end (kernel_iter); cuda_iterator_next (kernel_iter))
-    {
-      c  = cuda_iterator_get_current (kernel_iter);
-      kernel_id = c.kernelId;
+  struct type *type_uint32
+      = builtin_type (get_current_arch ())->builtin_uint32;
+  struct type *type_array = lookup_array_range_type (type_uint32, 1, 0);
 
-      filter = CUDA_WILDCARD_COORDS;
-      filter.kernelId = kernel_id;
-      block_iter = cuda_iterator_create (CUDA_ITERATOR_TYPE_BLOCKS, &filter, CUDA_SELECT_VALID);
-      num_blocks = cuda_iterator_get_size (block_iter);
-      max_blocks = num_blocks > max_blocks ? num_blocks : max_blocks;
-      cuda_iterator_destroy (block_iter);
+  /* This represents the array of active kernel Ids */
+  std::vector<uint64_t> kernels;
+  /*
+   * gdb value arrays require elements to be the same size, so we ensure
+   * each kernel has the same number of blocks and set the blocks outside
+   * the range to CUDA_INVALID.
+   */
+  uint32_t max_blocks = 0;
+  /* This represents the array of iterators for every block in every kernel */
+  std::vector<cuda_iterator<cuda_iterator_type::blocks, select_valid> >
+      blocks_itr;
+
+  /* Build up kernel and block iterators */
+  cuda_iterator<cuda_iterator_type::kernels, select_valid> kernels_itr{
+    cuda_coords::wild ()
+  };
+  /* Iterate over each kernel to count the block sizes */
+  for (const auto &kern : kernels_itr)
+    {
+      /* Save this kernelId */
+      kernels.push_back (kern.logical ().kernelId ());
+      /* Create an iterator over every block in the kernel */
+      cuda_coords filter{ kern.physical ().dev (),
+                          CUDA_WILDCARD,
+                          CUDA_WILDCARD,
+                          CUDA_WILDCARD,
+                          kern.logical ().kernelId (),
+                          CUDA_WILDCARD,
+                          CUDA_WILDCARD_DIM,
+                          CUDA_WILDCARD_DIM,
+                          CUDA_WILDCARD_DIM };
+      cuda_iterator<cuda_iterator_type::blocks, select_valid> blocks{ filter };
+      /* Update max blocks */
+      max_blocks = std::max ((uint32_t)blocks.size (), max_blocks);
+      /* Save the blocks iterator */
+      blocks_itr.push_back (std::move (blocks));
     }
-  cuda_iterator_destroy (kernel_iter);
 
   /* if no block or kernel, then return empty arrays */
-  if (max_blocks == 0)
+  if (!kernels.size ())
     {
       *kernel_id_array_value = allocate_value (type_array);
       *block_idx_array_value = allocate_value (type_array);
       return 0;
     }
 
-  /* fill up kernels and blocks */
-  kernels = (uint64_t *) xmalloc (num_kernels * sizeof(*kernels));
-  blocks  = (CuDim3 **) xmalloc (num_kernels * sizeof(*blocks));
+  gdb_assert (kernels.size () == blocks_itr.size ());
 
-  i = 0;
-  filter = CUDA_WILDCARD_COORDS;
-  kernel_iter = cuda_iterator_create (CUDA_ITERATOR_TYPE_KERNELS, &filter, CUDA_SELECT_VALID);
-  for (cuda_iterator_start (kernel_iter); !cuda_iterator_end (kernel_iter); cuda_iterator_next (kernel_iter))
+  /* Create the block value array */
+  std::vector<struct value *> kernel_block_idx_val_arr;
+  /* Iterate over every block iterator for every kernel*/
+  for (auto &block_itr : blocks_itr)
     {
-      c  = cuda_iterator_get_current (kernel_iter);
-      kernel_id = c.kernelId;
-
-      kernels[i] = kernel_id;
-      blocks[i]  = (CuDim3 *) xmalloc (max_blocks * sizeof(**blocks)); // max_blocks, yes.
-      for (j = 0; j < max_blocks; ++j)
-        blocks[i][j] = invalid_blockIdx;
-
-      j = 0;
-      filter = CUDA_WILDCARD_COORDS;
-      filter.kernelId = kernel_id;
-      block_iter = cuda_iterator_create (CUDA_ITERATOR_TYPE_BLOCKS, &filter, CUDA_SELECT_VALID);
-      for (cuda_iterator_start (block_iter); !cuda_iterator_end (block_iter); cuda_iterator_next (block_iter))
+      std::vector<struct value *> block_idx_val_arr;
+      // Iterate over every block in the block iterator
+      for (const auto &block : block_itr)
         {
-          c  = cuda_iterator_get_current (block_iter);
-          blocks[i][j] = c.blockIdx;
-          ++j;
+          std::vector<struct value *> block_dim_val_arr;
+          block_dim_val_arr.push_back (value_from_longest (
+              type_uint32, (LONGEST)block.logical ().blockIdx ().x));
+          block_dim_val_arr.push_back (value_from_longest (
+              type_uint32, (LONGEST)block.logical ().blockIdx ().y));
+          block_dim_val_arr.push_back (value_from_longest (
+              type_uint32, (LONGEST)block.logical ().blockIdx ().z));
+          block_idx_val_arr.push_back (
+              value_array (1, 3, block_dim_val_arr.data ()));
         }
-      cuda_iterator_destroy (block_iter);
-
-      ++i;
+      // Value arrays require each element to be the same size - push back any
+      // uninitialized values up to max_blocks
+      for (auto i = max_blocks - block_itr.size (); i > 0; i--)
+        {
+          std::vector<struct value *> block_dim_val_arr;
+          block_dim_val_arr.push_back (
+              value_from_longest (type_uint32, (LONGEST)CUDA_INVALID));
+          block_dim_val_arr.push_back (
+              value_from_longest (type_uint32, (LONGEST)CUDA_INVALID));
+          block_dim_val_arr.push_back (
+              value_from_longest (type_uint32, (LONGEST)CUDA_INVALID));
+          block_idx_val_arr.push_back (
+              value_array (1, 3, block_dim_val_arr.data ()));
+        }
+      // Push back the completed block arrays for this kernel
+      kernel_block_idx_val_arr.push_back (
+          value_array (1, max_blocks, block_idx_val_arr.data ()));
     }
-    cuda_iterator_destroy (kernel_iter);
+  /* We have completed the block value array. */
+  *block_idx_array_value
+      = value_array (1, kernels.size (), kernel_block_idx_val_arr.data ());
 
-  /* conversion */
-  *block_idx_array_value = cuda_convenience_convert_to_block_idx_array_value (blocks, num_kernels, max_blocks);
-  *kernel_id_array_value = cuda_convenience_convert_to_kernel_id_array_value (kernels, num_kernels);
+  /* Create the kernelId value array */
+  std::vector<struct value *> kernel_val_arr;
+  /* Iterate over every kernelId */
+  for (auto kernelId : kernels)
+    kernel_val_arr.push_back (
+        value_from_longest (type_uint32, (LONGEST)kernelId));
+  /* We have completed the kernelId value array. */
+  *kernel_id_array_value
+      = value_array (1, kernels.size (), kernel_val_arr.data ());
 
-  /* cleanup */
-  for (i = 0; i < num_kernels; i++)
-    xfree (blocks[i]);
-  xfree (blocks);
-  xfree (kernels);
-
-  return num_kernels;
+  return kernels.size ();
 }
-
 
 static inline void
 cv_set_uint32_var (const char *name, uint32_t val)
 {
   struct gdbarch *gdbarch = get_current_arch ();
   struct type *type = builtin_type (gdbarch)->builtin_uint32;
-  struct internalvar *var = lookup_internalvar(name);
+  struct internalvar *var = lookup_internalvar (name);
 
   set_internalvar (var, value_from_longest (type, (LONGEST)val));
 }
@@ -244,50 +209,46 @@ cv_set_uint64_var (const char *name, uint64_t val)
 {
   struct gdbarch *gdbarch = get_current_arch ();
   struct type *type = builtin_type (gdbarch)->builtin_uint64;
-  struct internalvar *var = lookup_internalvar(name);
+  struct internalvar *var = lookup_internalvar (name);
 
   set_internalvar (var, value_from_longest (type, (LONGEST)val));
 }
 
 static void
-cv_update_hw_vars(void)
+cv_update_hw_vars (void)
 {
-  cuda_coords_t current;
-  bool valid;
+  cv_set_uint32_var ("cuda_latest_launched_kernel_id",
+                     cuda_latest_launched_kernel_id ());
 
-  valid = !cuda_coords_get_current (&current);
+  if (!cuda_current_focus::isDevice ())
+    {
+      cv_set_uint32_var ("cuda_num_devices", CUDA_INVALID);
+      cv_set_uint32_var ("cuda_num_sm", CUDA_INVALID);
+      cv_set_uint32_var ("cuda_num_warps", CUDA_INVALID);
+      cv_set_uint32_var ("cuda_num_lanes", CUDA_INVALID);
+      cv_set_uint32_var ("cuda_num_registers", CUDA_INVALID);
+      cv_set_uint32_var ("cuda_num_uregisters", CUDA_INVALID);
+      return;
+    }
 
-  cv_set_uint32_var ("cuda_latest_launched_kernel_id", cuda_latest_launched_kernel_id ());
-
-  if (!valid) {
-    cv_set_uint32_var ("cuda_num_devices", CUDA_INVALID);
-    cv_set_uint32_var ("cuda_num_sm", CUDA_INVALID);
-    cv_set_uint32_var ("cuda_num_warps", CUDA_INVALID);
-    cv_set_uint32_var ("cuda_num_lanes", CUDA_INVALID);
-    cv_set_uint32_var ("cuda_num_registers", CUDA_INVALID);
-    return;
-  }
-
-  cv_set_uint32_var ("cuda_num_devices", cuda_system_get_num_devices());
-  cv_set_uint32_var ("cuda_num_sm", device_get_num_sms (current.dev));
-  cv_set_uint32_var ("cuda_num_warps", device_get_num_warps (current.dev));
-  cv_set_uint32_var ("cuda_num_lanes", device_get_num_lanes (current.dev));
-  cv_set_uint32_var ("cuda_num_registers", device_get_num_registers (current.dev));
+  const auto &c = cuda_current_focus::get ().physical ();
+  cv_set_uint32_var ("cuda_num_devices", cuda_state::get_num_devices ());
+  cv_set_uint32_var ("cuda_num_sm", cuda_state::device_get_num_sms (c.dev ()));
+  cv_set_uint32_var ("cuda_num_warps",
+                     cuda_state::device_get_num_warps (c.dev ()));
+  cv_set_uint32_var ("cuda_num_lanes",
+                     cuda_state::device_get_num_lanes (c.dev ()));
+  cv_set_uint32_var ("cuda_num_registers",
+                     cuda_state::device_get_num_registers (c.dev ()));
+  cv_set_uint32_var ("cuda_num_uregisters",
+                     cuda_state::device_get_num_uregisters (c.dev ()));
 }
 
 static void
-cv_update_focus_vars(void)
+cv_update_focus_vars (void)
 {
-  cuda_coords_t current;
-  bool valid, active;
-  kernel_t kernel;
-  CuDim3 grid_dim;
-  CuDim3 block_dim;
-
-  valid = !cuda_coords_get_current (&current);
-
-  if (!valid)
-  {
+  if (!cuda_current_focus::isDevice ())
+    {
       cv_set_uint32_var ("cuda_grid_dim_x", CUDA_INVALID);
       cv_set_uint32_var ("cuda_grid_dim_y", CUDA_INVALID);
       cv_set_uint32_var ("cuda_grid_dim_z", CUDA_INVALID);
@@ -308,13 +269,17 @@ cv_update_focus_vars(void)
       cv_set_uint32_var ("cuda_focus_thread_z", CUDA_INVALID);
       cv_set_uint32_var ("cuda_thread_active", false);
       return;
-  }
+    }
 
-  kernel = warp_get_kernel (current.dev, current.sm, current.wp);
-  grid_dim  = kernel_get_grid_dim (kernel);
-  block_dim = kernel_get_block_dim (kernel);
-  active    = lane_is_valid (current.dev, current.sm, current.wp, current.ln) &&
-              lane_is_active (current.dev, current.sm, current.wp, current.ln);
+  const auto &current = cuda_current_focus::get ();
+  const auto &p = current.physical ();
+  const auto &l = current.logical ();
+  auto kernel = cuda_state::warp_get_kernel (p.dev (), p.sm (), p.wp ());
+  auto grid_dim = kernel_get_grid_dim (kernel);
+  auto block_dim = kernel_get_block_dim (kernel);
+  bool active
+      = cuda_state::lane_is_valid (p.dev (), p.sm (), p.wp (), p.ln ())
+        && cuda_state::lane_is_active (p.dev (), p.sm (), p.wp (), p.ln ());
 
   cv_set_uint32_var ("cuda_grid_dim_x", grid_dim.x);
   cv_set_uint32_var ("cuda_grid_dim_y", grid_dim.y);
@@ -323,73 +288,70 @@ cv_update_focus_vars(void)
   cv_set_uint32_var ("cuda_block_dim_y", block_dim.y);
   cv_set_uint32_var ("cuda_block_dim_z", block_dim.z);
 
-  cv_set_uint32_var ("cuda_focus_device", current.dev);
-  cv_set_uint32_var ("cuda_focus_sm", current.sm);
-  cv_set_uint32_var ("cuda_focus_warp", current.wp);
-  cv_set_uint32_var ("cuda_focus_lane", current.ln);
-  cv_set_uint64_var ("cuda_focus_grid", current.gridId);
-  cv_set_uint64_var ("cuda_focus_kernel_id", current.kernelId);
-  cv_set_uint32_var ("cuda_focus_block_x", current.blockIdx.x);
-  cv_set_uint32_var ("cuda_focus_block_y", current.blockIdx.y);
-  cv_set_uint32_var ("cuda_focus_block_z", current.blockIdx.z);
-  cv_set_uint32_var ("cuda_focus_thread_x", current.threadIdx.x);
-  cv_set_uint32_var ("cuda_focus_thread_y", current.threadIdx.y);
-  cv_set_uint32_var ("cuda_focus_thread_z", current.threadIdx.z);
+  cv_set_uint32_var ("cuda_focus_device", p.dev ());
+  cv_set_uint32_var ("cuda_focus_sm", p.sm ());
+  cv_set_uint32_var ("cuda_focus_warp", p.wp ());
+  cv_set_uint32_var ("cuda_focus_lane", p.ln ());
+  cv_set_uint64_var ("cuda_focus_grid", l.gridId ());
+  cv_set_uint64_var ("cuda_focus_kernel_id", l.kernelId ());
+  cv_set_uint32_var ("cuda_focus_block_x", l.blockIdx ().x);
+  cv_set_uint32_var ("cuda_focus_block_y", l.blockIdx ().y);
+  cv_set_uint32_var ("cuda_focus_block_z", l.blockIdx ().z);
+  cv_set_uint32_var ("cuda_focus_thread_x", l.threadIdx ().x);
+  cv_set_uint32_var ("cuda_focus_thread_y", l.threadIdx ().y);
+  cv_set_uint32_var ("cuda_focus_thread_z", l.threadIdx ().z);
   cv_set_uint32_var ("cuda_thread_active", active);
 }
 
 static void
-cv_update_lineno_var(void)
+cv_update_lineno_var (void)
 {
-  cuda_coords_t cur;
-  bool valid;
   uint64_t pc = 0ULL;
   uint32_t lineno = 0;
 
-  valid = !cuda_coords_get_current (&cur);
-  if (valid)
+  if (cuda_current_focus::isDevice ())
     {
-      pc      = lane_get_virtual_pc (cur.dev, cur.sm, cur.wp, cur.ln);
-      lineno  = find_pc_line (pc, 0).line;
+      const auto &c = cuda_current_focus::get ().physical ();
+      pc = cuda_state::lane_get_virtual_pc (c.dev (), c.sm (), c.wp (),
+                                            c.ln ());
+      lineno = find_pc_line (pc, 0).line;
     }
 
   cv_set_uint32_var ("cuda_thread_lineno", lineno);
 }
 
 static void
-cv_update_call_depth_var(void)
+cv_update_call_depth_var (void)
 {
-  cuda_coords_t cur;
-  bool valid;
-  uint32_t  depth = CUDA_INVALID;
+  uint32_t depth = CUDA_INVALID;
 
-  valid = !cuda_coords_get_current (&cur);
-  if (valid)
+  if (cuda_current_focus::isDevice ())
     {
-      depth = lane_get_call_depth (cur.dev, cur.sm, cur.wp, cur.ln);
+      const auto &c = cuda_current_focus::get ().physical ();
+      depth = cuda_state::lane_get_call_depth (c.dev (), c.sm (), c.wp (),
+                                               c.ln ());
     }
 
   cv_set_uint32_var ("cuda_call_depth", depth);
 }
 
 static void
-cv_update_syscall_depth_var(void)
+cv_update_syscall_depth_var (void)
 {
-  cuda_coords_t cur;
-  bool valid;
-  uint32_t  depth = CUDA_INVALID;
+  uint32_t depth = CUDA_INVALID;
 
-  valid = !cuda_coords_get_current (&cur);
-  if (valid)
+  if (cuda_current_focus::isDevice ())
     {
-      depth = lane_get_syscall_call_depth (cur.dev, cur.sm, cur.wp, cur.ln);
+      const auto &c = cuda_current_focus::get ().physical ();
+      depth = cuda_state::lane_get_syscall_call_depth (c.dev (), c.sm (),
+                                                       c.wp (), c.ln ());
     }
 
   cv_set_uint32_var ("cuda_syscall_call_depth", depth);
 }
 
 static void
-cv_update_api_failures_vars(void)
+cv_update_api_failures_vars (void)
 {
   struct gdbarch *gdbarch = get_current_arch ();
   struct type *type_data_ptr = builtin_type (gdbarch)->builtin_data_ptr;
@@ -405,12 +367,13 @@ cv_update_api_failures_vars(void)
 }
 
 static void
-cv_update_present_kernels_vars(void)
+cv_update_present_kernels_vars (void)
 {
   uint32_t num_kernels;
   struct value *kernel_array, *blocks_array;
 
-  num_kernels = cuda_convenience_get_present_blocks_kernels (&kernel_array, &blocks_array);
+  num_kernels = cuda_convenience_get_present_blocks_kernels (&kernel_array,
+                                                             &blocks_array);
 
   cv_set_uint32_var ("cuda_num_present_kernels", num_kernels);
   set_internalvar (lookup_internalvar ("cuda_present_kernel_ids"),
@@ -419,39 +382,37 @@ cv_update_present_kernels_vars(void)
                    blocks_array);
 }
 
-static void cv_update_total_kernels_var(void)
+static void
+cv_update_total_kernels_var (void)
 {
-  cv_set_uint32_var ("cuda_num_total_kernels", cuda_system_get_num_present_kernels ());
+  cv_set_uint32_var ("cuda_num_total_kernels",
+                     cuda_state::get_num_present_kernels ());
 }
 
-struct cv_variable_group {
+struct cv_variable_group
+{
   const char *group_name;
   bool enabled;
-  void (*update_func)(void);
+  void (*update_func) (void);
   const char *group_desc;
 };
 
-static struct cv_variable_group cv_var_groups[] =
-{
-  {"hw_vars", false, cv_update_hw_vars,
-    "HW specific variables, like number of sms, lanes, warps, etc"},
-  {"focus", false, cv_update_focus_vars,
-    "CUDA focus specific variables"},
-  {"lineno", false, cv_update_lineno_var,
-    "Line number that matches $pc in focus"},
-  {"call_depth", false, cv_update_call_depth_var,
-    "Call depth"},
-  {"syscall_depth", false, cv_update_syscall_depth_var,
-    "Systemcall depth"},
-  {"api_failures", false, cv_update_api_failures_vars,
-    "API failure error number and function name"},
-  {"present_kernels", false, cv_update_present_kernels_vars,
-    "Kernel and their ids currently present on GPUs"},
-  {"total_kernels", false, cv_update_total_kernels_var,
-    "Total number of kernels on GPUs"},
-  {NULL, false, NULL, NULL},
+static struct cv_variable_group cv_var_groups[] = {
+  { "hw_vars", false, cv_update_hw_vars,
+    "HW specific variables, like number of sms, lanes, warps, etc" },
+  { "focus", false, cv_update_focus_vars, "CUDA focus specific variables" },
+  { "lineno", false, cv_update_lineno_var,
+    "Line number that matches $pc in focus" },
+  { "call_depth", false, cv_update_call_depth_var, "Call depth" },
+  { "syscall_depth", false, cv_update_syscall_depth_var, "Systemcall depth" },
+  { "api_failures", false, cv_update_api_failures_vars,
+    "API failure error number and function name" },
+  { "present_kernels", false, cv_update_present_kernels_vars,
+    "Kernel and their ids currently present on GPUs" },
+  { "total_kernels", false, cv_update_total_kernels_var,
+    "Total number of kernels on GPUs" },
+  { NULL, false, NULL, NULL },
 };
-
 
 int
 cuda_enable_convenience_variables_group (char *name, bool enable)
@@ -459,11 +420,11 @@ cuda_enable_convenience_variables_group (char *name, bool enable)
   struct cv_variable_group *grp;
   int rc = false;
 
-  for (grp=cv_var_groups;grp->group_name;grp++)
-    if (!name || strcasecmp(name,grp->group_name)==0)
+  for (grp = cv_var_groups; grp->group_name; grp++)
+    if (!name || strcasecmp (name, grp->group_name) == 0)
       {
-         grp->enabled = enable;
-         rc = true;
+        grp->enabled = enable;
+        rc = true;
       }
   return rc;
 }
@@ -476,9 +437,9 @@ cuda_update_convenience_variables (void)
 
   mark = value_mark ();
 
-  for (grp=cv_var_groups;grp->group_name;grp++)
+  for (grp = cv_var_groups; grp->group_name; grp++)
     if (grp->enabled)
-      grp->update_func();
+      grp->update_func ();
 
   /* Free the temporary values */
   value_free_to_mark (mark);
@@ -492,16 +453,21 @@ cuda_build_covenience_variables_help_message (char *ptr, int size)
   struct cv_variable_group *grp;
 
   rc = snprintf (ptr, size,
-    _("Specifies which convenience variables groups are available for debugging.\n"));
-  ptr += rc; size -= rc;
+                 _ ("Specifies which convenience variables groups are "
+                    "available for debugging.\n"));
+  ptr += rc;
+  size -= rc;
   rc = snprintf (ptr, size,
-    _("Groups names are: \"all\",\"none\" or comma separate list of the folowing:\n"));
-  ptr += rc; size -= rc;
-  for (grp=cv_var_groups;grp->group_name;grp++)
+                 _ ("Groups names are: \"all\",\"none\" or comma separate "
+                    "list of the folowing:\n"));
+  ptr += rc;
+  size -= rc;
+  for (grp = cv_var_groups; grp->group_name; grp++)
     {
-      rc = snprintf (ptr, size, " %*s : %s\n",
-                     20, grp->group_name, grp->group_desc);
-      if (rc <= 0) break;
+      rc = snprintf (ptr, size, " %*s : %s\n", 20, grp->group_name,
+                     grp->group_desc);
+      if (rc <= 0)
+        break;
       ptr += rc;
       size -= rc;
     }

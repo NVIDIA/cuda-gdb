@@ -1810,6 +1810,11 @@ static const struct CUDBGAPI_st cudbgCoreApi = {
 
     /* 12.2 Extensions */
     API_CALL(getErrorStringEx),
+
+#if CUDBG_API_VERSION_REVISION >= 138
+    /* 12.3 Extensions */
+    API_CALL(notSupported),
+#endif
 };
 
 CUDBGAPI cuCoreGetApi(CudaCore *cc)

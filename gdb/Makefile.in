@@ -279,7 +279,6 @@ SUBDIR_CUDA_SRCS = \
 	cuda/cuda-frame.c \
 	cuda/cuda-functions.c \
 	cuda/cuda-gdb.c \
-	cuda/cuda-iterator.c \
 	cuda/cuda-kernel.c \
 	cuda/cuda-lang.c \
 	cuda/cuda-linux-nat.c \

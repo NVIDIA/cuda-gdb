@@ -6936,7 +6936,7 @@ get_symbol_address (const struct symbol *sym)
 
   const char *linkage_name = sym->linkage_name ();
 #ifdef NVIDIA_CUDA_GDB
-  bool is_cuda_focus = cuda_focus_is_device ();
+  bool is_cuda_focus = cuda_current_focus::isDevice ();
 #endif
 
   for (objfile *objfile : current_program_space->objfiles ())
@@ -6969,7 +6969,7 @@ get_msymbol_address (struct objfile *objf, const struct minimal_symbol *minsym)
 
   const char *linkage_name = minsym->linkage_name ();
 #ifdef NVIDIA_CUDA_GDB
-  bool is_cuda_focus = cuda_focus_is_device ();
+  bool is_cuda_focus = cuda_current_focus::isDevice ();
 #endif
 
   for (objfile *objfile : current_program_space->objfiles ())

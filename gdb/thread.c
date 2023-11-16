@@ -710,8 +710,7 @@ switch_to_thread_if_alive (thread_info *thr)
   /* Need to restore the cuda coords if this is a fake_pid_p thread.
    * This is necessary for cuda coredumps since we don't have a host
    * target available. */
-  cuda_coords_t cur_coords;
-  bool focus_is_device = !cuda_coords_get_current (&cur_coords);
+  bool focus_is_device = cuda_current_focus::isDevice ();
 #endif
   /* Switch inferior first, so that we're looking at the right target
      stack.  */
@@ -720,8 +719,9 @@ switch_to_thread_if_alive (thread_info *thr)
   if (thread_alive (thr))
     {
 #ifdef NVIDIA_CUDA_GDB
+      // Switch focus back to cuda thread
       if (focus_is_device && thr->inf->fake_pid_p)
-	cuda_coords_set_current_no_verify (&cur_coords);
+	cuda_current_focus::forceValid ();
 #endif
       switch_to_thread (thr);
       restore_thread.dont_restore ();
@@ -1064,8 +1064,7 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 
 #ifdef NVIDIA_CUDA_GDB
   /* Switching to each thread will invalidate the cuda coordinates */
-  cuda_coords_t cur_coords;
-  bool focus_is_device = !cuda_coords_get_current (&cur_coords);
+  bool focus_is_device = cuda_current_focus::isDevice ();
 #endif
   update_thread_list ();
 
@@ -1189,7 +1188,7 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 	   * This is necessary for cuda coredumps since we don't have a host
 	   * target available. */
 	  if (focus_is_device && tp->inf->fake_pid_p)
-	    cuda_coords_set_current_no_verify (&cur_coords);
+	    cuda_current_focus::forceValid ();
 #endif
 	  /* Switch to the thread (and inferior / target).  */
 	  switch_to_thread (tp);
@@ -1366,7 +1365,7 @@ switch_to_no_thread ()
   current_thread_ = nullptr;
   inferior_ptid = null_ptid;
 #ifdef NVIDIA_CUDA_GDB
-  cuda_coords_invalidate_current ();
+  cuda_current_focus::invalidate ();
 #endif
   reinit_frame_cache ();
 }
@@ -1391,7 +1390,7 @@ switch_to_thread_1 (thread_info *thr, bool keep_cuda_focus)
      the full switch from happening when changing focus from the
      device to a host thread (as the host thread ID may not have
      changed based on the user's switch). */
-  if (!cuda_focus_is_device () && is_current_thread (thr))
+  if (!cuda_current_focus::isDevice () && is_current_thread (thr))
     return; 
   /* If we switch the focus away from the CUDA device, we will end up
      with regular information from the host machine's threads.  If we
@@ -1400,7 +1399,7 @@ switch_to_thread_1 (thread_info *thr, bool keep_cuda_focus)
   /* CUDA - focus
    * Only invalidate if this isn't the fake_pid_p for cuda coredumps. */
   if (!keep_cuda_focus && !thr->inf->fake_pid_p)
-    cuda_coords_invalidate_current ();
+    cuda_current_focus::invalidate ();
   /* Following two calls is existing switch_to_thread code */
   switch_to_thread_no_regs (thr);
   reinit_frame_cache (); 
@@ -1486,16 +1485,19 @@ scoped_restore_current_thread::restore ()
 
 #ifdef NVIDIA_CUDA_GDB
   /* CUDA - focus */
-  if (m_cuda_coords.valid)
+  if (m_cuda_coords.valid ())
     {
       /* If the device currently is executing, we can't switch to the thread.
        * This will cause an error when we try calling into the debug API.
        * Instead do a lightweight restore by forcing the coords without updating
        * state. */
-      if (device_suspended (m_cuda_coords.dev))
-	switch_to_cuda_thread (&m_cuda_coords);
+      if (cuda_state::device_is_suspended (m_cuda_coords.physical ().dev ()))
+	{
+	  if (const_cast<cuda_coords&>(m_cuda_coords).isValidOnDevice ())
+	    switch_to_cuda_thread (m_cuda_coords);
+	}
       else
-	cuda_coords_set_current_no_verify (&m_cuda_coords);
+	cuda_current_focus::set (m_cuda_coords);
     }
 #endif
   /* The running state of the originally selected thread may have
@@ -1521,9 +1523,8 @@ scoped_restore_current_thread::scoped_restore_current_thread ()
 {
   m_inf = inferior_ref::new_reference (current_inferior ());
 #ifdef NVIDIA_CUDA_GDB
-  m_cuda_coords = CUDA_INVALID_COORDS;
   /* CUDA - get current focus */
-  cuda_coords_get_current (&m_cuda_coords);
+  m_cuda_coords = cuda_current_focus::get ();
 #endif
 
   m_lang = current_language->la_language;
@@ -1949,7 +1950,7 @@ thread_command (const char *tidstr, int from_tty)
 
 #ifdef NVIDIA_CUDA_GDB
       /* CUDA - focus */
-      if (cuda_focus_is_device ())
+      if (cuda_current_focus::isDevice ())
         {
           printf_unfiltered (_("Focus not set on any host thread.\n"));
           return;

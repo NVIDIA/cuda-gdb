@@ -29,6 +29,7 @@
 #include "arch-utils.h"
 #include "varobj.h"
 
+#include "cuda-asm.h"
 #include "cuda-context.h"
 #include "cuda-events.h"
 #include "cuda-functions.h"
@@ -64,7 +65,7 @@ cuda_event_create_context (uint32_t dev_id, uint64_t context_id, uint32_t tid)
   if (tid == ~0U)
     error (_("A CUDA event reported an invalid thread id."));
 
-  contexts = device_get_contexts (dev_id);
+  contexts = cuda_state::device_get_contexts (dev_id);
   context  = context_new (context_id, dev_id);
 
   contexts_add_context (contexts, context);
@@ -87,7 +88,7 @@ cuda_event_destroy_context (uint32_t dev_id, uint64_t context_id, uint32_t tid)
   if (tid == ~0U)
     error (_("A CUDA event reported an invalid thread id."));
 
-  contexts = device_get_contexts (dev_id);
+  contexts = cuda_state::device_get_contexts (dev_id);
   context  = contexts_find_context_by_id (contexts, context_id);
 
   if (contexts_get_active_context (contexts, tid) == context)
@@ -114,13 +115,13 @@ cuda_event_push_context (uint32_t dev_id, uint64_t context_id, uint32_t tid)
                     dev_id, (unsigned long long)context_id, tid);
 
   /* context push/pop events are ignored when attaching */
-  if (cuda_api_get_attach_state () != CUDA_ATTACH_STATE_NOT_STARTED)
+  if (cuda_debugapi::get_attach_state () != CUDA_ATTACH_STATE_NOT_STARTED)
       return;
 
   if (tid == ~0U)
     error (_("A CUDA event reported an invalid thread id."));
 
-  contexts = device_get_contexts (dev_id);
+  contexts = cuda_state::device_get_contexts (dev_id);
   context  = contexts_find_context_by_id (contexts, context_id);
 
   contexts_stack_context (contexts, context, tid);
@@ -140,13 +141,13 @@ cuda_event_pop_context (uint32_t dev_id, uint64_t context_id, uint32_t tid)
                     dev_id, (unsigned long long)context_id, tid);
 
   /* context push/pop events are ignored when attaching */
-  if (cuda_api_get_attach_state () != CUDA_ATTACH_STATE_NOT_STARTED)
+  if (cuda_debugapi::get_attach_state () != CUDA_ATTACH_STATE_NOT_STARTED)
       return;
 
   if (tid == ~0U)
     error (_("A CUDA event reported an invalid thread id."));
 
-  contexts = device_get_contexts (dev_id);
+  contexts = cuda_state::device_get_contexts (dev_id);
   context  = contexts_unstack_context (contexts, tid);
 
   gdb_assert (context_get_id (context) == context_id);
@@ -172,7 +173,7 @@ cuda_event_load_elf_image (uint32_t dev_id, uint64_t context_id, uint64_t module
   cuda_trace_event ("CUDBG_EVENT_ELF_IMAGE_LOADED dev_id=%u context=%llx module=%llx",
                     dev_id, (unsigned long long)context_id, (unsigned long long)module_id);
 
-  context = device_find_context_by_id (dev_id, context_id);
+  context = cuda_state::device_find_context_by_id (dev_id, context_id);
   modules = context_get_modules (context);
   module  = module_new (context, module_id, elf_image_raw, elf_image_size);
   modules_add (modules, module);
@@ -183,7 +184,7 @@ cuda_event_load_elf_image (uint32_t dev_id, uint64_t context_id, uint64_t module
   cuda_elf_image_load (elf_image, is_system);
 
   auto objfile = cuda_elf_image_get_objfile (elf_image);
-  cuda_trace_event ("    -> ELF image %s\n", objfile->original_name);
+  cuda_trace_event ("    -> ELF image loaded %s %lld\n", objfile->original_name, cuda_elf_image_get_size (elf_image));
 }
 
 static void
@@ -200,11 +201,13 @@ cuda_event_unload_elf_image (uint32_t dev_id, uint64_t context_id, uint64_t modu
                     dev_id, (unsigned long long)context_id,
                     (unsigned long long)module_id, (unsigned long long)handle);
 
-  context = device_find_context_by_id (dev_id, context_id);
+  context = cuda_state::device_find_context_by_id (dev_id, context_id);
   modules = context_get_modules (context);
   module = modules_find_module_by_id (modules, module_id);
   elf_image = module_get_elf_image (module);
-  cuda_trace_event ("  -> ELF image %p", elf_image);
+
+  auto objfile = cuda_elf_image_get_objfile (elf_image);
+  cuda_trace_event ("    -> ELF image unloaded %s %lld\n", objfile->original_name, cuda_elf_image_get_size (elf_image));
 
   gdb_assert (cuda_elf_image_is_loaded (elf_image));
   cuda_elf_image_unload (elf_image);
@@ -318,7 +321,7 @@ cuda_event_functions_loaded (uint32_t dev_id,
                     (unsigned long long)module_id,
                     count);
 
-  auto context = device_find_context_by_id (dev_id, context_id);
+  auto context = cuda_state::device_find_context_by_id (dev_id, context_id);
   auto modules = context_get_modules (context);
   auto module = modules_find_module_by_id (modules, module_id);
   auto elf_image = module_get_elf_image (module);
@@ -337,6 +340,8 @@ cuda_event_functions_loaded (uint32_t dev_id,
   bool incremental_updates = true;
   if (incremental_updates)
     {
+      cuda_trace_event ("%s: applying incremental updates", __FUNCTION__);
+
       /* Save a copy of the current cubin */
       cuda_elf_image_read (objfile_old->original_name, buffer, image_size);
 
@@ -346,7 +351,7 @@ cuda_event_functions_loaded (uint32_t dev_id,
       /* Fetch the incremental function load information */
       size_t len = count * sizeof(CUDBGLoadedFunctionInfo);
       auto info = (CUDBGLoadedFunctionInfo *)xmalloc (len);
-      cuda_api_get_loaded_function_info (dev_id, module_id, info, count);
+      cuda_debugapi::get_loaded_function_info (dev_id, module_id, info, count);
 
       /* Apply the incremental relocations */
       cuda_apply_function_load_updates ((char *)buffer, info, count);
@@ -356,15 +361,17 @@ cuda_event_functions_loaded (uint32_t dev_id,
       bool compare_cubins = false;
       if (compare_cubins)
 	{
+	  cuda_trace_event ("%s: checking incremental updates", __FUNCTION__);
+
 	  /* Save a copy of the ELF image for updating below */
 	  auto original = (void *)xmalloc (image_size);
 
 	  /* Re-fetch the whole cubin */
-	  cuda_api_get_elf_image (dev_id, module_id, true, original, image_size);
+	  cuda_debugapi::get_elf_image (dev_id, module_id, true, original, image_size);
 
 	  /* Compare */
 	  if (memcmp (buffer, original, image_size))
-	    error (_("cubin buffers do not compare\n"));
+	    error (_("%s: cubin buffers do not match after incremental update"), __FUNCTION__);
 
 	  /* Done with the temp copy */
 	  xfree (original);
@@ -372,11 +379,13 @@ cuda_event_functions_loaded (uint32_t dev_id,
     }
   else
     {
+      cuda_trace_event ("%s: skipping incremental updates", __FUNCTION__);
+
       /* Unload the elf_image and objfile */
       cuda_elf_image_unload (elf_image);
 
       /* Re-fetch the whole cubin */
-      cuda_api_get_elf_image (dev_id, module_id, true, buffer, image_size);
+      cuda_debugapi::get_elf_image (dev_id, module_id, true, buffer, image_size);
     }
 
   /* Write image back out to disk for cuda_elf_image_load() to create
@@ -386,6 +395,10 @@ cuda_event_functions_loaded (uint32_t dev_id,
 
   /* Load the ELF image from the filesystem, creating a new objfile */
   cuda_elf_image_load (elf_image, is_system);
+
+  // Flush the module disassembly caches
+  // module->disassembler->flush_elf_cache ();
+  module->disassembler->flush_device_cache ();
 }
 #endif
 
@@ -409,8 +422,8 @@ cuda_process_events (CUDBGEvent *event, cuda_event_kind_t kind)
      We must consume every event prior to any generic operations
      that will force a state collection across the device. */
   for (; event->kind != CUDBG_EVENT_INVALID;
-       (kind == CUDA_EVENT_SYNC) ? cuda_api_get_next_sync_event (event) :
-                                   cuda_api_get_next_async_event (event)) {
+       (kind == CUDA_EVENT_SYNC) ? cuda_debugapi::get_next_sync_event (event) :
+                                   cuda_debugapi::get_next_async_event (event)) {
     cuda_process_event (event);
     if (event->kind == CUDBG_EVENT_KERNEL_READY)
         reset_bpt = true;
@@ -458,7 +471,7 @@ cuda_process_event (CUDBGEvent *event)
             properties     = event->cases.elfImageLoaded.properties;
             elf_image_size = event->cases.elfImageLoaded.size;
             elf_image      = malloc (elf_image_size);
-            cuda_api_get_elf_image (dev_id, handle, true, elf_image, elf_image_size);
+            cuda_debugapi::get_elf_image (dev_id, handle, true, elf_image, elf_image_size);
             cuda_event_load_elf_image (dev_id, context_id, module_id,
                                        elf_image, elf_image_size, properties);
             free (elf_image);
@@ -534,12 +547,12 @@ cuda_process_event (CUDBGEvent *event)
           }
         case CUDBG_EVENT_ATTACH_COMPLETE:
           {
-            cuda_api_set_attach_state (CUDA_ATTACH_STATE_APP_READY);
+            cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_APP_READY);
             break;
           }
         case CUDBG_EVENT_DETACH_COMPLETE:
           {
-            cuda_api_set_attach_state (CUDA_ATTACH_STATE_DETACH_COMPLETE);
+            cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_DETACH_COMPLETE);
             break;
           }
         case CUDBG_EVENT_ELF_IMAGE_UNLOADED:

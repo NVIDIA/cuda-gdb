@@ -121,6 +121,10 @@ public:
   virtual struct gdbarch *thread_architecture (ptid_t) override;
 
   virtual void detach (inferior *, int) override;
+
+protected:
+  /* Override the GNU/Linux inferior startup hook.  */
+  virtual void post_startup_inferior (ptid_t) override;
 };
 
 #endif

@@ -721,7 +721,7 @@ mi_about_to_proceed (void)
      have been resumed to collect more information, and it does
      not mean that attach/detach has completed. So we need to
      return early and not send the "running" message to the client. */
-  if (cuda_api_attach_or_detach_in_progress ())
+  if (cuda_debugapi::attach_or_detach_in_progress ())
     return;
 #endif
   mi_proceeded = 1;

@@ -1309,7 +1309,7 @@ check_for_thread_db (void)
      need to resume the application temporarily, which might cause
      libthread_db to be reinitialized and cause problems. This must
      be prevented. */
-  if (cuda_api_get_attach_state () == CUDA_ATTACH_STATE_DETACHING)
+  if (cuda_debugapi::get_attach_state () == CUDA_ATTACH_STATE_DETACHING)
     return;
 #endif
   /* Do nothing if we couldn't load libthread_db.so.1.  */

@@ -593,6 +593,10 @@ public:
   /* Per inferior data-pointers required by other GDB modules.  */
   REGISTRY_FIELDS;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA can only be intialized at most once per inferior */
+  bool cuda_initialized = false;
+#endif
 private:
   /* The inferior's target stack.  */
   target_stack m_target_stack;

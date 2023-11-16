@@ -2388,6 +2388,11 @@ stop_wait_callback (struct lwp_info *lp)
 {
   inferior *inf = find_inferior_ptid (linux_target, lp->ptid);
 
+#ifdef NVIDIA_CUDA_GDB
+  // find_inferior_ptid() can return NULL, check for it
+  if (!inf)
+    return 0;
+#endif
   /* If this is a vfork parent, bail out, it is not going to report
      any SIGSTOP until the vfork is done with.  */
   if (inf->vfork_child != NULL)

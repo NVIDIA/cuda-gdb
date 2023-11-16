@@ -65,8 +65,8 @@
 #include "gdbcore.h"
 #include "serial.h"
 #include "readline/readline.h"
-#include "cuda/remote-cuda.h"
 #include "cuda/cuda-packet-manager.h"
+#include "cuda/remote-cuda.h"
 #include "source.h"
 
 #include "infrun.h"
@@ -3068,9 +3068,6 @@ qnx_remote_target<parent>::mourn_inferior (void)
   tran.pkt.detach.pid = EXTRACT_SIGNED_INTEGER (&tran.pkt.detach.pid,
 						4, byte_order);
   nto_send_recv (&tran, &recv, sizeof (tran.pkt.detach), 1);
-
-  /* CUDA - clear the state before next run */
-  cuda_api_clear_state ();
 
   generic_mourn_inferior ();
   inf_data->has_execution = 0;

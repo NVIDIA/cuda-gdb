@@ -114,8 +114,10 @@ extern int bin2hex (const gdb_byte *bin, char *hex, int count);
 
 /* Device Properties */
 void cuda_remote_query_device_spec (remote_target *ops,
-				    uint32_t dev_id, uint32_t *num_sms, uint32_t *num_warps,
-                                    uint32_t *num_lanes, uint32_t *num_registers, char **dev_type, char **sm_type);
+				    uint32_t dev_id, uint32_t *num_sms, uint32_t *num_warps, uint32_t *num_lanes,
+				    uint32_t *num_registers,
+				    uint32_t *num_uregisters,
+				    char **dev_type, char **sm_type);
 
 /* Notifications */
 bool cuda_remote_notification_pending (remote_target *ops);
@@ -144,7 +146,8 @@ void cuda_remote_set_symbols (remote_target *ops, bool set_extra_symbols, bool *
 void cuda_remote_initialize (remote_target *remote,
 			     CUDBGResult *get_debugger_api_res, CUDBGResult *set_callback_api_res, 
                              CUDBGResult *initialize_api_res, bool *cuda_initialized, 
-                             bool *cuda_debugging_enabled, bool *driver_is_compatiable);
+                             bool *cuda_debugging_enabled, bool *driver_is_compatiable,
+			     uint32_t *major, uint32_t *minor, uint32_t *revision);
 CUDBGResult cuda_remote_api_finalize (remote_target *remote);
 #ifdef __QNXTARGET__
 bool cuda_remote_check_pending_sigint (remote_target *ops, ptid_t ptid);

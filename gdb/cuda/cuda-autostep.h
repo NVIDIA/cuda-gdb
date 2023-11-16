@@ -2,22 +2,23 @@
  * NVIDIA CUDA Debugger CUDA-GDB
  * Copyright (C) 2007-2023 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 3 as
  * published by the Free Software Foundation.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifndef _CUDA_AUTOSTEP_H_
 #define _CUDA_AUTOSTEP_H_ 1
+#include "cuda-iterator.h"
 #include <stdbool.h>
 
 bool cuda_get_autostep_pending (void);
@@ -41,15 +42,12 @@ void cuda_autostep_print_exception (void);
 struct device_astep_t
 {
   /* Coordinates from the current iteration.  */
-  cuda_coords_t cur_coords;
-  /* Coordinates from the first iteration.  */
-  cuda_coords_t start_coords;
-  /* Coordinates from the last iteration.  */
-  cuda_coords_t end_coords;
-  /* Filter used to initialize the iterator.  */
-  cuda_coords_t filter;
+  cuda_coords cur_coords;
   /* Warp iterator data.  */
-  cuda_iterator iter;
+  cuda_iterator<cuda_iterator_type::threads, select_bkpt | select_valid> iter;
+  /* Warp iterator current pos */
+  cuda_iterator<cuda_iterator_type::threads,
+                select_bkpt | select_valid>::iterator iter_pos;
   /* The current lane.  */
   int cur_ln;
   /* Lines information.  */
@@ -93,15 +91,10 @@ struct autostep_state
   int insns_stepped;
   /* Number of remaining steps/instructions/lines.  */
   int remaining;
-  /* 1 if we're focused on the device, 0 otherwise.  */
-  int device;
-
   /* Additional host/device autostep data.  */
-  union
-    {
-      struct device_astep_t device;
-      struct host_astep_t host;
-    } data;
+  device_astep_t device;
+  autostep_state () = default;
+  ~autostep_state () = default;
 };
 
 #endif

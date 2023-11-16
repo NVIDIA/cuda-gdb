@@ -1587,7 +1587,6 @@ static void check_producer (struct dwarf2_cu *cu);
 #ifdef NVIDIA_CUDA_GDB
 /* CUDA - Memory Segments */
 typedef struct {
-  struct objfile *objfile;
   struct symbol *sym;
   type_instance_flags flags;
 } cuda_sti_t;
@@ -16736,19 +16735,16 @@ static void
 make_segmented_type (cuda_sti_t &sti)
 {
   /* Sanity check */
-  if (!sti.objfile || !sti.sym)
+  if (!sti.sym)
     return;
   /* Create required hash tables */
-  htab_up copied_types = create_temp_copied_types_hash ();
   htab_up marked_types (htab_create_alloc (1, htab_hash_pointer,
 					   htab_eq_pointer,
 					   NULL, xcalloc, xfree));
-  
-  /* First, we need to make a deep copy of the type, so it is not overwritten
-     with subsequent passes (and so this pass doesn't overwrite any previous
+  /* First, we need to make a copy of the type, so it is not overwritten
+     with subsequent passes and so this pass doesn't overwrite any previous
      passes. */
-
-  sti.sym->set_type (copy_type_recursive (sti.objfile, sti.sym->type (), copied_types.get ()));
+  sti.sym->set_type (copy_type (sti.sym->type ()));
   /* Then we mark the segment for each field of the type, marking the types that
      have already been visited using marked_types. */
   sti.sym->set_type (make_segmented_type_aux (sti.sym->type (), sti.flags, marked_types.get ()));
@@ -22073,7 +22069,6 @@ cuda_dwarf2_add_address_class (struct symbol *sym, struct attribute *attr,
   if (!addr_class)
     return;
   cuda_sti_t sti;
-  sti.objfile = cu->per_objfile->objfile;
   sti.flags = cuda_address_class_type_flags (0 /*bogus*/, addr_class);
   sti.sym = sym;
   /* CUDA - Managed variable */

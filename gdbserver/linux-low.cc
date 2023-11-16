@@ -4211,7 +4211,20 @@ linux_process_target::resume_one_lwp (lwp_info *lwp, int step, int signal,
     }
   catch (const gdb_exception_error &ex)
     {
+#ifdef NVIDIA_CUDA_GDB
+      /* Upstream fix: set lwp !stopped when failing to resume */
+      if (check_ptrace_stopped_lwp_gone (lwp))
+	{
+	  /* This could because we tried to resume an LWP after its leader
+	     exited.  Mark it as resumed, so we can collect an exit event
+	     from it.  */
+	  lwp->stopped = 0;
+	  lwp->stop_reason = TARGET_STOPPED_BY_NO_REASON;
+	}
+      else
+#else
       if (!check_ptrace_stopped_lwp_gone (lwp))
+#endif
 	throw;
     }
 }

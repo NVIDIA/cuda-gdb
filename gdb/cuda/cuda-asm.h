@@ -48,6 +48,7 @@ public:
   {
     LINE_TYPE_UNKNOWN,
     LINE_TYPE_FUNC_HEADER,
+    LINE_TYPE_SECTION_HEADER,
     LINE_TYPE_OFFSET_INSN,
     LINE_TYPE_CODE_ONLY,
     LINE_TYPE_EOF
@@ -61,6 +62,7 @@ public:
   std::string m_current_func;
   std::string m_current_insn;
   std::string m_current_line;
+  std::string m_current_section;
 
   /* Holder for pc->insn mappings from the cubin/ELF file.
      These may be updated by lazy function loading, so
@@ -76,6 +78,7 @@ public:
   std::regex m_offset_insn_line;
   std::regex m_code_line;
   std::regex m_func_header_line;
+  std::regex m_section_header_line;
 
   std::string m_cuobjdump_path;
 

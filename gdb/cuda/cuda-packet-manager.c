@@ -103,7 +103,7 @@ extract_bin (char *src, gdb_byte *dest, int size)
 
   p = extract_string (src);
   if (!p)
-    error (_("The data in the cuda packet is not complete.\n")); 
+    error (_("The data in the cuda packet is not complete (cuda-gdb).\n")); 
   hex2bin (p, dest, size);
   return p;
 }
@@ -241,15 +241,15 @@ cuda_remote_update_per_warp_info_in_sm (remote_target *ops, uint32_t dev, uint32
      without server-side batching, using individual vCUDA packets via
      the CUDA API which are constant in size in this case. */
 
-  valid_warps_mask_c = sm_get_valid_warps_mask (dev, sm);
-  num_warps = device_get_num_warps (dev);
+  valid_warps_mask_c = cuda_state::sm_get_valid_warps_mask (dev, sm);
+  num_warps = cuda_state::device_get_num_warps (dev);
 
-  cuda_api_read_valid_warps (dev, sm, &valid_warps_mask_s);
+  cuda_debugapi::read_valid_warps (dev, sm, &valid_warps_mask_s);
   gdb_assert (cuda_api_eq_mask(&valid_warps_mask_s, valid_warps_mask_c));
 
   for (wp = 0; wp < num_warps; wp++)
     {
-      if (warp_is_valid (dev, sm, wp))
+      if (cuda_state::warp_is_valid (dev, sm, wp))
         {
           /* Get the value from the API first, then store it in warp state. */
           get_value (dev, sm, wp, &value);
@@ -265,8 +265,8 @@ cuda_remote_update_per_warp_info_in_sm (remote_target *ops, uint32_t dev, uint32
   uint32_t num_warps;
   TValue value;
 
-  valid_warps_mask_c = sm_get_valid_warps_mask (dev, sm);
-  num_warps = device_get_num_warps (dev);
+  valid_warps_mask_c = cuda_state::sm_get_valid_warps_mask (dev, sm);
+  num_warps = cuda_state::device_get_num_warps (dev);
   p = append_string ("qnv.", pktbuf.data (), false);
   p = append_bin ((gdb_byte *) &packet_type, p, sizeof (packet_type), true);
   p = append_bin ((gdb_byte *) &dev, p, sizeof (dev), true);
@@ -280,7 +280,7 @@ cuda_remote_update_per_warp_info_in_sm (remote_target *ops, uint32_t dev, uint32
   gdb_assert (cuda_api_eq_mask(&valid_warps_mask_s, valid_warps_mask_c));
   for (wp = 0; wp < num_warps; wp++)
     {
-      if (warp_is_valid (dev, sm, wp))
+      if (cuda_state::warp_is_valid (dev, sm, wp))
         {
           extract_bin (NULL, (gdb_byte *) &value, sizeof (value));
           set_value (dev, sm, wp, value);
@@ -296,9 +296,9 @@ void
 cuda_remote_update_grid_id_in_sm (remote_target *ops, uint32_t dev, uint32_t sm)
 {
   cuda_remote_update_per_warp_info_in_sm<uint64_t> (
-    ops, dev, sm, UPDATE_GRID_ID_IN_SM, "grid ID", cuda_api_read_grid_id,
+    ops, dev, sm, UPDATE_GRID_ID_IN_SM, "grid ID", cuda_debugapi::read_grid_id,
     [](uint32_t _dev, uint32_t _sm, uint32_t _wp, const uint64_t& _grid_id) {
-      warp_set_grid_id (_dev, _sm, _wp, _grid_id);
+      cuda_state::warp_set_grid_id (_dev, _sm, _wp, _grid_id);
     });
 }
 
@@ -306,9 +306,9 @@ void
 cuda_remote_update_cluster_idx_in_sm (remote_target *ops, uint32_t dev, uint32_t sm)
 {
   cuda_remote_update_per_warp_info_in_sm<CuDim3> (
-    ops, dev, sm, UPDATE_CLUSTER_IDX_IN_SM, "cluster index", cuda_api_read_cluster_idx,
+    ops, dev, sm, UPDATE_CLUSTER_IDX_IN_SM, "cluster index", cuda_debugapi::read_cluster_idx,
     [](uint32_t _dev, uint32_t _sm, uint32_t _wp, const CuDim3& _cluster_idx) {
-      warp_set_cluster_idx (_dev, _sm, _wp, &_cluster_idx);
+      cuda_state::warp_set_cluster_idx (_dev, _sm, _wp, &_cluster_idx);
     });
 }
 
@@ -316,9 +316,9 @@ void
 cuda_remote_update_block_idx_in_sm (remote_target *ops, uint32_t dev, uint32_t sm)
 {
   cuda_remote_update_per_warp_info_in_sm<CuDim3> (
-    ops, dev, sm, UPDATE_BLOCK_IDX_IN_SM, "block index", cuda_api_read_block_idx,
+    ops, dev, sm, UPDATE_BLOCK_IDX_IN_SM, "block index", cuda_debugapi::read_block_idx,
     [](uint32_t _dev, uint32_t _sm, uint32_t _wp, const CuDim3& _block_idx) {
-      warp_set_block_idx (_dev, _sm, _wp, &_block_idx);
+      cuda_state::warp_set_block_idx (_dev, _sm, _wp, &_block_idx);
     });
 }
 
@@ -334,8 +334,8 @@ cuda_remote_update_thread_idx_in_warp (remote_target *ops, uint32_t dev, uint32_
   CuDim3 thread_idx;
   cuda_packet_type_t packet_type = UPDATE_THREAD_IDX_IN_WARP;
 
-  valid_lanes_mask_c = warp_get_valid_lanes_mask (dev, sm, wp);
-  num_lanes = device_get_num_lanes (dev);
+  valid_lanes_mask_c = cuda_state::warp_get_valid_lanes_mask (dev, sm, wp);
+  num_lanes = cuda_state::device_get_num_lanes (dev);
   p = append_string ("qnv.", pktbuf.data (), false);
   p = append_bin ((gdb_byte *) &packet_type, p, sizeof (packet_type), true);
   p = append_bin ((gdb_byte *) &dev, p, sizeof (dev), true);
@@ -350,10 +350,10 @@ cuda_remote_update_thread_idx_in_warp (remote_target *ops, uint32_t dev, uint32_
   gdb_assert (valid_lanes_mask_s == valid_lanes_mask_c);
   for (ln = 0; ln < num_lanes; ln++)
     {
-       if (lane_is_valid (dev, sm, wp, ln))
+       if (cuda_state::lane_is_valid (dev, sm, wp, ln))
          {
            extract_bin (NULL, (gdb_byte *) &thread_idx, sizeof (thread_idx));
-           lane_set_thread_idx (dev, sm, wp, ln, &thread_idx);
+           cuda_state::lane_set_thread_idx (dev, sm, wp, ln, &thread_idx);
          }
     }
   extract_bin (NULL, (gdb_byte *) &res, sizeof (res));
@@ -374,6 +374,8 @@ cuda_remote_set_symbols (remote_target *ops, bool set_extra_symbols, bool *symbo
 
   *symbols_are_set = false;
 
+  /* Old fields are left to maintain the binary compatibility with legacy CUDA
+   * GDB server binaries */
   /* Remote side will also check for zeros, here we test only one symbol
      to avoid unnecessary back and forth with it.
      Sent symbols must be kept in sync with those in cuda_symbol_list[] */
@@ -408,10 +410,10 @@ cuda_remote_set_symbols (remote_target *ops, bool set_extra_symbols, bool *symbo
   p = append_bin ((gdb_byte *) &address, p, sizeof (address), true);
   address = cuda_get_symbol_address (_STRING_(CUDBG_REPORTED_DRIVER_INTERNAL_ERROR_CODE));
   p = append_bin ((gdb_byte *) &address, p, sizeof (address), true);
+  /* CUDBG_DETACH_SUSPENDED_DEVICES_MASK is deprecated */
   address = cuda_get_symbol_address (_STRING_(CUDBG_DETACH_SUSPENDED_DEVICES_MASK));
   p = append_bin ((gdb_byte *) &address, p, sizeof (address), true);
-  /* CUDA MEMCHECK support is removed from CUDA GDB: this field is left to maintain
-   * the binary compatibility with legacy CUDA GDB server binaries */
+  /* CUDA MEMCHECK support is removed from CUDA GDB */
   address = cuda_get_symbol_address (_STRING_(CUDBG_ENABLE_INTEGRATED_MEMCHECK));
   p = append_bin ((gdb_byte *) &address, p, sizeof (address), true);
   address = cuda_get_symbol_address (_STRING_(CUDBG_ENABLE_LAUNCH_BLOCKING));
@@ -444,7 +446,8 @@ void
 cuda_remote_initialize (remote_target *ops,
 			CUDBGResult *get_debugger_api_res, CUDBGResult *set_callback_api_res,
                         CUDBGResult *initialize_api_res, bool *cuda_initialized,
-                        bool *cuda_debugging_enabled, bool *driver_is_compatible)
+                        bool *cuda_debugging_enabled, bool *driver_is_compatible,
+			uint32_t *major, uint32_t *minor, uint32_t *revision)
 {
   char *p;
   cuda_packet_type_t packet_type = INITIALIZE_TARGET;
@@ -469,12 +472,18 @@ cuda_remote_initialize (remote_target *ops,
   extract_bin (NULL, (gdb_byte *) cuda_initialized, sizeof (*cuda_initialized));
   extract_bin (NULL, (gdb_byte *) cuda_debugging_enabled, sizeof (*cuda_debugging_enabled));
   extract_bin (NULL, (gdb_byte *) driver_is_compatible, sizeof (*driver_is_compatible));
+
+  extract_bin (NULL, (gdb_byte *) major, sizeof (*major));
+  extract_bin (NULL, (gdb_byte *) minor, sizeof (*minor));
+  extract_bin (NULL, (gdb_byte *) revision, sizeof (*revision));
 }
 
 void
 cuda_remote_query_device_spec (remote_target *ops,
 			       uint32_t dev_id, uint32_t *num_sms, uint32_t *num_warps,
-                               uint32_t *num_lanes, uint32_t *num_registers,
+                               uint32_t *num_lanes,
+			       uint32_t *num_registers,
+			       uint32_t *num_uregisters,
                                char **dev_type, char **sm_type)
 {
   char *p;
@@ -497,6 +506,9 @@ cuda_remote_query_device_spec (remote_target *ops,
   extract_bin (NULL, (gdb_byte *) num_registers, sizeof (num_registers));
   *dev_type = extract_string (NULL);
   *sm_type  = extract_string (NULL);
+
+  // FIXME: until we add number of uregisters to the remote protocol
+  *num_uregisters = 0;
 }
 
 bool

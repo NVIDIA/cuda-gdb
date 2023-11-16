@@ -624,8 +624,8 @@ core_target_open (const char *arg, int from_tty)
   reinit_frame_cache ();
 
 #ifdef NVIDIA_CUDA_GDB
-  if (cudacorename.get () && cuda_focus_is_device ())
-    cuda_print_message_focus (false);
+  if (cudacorename.get () && cuda_current_focus::isDevice ())
+    cuda_current_focus::printFocus (false);
 #endif
   print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC, 1);
 
@@ -775,7 +775,7 @@ void
 core_target::fetch_registers (struct regcache *regcache, int regno)
 {
 #ifdef NVIDIA_CUDA_GDB
-  if (cuda_focus_is_device ())
+  if (cuda_current_focus::isDevice ())
     {
       cuda_core_fetch_registers (regcache, regno);
       return;
@@ -1269,7 +1269,7 @@ struct gdbarch *
 core_target::thread_architecture (ptid_t)
 {
   /* A copy of cuda_nat_linux<BaseTarget>::thread_architecture */
-  if (cuda_focus_is_device ())
+  if (cuda_current_focus::isDevice ())
     return cuda_get_gdbarch ();
   else
     return target_gdbarch ();

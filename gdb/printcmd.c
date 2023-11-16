@@ -791,12 +791,12 @@ pc_prefix (CORE_ADDR addr)
       frame = get_selected_frame (NULL);
 #ifdef NVIDIA_CUDA_GDB
       bool has_pc = get_frame_pc_if_available (frame, &pc);
-      cuda_coords_t c;
-      if (cuda_focus_is_device() && !cuda_coords_get_current (&c))
+      if (cuda_current_focus::isDevice ())
 	{
-	  if (warp_has_error_pc (c.dev, c.sm, c.wp))
+	  const auto& c = cuda_current_focus::get ().physical ();
+	  if (cuda_state::warp_has_error_pc (c.dev (), c.sm (), c.wp ()))
 	    {
-	      CORE_ADDR error_pc = warp_get_error_pc (c.dev, c.sm, c.wp);
+	      CORE_ADDR error_pc = cuda_state::warp_get_error_pc (c.dev (), c.sm (), c.wp ());
 	      /* Check the new states. */
 	      if (error_pc == addr)
 		{

@@ -199,11 +199,6 @@ extern void quit_serial_event_set (void);
 /* Clear the serial event associated with the quit flag.  */
 extern void quit_serial_event_clear (void);
 
-#ifdef NVIDIA_CUDA_GDB
-#define QUIT2 { \
-  if (check_quit_flag () > 1) quit (); \
-}
-#endif
 /* * Languages represented in the symbol table and elsewhere.
    This should probably be in language.h, but since enum's can't
    be forward declared to satisfy opaque references before their

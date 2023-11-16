@@ -17,11 +17,12 @@
  */
 
 #include "defs.h"
-#include "cuda-regmap.h"
-#include "obstack.h"
+
 #include "cuda-coords.h"
-#include "cuda-state.h"
 #include "cuda-options.h"
+#include "cuda-regmap.h"
+#include "cuda-state.h"
+#include "obstack.h"
 
 /*
    The PTX to SASS register map table is made of a series of entries,
@@ -51,29 +52,32 @@
  */
 
 /* Raw value decoding */
-#define REGMAP_CLASS(x)   (x >> 24)
-#define REGMAP_REG(x)     (x & 0xffffff)
-#define REGMAP_OFST(x)    (x & 0xffffff)
-#define REGMAP_SP_REG(x)  ((x >> 16) & 0xff)
+#define REGMAP_CLASS(x) (x >> 24)
+#define REGMAP_REG(x) (x & 0xffffff)
+#define REGMAP_OFST(x) (x & 0xffffff)
+#define REGMAP_SP_REG(x) ((x >> 16) & 0xff)
 #define REGMAP_SP_OFST(x) (x & 0xffff)
 
 /* Structure/global variables for storing search results*/
 #define REGMAP_ENTRIES_ALLOC 64
 
-struct regmap_st {
-  struct {
-    const char   *func_name;   /* the kernel name */
-    const char   *reg_name;    /* the PTX register name */
-    uint64_t      addr;        /* the kernel-relative PC address */
+struct regmap_st
+{
+  struct
+  {
+    const char *func_name; /* the kernel name */
+    const char *reg_name;  /* the PTX register name */
+    uint64_t addr;         /* the kernel-relative PC address */
   } input;
-  struct {
-    uint32_t      num_entries;              /* # entries in the other fields */
-    uint32_t      num_entries_allocated;    /* number of entries allocated for raw_value[] */
-
-    uint32_t      *raw_value;               /* see REGMAP_* macros above */
-    uint32_t      max_location_index;       /* max loc index across all addrs */
-    uint32_t      *location_index;          /* location index for raw value */
-    bool          extrapolated;             /* Indicates that regmap was extrapolated */
+  struct
+  {
+    uint32_t num_entries;           /* # entries in the other fields */
+    uint32_t num_entries_allocated; /* number of entries allocated for
+				       raw_value[] */
+    uint32_t *raw_value;            /* see REGMAP_* macros above */
+    uint32_t max_location_index;    /* max loc index across all addrs */
+    uint32_t *location_index;       /* location index for raw value */
+    bool extrapolated; /* Indicates that regmap was extrapolated */
   } output;
 };
 
@@ -81,30 +85,35 @@ static struct regmap_st cuda_regmap_st;
 regmap_t cuda_regmap = &cuda_regmap_st;
 
 /* Structures used to parse on-disk register mapping representation */
-typedef struct {
-  union {
-    char        *byte;
-    uint32_t    *uint32;
+typedef struct
+{
+  union
+  {
+    char *byte;
+    uint32_t *uint32;
   } u;
-  char        *byte_end;
+  char *byte_end;
 } regmap_iterator_t;
 
 /* Structures describing register mapping in-memory representations */
-typedef struct {
-  char rname[8]; //PTX register name without trailing %
+typedef struct
+{
+  char rname[8]; // PTX register name without trailing %
   uint32_t target;
-  uint32_t start,end;
+  uint32_t start, end;
   uint32_t extended_end;
   uint32_t idx;
 } regmap_map_t;
 
-typedef struct {
+typedef struct
+{
   char *name;
   uint32_t maps_no;
   regmap_map_t map[0];
 } regmap_func_t;
 
-typedef struct cuda_regmap_table {
+typedef struct cuda_regmap_table
+{
   struct objfile *owner;
   struct obstack *obstack;
   uint32_t num_funcs;
@@ -175,18 +184,20 @@ regmap_get_class (regmap_t regmap, uint32_t idx)
   gdb_assert (regmap);
   gdb_assert (idx < regmap->output.num_entries);
 
-  return (CUDBGRegClass) REGMAP_CLASS (regmap->output.raw_value[idx]);
+  return (CUDBGRegClass)REGMAP_CLASS (regmap->output.raw_value[idx]);
 }
 
 uint32_t
-regmap_get_half_register (regmap_t regmap, uint32_t idx, bool *in_higher_16_bits)
+regmap_get_half_register (regmap_t regmap, uint32_t idx,
+			  bool *in_higher_16_bits)
 {
   uint32_t raw_register = 0;
 
   gdb_assert (in_higher_16_bits);
   gdb_assert (regmap);
   gdb_assert (idx < regmap->output.num_entries);
-  gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx]) == REG_CLASS_REG_HALF);
+  gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx])
+	      == REG_CLASS_REG_HALF);
 
   raw_register = REGMAP_REG (regmap->output.raw_value[idx]);
   *in_higher_16_bits = raw_register & 1;
@@ -198,20 +209,23 @@ regmap_get_register (regmap_t regmap, uint32_t idx)
 {
   gdb_assert (regmap);
   gdb_assert (idx < regmap->output.num_entries);
-  gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx]) == REG_CLASS_REG_FULL);
+  gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx])
+	      == REG_CLASS_REG_FULL);
 
   return REGMAP_REG (regmap->output.raw_value[idx]);
 }
 
 uint32_t
-regmap_get_half_uregister (regmap_t regmap, uint32_t idx, bool *in_higher_16_bits)
+regmap_get_half_uregister (regmap_t regmap, uint32_t idx,
+			   bool *in_higher_16_bits)
 {
   uint32_t raw_register = 0;
 
   gdb_assert (in_higher_16_bits);
   gdb_assert (regmap);
   gdb_assert (idx < regmap->output.num_entries);
-  gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx]) == REG_CLASS_UREG_HALF);
+  gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx])
+	      == REG_CLASS_UREG_HALF);
 
   raw_register = REGMAP_REG (regmap->output.raw_value[idx]);
   *in_higher_16_bits = raw_register & 1;
@@ -223,7 +237,8 @@ regmap_get_uregister (regmap_t regmap, uint32_t idx)
 {
   gdb_assert (regmap);
   gdb_assert (idx < regmap->output.num_entries);
-  gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx]) == REG_CLASS_UREG_FULL);
+  gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx])
+	      == REG_CLASS_UREG_FULL);
 
   return REGMAP_REG (regmap->output.raw_value[idx]);
 }
@@ -233,7 +248,8 @@ regmap_get_sp_register (regmap_t regmap, uint32_t idx)
 {
   gdb_assert (regmap);
   gdb_assert (idx < regmap->output.num_entries);
-  gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx]) == REG_CLASS_LMEM_REG_OFFSET);
+  gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx])
+	      == REG_CLASS_LMEM_REG_OFFSET);
 
   return REGMAP_SP_REG (regmap->output.raw_value[idx]);
 }
@@ -243,7 +259,8 @@ regmap_get_sp_offset (regmap_t regmap, uint32_t idx)
 {
   gdb_assert (regmap);
   gdb_assert (idx < regmap->output.num_entries);
-  gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx]) == REG_CLASS_LMEM_REG_OFFSET);
+  gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx])
+	      == REG_CLASS_LMEM_REG_OFFSET);
 
   return REGMAP_SP_OFST (regmap->output.raw_value[idx]);
 }
@@ -253,18 +270,18 @@ regmap_get_offset (regmap_t regmap, uint32_t idx)
 {
   gdb_assert (regmap);
   gdb_assert (idx < regmap->output.num_entries);
-  gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx]) == REG_CLASS_MEM_LOCAL);
+  gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx])
+	      == REG_CLASS_MEM_LOCAL);
 
   return REGMAP_OFST (regmap->output.raw_value[idx]);
 }
-
 
 /*
  * Determine if the value indicated by this register map is readable and
  * writable.
  */
 static void
-regmap_find_access_permissions (regmap_t regmap, bool* read, bool *write)
+regmap_find_access_permissions (regmap_t regmap, bool *read, bool *write)
 {
   uint32_t num_chunks, chunk;
   uint32_t num_entries, i;
@@ -296,23 +313,23 @@ regmap_find_access_permissions (regmap_t regmap, bool* read, bool *write)
       /* Count the number of instances for this chunk */
       num_instances = 0;
       for (i = 0; i < num_entries; ++i)
-        if (regmap_get_location_index (regmap, i) == chunk)
-          ++num_instances;
+	if (regmap_get_location_index (regmap, i) == chunk)
+	  ++num_instances;
 
       /* Chunk 0, which always exists, is used as the reference */
       if (chunk == 0)
-        expected_num_instances = num_instances;
+	expected_num_instances = num_instances;
 
       /* Not readable or writable if one chunk is missing */
       if (num_instances == 0)
-        {
-          *read = false;
-          *write = false;
-        }
+	{
+	  *read = false;
+	  *write = false;
+	}
 
       /* Writeable if same number of instances for all the chunks */
       if (num_instances != expected_num_instances)
-        *write = false;
+	*write = false;
     }
 }
 
@@ -344,7 +361,7 @@ regmap_iterator_start (regmap_iterator_t *itr, char *ptr, uint32_t size)
 {
   gdb_assert (itr);
 
-  memset (itr, 0, sizeof(*itr));
+  memset (itr, 0, sizeof (*itr));
   itr->u.byte = ptr;
   itr->byte_end = ptr + size;
 }
@@ -356,7 +373,7 @@ regmap_iterator_copy (const regmap_iterator_t *in, regmap_iterator_t *out)
   gdb_assert (in);
   gdb_assert (out);
 
-  memset (out, 0, sizeof(*out));
+  memset (out, 0, sizeof (*out));
   out->u.byte = in->u.byte;
   out->byte_end = in->byte_end;
 }
@@ -386,7 +403,7 @@ regmap_iterator_read_string (regmap_iterator_t *itr)
   char *ptr;
   gdb_assert (itr);
   ptr = itr->u.byte;
-  regmap_iterator_move (itr, strlen(ptr)+1);
+  regmap_iterator_move (itr, strlen (ptr) + 1);
   return ptr;
 }
 
@@ -398,9 +415,11 @@ regmap_iterator_read_uint32 (regmap_iterator_t *itr)
   return *itr->u.uint32++;
 }
 
-/* read one function entry and returns the address of its first register entry */
+/* read one function entry and returns the address of its first register entry
+ */
 static void
-regmap_parse_ondisk_func (regmap_iterator_t *itr, char **fname, uint32_t *num_entries, uint32_t *func_size)
+regmap_parse_ondisk_func (regmap_iterator_t *itr, char **fname,
+			  uint32_t *num_entries, uint32_t *func_size)
 {
   uint32_t i, entries;
   char *name;
@@ -408,8 +427,8 @@ regmap_parse_ondisk_func (regmap_iterator_t *itr, char **fname, uint32_t *num_en
 
   gdb_assert (itr);
 
-  name      = regmap_iterator_read_string (itr);
-  entries   = regmap_iterator_read_uint32 (itr);
+  name = regmap_iterator_read_string (itr);
+  entries = regmap_iterator_read_uint32 (itr);
 
   /* Because the size of the register entries is variables, we must read all
      the register entries to compute the function entry size. Sigh. */
@@ -434,13 +453,14 @@ regmap_parse_ondisk_func (regmap_iterator_t *itr, char **fname, uint32_t *num_en
 
 /* reads reg_sass elf section into the xmalloced buffer */
 static void
-regmap_read_elf_section (struct objfile *objfile, char **buffer, uint32_t *buffer_size)
+regmap_read_elf_section (struct objfile *objfile, char **buffer,
+			 uint32_t *buffer_size)
 {
   static const char section_name[] = ".nv_debug_info_reg_sass";
-  bfd      *abfd;
+  bfd *abfd;
   asection *asection;
-  char     *ptr;
-  uint32_t  size;
+  char *ptr;
+  uint32_t size;
 
   gdb_assert (objfile);
   gdb_assert (buffer);
@@ -461,8 +481,8 @@ regmap_read_elf_section (struct objfile *objfile, char **buffer, uint32_t *buffe
     return;
 
   /* allocate space to read the section */
-  size  = bfd_section_size (asection);
-  ptr   = (char *) xmalloc (size);
+  size = bfd_section_size (asection);
+  ptr = (char *)xmalloc (size);
   if (!ptr)
     return;
 
@@ -474,10 +494,11 @@ regmap_read_elf_section (struct objfile *objfile, char **buffer, uint32_t *buffe
     }
 
   *buffer = ptr;
-  *buffer_size  = size;
+  *buffer_size = size;
 }
 
-/* Extend live range of mapping until the register is used for something else */
+/* Extend live range of mapping until the register is used for something else
+ */
 static void
 regmap_extend_liverange (regmap_func_t *func)
 {
@@ -488,29 +509,34 @@ regmap_extend_liverange (regmap_func_t *func)
   /* Find the max end for this function */
   /* PERF: replace me with a lookup of the function's PC range instead */
   for (map = &func->map[0]; map < map_end; map++)
-    if (end_max < map->end) end_max = map->end;
+    if (end_max < map->end)
+      end_max = map->end;
 
   for (map = &func->map[0]; map < map_end; map++)
     {
       /* Initialize the extended end to be the end of the function */
       map->extended_end = end_max;
-      /* Now look for a range interval that will cover *after* this interval and
-         reset the extended interval */
+      /* Now look for a range interval that will cover *after* this interval
+	 and reset the extended interval */
       for (map1 = &func->map[0]; map1 < map_end; map1++)
-        {
-           if (map == map1 || strncmp(map->rname, map1->rname, sizeof(map->rname)) != 0)
-               continue;
-           if (map1->start >= map->end)
-             {
-               /* Extend our end to cover tha gap */
-               map->extended_end = (map1->start < map->extended_end ? map1->start : map->extended_end);
-             }
-           else if (map1->end > map->end)
-             {  /* Overlapping range with an end further out, don't extend our range */
-               map->extended_end = map->end;
-               break;
-             }
-        }
+	{
+	  if (map == map1
+	      || strncmp (map->rname, map1->rname, sizeof (map->rname)) != 0)
+	    continue;
+	  if (map1->start >= map->end)
+	    {
+	      /* Extend our end to cover tha gap */
+	      map->extended_end
+		  = (map1->start < map->extended_end ? map1->start
+						     : map->extended_end);
+	    }
+	  else if (map1->end > map->end)
+	    { /* Overlapping range with an end further out, don't extend our
+		 range */
+	      map->extended_end = map->end;
+	      break;
+	    }
+	}
     }
 }
 
@@ -529,39 +555,40 @@ regmap_load_func (regmap_iterator_t *itr, regmap_table_t *table)
   gdb_assert (table);
 
   regmap_parse_ondisk_func (itr, &fname, &num_entries, NULL);
-  alloc_size = sizeof(regmap_func_t) + num_entries*sizeof(regmap_map_t);
-  func = (regmap_func_t *) obstack_alloc (table->obstack, alloc_size);
+  alloc_size = sizeof (regmap_func_t) + num_entries * sizeof (regmap_map_t);
+  func = (regmap_func_t *)obstack_alloc (table->obstack, alloc_size);
   if (!func)
-      return -1;
+    return -1;
   memset (func, 0, alloc_size);
 
-  func->name = (char *) obstack_alloc(table->obstack, strlen(fname)+1);
+  func->name = (char *)obstack_alloc (table->obstack, strlen (fname) + 1);
   if (!func->name)
     {
-       obstack_free (table->obstack, func);
-       return -1;
+      obstack_free (table->obstack, func);
+      return -1;
     }
-  strcpy(func->name, fname);
+  strcpy (func->name, fname);
 
   /* Read registers */
-  for (cnt=0; cnt < num_entries; cnt++)
+  for (cnt = 0; cnt < num_entries; cnt++)
     {
       map = &func->map[func->maps_no];
-      /* Map index is encoded as two lower bits for 32-bit word in PTX->SASS register map */
-      map->idx        = regmap_iterator_read_uint32 (itr) & 3;
-      rname           = regmap_iterator_read_string (itr);
-      map->target     = regmap_iterator_read_uint32 (itr);
-      map->start      = regmap_iterator_read_uint32 (itr);
-      map->end        = regmap_iterator_read_uint32 (itr);
+      /* Map index is encoded as two lower bits for 32-bit word in PTX->SASS
+       * register map */
+      map->idx = regmap_iterator_read_uint32 (itr) & 3;
+      rname = regmap_iterator_read_string (itr);
+      map->target = regmap_iterator_read_uint32 (itr);
+      map->start = regmap_iterator_read_uint32 (itr);
+      map->end = regmap_iterator_read_uint32 (itr);
       gdb_assert (rname);
-      if (rname[0] != '%' || strlen (rname+1) >= sizeof(uint64_t))
-        {
-          cuda_trace ("%s: skipping regmap %s->0x%x from 0x%08x->0x%08x\n",
-                      __func__, rname, map->target, map->start, map->end);
-          continue;
-        }
+      if (rname[0] != '%' || strlen (rname + 1) >= sizeof (uint64_t))
+	{
+	  cuda_trace ("%s: skipping regmap %s->0x%x from 0x%08x->0x%08x\n",
+		      __func__, rname, map->target, map->start, map->end);
+	  continue;
+	}
       /* Append a new entry */
-      strcpy(map->rname, rname+1);
+      strcpy (map->rname, rname + 1);
       map->extended_end = map->end;
       func->maps_no++;
     }
@@ -572,7 +599,8 @@ regmap_load_func (regmap_iterator_t *itr, regmap_table_t *table)
   return 0;
 }
 
-/* Loads PTX->SASS register mapping table into the structure allocated on objfile's heap */
+/* Loads PTX->SASS register mapping table into the structure allocated on
+ * objfile's heap */
 static regmap_table_t *
 regmap_load_table (struct objfile *objfile)
 {
@@ -585,7 +613,7 @@ regmap_load_table (struct objfile *objfile)
   uint32_t cnt, alloc_size, func_size;
 
   gdb_assert (objfile);
-  obstack  = &objfile->objfile_obstack;
+  obstack = &objfile->objfile_obstack;
 
   /* If table was read already - return it */
   if (objfile->cuda_regmap)
@@ -598,14 +626,14 @@ regmap_load_table (struct objfile *objfile)
    * regmap_iterator_start() and regmap_iterator_end() would always return true
    */
   regmap_iterator_start (&itr, buffer, buffer_size);
-  for (cnt=0; !regmap_iterator_end(&itr); cnt++)
+  for (cnt = 0; !regmap_iterator_end (&itr); cnt++)
     {
       regmap_parse_ondisk_func (&itr, NULL, NULL, &func_size);
       regmap_iterator_move (&itr, func_size);
     }
 
-  alloc_size = sizeof(regmap_table_t) + cnt * sizeof(regmap_func_t *);
-  table = (regmap_table_t *) obstack_alloc (obstack, alloc_size);
+  alloc_size = sizeof (regmap_table_t) + cnt * sizeof (regmap_func_t *);
+  table = (regmap_table_t *)obstack_alloc (obstack, alloc_size);
   if (!table)
     goto err;
 
@@ -616,8 +644,8 @@ regmap_load_table (struct objfile *objfile)
 
   regmap_iterator_start (&itr, buffer, buffer_size);
   while (!regmap_iterator_end (&itr))
-      if (regmap_load_func (&itr, table))
-        goto err;
+    if (regmap_load_func (&itr, table))
+      goto err;
 
   xfree (buffer);
 
@@ -629,14 +657,14 @@ err:
   xfree (buffer);
 
   if (!table)
-      return NULL;
+    return NULL;
 
   for (cnt = 0; cnt < table->num_funcs; cnt++)
     if (table->func[cnt])
       {
-        if (table->func[cnt]->name)
-          obstack_free (obstack, table->func[cnt]->name);
-        obstack_free (obstack, table->func[cnt]);
+	if (table->func[cnt]->name)
+	  obstack_free (obstack, table->func[cnt]->name);
+	obstack_free (obstack, table->func[cnt]);
       }
 
   obstack_free (obstack, table);
@@ -657,16 +685,20 @@ regmap_table_print (struct objfile *objfile)
   table = regmap_load_table (objfile);
   gdb_assert (table);
 
-  for ( func = table->func[0], cnt = 0; cnt < table->num_funcs; func = table->func[++cnt])
+  for (func = table->func[0], cnt = 0; cnt < table->num_funcs;
+       func = table->func[++cnt])
     {
       printf ("Function: %s (%u entries)\n", func->name, func->maps_no);
-      for ( map = &func->map[0], map_end = &func->map[func->maps_no]; map < map_end; map++)
-        if (map->end == map->extended_end)
-          printf ("\t%10s (idx: %d) -> 0x%x, range 0x%08x - 0x%08x\n",
-                 map->rname, map->idx, map->target, map->start, map->end);
-        else
-          printf ("\t%10s (idx: %d) -> 0x%x, range 0x%08x - 0x%08x (could be extended to 0x%08x)\n",
-                 map->rname, map->idx, map->target, map->start, map->end, map->extended_end);
+      for (map = &func->map[0], map_end = &func->map[func->maps_no];
+	   map < map_end; map++)
+	if (map->end == map->extended_end)
+	  printf ("\t%10s (idx: %d) -> 0x%x, range 0x%08x - 0x%08x\n",
+		  map->rname, map->idx, map->target, map->start, map->end);
+	else
+	  printf ("\t%10s (idx: %d) -> 0x%x, range 0x%08x - 0x%08x (could be "
+		  "extended to 0x%08x)\n",
+		  map->rname, map->idx, map->target, map->start, map->end,
+		  map->extended_end);
     }
 }
 
@@ -677,10 +709,12 @@ regmap_append (regmap_t regmap, uint32_t idx, uint32_t target)
   if (regmap->output.num_entries >= regmap->output.num_entries_allocated)
     {
       regmap->output.num_entries_allocated += REGMAP_ENTRIES_ALLOC;
-      regmap->output.raw_value = (uint32_t *) xrealloc (regmap->output.raw_value,
-                            regmap->output.num_entries_allocated * sizeof (uint32_t));
-      regmap->output.location_index = (uint32_t *) xrealloc (regmap->output.location_index,
-                                 regmap->output.num_entries_allocated * sizeof (uint32_t));
+      regmap->output.raw_value = (uint32_t *)xrealloc (
+	  regmap->output.raw_value,
+	  regmap->output.num_entries_allocated * sizeof (uint32_t));
+      regmap->output.location_index = (uint32_t *)xrealloc (
+	  regmap->output.location_index,
+	  regmap->output.num_entries_allocated * sizeof (uint32_t));
     }
 
   regmap->output.raw_value[regmap->output.num_entries] = target;
@@ -688,17 +722,18 @@ regmap_append (regmap_t regmap, uint32_t idx, uint32_t target)
   regmap->output.num_entries++;
 }
 
-/* Generate regmap_t entry for given PTX register at given address in a given function */
+/* Generate regmap_t entry for given PTX register at given address in a given
+ * function */
 regmap_t
 regmap_table_search (struct objfile *objfile, const char *func_name,
-                     const char *reg_name, uint64_t addr)
+		     const char *reg_name, uint64_t addr)
 {
   const char *tmp;
   uint32_t func_name_len;
   uint32_t cnt;
   regmap_table_t *table;
   regmap_func_t *func;
-  regmap_map_t  *map, *map_end;
+  regmap_map_t *map, *map_end;
 
   gdb_assert (objfile);
   gdb_assert (func_name);
@@ -708,28 +743,32 @@ regmap_table_search (struct objfile *objfile, const char *func_name,
   func_name_len = strlen (func_name);
   tmp = strchr (func_name, '(');
   if (tmp)
-    func_name_len = (unsigned long) tmp - (unsigned long)func_name;
+    func_name_len = (unsigned long)tmp - (unsigned long)func_name;
 
   /* Initialize the search */
-  cuda_regmap->input.func_name           = func_name;
-  cuda_regmap->input.reg_name            = reg_name;
-  cuda_regmap->input.addr                = addr;
-  cuda_regmap->output.num_entries        = 0;
-  cuda_regmap->output.extrapolated       = false;
+  cuda_regmap->input.func_name = func_name;
+  cuda_regmap->input.reg_name = reg_name;
+  cuda_regmap->input.addr = addr;
+  cuda_regmap->output.num_entries = 0;
+  cuda_regmap->output.extrapolated = false;
   cuda_regmap->output.max_location_index = ~0U;
 
   /* allocate initial vectors if needed */
   if (!cuda_regmap->output.num_entries_allocated)
     {
       cuda_regmap->output.num_entries_allocated = REGMAP_ENTRIES_ALLOC;
-      cuda_regmap->output.raw_value = (uint32_t *) xcalloc (cuda_regmap->output.num_entries_allocated, sizeof (uint32_t));
-      cuda_regmap->output.location_index = (uint32_t *) xcalloc (cuda_regmap->output.num_entries_allocated, sizeof (uint32_t));
+      cuda_regmap->output.raw_value = (uint32_t *)xcalloc (
+	  cuda_regmap->output.num_entries_allocated, sizeof (uint32_t));
+      cuda_regmap->output.location_index = (uint32_t *)xcalloc (
+	  cuda_regmap->output.num_entries_allocated, sizeof (uint32_t));
     }
   else
     {
       /* Clear vectors (to make debugging easier) */
-      memset (cuda_regmap->output.raw_value, 0, cuda_regmap->output.num_entries_allocated * sizeof (uint32_t));
-      memset (cuda_regmap->output.location_index, 0, cuda_regmap->output.num_entries_allocated * sizeof (uint32_t));
+      memset (cuda_regmap->output.raw_value, 0,
+	      cuda_regmap->output.num_entries_allocated * sizeof (uint32_t));
+      memset (cuda_regmap->output.location_index, 0,
+	      cuda_regmap->output.num_entries_allocated * sizeof (uint32_t));
     }
 
   /* Search in each function */
@@ -737,44 +776,48 @@ regmap_table_search (struct objfile *objfile, const char *func_name,
   if (!table || table->num_funcs == 0)
     return cuda_regmap;
 
-  for ( func = table->func[cnt = 0]; cnt < table->num_funcs; func = table->func[++cnt])
-  {
-     if (strncmp (func->name, func_name, func_name_len) != 0
-         || func->name[func_name_len] != 0)
-       continue;
-     for (map = &func->map[0], map_end = &func->map[func->maps_no]; map < map_end; map++)
-       {
-         /* Discard this register reg if the register name does not match */
-         if (strcmp (map->rname, reg_name+1) != 0)
-           continue;
+  for (func = table->func[cnt = 0]; cnt < table->num_funcs;
+       func = table->func[++cnt])
+    {
+      if (strncmp (func->name, func_name, func_name_len) != 0
+	  || func->name[func_name_len] != 0)
+	continue;
+      for (map = &func->map[0], map_end = &func->map[func->maps_no];
+	   map < map_end; map++)
+	{
+	  /* Discard this register reg if the register name does not match */
+	  if (strcmp (map->rname, reg_name + 1) != 0)
+	    continue;
 
-         /* Save the maximum location index encountered for this register name */
-         if (cuda_regmap->output.max_location_index == ~0U ||
-             map->idx > cuda_regmap->output.max_location_index)
-           cuda_regmap->output.max_location_index = map->idx;
+	  /* Save the maximum location index encountered for this register name
+	   */
+	  if (cuda_regmap->output.max_location_index == ~0U
+	      || map->idx > cuda_regmap->output.max_location_index)
+	    cuda_regmap->output.max_location_index = map->idx;
 
-         /* Discard this register reg if the address if out of range/extended range */
-         if (addr < map->start ||
-             addr > (cuda_options_value_extrapolation_enabled () ?
-                    map->extended_end : map->end) )
-             continue;
+	  /* Discard this register reg if the address if out of range/extended
+	   * range */
+	  if (addr < map->start
+	      || addr > (cuda_options_value_extrapolation_enabled ()
+			     ? map->extended_end
+			     : map->end))
+	    continue;
 
-         /* Ignore upper 64-bit of 128-bit PTX registers */
-         if (map->idx > 1)
-             continue;
+	  /* Ignore upper 64-bit of 128-bit PTX registers */
+	  if (map->idx > 1)
+	    continue;
 
-        /* Save the found element in the regmap object */
-        regmap_append (cuda_regmap, map->idx, map->target);
+	  /* Save the found element in the regmap object */
+	  regmap_append (cuda_regmap, map->idx, map->target);
 
-         /* Mark output as extrapolated */
-         if (cuda_options_value_extrapolation_enabled () && addr > map->end)
-           cuda_regmap->output.extrapolated = true;
-       }
-  }
+	  /* Mark output as extrapolated */
+	  if (cuda_options_value_extrapolation_enabled () && addr > map->end)
+	    cuda_regmap->output.extrapolated = true;
+	}
+    }
 
   return cuda_regmap;
 }
-
 
 /* See if reg is a properly encoded CUDA physical register.  Currently only
    used by the DWARF2 frame reader (see dwarf2-frame.c) to decode CFA
@@ -788,8 +831,8 @@ regmap_table_search (struct objfile *objfile, const char *func_name,
 int
 cuda_decode_physical_register (uint64_t reg, int32_t *result)
 {
-  uint32_t dev_id   = cuda_current_device ();
-  uint32_t num_regs = device_get_num_registers (dev_id);
+  uint32_t dev_id = cuda_current_focus::get ().physical ().dev ();
+  uint32_t num_regs = cuda_state::device_get_num_registers (dev_id);
   ULONGEST last_regnum = num_regs - 1;
 
   if (reg < last_regnum)

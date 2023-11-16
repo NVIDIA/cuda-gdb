@@ -19,22 +19,13 @@
 #ifndef _CUDA_VERSION_H
 #define _CUDA_VERSION_H 1
 
+#ifndef CUDA_VERSION
+#define CUDA_VERSION 12030
+#endif
+
 const int cuda_major_version (void);
 const int cuda_minor_version (void);
 const char *cuda_current_year (void);
-
-class cuda_api_version
-{
-public:
-    explicit cuda_api_version()
-      : m_major {0}, m_minor {0}, m_revision {0} { }
-    explicit cuda_api_version(uint32_t major, uint32_t minor, uint32_t revision)
-      : m_major {major}, m_minor {minor}, m_revision {revision} { }
-        
-    uint32_t m_major;
-    uint32_t m_minor;
-    uint32_t m_revision;
-};
 
 #endif
 

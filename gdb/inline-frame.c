@@ -361,7 +361,7 @@ skip_inline_frames (thread_info *thread, bpstat *stop_chain)
 #ifdef NVIDIA_CUDA_GDB
   /* CUDA - inline frame support */
   /* For the CUDA frames, we want to always expose the inlined frames */
-  if (frame_block != NULL && !cuda_focus_is_device ())
+  if (frame_block != NULL && !cuda_current_focus::isDevice ())
 #else
   if (frame_block != NULL)
 #endif

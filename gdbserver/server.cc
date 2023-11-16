@@ -41,7 +41,6 @@
 #include "dll.h"
 #include "hostio.h"
 #ifdef NVIDIA_CUDA_GDB
-#include "cuda.h"
 #include "cuda-tdep-server.h"
 #include "cuda/cuda-utils.h"
 #include "cuda/cuda-version.h"

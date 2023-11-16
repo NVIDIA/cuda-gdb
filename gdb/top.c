@@ -1847,10 +1847,10 @@ quit_force (int *exit_arg, int from_tty)
   undo_terminal_modifications_before_exit ();
 
 #ifdef NVIDIA_CUDA_GDB
-  if (cuda_exception_is_valid (cuda_exception))
+  cuda_exception ex;
+  if (ex.valid ())
     {
       cuda_cleanup();
-      cuda_exception_reset (cuda_exception);
 
       if (target_has_execution ())
         target_kill ();

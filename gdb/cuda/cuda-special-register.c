@@ -131,7 +131,6 @@ cuda_special_register_read_entry (regmap_t regmap,
                                   uint32_t entry_idx,
                                   uint32_t *buf)
 {
-  uint32_t dev, sm, wp, ln;
   uint32_t stack_addr, offset, sz, regnum;
   int sp_regnum, tmp;
   bool high;
@@ -140,7 +139,7 @@ cuda_special_register_read_entry (regmap_t regmap,
   gdb_assert (buf);
   gdb_assert (regmap_is_readable (regmap));
 
-  cuda_coords_get_current_physical (&dev, &sm, &wp, &ln);
+  const auto& c = cuda_current_focus::get ().physical ();
 
   sz = sizeof *buf;
 
@@ -148,37 +147,37 @@ cuda_special_register_read_entry (regmap_t regmap,
   {
     case REG_CLASS_REG_FULL:
       regnum = regmap_get_register (regmap, entry_idx);
-      *buf = lane_get_register (dev, sm, wp, ln, regnum);
+      *buf = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (), regnum);
       break;
 
     case REG_CLASS_MEM_LOCAL:
       gdb_assert (!cuda_current_active_elf_image_uses_abi ());
       offset = regmap_get_offset (regmap, entry_idx);
-      cuda_api_read_local_memory (dev, sm, wp, ln, offset, buf, sz);
+      cuda_debugapi::read_local_memory (c.dev (), c.sm (), c.wp (), c.ln (), offset, buf, sz);
       break;
 
     case REG_CLASS_LMEM_REG_OFFSET:
       gdb_assert (cuda_current_active_elf_image_uses_abi ());
       sp_regnum = regmap_get_sp_register (regmap, entry_idx);
       offset = regmap_get_sp_offset (regmap, entry_idx);
-      stack_addr = lane_get_register (dev, sm, wp, ln, sp_regnum);
-      cuda_api_read_local_memory (dev, sm, wp, ln, stack_addr + offset, buf, sz);
+      stack_addr = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (), sp_regnum);
+      cuda_debugapi::read_local_memory (c.dev (), c.sm (), c.wp (), c.ln (), stack_addr + offset, buf, sz);
       break;
 
     case REG_CLASS_REG_HALF:
       regnum = regmap_get_half_register (regmap, entry_idx, &high);
-      tmp = lane_get_register (dev, sm, wp, ln, regnum);
+      tmp = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (), regnum);
       *buf = high ? tmp >> 16 : tmp & 0xffff;
       break;
 
     case REG_CLASS_UREG_FULL:
       regnum = regmap_get_uregister (regmap, entry_idx);
-      *buf = warp_get_uregister (dev, sm, wp, regnum);
+      *buf = cuda_state::warp_get_uregister (c.dev (), c.sm (), c.wp (), regnum);
       break;
 
     case REG_CLASS_UREG_HALF:
       regnum = regmap_get_half_uregister (regmap, entry_idx, &high);
-      tmp = warp_get_uregister (dev, sm, wp, regnum);
+      tmp = cuda_state::warp_get_uregister (c.dev (), c.sm (), c.wp (), regnum);
       *buf = high ? tmp >> 16 : tmp & 0xffff;
       break;
 
@@ -200,7 +199,6 @@ cuda_special_register_write_entry (regmap_t regmap,
                                    uint32_t entry_idx,
                                    const uint32_t *buf)
 {
-  uint32_t dev, sm, wp, ln;
   uint32_t stack_addr, offset, sz, old_val, new_val, regnum;
   void *ptr;
   int sp_regnum;
@@ -209,7 +207,7 @@ cuda_special_register_write_entry (regmap_t regmap,
   gdb_assert (regmap);
   gdb_assert (buf);
 
-  cuda_coords_get_current_physical (&dev, &sm, &wp, &ln);
+  const auto& c = cuda_current_focus::get ().physical ();
 
   ptr = (void*)buf;
   sz = sizeof *buf;
@@ -218,31 +216,31 @@ cuda_special_register_write_entry (regmap_t regmap,
   {
     case REG_CLASS_REG_FULL:
       regnum = regmap_get_register (regmap, entry_idx);
-      lane_set_register (dev, sm, wp, ln, regnum, *buf);
+      cuda_state::lane_set_register (c.dev (), c.sm (), c.wp (), c.ln (), regnum, *buf);
       break;
 
     case REG_CLASS_MEM_LOCAL:
       gdb_assert (!cuda_current_active_elf_image_uses_abi ());
       offset = regmap_get_offset (regmap, entry_idx);
-      cuda_api_write_local_memory (dev, sm, wp, ln, offset, ptr, sz);
+      cuda_debugapi::write_local_memory (c.dev (), c.sm (), c.wp (), c.ln (), offset, ptr, sz);
       break;
 
     case REG_CLASS_LMEM_REG_OFFSET:
       gdb_assert (cuda_current_active_elf_image_uses_abi ());
       sp_regnum = regmap_get_sp_register (regmap, entry_idx);
       offset = regmap_get_sp_offset (regmap, entry_idx);
-      stack_addr = lane_get_register (dev, sm, wp, ln, sp_regnum);
-      cuda_api_write_local_memory (dev, sm, wp, ln, stack_addr + offset, ptr, sz);
+      stack_addr = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (), sp_regnum);
+      cuda_debugapi::write_local_memory (c.dev (), c.sm (), c.wp (), c.ln (), stack_addr + offset, ptr, sz);
       break;
 
     case REG_CLASS_REG_HALF:
       regnum = regmap_get_half_register (regmap, entry_idx, &high);
-      old_val = lane_get_register (dev, sm, wp, ln, regnum);
+      old_val = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (), regnum);
       if (high)
         new_val = (*buf << 16) | (old_val & 0x0000ffff);
       else
         new_val = (old_val & 0xffff0000) | (*buf);
-      lane_set_register (dev, sm, wp, ln, regnum, new_val);
+      cuda_state::lane_set_register (c.dev (), c.sm (), c.wp (), c.ln (), regnum, new_val);
       break;
 
     case REG_CLASS_REG_CC:
@@ -302,7 +300,6 @@ cuda_special_register_to_value (regmap_t regmap, struct frame_info *frame,
   int i = 0, regnum = 0;
   bool high = false;
   uint32_t *p = (uint32_t *)to;
-  uint32_t dev = 0, sm = 0, wp = 0, ln = 0;
   uint32_t sp_regnum = 0, offset = 0, stack_addr = 0, val32 = 0, idx = 0;
 
   gdb_assert (regmap);
@@ -310,7 +307,7 @@ cuda_special_register_to_value (regmap_t regmap, struct frame_info *frame,
   gdb_assert (to);
   gdb_assert (regmap_is_readable (regmap));
 
-  cuda_coords_get_current_physical (&dev, &sm, &wp, &ln);
+  const auto& c = cuda_current_focus::get ().physical ();
 
   for (i = 0; i < regmap_get_num_entries (regmap); ++i)
     {
@@ -325,7 +322,7 @@ cuda_special_register_to_value (regmap_t regmap, struct frame_info *frame,
 
           case REG_CLASS_MEM_LOCAL:
             offset = regmap_get_offset (regmap, i);
-            cuda_api_read_local_memory (dev, sm, wp, ln, offset,
+            cuda_debugapi::read_local_memory (c.dev (), c.sm (), c.wp (), c.ln (), offset,
                                         (void*)&p[idx], sizeof (p[idx]));
             break;
 
@@ -333,7 +330,7 @@ cuda_special_register_to_value (regmap_t regmap, struct frame_info *frame,
             sp_regnum = regmap_get_sp_register (regmap, i);
             offset = regmap_get_sp_offset (regmap, i);
             get_frame_register (frame, sp_regnum, (gdb_byte*)&stack_addr);
-            cuda_api_read_local_memory (dev, sm, wp, ln, stack_addr + offset,
+            cuda_debugapi::read_local_memory (c.dev (), c.sm (), c.wp (), c.ln (), stack_addr + offset,
                                         (void*)&p[idx], sizeof (p[idx]));
             break;
 
@@ -375,7 +372,6 @@ cuda_value_to_special_register (regmap_t regmap, struct frame_info *frame,
   int i = 0, regnum = 0;
   bool high = false;
   uint32_t *p = (uint32_t *)from;
-  uint32_t dev = 0, sm = 0, wp = 0, ln = 0;
   uint32_t sp_regnum = 0, offset = 0, stack_addr = 0, val32 = 0, idx = 0;
 
   gdb_assert (regmap);
@@ -385,7 +381,7 @@ cuda_value_to_special_register (regmap_t regmap, struct frame_info *frame,
   if (!regmap_is_writable (regmap))
     error (_("Write request impossible. Insufficient debug information."));
 
-  cuda_coords_get_current_physical (&dev, &sm, &wp, &ln);
+  const auto& c = cuda_current_focus::get ().physical ();
 
   for (i = 0; i < regmap_get_num_entries (regmap); ++i)
     {
@@ -400,7 +396,7 @@ cuda_value_to_special_register (regmap_t regmap, struct frame_info *frame,
 
           case REG_CLASS_MEM_LOCAL:
             offset = regmap_get_offset (regmap, i);
-            cuda_api_write_local_memory (dev, sm, wp, ln, offset,
+            cuda_debugapi::write_local_memory (c.dev (), c.sm (), c.wp (), c.ln (), offset,
                                         (void*)&p[idx], sizeof (p[idx]));
             break;
 
@@ -408,7 +404,7 @@ cuda_value_to_special_register (regmap_t regmap, struct frame_info *frame,
             sp_regnum = regmap_get_sp_register (regmap, i);
             offset = regmap_get_sp_offset (regmap, i);
             get_frame_register (frame, sp_regnum, (gdb_byte*)&stack_addr);
-            cuda_api_write_local_memory (dev, sm, wp, ln, stack_addr + offset,
+            cuda_debugapi::write_local_memory (c.dev (), c.sm (), c.wp (), c.ln (), stack_addr + offset,
                                          (void*)&p[idx], sizeof (p[idx]));
             break;
 
