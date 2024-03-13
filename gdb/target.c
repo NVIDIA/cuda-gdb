@@ -19,6 +19,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "target.h"
 #include "target-dcache.h"
@@ -4412,10 +4417,22 @@ exists_non_stop_target ()
 
   return false;
 }
+/* CUDA - The CUDA backend is not yet ready to control the target in non-stop
+   mode, so we disable that mode for now and switch back to using the old
+   all-stop mechanism so GDB can properly stop all threads before reporting an
+   event to the core.
+
+   Using non-stop with the current CUDA backend will run into problems where
+   we try to remove/insert breakpoints or read/write memory while threads are
+   still running.  */
 
 /* Controls if targets can report that they always run in non-stop
    mode.  This is just for maintainers to use when debugging gdb.  */
+#ifdef NVIDIA_CUDA_GDB
+enum auto_boolean target_non_stop_enabled = AUTO_BOOLEAN_FALSE;
+#else
 enum auto_boolean target_non_stop_enabled = AUTO_BOOLEAN_AUTO;
+#endif
 
 /* Set callback for maint target-non-stop setting.  */
 

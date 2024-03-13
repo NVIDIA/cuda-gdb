@@ -19,6 +19,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* This file contains support routines for creating, manipulating, and
    destroying objfile structures.  */
 
@@ -265,7 +270,13 @@ add_to_objfile_sections (struct bfd *abfd, struct bfd_section *asect,
 	return;
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  int idx = gdb_bfd_section_index (abfd, asect);
+  section = &objfile->sections[idx];
+  section->bfd_index = idx;
+#else
   section = &objfile->sections[gdb_bfd_section_index (abfd, asect)];
+#endif
   section->objfile = objfile;
   section->the_bfd_section = asect;
   section->ovly_mapped = 0;
@@ -908,6 +919,16 @@ sort_cmp (const struct obj_section *sect1, const obj_section *sect2)
 	     SECT2 == SECT1, in both cases we should return false.  The
 	     second case shouldn't occur during normal use, but std::sort
 	     does check that '!(a < a)' when compiled in debug mode.  */
+#ifdef NVIDIA_CUDA_GDB
+	  /* CUDA: Try to use the index to avoid iterating over every objfile section. 
+	   * This greatly improves performance as we don't want to conduct a linear
+	   * search in a compare function during the sort. This is a common case for
+	   * cuda objfiles. */
+	  if (sect1->the_bfd_section->index < sect2->the_bfd_section->index)
+	    return true;
+	  if (sect1->the_bfd_section->index > sect2->the_bfd_section->index)
+	    return false;
+#endif
 
 	  const struct obj_section *osect;
 
@@ -923,6 +944,17 @@ sort_cmp (const struct obj_section *sect1, const obj_section *sect2)
       else
 	{
 	  /* Sort on sequence number of the objfile in the chain.  */
+#ifdef NVIDIA_CUDA_GDB
+	  /* CUDA: Instead of overlap being an edge case, this is a common case for
+	   * cuda objfiles. We can speed up the sort 100x by using a saved insertion
+	   * order id stored in the objfile rather than the existing linear search below.
+	   * Remember: We are in a comparison function inside of the sort! */
+	  if (objfile1->id < objfile2->id)
+	    return true;
+	  if (objfile1->id > objfile2->id)
+	    return false;
+	  complaint (_("Falling back to slow path in objfile sort.\n"));
+#endif
 
 	  for (objfile *objfile : current_program_space->objfiles ())
 	    if (objfile == objfile1)

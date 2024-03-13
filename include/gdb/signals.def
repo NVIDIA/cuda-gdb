@@ -16,6 +16,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* Used some places (e.g. stop_signal) to record the concept that
    there is no signal.  */
 SET (GDB_SIGNAL_0, 0, "0", "Signal 0")
@@ -196,7 +201,38 @@ SET (GDB_EXC_BREAKPOINT, 150, "EXC_BREAKPOINT", "Breakpoint")
 
 SET (GDB_SIGNAL_LIBRT, 151, "SIGLIBRT", "librt internal signal")
 
+/* CUDA - extra signals */
+SET (GDB_SIGNAL_CUDA_UNKNOWN_EXCEPTION,              152, "CUDA_EXCEPTION_0", "Device Unknown Exception")
+/* cuda memcheck */
+SET (GDB_SIGNAL_CUDA_LANE_ILLEGAL_ADDRESS,           153, "CUDA_EXCEPTION_1", "Lane Illegal Address")
+SET (GDB_SIGNAL_CUDA_LANE_USER_STACK_OVERFLOW,       154, "CUDA_EXCEPTION_2", "Lane User Stack Overflow")
+SET (GDB_SIGNAL_CUDA_DEVICE_HARDWARE_STACK_OVERFLOW, 155, "CUDA_EXCEPTION_3", "Device Hardware Stack Overflow")
+SET (GDB_SIGNAL_CUDA_WARP_ILLEGAL_INSTRUCTION,       156, "CUDA_EXCEPTION_4", "Warp Illegal Instruction")
+SET (GDB_SIGNAL_CUDA_WARP_OUT_OF_RANGE_ADDRESS,      157, "CUDA_EXCEPTION_5", "Warp Out-of-range Address")
+SET (GDB_SIGNAL_CUDA_WARP_MISALIGNED_ADDRESS,        158, "CUDA_EXCEPTION_6", "Warp Misaligned Address")
+SET (GDB_SIGNAL_CUDA_WARP_INVALID_ADDRESS_SPACE,     159, "CUDA_EXCEPTION_7", "Warp Invalid Address Space")
+SET (GDB_SIGNAL_CUDA_WARP_INVALID_PC,                160, "CUDA_EXCEPTION_8", "Warp Invalid PC")
+SET (GDB_SIGNAL_CUDA_WARP_HARDWARE_STACK_OVERFLOW,   161, "CUDA_EXCEPTION_9", "Warp Hardware Stack Overflow")
+SET (GDB_SIGNAL_CUDA_DEVICE_ILLEGAL_ADDRESS,         162, "CUDA_EXCEPTION_10", "Device Illegal Address")
+/* cuda memcheck (future) */
+SET (GDB_SIGNAL_CUDA_LANE_MISALIGNED_ADDRESS,        163, "CUDA_EXCEPTION_11", "Lane Misaligned Address")
+/* device side assert */
+SET (GDB_SIGNAL_CUDA_WARP_ASSERT,                    164, "CUDA_EXCEPTION_12", "Warp Assert")
+SET (GDB_SIGNAL_CUDA_LANE_SYSCALL_ERROR,             165, "CUDA_EXCEPTION_13", "Lane Syscall Error")
+SET (GDB_SIGNAL_CUDA_WARP_ILLEGAL_ADDRESS,           166, "CUDA_EXCEPTION_14", "Warp Illegal Address")
+SET (GDB_SIGNAL_CUDA_INVALID_MANAGED_MEMORY_ACCESS,  167, "CUDA_EXCEPTION_15", "Invalid Managed Memory Access")
+SET (GDB_SIGNAL_CUDA_LANE_NONMIGRATABLE_ATOMSYS,     168, "CUDA_EXCEPTION_16", "Non-migratable System-scoped Atomic Access")
+SET (GDB_SIGNAL_CUDA_CLUSTER_BLOCK_NOT_PRESENT,      169, "CUDA_EXCEPTION_17", "Cluster target block not present")
+SET (GDB_SIGNAL_CUDA_CLUSTER_OUT_OF_RANGE_ADDRESS,   170, "CUDA_EXCEPTION_18", "Cluster out of range address")
+/* QNX */
+SET (GDB_SIGNAL_SELECT, 171, "SIGSELECT", "Data available")
+/* END CUDA */
 /* If you are adding a new signal, add it just above this comment.  */
 
 /* Last and unused enum value, for sizing arrays, etc.  */
+/*** CUDA REMOVED
 SET (GDB_SIGNAL_LAST, 152, NULL, "GDB_SIGNAL_LAST")
+***/
+/* CUDA */
+SET (GDB_SIGNAL_LAST, 172, NULL, "GDB_SIGNAL_LAST")
+/* END CUDA */

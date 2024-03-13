@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -33,6 +38,9 @@
 #include "language.h"
 #include "dwarf2/loc.h"
 #include "gdbsupport/selftest.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-tdep.h"
+#endif
 
 /* Basic byte-swapping routines.  All 'extract' functions return a
    host-format integer from a target-format integer at ADDR which is
@@ -855,6 +863,11 @@ read_frame_register_value (struct value *value, frame_info_ptr frame)
       regnum++;
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - fetch lazy values first */
+  if (value_lazy(value))
+    value_fetch_lazy (value);
+#endif
   /* Copy the data.  */
   while (len > 0)
     {
@@ -940,6 +953,15 @@ address_from_register (int regnum, frame_info_ptr frame)
     error (_("Invalid register #%d, expecting 0 <= # < %d"), regnum,
 	   regnum_max_excl);
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - Read correct pointer size from header */
+  /* When debugging 32-bit apps on 64-bit cuda-gdb, the pointer size
+  * is not set correctly. Here we need to reset the size of the builtin
+  * type to make sure cuda-gdb reads the correct size.
+  */
+  if (cuda_is_cuda_gdbarch (gdbarch))
+    type = gdbarch_register_type (gdbarch, regnum);
+#endif
   /* This routine may be called during early unwinding, at a time
      where the ID of FRAME is not yet known.  Calling value_from_register
      would therefore abort in get_frame_id.  However, since we only need

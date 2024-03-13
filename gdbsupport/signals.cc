@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "common-defs.h"
 
 #ifdef HAVE_SIGNAL_H
@@ -301,6 +306,13 @@ gdb_signal_from_host (int hostsig)
     return GDB_SIGNAL_PRIO;
 #endif
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+#if defined (SIGSELECT)
+  if (hostsig == SIGSELECT)
+    return GDB_SIGNAL_SELECT;
+#endif
+#endif
+
   /* Mach exceptions.  Assumes that the values for EXC_ are positive! */
 #if defined (EXC_BAD_ACCESS) && defined (_NSIG)
   if (hostsig == _NSIG + EXC_BAD_ACCESS)
@@ -558,6 +570,13 @@ do_gdb_signal_to_host (enum gdb_signal oursig,
       return SIGPRIO;
 #endif
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+#if defined (SIGSELECT)
+    case GDB_SIGNAL_SELECT:
+      return SIGSELECT;
+#endif
+#endif
+
       /* Mach exceptions.  Assumes that the values for EXC_ are positive! */
 #if defined (EXC_BAD_ACCESS) && defined (_NSIG)
     case GDB_EXC_BAD_ACCESS:
@@ -593,6 +612,12 @@ do_gdb_signal_to_host (enum gdb_signal oursig,
       return SIGLIBRT;
 #endif
 
+#ifdef NVIDIA_CUDA_GDB
+    /* This should be generic to all recoverable signals from the
+       inferior. For now, behave the same as TARGET_SIGNAL_0 */
+    case GDB_SIGNAL_CUDA_WARP_ASSERT:
+      return 0;
+#endif
     default:
 #if defined (REALTIME_LO)
       retsig = 0;

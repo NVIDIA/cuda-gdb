@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "common-defs.h"
 #include "print-utils.h"
 /* Temporary storage using circular buffer.  */
@@ -222,12 +227,40 @@ phex_nz (ULONGEST l, int sizeof_l)
 
 /* See print-utils.h.  */
 
+#ifdef NVIDIA_CUDA_GDB
+char *
+hex_string (ULONGEST num)
+#else
 char *
 hex_string (LONGEST num)
+#endif
 {
+#ifdef NVIDIA_CUDA_GDB
+  static const char hexdigit[]="0123456789abcdef";
+  char *result = get_print_cell () + PRINT_CELL_SIZE;
+
+  *(--result) = 0;
+  do
+    {
+     if (num < 16)
+       {
+         *(--result) = hexdigit[num];
+         break;
+       }
+     result -= 2;
+     result[0] = hexdigit[(num>>4)&0xf];
+     result[1] = hexdigit[num&0xf];
+     num >>= 8;
+    } while (num);
+
+  result -= 2;
+  result[0] = '0';
+  result[1] = 'x';
+#else
   char *result = get_print_cell ();
 
   xsnprintf (result, PRINT_CELL_SIZE, "0x%s", phex_nz (num, sizeof (num)));
+#endif
   return result;
 }
 

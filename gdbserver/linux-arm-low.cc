@@ -16,8 +16,16 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "server.h"
 #include "linux-low.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "linux-cuda-low.h"
+#endif
 #include "arch/arm.h"
 #include "arch/arm-linux.h"
 #include "arch/arm-get-next-pcs.h"
@@ -120,8 +128,11 @@ protected:
 };
 
 /* The singleton target ops object.  */
-
+#ifdef NVIDIA_CUDA_GDB
+static cuda_linux_process_target<arm_target> the_arm_target;
+#else
 static arm_target the_arm_target;
+#endif
 
 bool
 arm_target::low_supports_breakpoints ()
@@ -220,11 +231,14 @@ struct arch_lwp_info
 };
 
 /* These are in <asm/elf.h> in current kernels.  */
+/* CUDA */
+#if !defined(HWCAP_VFP)
 #define HWCAP_VFP       64
 #define HWCAP_IWMMXT    512
 #define HWCAP_NEON      4096
 #define HWCAP_VFPv3     8192
 #define HWCAP_VFPv3D16  16384
+#endif
 
 #ifdef HAVE_SYS_REG_H
 #include <sys/reg.h>

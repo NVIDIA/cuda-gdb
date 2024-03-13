@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "target.h"
 #include "gdbtypes.h"
@@ -509,10 +514,14 @@ default_print_auxv_entry (struct gdbarch *gdbarch, struct ui_file *file,
 	   AUXV_FORMAT_HEX);
       TAG (AT_L2_CACHESHAPE, _("L2 cache information"), AUXV_FORMAT_HEX);
       TAG (AT_L2_CACHESIZE, _("L2 cache size"), AUXV_FORMAT_HEX);
+#if defined(NVIDIA_CUDA_GDB) && !defined(__QNXTARGET__)
       TAG (AT_L2_CACHEGEOMETRY, _("L2 cache geometry"), AUXV_FORMAT_HEX);
+#endif
       TAG (AT_L3_CACHESHAPE, _("L3 cache information"), AUXV_FORMAT_HEX);
+#if defined(NVIDIA_CUDA_GDB) && !defined(__QNXTARGET__)
       TAG (AT_L3_CACHESIZE, _("L3 cache size"), AUXV_FORMAT_HEX);
       TAG (AT_L3_CACHEGEOMETRY, _("L3 cache geometry"), AUXV_FORMAT_HEX);
+#endif
       TAG (AT_MINSIGSTKSZ, _("Minimum stack size for signal delivery"),
 	   AUXV_FORMAT_HEX);
       TAG (AT_SUN_UID, _("Effective user ID"), AUXV_FORMAT_DEC);
@@ -551,6 +560,17 @@ default_print_auxv_entry (struct gdbarch *gdbarch, struct ui_file *file,
 	   AUXV_FORMAT_HEX);
       TAG (AT_SUN_CAP_HW2, _("Machine-dependent CPU capability hints 2"),
 	   AUXV_FORMAT_HEX);
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+#undef TAG
+#define TAG(tag, nme, text, kind) \
+      case tag: name = nme; description = text; format = kind; break
+      TAG (45, "AT_INTP_DEVICE", _("QNX Extension"), AUXV_FORMAT_HEX);
+      TAG (46, "AT_INTP_INODE", _("QNX Extension"), AUXV_FORMAT_HEX);
+      TAG (47, "AT_EXEFILE", _("QNX Extension"), AUXV_FORMAT_HEX);
+      TAG (48, "AT_LIBPATH", _("QNX Extension"), AUXV_FORMAT_HEX);
+      TAG (49, "AT_DATA", _("QNX Extension"), AUXV_FORMAT_HEX);
+#undef TAG
+#endif
     }
 
   fprint_auxv_entry (file, name, description, format, type, val);

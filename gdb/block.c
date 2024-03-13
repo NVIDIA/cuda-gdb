@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "block.h"
 #include "symtab.h"
@@ -161,6 +166,52 @@ find_block_in_blockvector (const struct blockvector *bl, CORE_ADDR pc)
 	top = bot + half;
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* Address the case where multiple blocks start at the same address. */
+  while (((bot + 1) < bl->blocks ().size ())
+         && (bl->block (bot)->start () == bl->block (bot + 1)->start ()))
+    ++bot;
+  /* CUDA - bug fix */
+  /* Now search backward for the innermost block that starts before PC and ends
+     after PC. The block are sorted by start addr, but not by end addr. The
+     original version was returning one arbitrary block of all the blocks that
+     contain the PC. The CUDA version makes sure we return the innermost one.
+   */
+  const struct block *innermost = nullptr;
+  while (bot >= STATIC_BLOCK)
+    {
+      b = bl->block (bot);
+      /* If we encounter a block starting prior to innermost we are done
+       * searching. */
+      if (innermost && (b->start () < innermost->start ()))
+        break;
+
+      if (!innermost)
+        {
+          /* If the first block we encounter starts after the pc, no innermost
+           block will exist. */
+          if (b->start () > pc)
+            return nullptr;
+          /* If the candidate b ends after the pc, its a match. */
+          if (pc < b->end ())
+            innermost = b;
+        }
+      else
+        {
+          /* b ends after pc and b ends before innermost it is a better candidate. */
+          if ((pc < b->end ()) && (b->end () < innermost->end ()))
+            innermost = b;
+          /* If this block's superblock is the current 'innermost' block, then
+           this block must be made the new 'innermost'.  lookup_symbol_block
+           will traverse backwards from this block, through each superblock. */
+          if (b->superblock () == innermost)
+            innermost = b;
+        }
+      bot--;
+    }
+
+  return innermost;
+#else
   /* Now search backward for a block that ends after PC.  */
 
   while (bot >= STATIC_BLOCK)
@@ -174,6 +225,7 @@ find_block_in_blockvector (const struct blockvector *bl, CORE_ADDR pc)
     }
 
   return NULL;
+#endif
 }
 
 /* Return the blockvector immediately containing the innermost lexical
@@ -742,6 +794,14 @@ block_lookup_symbol (const struct block *block, const char *name,
 	 It's hard to define types in the parameter list (at least in
 	 C/C++) so we don't do the same PR 16253 hack here that is done
 	 for the !BLOCK_FUNCTION case.  */
+      /* CUDA - missing DW_AT_abstract_origin */
+      /* When a CUDA device function is inlined, its variables, parameters,...
+         have no DW_AT_abstract_origin tags. Therefore the same attributes from
+         the origin routine are inherited. It is not the issue most of the time
+         because those inherited attributes, and therefore symbols, appear
+         later in the list and are never seen. But, for parameters, that's
+         different, per the comment above. A quick workaround is return the
+         first parameter instead of the last. */
 
       struct symbol *sym_found = NULL;
 
@@ -750,11 +810,21 @@ block_lookup_symbol (const struct block *block, const char *name,
 	  if (symbol_matches_domain (sym->language (),
 				     sym->domain (), domain))
 	    {
+#ifdef NVIDIA_CUDA_GDB
+	      if (!sym->is_argument ())
+		{
+		  sym_found = sym;
+		  break;
+		}
+	      else if (!sym_found)
+		sym_found = sym;
+#else
 	      sym_found = sym;
 	      if (!sym->is_argument ())
 		{
 		  break;
 		}
+#endif
 	    }
 	}
       return (sym_found);	/* Will be NULL if not found.  */

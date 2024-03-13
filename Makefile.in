@@ -1110,7 +1110,8 @@ configure-host:  \
     maybe-configure-libcc1 \
     maybe-configure-gotools \
     maybe-configure-libctf \
-    maybe-configure-libsframe
+    maybe-configure-libsframe \
+    maybe-configure-libcudacore
 .PHONY: configure-target
 configure-target:  \
     maybe-configure-target-libstdc++-v3 \
@@ -1294,6 +1295,7 @@ all-host: maybe-all-libctf
 @if libsframe-no-bootstrap
 all-host: maybe-all-libsframe
 @endif libsframe-no-bootstrap
+all-host: maybe-all-libcudacore
 
 .PHONY: all-target
 
@@ -1401,6 +1403,7 @@ info-host: maybe-info-libcc1
 info-host: maybe-info-gotools
 info-host: maybe-info-libctf
 info-host: maybe-info-libsframe
+info-host: maybe-info-libcudacore
 
 .PHONY: info-target
 
@@ -1493,6 +1496,7 @@ dvi-host: maybe-dvi-libcc1
 dvi-host: maybe-dvi-gotools
 dvi-host: maybe-dvi-libctf
 dvi-host: maybe-dvi-libsframe
+dvi-host: maybe-dvi-libcudacore
 
 .PHONY: dvi-target
 
@@ -1585,6 +1589,7 @@ pdf-host: maybe-pdf-libcc1
 pdf-host: maybe-pdf-gotools
 pdf-host: maybe-pdf-libctf
 pdf-host: maybe-pdf-libsframe
+pdf-host: maybe-pdf-libcudacore
 
 .PHONY: pdf-target
 
@@ -1677,6 +1682,7 @@ html-host: maybe-html-libcc1
 html-host: maybe-html-gotools
 html-host: maybe-html-libctf
 html-host: maybe-html-libsframe
+html-host: maybe-html-libcudacore
 
 .PHONY: html-target
 
@@ -1769,6 +1775,7 @@ TAGS-host: maybe-TAGS-libcc1
 TAGS-host: maybe-TAGS-gotools
 TAGS-host: maybe-TAGS-libctf
 TAGS-host: maybe-TAGS-libsframe
+TAGS-host: maybe-TAGS-libcudacore
 
 .PHONY: TAGS-target
 
@@ -1861,6 +1868,7 @@ install-info-host: maybe-install-info-libcc1
 install-info-host: maybe-install-info-gotools
 install-info-host: maybe-install-info-libctf
 install-info-host: maybe-install-info-libsframe
+install-info-host: maybe-install-info-libcudacore
 
 .PHONY: install-info-target
 
@@ -1953,6 +1961,7 @@ install-dvi-host: maybe-install-dvi-libcc1
 install-dvi-host: maybe-install-dvi-gotools
 install-dvi-host: maybe-install-dvi-libctf
 install-dvi-host: maybe-install-dvi-libsframe
+install-dvi-host: maybe-install-dvi-libcudacore
 
 .PHONY: install-dvi-target
 
@@ -2045,6 +2054,7 @@ install-pdf-host: maybe-install-pdf-libcc1
 install-pdf-host: maybe-install-pdf-gotools
 install-pdf-host: maybe-install-pdf-libctf
 install-pdf-host: maybe-install-pdf-libsframe
+install-pdf-host: maybe-install-pdf-libcudacore
 
 .PHONY: install-pdf-target
 
@@ -2137,6 +2147,7 @@ install-html-host: maybe-install-html-libcc1
 install-html-host: maybe-install-html-gotools
 install-html-host: maybe-install-html-libctf
 install-html-host: maybe-install-html-libsframe
+install-html-host: maybe-install-html-libcudacore
 
 .PHONY: install-html-target
 
@@ -2229,6 +2240,7 @@ installcheck-host: maybe-installcheck-libcc1
 installcheck-host: maybe-installcheck-gotools
 installcheck-host: maybe-installcheck-libctf
 installcheck-host: maybe-installcheck-libsframe
+installcheck-host: maybe-installcheck-libcudacore
 
 .PHONY: installcheck-target
 
@@ -2321,6 +2333,7 @@ mostlyclean-host: maybe-mostlyclean-libcc1
 mostlyclean-host: maybe-mostlyclean-gotools
 mostlyclean-host: maybe-mostlyclean-libctf
 mostlyclean-host: maybe-mostlyclean-libsframe
+mostlyclean-host: maybe-mostlyclean-libcudacore
 
 .PHONY: mostlyclean-target
 
@@ -2413,6 +2426,7 @@ clean-host: maybe-clean-libcc1
 clean-host: maybe-clean-gotools
 clean-host: maybe-clean-libctf
 clean-host: maybe-clean-libsframe
+clean-host: maybe-clean-libcudacore
 
 .PHONY: clean-target
 
@@ -2505,6 +2519,7 @@ distclean-host: maybe-distclean-libcc1
 distclean-host: maybe-distclean-gotools
 distclean-host: maybe-distclean-libctf
 distclean-host: maybe-distclean-libsframe
+distclean-host: maybe-distclean-libcudacore
 
 .PHONY: distclean-target
 
@@ -2597,6 +2612,7 @@ maintainer-clean-host: maybe-maintainer-clean-libcc1
 maintainer-clean-host: maybe-maintainer-clean-gotools
 maintainer-clean-host: maybe-maintainer-clean-libctf
 maintainer-clean-host: maybe-maintainer-clean-libsframe
+maintainer-clean-host: maybe-maintainer-clean-libcudacore
 
 .PHONY: maintainer-clean-target
 
@@ -2746,7 +2762,8 @@ check-host:  \
     maybe-check-libcc1 \
     maybe-check-gotools \
     maybe-check-libctf \
-    maybe-check-libsframe
+    maybe-check-libsframe \
+    maybe-check-libcudacore
 
 .PHONY: check-target
 check-target:  \
@@ -2885,7 +2902,8 @@ install-host-nogcc:  \
     maybe-install-libcc1 \
     maybe-install-gotools \
     maybe-install-libctf \
-    maybe-install-libsframe
+    maybe-install-libsframe \
+    maybe-install-libcudacore
 
 .PHONY: install-host
 install-host:  \
@@ -2942,7 +2960,8 @@ install-host:  \
     maybe-install-libcc1 \
     maybe-install-gotools \
     maybe-install-libctf \
-    maybe-install-libsframe
+    maybe-install-libsframe \
+    maybe-install-libcudacore
 
 .PHONY: install-target
 install-target:  \
@@ -3054,7 +3073,8 @@ install-strip-host:  \
     maybe-install-strip-libcc1 \
     maybe-install-strip-gotools \
     maybe-install-strip-libctf \
-    maybe-install-strip-libsframe
+    maybe-install-strip-libsframe \
+    maybe-install-strip-libcudacore
 
 .PHONY: install-strip-target
 install-strip-target:  \
@@ -45206,6 +45226,474 @@ maintainer-clean-libsframe:
 
 
 
+.PHONY: configure-libcudacore maybe-configure-libcudacore
+maybe-configure-libcudacore:
+@if gcc-bootstrap
+configure-libcudacore: stage_current
+@endif gcc-bootstrap
+@if libcudacore
+maybe-configure-libcudacore: configure-libcudacore
+configure-libcudacore: 
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	test ! -f $(HOST_SUBDIR)/libcudacore/Makefile || exit 0; \
+	$(SHELL) $(srcdir)/mkinstalldirs $(HOST_SUBDIR)/libcudacore; \
+	$(HOST_EXPORTS)  \
+	echo Configuring in $(HOST_SUBDIR)/libcudacore; \
+	cd "$(HOST_SUBDIR)/libcudacore" || exit 1; \
+	case $(srcdir) in \
+	  /* | [A-Za-z]:[\\/]*) topdir=$(srcdir) ;; \
+	  *) topdir=`echo $(HOST_SUBDIR)/libcudacore/ | \
+		sed -e 's,\./,,g' -e 's,[^/]*/,../,g' `$(srcdir) ;; \
+	esac; \
+	module_srcdir=libcudacore; \
+	$(SHELL) \
+	  $$s/$$module_srcdir/configure \
+	  --srcdir=$${topdir}/$$module_srcdir \
+	  $(HOST_CONFIGARGS) --build=${build_alias} --host=${host_alias} \
+	  --target=${target_alias}  \
+	  || exit 1
+@endif libcudacore
+
+
+
+
+
+.PHONY: all-libcudacore maybe-all-libcudacore
+maybe-all-libcudacore:
+@if gcc-bootstrap
+all-libcudacore: stage_current
+@endif gcc-bootstrap
+@if libcudacore
+TARGET-libcudacore=all
+maybe-all-libcudacore: all-libcudacore
+all-libcudacore: configure-libcudacore
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS)  \
+	(cd $(HOST_SUBDIR)/libcudacore && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) $(EXTRA_HOST_FLAGS) $(STAGE1_FLAGS_TO_PASS)  \
+		$(TARGET-libcudacore))
+@endif libcudacore
+
+
+
+
+.PHONY: check-libcudacore maybe-check-libcudacore
+maybe-check-libcudacore:
+@if libcudacore
+maybe-check-libcudacore: check-libcudacore
+
+check-libcudacore:
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS)  \
+	(cd $(HOST_SUBDIR)/libcudacore && \
+	  $(MAKE) $(FLAGS_TO_PASS)  check)
+
+@endif libcudacore
+
+.PHONY: install-libcudacore maybe-install-libcudacore
+maybe-install-libcudacore:
+@if libcudacore
+maybe-install-libcudacore: install-libcudacore
+
+install-libcudacore: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/libcudacore && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install)
+
+@endif libcudacore
+
+.PHONY: install-strip-libcudacore maybe-install-strip-libcudacore
+maybe-install-strip-libcudacore:
+@if libcudacore
+maybe-install-strip-libcudacore: install-strip-libcudacore
+
+install-strip-libcudacore: installdirs
+	@: $(MAKE); $(unstage)
+	@r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	(cd $(HOST_SUBDIR)/libcudacore && \
+	  $(MAKE) $(FLAGS_TO_PASS)  install-strip)
+
+@endif libcudacore
+
+# Other targets (info, dvi, pdf, etc.)
+
+.PHONY: maybe-info-libcudacore info-libcudacore
+maybe-info-libcudacore:
+@if libcudacore
+maybe-info-libcudacore: info-libcudacore
+
+info-libcudacore: \
+    configure-libcudacore 
+	@: $(MAKE); $(unstage)
+	@[ -f ./libcudacore/Makefile ] || exit 0; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	for flag in $(EXTRA_HOST_FLAGS) ; do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	echo "Doing info in libcudacore"; \
+	(cd $(HOST_SUBDIR)/libcudacore && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	          info) \
+	  || exit 1
+
+@endif libcudacore
+
+.PHONY: maybe-dvi-libcudacore dvi-libcudacore
+maybe-dvi-libcudacore:
+@if libcudacore
+maybe-dvi-libcudacore: dvi-libcudacore
+
+dvi-libcudacore: \
+    configure-libcudacore 
+	@: $(MAKE); $(unstage)
+	@[ -f ./libcudacore/Makefile ] || exit 0; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	for flag in $(EXTRA_HOST_FLAGS) ; do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	echo "Doing dvi in libcudacore"; \
+	(cd $(HOST_SUBDIR)/libcudacore && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	          dvi) \
+	  || exit 1
+
+@endif libcudacore
+
+.PHONY: maybe-pdf-libcudacore pdf-libcudacore
+maybe-pdf-libcudacore:
+@if libcudacore
+maybe-pdf-libcudacore: pdf-libcudacore
+
+pdf-libcudacore: \
+    configure-libcudacore 
+	@: $(MAKE); $(unstage)
+	@[ -f ./libcudacore/Makefile ] || exit 0; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	for flag in $(EXTRA_HOST_FLAGS) ; do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	echo "Doing pdf in libcudacore"; \
+	(cd $(HOST_SUBDIR)/libcudacore && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	          pdf) \
+	  || exit 1
+
+@endif libcudacore
+
+.PHONY: maybe-html-libcudacore html-libcudacore
+maybe-html-libcudacore:
+@if libcudacore
+maybe-html-libcudacore: html-libcudacore
+
+html-libcudacore: \
+    configure-libcudacore 
+	@: $(MAKE); $(unstage)
+	@[ -f ./libcudacore/Makefile ] || exit 0; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	for flag in $(EXTRA_HOST_FLAGS) ; do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	echo "Doing html in libcudacore"; \
+	(cd $(HOST_SUBDIR)/libcudacore && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	          html) \
+	  || exit 1
+
+@endif libcudacore
+
+.PHONY: maybe-TAGS-libcudacore TAGS-libcudacore
+maybe-TAGS-libcudacore:
+@if libcudacore
+maybe-TAGS-libcudacore: TAGS-libcudacore
+
+TAGS-libcudacore: \
+    configure-libcudacore 
+	@: $(MAKE); $(unstage)
+	@[ -f ./libcudacore/Makefile ] || exit 0; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	for flag in $(EXTRA_HOST_FLAGS) ; do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	echo "Doing TAGS in libcudacore"; \
+	(cd $(HOST_SUBDIR)/libcudacore && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	          TAGS) \
+	  || exit 1
+
+@endif libcudacore
+
+.PHONY: maybe-install-info-libcudacore install-info-libcudacore
+maybe-install-info-libcudacore:
+@if libcudacore
+maybe-install-info-libcudacore: install-info-libcudacore
+
+install-info-libcudacore: \
+    configure-libcudacore \
+    info-libcudacore 
+	@: $(MAKE); $(unstage)
+	@[ -f ./libcudacore/Makefile ] || exit 0; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	for flag in $(EXTRA_HOST_FLAGS) ; do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	echo "Doing install-info in libcudacore"; \
+	(cd $(HOST_SUBDIR)/libcudacore && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	          install-info) \
+	  || exit 1
+
+@endif libcudacore
+
+.PHONY: maybe-install-dvi-libcudacore install-dvi-libcudacore
+maybe-install-dvi-libcudacore:
+@if libcudacore
+maybe-install-dvi-libcudacore: install-dvi-libcudacore
+
+install-dvi-libcudacore: \
+    configure-libcudacore \
+    dvi-libcudacore 
+	@: $(MAKE); $(unstage)
+	@[ -f ./libcudacore/Makefile ] || exit 0; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	for flag in $(EXTRA_HOST_FLAGS) ; do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	echo "Doing install-dvi in libcudacore"; \
+	(cd $(HOST_SUBDIR)/libcudacore && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	          install-dvi) \
+	  || exit 1
+
+@endif libcudacore
+
+.PHONY: maybe-install-pdf-libcudacore install-pdf-libcudacore
+maybe-install-pdf-libcudacore:
+@if libcudacore
+maybe-install-pdf-libcudacore: install-pdf-libcudacore
+
+install-pdf-libcudacore: \
+    configure-libcudacore \
+    pdf-libcudacore 
+	@: $(MAKE); $(unstage)
+	@[ -f ./libcudacore/Makefile ] || exit 0; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	for flag in $(EXTRA_HOST_FLAGS) ; do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	echo "Doing install-pdf in libcudacore"; \
+	(cd $(HOST_SUBDIR)/libcudacore && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	          install-pdf) \
+	  || exit 1
+
+@endif libcudacore
+
+.PHONY: maybe-install-html-libcudacore install-html-libcudacore
+maybe-install-html-libcudacore:
+@if libcudacore
+maybe-install-html-libcudacore: install-html-libcudacore
+
+install-html-libcudacore: \
+    configure-libcudacore \
+    html-libcudacore 
+	@: $(MAKE); $(unstage)
+	@[ -f ./libcudacore/Makefile ] || exit 0; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	for flag in $(EXTRA_HOST_FLAGS) ; do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	echo "Doing install-html in libcudacore"; \
+	(cd $(HOST_SUBDIR)/libcudacore && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	          install-html) \
+	  || exit 1
+
+@endif libcudacore
+
+.PHONY: maybe-installcheck-libcudacore installcheck-libcudacore
+maybe-installcheck-libcudacore:
+@if libcudacore
+maybe-installcheck-libcudacore: installcheck-libcudacore
+
+installcheck-libcudacore: \
+    configure-libcudacore 
+	@: $(MAKE); $(unstage)
+	@[ -f ./libcudacore/Makefile ] || exit 0; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	for flag in $(EXTRA_HOST_FLAGS) ; do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	echo "Doing installcheck in libcudacore"; \
+	(cd $(HOST_SUBDIR)/libcudacore && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	          installcheck) \
+	  || exit 1
+
+@endif libcudacore
+
+.PHONY: maybe-mostlyclean-libcudacore mostlyclean-libcudacore
+maybe-mostlyclean-libcudacore:
+@if libcudacore
+maybe-mostlyclean-libcudacore: mostlyclean-libcudacore
+
+mostlyclean-libcudacore: 
+	@: $(MAKE); $(unstage)
+	@[ -f ./libcudacore/Makefile ] || exit 0; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	for flag in $(EXTRA_HOST_FLAGS) ; do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	echo "Doing mostlyclean in libcudacore"; \
+	(cd $(HOST_SUBDIR)/libcudacore && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	          mostlyclean) \
+	  || exit 1
+
+@endif libcudacore
+
+.PHONY: maybe-clean-libcudacore clean-libcudacore
+maybe-clean-libcudacore:
+@if libcudacore
+maybe-clean-libcudacore: clean-libcudacore
+
+clean-libcudacore: 
+	@: $(MAKE); $(unstage)
+	@[ -f ./libcudacore/Makefile ] || exit 0; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	for flag in $(EXTRA_HOST_FLAGS) ; do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	echo "Doing clean in libcudacore"; \
+	(cd $(HOST_SUBDIR)/libcudacore && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	          clean) \
+	  || exit 1
+
+@endif libcudacore
+
+.PHONY: maybe-distclean-libcudacore distclean-libcudacore
+maybe-distclean-libcudacore:
+@if libcudacore
+maybe-distclean-libcudacore: distclean-libcudacore
+
+distclean-libcudacore: 
+	@: $(MAKE); $(unstage)
+	@[ -f ./libcudacore/Makefile ] || exit 0; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	for flag in $(EXTRA_HOST_FLAGS) ; do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	echo "Doing distclean in libcudacore"; \
+	(cd $(HOST_SUBDIR)/libcudacore && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	          distclean) \
+	  || exit 1
+
+@endif libcudacore
+
+.PHONY: maybe-maintainer-clean-libcudacore maintainer-clean-libcudacore
+maybe-maintainer-clean-libcudacore:
+@if libcudacore
+maybe-maintainer-clean-libcudacore: maintainer-clean-libcudacore
+
+maintainer-clean-libcudacore: 
+	@: $(MAKE); $(unstage)
+	@[ -f ./libcudacore/Makefile ] || exit 0; \
+	r=`${PWD_COMMAND}`; export r; \
+	s=`cd $(srcdir); ${PWD_COMMAND}`; export s; \
+	$(HOST_EXPORTS) \
+	for flag in $(EXTRA_HOST_FLAGS) ; do \
+	  eval `echo "$$flag" | sed -e "s|^\([^=]*\)=\(.*\)|\1='\2'; export \1|"`; \
+	done; \
+	echo "Doing maintainer-clean in libcudacore"; \
+	(cd $(HOST_SUBDIR)/libcudacore && \
+	  $(MAKE) $(BASE_FLAGS_TO_PASS) "AR=$${AR}" "AS=$${AS}" \
+	          "CC=$${CC}" "CXX=$${CXX}" "LD=$${LD}" "NM=$${NM}" \
+	          "RANLIB=$${RANLIB}" \
+	          "DLLTOOL=$${DLLTOOL}" "WINDRES=$${WINDRES}" "WINDMC=$${WINDMC}" \
+	          maintainer-clean) \
+	  || exit 1
+
+@endif libcudacore
+
+
+
 # ---------------------------------------
 # Modules which run on the target machine
 # ---------------------------------------
@@ -64347,6 +64835,7 @@ all-gdb: maybe-all-readline
 all-gdb: maybe-all-build-bison
 all-gdb: maybe-all-sim
 all-gdb: maybe-all-libtermcap
+all-gdb: maybe-all-libcudacore
 configure-gdbserver: maybe-all-gnulib
 all-gdbserver: maybe-all-gdbsupport
 all-gdbserver: maybe-all-gnulib

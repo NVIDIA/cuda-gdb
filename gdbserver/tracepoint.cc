@@ -16,6 +16,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "server.h"
 #include "tracepoint.h"
 #include "gdbthread.h"
@@ -3732,10 +3737,18 @@ response_tracepoint (char *packet, struct tracepoint *tpoint)
 {
   char *buf;
 
+#ifdef NVIDIA_CUDA_GDB
+  sprintf (packet, "T%x:%s:%c:%llx:%llx", tpoint->number,
+	   paddress (tpoint->address), 
+	   (tpoint->enabled ? 'E' : 'D'),
+	   (unsigned long long)tpoint->step_count,
+	   (unsigned long long)tpoint->pass_count);
+#else
   sprintf (packet, "T%x:%s:%c:%" PRIx64 ":%" PRIx64, tpoint->number,
 	   paddress (tpoint->address),
 	   (tpoint->enabled ? 'E' : 'D'), tpoint->step_count,
 	   tpoint->pass_count);
+#endif
   if (tpoint->type == fast_tracepoint)
     sprintf (packet + strlen (packet), ":F%x", tpoint->orig_size);
   else if (tpoint->type == static_tracepoint)

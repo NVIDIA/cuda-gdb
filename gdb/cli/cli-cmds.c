@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "arch-utils.h"
 #include "readline/tilde.h"
@@ -2457,6 +2462,9 @@ In TUI mode, GDB can display several text windows showing\n\
 the source file, the processor registers, the program disassembly, ..."), &cmdlist);
 #endif
   add_cmd ("running", class_run, _("Running the program."), &cmdlist);
+#ifdef NVIDIA_CUDA_GDB
+  add_cmd ("cuda ", class_cuda, _("CUDA commands."), &cmdlist);
+#endif
 
   /* Define general commands.  */
 

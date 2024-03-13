@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include <dlfcn.h>
 #include "gdb_proc_service.h"
@@ -42,6 +47,9 @@
 #include "nat/linux-osdata.h"
 #include "auto-load.h"
 #include "cli/cli-utils.h"
+#if defined(NVIDIA_CUDA_GDB) && defined(__ANDROID__)
+#include "solist.h"
+#endif
 #include <signal.h>
 #include <ctype.h>
 #include "nat/linux-namespaces.h"
@@ -49,6 +57,9 @@
 #include "gdbsupport/pathstuff.h"
 #include "valprint.h"
 #include "cli/cli-style.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-api.h"
+#endif
 
 /* GNU/Linux libthread_db support.
 
@@ -400,7 +411,10 @@ thread_from_lwp (thread_info *stopped, ptid_t ptid)
   struct thread_info *tp;
 
   /* Just in case td_ta_map_lwp2thr doesn't initialize it completely.  */
+/* CUDA - ignore for android */
+#ifndef __ANDROID__
   th.th_unique = 0;
+#endif
 
   /* This ptid comes from linux-nat.c, which should always fill in the
      LWP.  */
@@ -548,8 +562,13 @@ dladdr_to_soname (const void *addr)
 {
   Dl_info info;
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__ANDROID__)
+  if (dladdr ((void *)addr, &info) != 0)\
+    return info.dli_fname;
+#else
   if (dladdr (addr, &info) != 0)
     return info.dli_fname;
+#endif
   return NULL;
 }
 
@@ -841,6 +860,25 @@ try_thread_db_load_1 (struct thread_db_info *info)
 	return false;							\
   } while (0)
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__ANDROID__)
+  /* There is no td_init_p on Android.
+     But libthread_db should not be used until libc is loaded.
+     This change will impede thread event reception on multi-threaded,
+     statically linked apps.
+   */
+  {
+    bool found = false;
+    for (struct so_list *so : current_program_space->solibs ())
+      if (so->so_original_name &&
+         strcmp(so->so_name, "/system/lib/libc.so")==0)
+	{
+	  found = true;
+	  break;
+	}
+    if (!found)
+      return 0;
+  }
+#else
   CHK (TDB_VERBOSE_DLSYM (info, td_init));
 
   err = info->td_init_p ();
@@ -850,6 +888,7 @@ try_thread_db_load_1 (struct thread_db_info *info)
 	       thread_db_err_str (err));
       return false;
     }
+#endif
 
   CHK (TDB_VERBOSE_DLSYM (info, td_ta_new));
 
@@ -1264,6 +1303,15 @@ check_thread_signals (void)
 static void
 check_for_thread_db (void)
 {
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - detach */
+  /* While detaching from a running CUDA application, we may
+     need to resume the application temporarily, which might cause
+     libthread_db to be reinitialized and cause problems. This must
+     be prevented. */
+  if (cuda_debugapi::get_attach_state () == CUDA_ATTACH_STATE_DETACHING)
+    return;
+#endif
   /* Do nothing if we couldn't load libthread_db.so.1.  */
   if (!thread_db_load ())
     return;

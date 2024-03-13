@@ -16,6 +16,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef GDBSERVER_LINUX_LOW_H
 #define GDBSERVER_LINUX_LOW_H
 
@@ -813,6 +818,10 @@ struct lwp_info
 
   /* When stopped is set, the last wait status recorded for this lwp.  */
   int last_status = 0;
+#ifdef NVIDIA_CUDA_GDB
+  /*  When stopped is set, is non zero if last wait status could be explained by breakpoint */ 
+  int breakpoint_explains_trap; 
+#endif
 
   /* If WAITSTATUS->KIND != TARGET_WAITKIND_IGNORE, the waitstatus for
      this LWP's last event, to pass to GDB without any further

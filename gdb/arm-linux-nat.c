@@ -16,6 +16,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "inferior.h"
 #include "gdbcore.h"
@@ -33,10 +38,21 @@
 #include "aarch32-linux-nat.h"
 
 #include <elf/common.h>
+#if defined(NVIDIA_CUDA_GDB) && defined(__ANDROID__)
+#include <sys/utsname.h>
+#ifdef PSR_A_BIT
+  #include <sys/user.h>
+  #include <fake-armv7-elf.h>
+#endif
+#include <thread_db.h> /* for lwpid_t */
+#include <sys/ptrace.h>
+#define PT_GETFPREGS PTRACE_GETFPREGS
+#else
 #include <sys/user.h>
 #include "nat/gdb_ptrace.h"
 #include <sys/utsname.h>
 #include <sys/procfs.h>
+#endif
 
 #include "nat/linux-ptrace.h"
 #include "linux-tdep.h"
@@ -107,7 +123,11 @@ public:
   void low_forget_process (pid_t pid) override;
 };
 
+#ifdef NVIDIA_CUDA_GDB
+static cuda_nat_linux<arm_linux_nat_target> the_cuda_arm_linux_nat_target;
+#else
 static arm_linux_nat_target the_arm_linux_nat_target;
+#endif
 
 /* Get the whole floating point state of the process and store it
    into regcache.  */
@@ -1304,6 +1324,11 @@ void
 _initialize_arm_linux_nat ()
 {
   /* Register the target.  */
+#ifdef NVIDIA_CUDA_GDB
+  linux_target = &the_cuda_arm_linux_nat_target;
+  add_inf_child_target (&the_cuda_arm_linux_nat_target);
+#else
   linux_target = &the_arm_linux_nat_target;
   add_inf_child_target (&the_arm_linux_nat_target);
+#endif
 }

@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #if !defined (VALUE_H)
 #define VALUE_H 1
 
@@ -401,6 +406,14 @@ extern int value_optimized_out (struct value *value);
 
 extern int value_bits_any_optimized_out (const struct value *value,
 					 int bit_offset, int bit_length);
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - register cache */
+extern int value_cached (const struct value *value);
+extern void set_value_cached (struct value *value, int val);
+/* CUDA - regmap extrapolation */
+extern int value_extrapolated (const struct value *value);
+extern void set_value_extrapolated (struct value *value, int val);
+#endif
 
 /* Like value_optimized_out, but return true iff the whole value is
    optimized out.  */

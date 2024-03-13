@@ -141,8 +141,16 @@ void
 program_space::add_objfile (std::unique_ptr<objfile> &&objfile,
 			    struct objfile *before)
 {
+#ifdef NVIDIA_CUDA_GDB
+  if (before == nullptr)
+    {
+      objfile->id = objfiles_list.size ();
+      objfiles_list.push_back (std::move (objfile));
+    }
+#else
   if (before == nullptr)
     objfiles_list.push_back (std::move (objfile));
+#endif
   else
     {
       auto iter = std::find_if (objfiles_list.begin (), objfiles_list.end (),
@@ -152,9 +160,24 @@ program_space::add_objfile (std::unique_ptr<objfile> &&objfile,
 				});
       gdb_assert (iter != objfiles_list.end ());
       objfiles_list.insert (iter, std::move (objfile));
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA: Need to regen the id's in the correct order. */
+      regen_objfile_ids ();
+#endif
     }
 }
 
+#ifdef NVIDIA_CUDA_GDB
+void
+program_space::regen_objfile_ids ()
+{
+  auto cnt = 0;
+  for (auto &&objfile : objfiles_list)
+    {
+      objfile->id = cnt++;
+    }
+}
+#endif
 /* See progspace.h.  */
 
 void

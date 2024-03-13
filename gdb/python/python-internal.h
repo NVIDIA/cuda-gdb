@@ -132,6 +132,592 @@ typedef long Py_hash_t;
 #define PyMem_RawMalloc PyMem_Malloc
 #endif
 
+
+#ifdef NVIDIA_PYTHON_DYNLIB
+/* The following defines interfaces used by the dlopen mechanism to
+ * support python without directly linking against libpython. */
+
+/* Redefine NULL to nullptr to avoid warnings due to passing 
+ * NULL to long int with the generated wrappers. */
+#undef NULL
+#define NULL nullptr
+
+/* dynlib functions */
+extern bool is_python_available ();
+extern const char *get_python_init_error ();
+extern void python_print_library ();
+
+/* The following macro is used to allow us to maintain a single
+ * list of function prototypes. By default these will be extern.
+ * They are defined in the python-dynobj.c source file. */
+#ifdef GDBDYN_DEFINE_VARIABLES
+#define GDBDYN_EXTERN
+#else
+#define GDBDYN_EXTERN extern
+#endif
+
+/* Dynamic reference to flags */
+GDBDYN_EXTERN int *gdbdyn_IgnoreEnvironmentFlag;
+GDBDYN_EXTERN int *gdbdyn_DontWriteBytecodeFlag;
+
+/* Dynamic reference to constants */
+GDBDYN_EXTERN PyObject *gdbdyn_None;
+GDBDYN_EXTERN PyObject *gdbdyn_True;
+GDBDYN_EXTERN PyObject *gdbdyn_False;
+GDBDYN_EXTERN PyObject *gdbdyn_NotImplemented;
+
+GDBDYN_EXTERN PyTypeObject *gdbdyn_FloatType;
+GDBDYN_EXTERN PyTypeObject *gdbdyn_BoolType;
+GDBDYN_EXTERN PyTypeObject *gdbdyn_SliceType;
+GDBDYN_EXTERN PyTypeObject *gdbdyn_UnicodeType;
+
+/* Dynamic reference to exception types */
+GDBDYN_EXTERN PyObject **pgdbpyExc_AttributeError;
+GDBDYN_EXTERN PyObject **pgdbpyExc_IndexError;
+GDBDYN_EXTERN PyObject **pgdbpyExc_IOError;
+GDBDYN_EXTERN PyObject **pgdbpyExc_KeyError;
+GDBDYN_EXTERN PyObject **pgdbpyExc_KeyboardInterrupt;
+GDBDYN_EXTERN PyObject **pgdbpyExc_MemoryError;
+GDBDYN_EXTERN PyObject **pgdbpyExc_NotImplementedError;
+GDBDYN_EXTERN PyObject **pgdbpyExc_OverflowError;
+GDBDYN_EXTERN PyObject **pgdbpyExc_RuntimeError;
+GDBDYN_EXTERN PyObject **pgdbpyExc_StopIteration;
+GDBDYN_EXTERN PyObject **pgdbpyExc_SystemError;
+GDBDYN_EXTERN PyObject **pgdbpyExc_TypeError;
+GDBDYN_EXTERN PyObject **pgdbpyExc_ValueError;
+GDBDYN_EXTERN PyObject **pgdbpyExc_NameError;
+
+GDBDYN_EXTERN PyThreadState **pgdbdyn_OSReadlineTState;
+
+/* Dynamic functions exposed as function pointers */
+GDBDYN_EXTERN char *(**pgdbdyn_PyOS_ReadlineFunctionPointer) (FILE*, FILE*, const char*);
+
+/* Dynamic reference to functions */
+GDBDYN_EXTERN int (*gdbdyn_Arg_UnpackTuple)(PyObject *, const char *, Py_ssize_t, Py_ssize_t, ...);
+GDBDYN_EXTERN PyObject * (*gdbdyn_ErrFormat) (PyObject *, const char *, ...);
+GDBDYN_EXTERN PyObject * (*gdbdyn_BuildValue) (const char *, ...);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyObject_CallFunctionObjArgs) (PyObject *,...);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyObject_CallMethodObjArgs) (PyObject *, PyObject *,...);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyObject_CallMethod) (PyObject *o, const char *m, const char *format, ...);
+GDBDYN_EXTERN int (*gdbdyn_PyArg_ParseTuple) (PyObject *obj, const char *, ...);
+GDBDYN_EXTERN int (*gdbdyn_PyArg_ParseTuple_SizeT) (PyObject *obj, const char *, ...);
+GDBDYN_EXTERN int (*gdbdyn_PyArg_ParseTupleAndKeywords) (PyObject *obj, PyObject *, const char *, char **, ...);
+GDBDYN_EXTERN int (*gdbdyn_PyArg_VaParseTupleAndKeywords) (PyObject *obj, PyObject *, const char *, char **, va_list);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyUnicode_FromFormat) (const char *format, ...);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyBool_FromLong) (long);
+GDBDYN_EXTERN char * (*gdbdyn_PyBytes_AsString) (PyObject *o);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyBytes_FromString) (const char *v);
+GDBDYN_EXTERN int (*gdbdyn_PyBytes_AsStringAndSize) (PyObject *obj, char **buffer, Py_ssize_t *Length);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyBytes_FromStringAndSize) (const char *v, Py_ssize_t len);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyMemoryView_FromObject) (PyObject *);
+GDBDYN_EXTERN int (*gdbdyn_PyBuffer_FillInfo) (Py_buffer *view, PyObject *exporter, void *buf, Py_ssize_t len, int readonly, int flags);
+GDBDYN_EXTERN int (*gdbdyn_PyCallable_Check) (PyObject *o);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyDict_New) (void);
+GDBDYN_EXTERN int (*gdbdyn_PyDict_SetItem) (PyObject *p, PyObject *key, PyObject *val);
+GDBDYN_EXTERN int (*gdbdyn_PyDict_SetItemString) (PyObject *dp, const char *key, PyObject *item);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyDict_Keys) (PyObject *p);
+GDBDYN_EXTERN int (*gdbdyn_PyDict_Next) (PyObject *, Py_ssize_t *, PyObject **, PyObject **);
+GDBDYN_EXTERN void (*gdbdyn_PyErr_Clear) (void);
+GDBDYN_EXTERN int (*gdbdyn_PyErr_ExceptionMatches) (PyObject *);
+GDBDYN_EXTERN void (*gdbdyn_PyErr_Fetch) (PyObject **, PyObject **, PyObject **);
+GDBDYN_EXTERN int (*gdbdyn_PyErr_GivenExceptionMatches) (PyObject *, PyObject *);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyErr_Occurred) (void);
+GDBDYN_EXTERN void (*gdbdyn_PyErr_Print) (void);
+GDBDYN_EXTERN void (*gdbdyn_PyErr_Restore) (PyObject *, PyObject *, PyObject *);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyErr_SetFromErrno) (PyObject *);
+GDBDYN_EXTERN void (*gdbdyn_PyErr_SetInterrupt) (void);
+GDBDYN_EXTERN void (*gdbdyn_PyErr_SetNone) (PyObject *type);
+GDBDYN_EXTERN void (*gdbdyn_PyErr_SetObject) (PyObject *, PyObject *);
+GDBDYN_EXTERN void (*gdbdyn_PyErr_SetString) (PyObject *, const char *);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyErr_NewException)(const char *name, PyObject *base, PyObject *dict);
+GDBDYN_EXTERN void (*gdbdyn_PyEval_InitThreads) (void);
+GDBDYN_EXTERN void (*gdbdyn_PyEval_ReleaseLock) (void);
+GDBDYN_EXTERN void (*gdbdyn_PyEval_RestoreThread) (PyThreadState *);
+GDBDYN_EXTERN PyThreadState * (*gdbdyn_PyEval_SaveThread) (void);
+GDBDYN_EXTERN double (*gdbdyn_PyFloat_AsDouble) (PyObject *);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyFloat_FromDouble) (double);
+GDBDYN_EXTERN PyFrameObject * (*gdbdyn_PyFrame_New)(PyThreadState *, PyCodeObject *, PyObject *, PyObject *);
+GDBDYN_EXTERN PyGILState_STATE (*gdbdyn_PyGILState_Ensure) (void);
+GDBDYN_EXTERN void (*gdbdyn_PyGILState_Release) (PyGILState_STATE);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyImport_AddModule) (const char *name);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyImport_ImportModule) (const char *name);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyImport_GetModuleDict) (void);
+GDBDYN_EXTERN int (*gdbdyn_PyImport_AppendInittab) (const char *name, PyObject *(*initfunc)(void));
+GDBDYN_EXTERN int (*gdbdyn_PyImport_ExtendInittab) (struct _inittab *newtab);
+GDBDYN_EXTERN long (*gdbdyn_PyInt_AsLong) (PyObject *);
+GDBDYN_EXTERN long (*gdbdyn_PyInt_GetMax) (void);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyInt_FromLong) (long);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyIter_Next) (PyObject *);
+GDBDYN_EXTERN int (*gdbdyn_PyIter_Check) (PyObject *);
+GDBDYN_EXTERN int (*gdbdyn_PyList_Append) (PyObject *, PyObject *);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyList_AsTuple) (PyObject *);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyList_GetItem) (PyObject *, Py_ssize_t);
+GDBDYN_EXTERN int (*gdbdyn_PyList_SetItem) (PyObject *, Py_ssize_t, PyObject *);
+GDBDYN_EXTERN int (*gdbdyn_PyList_Insert) (PyObject *, Py_ssize_t, PyObject *);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyList_New) (Py_ssize_t size);
+GDBDYN_EXTERN Py_ssize_t (*gdbdyn_PyList_Size) (PyObject *);
+GDBDYN_EXTERN PY_LONG_LONG (*gdbdyn_PyLong_AsLongLong) (PyObject *);
+GDBDYN_EXTERN long (*gdbdyn_PyLong_AsLong) (PyObject *);
+GDBDYN_EXTERN unsigned PY_LONG_LONG (*gdbdyn_PyLong_AsUnsignedLongLong) (PyObject *);
+GDBDYN_EXTERN Py_ssize_t (*gdbdyn_PyLong_AsSsize_t) (PyObject *pylong);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyLong_FromLong) (long);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyLong_FromLongLong) (PY_LONG_LONG);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyLong_FromUnsignedLong) (unsigned long);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyLong_FromUnsignedLongLong) (unsigned PY_LONG_LONG);
+GDBDYN_EXTERN void * (*gdbdyn_PyMem_RawMalloc) (size_t);
+GDBDYN_EXTERN void * (*gdbdyn_PyMem_Malloc) (size_t);
+GDBDYN_EXTERN int (*gdbdyn_PyModule_AddIntConstant) (PyObject *, const char *, long);
+GDBDYN_EXTERN int (*gdbdyn_PyModule_AddObject) (PyObject *, const char *, PyObject *);
+GDBDYN_EXTERN int (*gdbdyn_PyModule_AddStringConstant) (PyObject *, const char *, const char *);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyModule_GetDict) (PyObject *);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyNumber_Long) (PyObject *o);
+GDBDYN_EXTERN int (*gdbdyn_PyOS_InterruptOccurred) (void);
+GDBDYN_EXTERN int (*gdbdyn_PyObject_AsReadBuffer) (PyObject *obj, const void **, Py_ssize_t *);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyObject_Repr) (PyObject *obj);
+GDBDYN_EXTERN int (*gdbdyn_PyObject_CheckReadBuffer) (PyObject *obj);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyObject_GenericGetAttr) (PyObject *, PyObject *);
+GDBDYN_EXTERN int (*gdbdyn_PyObject_GenericSetAttr)(PyObject *arg1, PyObject *arg2, PyObject *arg3);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyObject_GetAttr) (PyObject *, PyObject *);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyObject_GetAttrString) (PyObject *, const char *);
+GDBDYN_EXTERN int (*gdbdyn_PyObject_GetBuffer) (PyObject *exporter, Py_buffer *view, int flags);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyObject_GetIter) (PyObject *);
+GDBDYN_EXTERN int (*gdbdyn_PyObject_HasAttr) (PyObject *, PyObject *);
+GDBDYN_EXTERN int (*gdbdyn_PyObject_HasAttrString) (PyObject *, const char *);
+GDBDYN_EXTERN int (*gdbdyn_PyObject_IsTrue) (PyObject *);
+GDBDYN_EXTERN int (*gdbdyn_PyObject_IsInstance) (PyObject *inst, PyObject *cls);
+GDBDYN_EXTERN int (*gdbdyn_PyObject_RichCompareBool) (PyObject *, PyObject *, int);
+GDBDYN_EXTERN int (*gdbdyn_PyObject_SetAttrString) (PyObject *, const char *, PyObject *);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyObject_Str) (PyObject *);
+GDBDYN_EXTERN Py_ssize_t (*gdbdyn_PyObject_Size) (PyObject *o);
+GDBDYN_EXTERN int (*gdbdyn_PyRun_SimpleString) (const char *command);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyRun_StringFlags) (const char *, int, PyObject *, PyObject *, PyCompilerFlags *);
+GDBDYN_EXTERN int (*gdbdyn_PyRun_InteractiveLoop) (FILE *fp, const char *filename);
+GDBDYN_EXTERN int (*gdbdyn_PyRun_SimpleFile) (FILE *fp, const char *filename);
+GDBDYN_EXTERN int (*gdbdyn_PySequence_Check) (PyObject *o);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PySequence_Concat) (PyObject *o1, PyObject *o2);
+GDBDYN_EXTERN int (*gdbdyn_PySequence_DelItem) (PyObject *o, Py_ssize_t i);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PySequence_GetItem) (PyObject *o, Py_ssize_t i);
+GDBDYN_EXTERN Py_ssize_t (*gdbdyn_PySequence_Index) (PyObject *o, PyObject *value);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PySequence_List) (PyObject *o);
+GDBDYN_EXTERN Py_ssize_t (*gdbdyn_PySequence_Size) (PyObject *o);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PySys_GetObject) (char *);
+GDBDYN_EXTERN void (*gdbdyn_PySys_SetPath) (wchar_t *);
+GDBDYN_EXTERN PyThreadState * (*gdbdyn_PyThreadState_Get) (void);
+GDBDYN_EXTERN PyThreadState * (*gdbdyn_PyThreadState_Swap) (PyThreadState *);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyTuple_GetItem) (PyObject *, Py_ssize_t);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyTuple_New) (Py_ssize_t size);
+GDBDYN_EXTERN int (*gdbdyn_PyTuple_SetItem) (PyObject *, Py_ssize_t, PyObject *);
+GDBDYN_EXTERN Py_ssize_t (*gdbdyn_PyTuple_Size) (PyObject *);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyType_GenericNew)(PyTypeObject *, PyObject *, PyObject *);
+GDBDYN_EXTERN int (*gdbdyn_PyType_IsSubtype) (PyTypeObject *, PyTypeObject *);
+GDBDYN_EXTERN int (*gdbdyn_PyType_Ready) (PyTypeObject *);
+GDBDYN_EXTERN void (*gdbdyn_Py_Finalize) (void);
+GDBDYN_EXTERN void (*gdbdyn_Py_Initialize) (void);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyModule_Create2)(PyModuleDef *, int);
+#if (PY_MAJOR_VERSION == 3) && (PY_MINOR_VERSION == 6)
+GDBDYN_EXTERN void (*gdbdyn_Py_SetProgramName) (wchar_t *);
+#else
+GDBDYN_EXTERN void (*gdbdyn_Py_SetProgramName) (const wchar_t *);
+#endif
+GDBDYN_EXTERN PyObject * (*gdbdyn__PyObject_New) (PyTypeObject *);
+GDBDYN_EXTERN PyCodeObject * (*gdbdyn_PyCode_New) (int, int, int, int, int,
+    PyObject *, PyObject *, PyObject *, PyObject *,
+    PyObject *, PyObject *, PyObject *, PyObject *,
+    int, PyObject *);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyObject_CallObject) (PyObject *callable_object, PyObject *args);
+GDBDYN_EXTERN PyObject * (*gdbdyn_PyObject_Call)(PyObject *callable_object, PyObject *args, PyObject *kw);
+GDBDYN_EXTERN PyObject* (*gdbdyn_PyUnicode_Decode)(const char *s, Py_ssize_t size, const char *encoding, const char *errors);
+GDBDYN_EXTERN PyObject* (*gdbdyn_PyUnicode_AsEncodedString)(register PyObject *unicode, const char *encoding, const char *errors);
+GDBDYN_EXTERN PyObject* (*gdbdyn_PyUnicode_FromEncodedObject)(register PyObject *obj, const char *encoding, const char *errors);
+GDBDYN_EXTERN PyObject* (*gdbdyn_PyUnicode_FromString)(const char *string);
+GDBDYN_EXTERN int (*gdbdyn_PyUnicode_CompareWithASCIIString)(PyObject *uni, const char *string);
+GDBDYN_EXTERN PyObject* (*gdbdyn_PyUnicode_AsASCIIString)(PyObject *uni);
+GDBDYN_EXTERN void (*gdbdyn_PyBuffer_Release) (Py_buffer *buf);
+GDBDYN_EXTERN int (*gdbdyn_PySlice_GetIndicesEx) (PyObject *slice, Py_ssize_t length, Py_ssize_t *start,
+    Py_ssize_t *stop, Py_ssize_t *step, Py_ssize_t *slicelength);
+
+/* Redefine python constants. We check for nullptr during initialization. */
+#define Py_IgnoreEnvironmentFlag (*gdbdyn_IgnoreEnvironmentFlag)
+#define Py_DontWriteBytecodeFlag (*gdbdyn_DontWriteBytecodeFlag)
+
+#define _Py_NoneStruct (*gdbdyn_None)
+#define _Py_TrueStruct (*gdbdyn_True)
+#define _Py_FalseStruct (*gdbdyn_False)
+#define _Py_NotImplementedStruct (*gdbdyn_NotImplemented)
+
+#define PyFloat_Type (*gdbdyn_FloatType)
+#define PyBool_Type (*gdbdyn_BoolType)
+#define PySlice_Type (*gdbdyn_SliceType)
+
+#define PyExc_AttributeError (*pgdbpyExc_AttributeError)
+#define PyExc_IndexError (*pgdbpyExc_IndexError)
+#define PyExc_IOError (*pgdbpyExc_IOError)
+#define PyExc_KeyError (*pgdbpyExc_KeyError)
+#define PyExc_KeyboardInterrupt (*pgdbpyExc_KeyboardInterrupt)
+#define PyExc_MemoryError (*pgdbpyExc_MemoryError)
+#define PyExc_NotImplementedError (*pgdbpyExc_NotImplementedError)
+#define PyExc_OverflowError (*pgdbpyExc_OverflowError)
+#define PyExc_RuntimeError (*pgdbpyExc_RuntimeError)
+#define PyExc_StopIteration (*pgdbpyExc_StopIteration)
+#define PyExc_SystemError (*pgdbpyExc_SystemError)
+#define PyExc_TypeError (*pgdbpyExc_TypeError)
+#define PyExc_ValueError (*pgdbpyExc_ValueError)
+#define PyExc_NameError (*pgdbpyExc_NameError) 
+
+#define _PyOS_ReadlineTState (*pgdbdyn_OSReadlineTState)
+
+/* Redefine python functions exposed as function pointers. We check for nullptr during
+ * initialization. */
+#undef PyType_GenericNew
+#define PyType_GenericNew (*gdbdyn_PyType_GenericNew)
+#undef PyOS_ReadlineFunctionPointer
+#define PyOS_ReadlineFunctionPointer (*pgdbdyn_PyOS_ReadlineFunctionPointer)
+
+/* Wrap python functions to ensure they are only
+ * called when python is enabled. */
+template<typename Func, Func func, typename... Args>
+static inline auto
+gdbdyn_pywrapper (Args&&... args)
+{
+  if (!is_python_available ())
+    {
+      error (_("Attempted python call but python is uninitialized."));
+    } 
+  if ((*func) == nullptr)
+    {
+      error (_("Attempted to call a python binding that dlsym failed to load."));
+    }
+  return (*func)(std::forward<Args>(args)...);
+}
+#define GDBDYN_PYWRAPPER(name) gdbdyn_pywrapper<decltype(&name), &name>
+
+/* Redefine python functions */
+#undef PyArg_UnpackTuple
+#define PyArg_UnpackTuple GDBDYN_PYWRAPPER(gdbdyn_Arg_UnpackTuple)
+#undef PyErr_Format
+#define PyErr_Format GDBDYN_PYWRAPPER(gdbdyn_ErrFormat)
+#undef Py_BuildValue
+#define Py_BuildValue GDBDYN_PYWRAPPER(gdbdyn_BuildValue)
+#undef PyObject_CallFunctionObjArgs
+#define PyObject_CallFunctionObjArgs GDBDYN_PYWRAPPER(gdbdyn_PyObject_CallFunctionObjArgs)
+#undef PyObject_CallMethodObjArgs
+#define PyObject_CallMethodObjArgs GDBDYN_PYWRAPPER(gdbdyn_PyObject_CallMethodObjArgs)
+#undef PyObject_CallMethod
+#define PyObject_CallMethod GDBDYN_PYWRAPPER(gdbdyn_PyObject_CallMethod)
+#undef PyArg_ParseTuple
+#define PyArg_ParseTuple GDBDYN_PYWRAPPER(gdbdyn_PyArg_ParseTuple)
+#undef PyArg_ParseTuple_SizeT
+#define PyArg_ParseTuple_SizeT GDBDYN_PYWRAPPER(gdbdyn_PyArg_ParseTuple_SizeT)
+#undef PyArg_ParseTupleAndKeywords
+#define PyArg_ParseTupleAndKeywords GDBDYN_PYWRAPPER(gdbdyn_PyArg_ParseTupleAndKeywords)
+#undef PyArg_VaParseTupleAndKeywords
+#define PyArg_VaParseTupleAndKeywords GDBDYN_PYWRAPPER(gdbdyn_PyArg_VaParseTupleAndKeywords)
+#undef PyUnicode_FromFormat
+#define PyUnicode_FromFormat GDBDYN_PYWRAPPER(gdbdyn_PyUnicode_FromFormat)
+#undef PyBool_FromLong
+#define PyBool_FromLong GDBDYN_PYWRAPPER(gdbdyn_PyBool_FromLong)
+#undef PyBytes_AsString
+#define PyBytes_AsString GDBDYN_PYWRAPPER(gdbdyn_PyBytes_AsString)
+#undef PyBytes_FromString
+#define PyBytes_FromString GDBDYN_PYWRAPPER(gdbdyn_PyBytes_FromString)
+#undef PyBytes_AsStringAndSize
+#define PyBytes_AsStringAndSize GDBDYN_PYWRAPPER(gdbdyn_PyBytes_AsStringAndSize)
+#undef PyBytes_FromStringAndSize
+#define PyBytes_FromStringAndSize GDBDYN_PYWRAPPER(gdbdyn_PyBytes_FromStringAndSize)
+#undef PyMemoryView_FromObject
+#define PyMemoryView_FromObject GDBDYN_PYWRAPPER(gdbdyn_PyMemoryView_FromObject)
+#undef PyBuffer_FillInfo
+#define PyBuffer_FillInfo GDBDYN_PYWRAPPER(gdbdyn_PyBuffer_FillInfo)
+#undef PyCallable_Check
+#define PyCallable_Check GDBDYN_PYWRAPPER(gdbdyn_PyCallable_Check)
+#undef PyDict_Keys
+#define PyDict_Keys GDBDYN_PYWRAPPER(gdbdyn_PyDict_Keys)
+#undef PyDict_New
+#define PyDict_New GDBDYN_PYWRAPPER(gdbdyn_PyDict_New)
+#undef PyDict_SetItem
+#define PyDict_SetItem GDBDYN_PYWRAPPER(gdbdyn_PyDict_SetItem)
+#undef PyDict_SetItemString
+#define PyDict_SetItemString GDBDYN_PYWRAPPER(gdbdyn_PyDict_SetItemString)
+#undef PyDict_Next
+#define PyDict_Next GDBDYN_PYWRAPPER(gdbdyn_PyDict_Next)
+#undef PyErr_Clear
+#define PyErr_Clear GDBDYN_PYWRAPPER(gdbdyn_PyErr_Clear)
+#undef PyErr_ExceptionMatches
+#define PyErr_ExceptionMatches GDBDYN_PYWRAPPER(gdbdyn_PyErr_ExceptionMatches)
+#undef PyErr_Fetch
+#define PyErr_Fetch GDBDYN_PYWRAPPER(gdbdyn_PyErr_Fetch)
+#undef PyErr_GivenExceptionMatches
+#define PyErr_GivenExceptionMatches GDBDYN_PYWRAPPER(gdbdyn_PyErr_GivenExceptionMatches)
+#undef PyErr_Occurred
+#define PyErr_Occurred GDBDYN_PYWRAPPER(gdbdyn_PyErr_Occurred)
+#undef PyErr_Print
+#define PyErr_Print GDBDYN_PYWRAPPER(gdbdyn_PyErr_Print)
+#undef PyErr_Restore
+#define PyErr_Restore GDBDYN_PYWRAPPER(gdbdyn_PyErr_Restore)
+#undef PyErr_SetFromErrno
+#define PyErr_SetFromErrno GDBDYN_PYWRAPPER(gdbdyn_PyErr_SetFromErrno)
+#undef PyErr_SetInterrupt
+#define PyErr_SetInterrupt GDBDYN_PYWRAPPER(gdbdyn_PyErr_SetInterrupt)
+#undef PyErr_SetNone
+#define PyErr_SetNone GDBDYN_PYWRAPPER(gdbdyn_PyErr_SetNone)
+#undef PyErr_SetObject
+#define PyErr_SetObject GDBDYN_PYWRAPPER(gdbdyn_PyErr_SetObject)
+#undef PyErr_SetString
+#define PyErr_SetString GDBDYN_PYWRAPPER(gdbdyn_PyErr_SetString)
+#undef PyErr_NewException
+#define PyErr_NewException GDBDYN_PYWRAPPER(gdbdyn_PyErr_NewException)
+#undef PyEval_InitThreads
+#define PyEval_InitThreads GDBDYN_PYWRAPPER(gdbdyn_PyEval_InitThreads)
+#undef PyEval_ReleaseLock
+#define PyEval_ReleaseLock GDBDYN_PYWRAPPER(gdbdyn_PyEval_ReleaseLock)
+#undef PyEval_RestoreThread
+#define PyEval_RestoreThread GDBDYN_PYWRAPPER(gdbdyn_PyEval_RestoreThread)
+#undef PyEval_SaveThread
+#define PyEval_SaveThread GDBDYN_PYWRAPPER(gdbdyn_PyEval_SaveThread)
+#undef PyFloat_AsDouble
+#define PyFloat_AsDouble GDBDYN_PYWRAPPER(gdbdyn_PyFloat_AsDouble)
+#undef PyFloat_FromDouble
+#define PyFloat_FromDouble GDBDYN_PYWRAPPER(gdbdyn_PyFloat_FromDouble)
+#undef PyFrame_New
+#define PyFrame_New GDBDYN_PYWRAPPER(gdbdyn_PyFrame_New)
+#undef PyGILState_Ensure
+#define PyGILState_Ensure GDBDYN_PYWRAPPER(gdbdyn_PyGILState_Ensure)
+#undef PyGILState_Release
+#define PyGILState_Release GDBDYN_PYWRAPPER(gdbdyn_PyGILState_Release)
+#undef PyImport_AddModule
+#define PyImport_AddModule GDBDYN_PYWRAPPER(gdbdyn_PyImport_AddModule)
+#undef PyImport_ImportModule
+#define PyImport_ImportModule GDBDYN_PYWRAPPER(gdbdyn_PyImport_ImportModule)
+#undef PyImport_GetModuleDict
+#define PyImport_GetModuleDict GDBDYN_PYWRAPPER(gdbdyn_PyImport_GetModuleDict)
+#undef PyImport_AppendInittab
+#define PyImport_AppendInittab GDBDYN_PYWRAPPER(gdbdyn_PyImport_AppendInittab)
+#undef PyImport_ExtendInittab
+#define PyImport_ExtendInittab GDBDYN_PYWRAPPER(gdbdyn_PyImport_ExtendInittab)
+#undef PyInt_AsLong
+#define PyInt_AsLong GDBDYN_PYWRAPPER(gdbdyn_PyInt_AsLong)
+#undef PyInt_GetMax
+#define PyInt_GetMax GDBDYN_PYWRAPPER(gdbdyn_PyInt_GetMax)
+#undef PyInt_FromLong
+#define PyInt_FromLong GDBDYN_PYWRAPPER(gdbdyn_PyInt_FromLong)
+#undef PyIter_Next
+#define PyIter_Next GDBDYN_PYWRAPPER(gdbdyn_PyIter_Next)
+#undef PyIter_Check
+#define PyIter_Check GDBDYN_PYWRAPPER(gdbdyn_PyIter_Check)
+#undef PyList_Append
+#define PyList_Append GDBDYN_PYWRAPPER(gdbdyn_PyList_Append)
+#undef PyList_AsTuple
+#define PyList_AsTuple GDBDYN_PYWRAPPER(gdbdyn_PyList_AsTuple)
+#undef PyList_GetItem
+#define PyList_GetItem GDBDYN_PYWRAPPER(gdbdyn_PyList_GetItem)
+#undef PyList_SetItem
+#define PyList_SetItem GDBDYN_PYWRAPPER(gdbdyn_PyList_SetItem)
+#undef PyList_Insert
+#define PyList_Insert GDBDYN_PYWRAPPER(gdbdyn_PyList_Insert)
+#undef PyList_New
+#define PyList_New GDBDYN_PYWRAPPER(gdbdyn_PyList_New)
+#undef PyList_Size
+#define PyList_Size GDBDYN_PYWRAPPER(gdbdyn_PyList_Size)
+#undef PyLong_AsLongLong
+#define PyLong_AsLongLong GDBDYN_PYWRAPPER(gdbdyn_PyLong_AsLongLong)
+#undef PyLong_AsLong
+#define PyLong_AsLong GDBDYN_PYWRAPPER(gdbdyn_PyLong_AsLong)
+#undef PyLong_AsUnsignedLongLong
+#define PyLong_AsUnsignedLongLong GDBDYN_PYWRAPPER(gdbdyn_PyLong_AsUnsignedLongLong)
+#undef PyLong_AsSsize_t
+#define PyLong_AsSsize_t GDBDYN_PYWRAPPER(gdbdyn_PyLong_AsSsize_t)
+#undef PyLong_FromLong
+#define PyLong_FromLong GDBDYN_PYWRAPPER(gdbdyn_PyLong_FromLong)
+#undef PyLong_FromLongLong
+#define PyLong_FromLongLong GDBDYN_PYWRAPPER(gdbdyn_PyLong_FromLongLong)
+#undef PyLong_FromUnsignedLong
+#define PyLong_FromUnsignedLong GDBDYN_PYWRAPPER(gdbdyn_PyLong_FromUnsignedLong)
+#undef PyLong_FromUnsignedLongLong
+#define PyLong_FromUnsignedLongLong GDBDYN_PYWRAPPER(gdbdyn_PyLong_FromUnsignedLongLong)
+#undef PyMem_RawMalloc
+#define PyMem_RawMalloc GDBDYN_PYWRAPPER(gdbdyn_PyMem_RawMalloc)
+#undef PyMem_Malloc
+#define PyMem_Malloc GDBDYN_PYWRAPPER(gdbdyn_PyMem_Malloc)
+#undef PyModule_AddIntConstant
+#define PyModule_AddIntConstant GDBDYN_PYWRAPPER(gdbdyn_PyModule_AddIntConstant)
+#undef PyModule_AddObject
+#define PyModule_AddObject GDBDYN_PYWRAPPER(gdbdyn_PyModule_AddObject)
+#undef PyModule_AddStringConstant
+#define PyModule_AddStringConstant GDBDYN_PYWRAPPER(gdbdyn_PyModule_AddStringConstant)
+#undef PyModule_GetDict
+#define PyModule_GetDict GDBDYN_PYWRAPPER(gdbdyn_PyModule_GetDict)
+#undef PyNumber_Long
+#define PyNumber_Long GDBDYN_PYWRAPPER(gdbdyn_PyNumber_Long)
+#undef PyOS_InterruptOccurred
+#define PyOS_InterruptOccurred GDBDYN_PYWRAPPER(gdbdyn_PyOS_InterruptOccurred)
+#undef PyObject_AsReadBuffer
+#define PyObject_AsReadBuffer GDBDYN_PYWRAPPER(gdbdyn_PyObject_AsReadBuffer)
+#undef PyObject_Repr
+#define PyObject_Repr GDBDYN_PYWRAPPER(gdbdyn_PyObject_Repr)
+#undef PyObject_CheckReadBuffer
+#define PyObject_CheckReadBuffer GDBDYN_PYWRAPPER(gdbdyn_PyObject_CheckReadBuffer)
+#undef PyObject_GenericGetAttr
+#define PyObject_GenericGetAttr GDBDYN_PYWRAPPER(gdbdyn_PyObject_GenericGetAttr)
+#undef PyObject_GenericSetAttr
+#define PyObject_GenericSetAttr GDBDYN_PYWRAPPER(gdbdyn_PyObject_GenericSetAttr)
+#undef PyObject_GetAttr
+#define PyObject_GetAttr GDBDYN_PYWRAPPER(gdbdyn_PyObject_GetAttr)
+#undef PyObject_GetAttrString
+#define PyObject_GetAttrString GDBDYN_PYWRAPPER(gdbdyn_PyObject_GetAttrString)
+#undef PyObject_GetBuffer
+#define PyObject_GetBuffer GDBDYN_PYWRAPPER(gdbdyn_PyObject_GetBuffer)
+#undef PyObject_GetIter
+#define PyObject_GetIter GDBDYN_PYWRAPPER(gdbdyn_PyObject_GetIter)
+#undef PyObject_HasAttr
+#define PyObject_HasAttr GDBDYN_PYWRAPPER(gdbdyn_PyObject_HasAttr)
+#undef PyObject_HasAttrString
+#define PyObject_HasAttrString GDBDYN_PYWRAPPER(gdbdyn_PyObject_HasAttrString)
+#undef PyObject_IsTrue
+#define PyObject_IsTrue GDBDYN_PYWRAPPER(gdbdyn_PyObject_IsTrue)
+#undef PyObject_IsInstance
+#define PyObject_IsInstance GDBDYN_PYWRAPPER(gdbdyn_PyObject_IsInstance)
+#undef PyObject_RichCompareBool
+#define PyObject_RichCompareBool GDBDYN_PYWRAPPER(gdbdyn_PyObject_RichCompareBool)
+#undef PyObject_SetAttrString
+#define PyObject_SetAttrString GDBDYN_PYWRAPPER(gdbdyn_PyObject_SetAttrString)
+#undef PyObject_Str
+#define PyObject_Str GDBDYN_PYWRAPPER(gdbdyn_PyObject_Str)
+#undef PyObject_Size
+#define PyObject_Size GDBDYN_PYWRAPPER(gdbdyn_PyObject_Size)
+#undef PyRun_SimpleString
+#define PyRun_SimpleString GDBDYN_PYWRAPPER(gdbdyn_PyRun_SimpleString)
+#undef PyRun_StringFlags
+#define PyRun_StringFlags GDBDYN_PYWRAPPER(gdbdyn_PyRun_StringFlags)
+#undef PyRun_InteractiveLoop
+#define PyRun_InteractiveLoop GDBDYN_PYWRAPPER(gdbdyn_PyRun_InteractiveLoop)
+#undef PyRun_SimpleFile
+#define PyRun_SimpleFile GDBDYN_PYWRAPPER(gdbdyn_PyRun_SimpleFile)
+#undef PySequence_Check
+#define PySequence_Check GDBDYN_PYWRAPPER(gdbdyn_PySequence_Check)
+#undef PySequence_Concat
+#define PySequence_Concat GDBDYN_PYWRAPPER(gdbdyn_PySequence_Concat)
+#undef PySequence_DelItem
+#define PySequence_DelItem GDBDYN_PYWRAPPER(gdbdyn_PySequence_DelItem)
+#undef PySequence_GetItem
+#define PySequence_GetItem GDBDYN_PYWRAPPER(gdbdyn_PySequence_GetItem)
+#undef PySequence_Index
+#define PySequence_Index GDBDYN_PYWRAPPER(gdbdyn_PySequence_Index)
+#undef PySequence_List
+#define PySequence_List GDBDYN_PYWRAPPER(gdbdyn_PySequence_List)
+#undef PySequence_Size
+#define PySequence_Size GDBDYN_PYWRAPPER(gdbdyn_PySequence_Size)
+#undef PySys_GetObject
+#define PySys_GetObject GDBDYN_PYWRAPPER(gdbdyn_PySys_GetObject)
+#undef PySys_SetPath
+#define PySys_SetPath GDBDYN_PYWRAPPER(gdbdyn_PySys_SetPath)
+#undef PyThreadState_Get
+#define PyThreadState_Get GDBDYN_PYWRAPPER(gdbdyn_PyThreadState_Get)
+#undef PyThreadState_Swap
+#define PyThreadState_Swap GDBDYN_PYWRAPPER(gdbdyn_PyThreadState_Swap)
+#undef PyTuple_GetItem
+#define PyTuple_GetItem GDBDYN_PYWRAPPER(gdbdyn_PyTuple_GetItem)
+#undef PyTuple_New
+#define PyTuple_New GDBDYN_PYWRAPPER(gdbdyn_PyTuple_New)
+#undef PyTuple_SetItem
+#define PyTuple_SetItem GDBDYN_PYWRAPPER(gdbdyn_PyTuple_SetItem)
+#undef PyTuple_Size
+#define PyTuple_Size GDBDYN_PYWRAPPER(gdbdyn_PyTuple_Size)
+#undef PyType_IsSubtype
+#define PyType_IsSubtype GDBDYN_PYWRAPPER(gdbdyn_PyType_IsSubtype)
+#undef PyType_Ready
+#define PyType_Ready GDBDYN_PYWRAPPER(gdbdyn_PyType_Ready)
+#undef Py_Finalize
+#define Py_Finalize GDBDYN_PYWRAPPER(gdbdyn_Py_Finalize)
+#undef Py_Initialize
+#define Py_Initialize GDBDYN_PYWRAPPER(gdbdyn_Py_Initialize)
+#undef PyModule_Create2
+#define PyModule_Create2 GDBDYN_PYWRAPPER(gdbdyn_PyModule_Create2)
+#undef Py_SetProgramName
+#define Py_SetProgramName GDBDYN_PYWRAPPER(gdbdyn_Py_SetProgramName)
+#undef _PyObject_New
+#define _PyObject_New GDBDYN_PYWRAPPER(gdbdyn__PyObject_New)
+#undef PyCode_New
+#define PyCode_New GDBDYN_PYWRAPPER(gdbdyn_PyCode_New)
+#undef PyObject_CallObject
+#define PyObject_CallObject GDBDYN_PYWRAPPER(gdbdyn_PyObject_CallObject)
+#undef PyObject_Call
+#define PyObject_Call GDBDYN_PYWRAPPER(gdbdyn_PyObject_Call)
+#undef PyUnicode_Decode
+#define PyUnicode_Decode GDBDYN_PYWRAPPER(gdbdyn_PyUnicode_Decode)
+#undef PyUnicode_AsEncodedString
+#define PyUnicode_AsEncodedString GDBDYN_PYWRAPPER(gdbdyn_PyUnicode_AsEncodedString)
+#undef PyUnicode_FromEncodedObject
+#define PyUnicode_FromEncodedObject GDBDYN_PYWRAPPER(gdbdyn_PyUnicode_FromEncodedObject)
+#undef PyUnicode_FromString
+#define PyUnicode_FromString GDBDYN_PYWRAPPER(gdbdyn_PyUnicode_FromString)
+#undef PyUnicode_CompareWithASCIIString
+#define PyUnicode_CompareWithASCIIString GDBDYN_PYWRAPPER(gdbdyn_PyUnicode_CompareWithASCIIString)
+#undef PyUnicode_AsASCIIString
+#define PyUnicode_AsASCIIString GDBDYN_PYWRAPPER(gdbdyn_PyUnicode_AsASCIIString)
+#undef PyBuffer_Release
+#define PyBuffer_Release GDBDYN_PYWRAPPER(gdbdyn_PyBuffer_Release)
+#undef PySlice_GetIndicesEx
+#define PySlice_GetIndicesEx GDBDYN_PYWRAPPER(gdbdyn_PySlice_GetIndicesEx)
+
+/* Fix template expansion failures due to implicit casts used in gdb code. */
+static inline PyObject*
+gdb_PyUnicode_Decode (const char *s, Py_ssize_t size, const char *encoding, const char *errors)
+{
+  return PyUnicode_Decode (s, size, encoding, errors);
+}
+#undef PyUnicode_Decode
+#define PyUnicode_Decode gdb_PyUnicode_Decode
+
+static inline PyObject*
+gdb_PyUnicode_AsEncodedString (PyObject *unicode, const char *encoding, const char *errors)
+{
+  return PyUnicode_AsEncodedString (unicode, encoding, errors);
+}
+#undef PyUnicode_AsEncodedString
+#define PyUnicode_AsEncodedString gdb_PyUnicode_AsEncodedString
+
+static inline PyObject*
+gdb_PyRun_String (const char *str, int s, PyObject *g, PyObject *l)
+{
+  return PyRun_StringFlags (str, s, g, l, nullptr);
+}
+#undef PyRun_String
+#define PyRun_String gdb_PyRun_String
+
+static inline PyObject* 
+gdb_PyRun_StringFlags (const char *str, int s, PyObject *g, PyObject *l, PyCompilerFlags *f)
+{
+  return PyRun_StringFlags (str, s, g, l, f);
+}
+#undef PyRun_StringFlags
+#define PyRun_StringFlags gdb_PyRun_StringFlags
+
+static inline PyObject*
+gdb_PyObject_Call(PyObject *callable_object, PyObject *args, PyObject *kw)
+{
+  return PyObject_Call (callable_object, args, kw);
+}
+#undef PyObject_Call
+#define PyObject_Call gdb_PyObject_Call
+
+static inline PyObject* 
+gdb_PyObject_CallObject (PyObject *callable_object, PyObject *args)
+{
+  return PyObject_CallObject (callable_object, args);
+}
+#undef PyObject_CallObject
+#define PyObject_CallObject gdb_PyObject_CallObject
+
+static inline PyObject*
+gdb_PyBool_FromLong (long l)
+{
+  return PyBool_FromLong (l);
+}
+#undef PyBool_FromLong
+#define PyBool_FromLong gdb_PyBool_FromLong
+
+#endif /* NVIDIA_PYTHON_DYNLIB */
+
 /* PyObject_CallMethod's 'method' and 'format' parameters were missing
    the 'const' qualifier before Python 3.4.  Hence, we wrap the
    function in our own version to avoid errors with string literals.
@@ -163,6 +749,10 @@ gdb_PyErr_NewException (const char *name, PyObject *base, PyObject *dict)
   return PyErr_NewException (const_cast<char *> (name), base, dict);
 }
 
+#ifdef NVIDIA_PYTHON_DYNLIB
+/* Silence warning */
+#undef PyErr_NewException
+#endif
 #define PyErr_NewException gdb_PyErr_NewException
 
 /* PySys_GetObject's 'name' parameter was missing the 'const'
@@ -175,6 +765,10 @@ gdb_PySys_GetObject (const char *name)
   return PySys_GetObject (const_cast<char *> (name));
 }
 
+#ifdef NVIDIA_PYTHON_DYNLIB
+/* Silence warning */
+#undef PySys_GetObject
+#endif
 #define PySys_GetObject gdb_PySys_GetObject
 
 /* PySys_SetPath was deprecated in Python 3.11.  Disable the deprecated
@@ -193,6 +787,10 @@ gdb_PySys_SetPath (const GDB_PYSYS_SETPATH_CHAR *path)
   PySys_SetPath (const_cast<GDB_PYSYS_SETPATH_CHAR *> (path));
 }
 
+#ifdef NVIDIA_PYTHON_DYNLIB
+/* Silence warning */
+#undef PySys_SetPath
+#endif
 #define PySys_SetPath gdb_PySys_SetPath
 #endif
 

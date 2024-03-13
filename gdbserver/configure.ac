@@ -15,6 +15,11 @@ dnl GNU General Public License for more details.
 dnl
 dnl You should have received a copy of the GNU General Public License
 dnl along with this program.  If not, see <http://www.gnu.org/licenses/>.
+dnl
+dnl NVIDIA CUDA Debugger CUDA-GDB
+dnl Copyright (C) 2007-2023 NVIDIA Corporation
+dnl Modified from the original GDB file referenced above by the CUDA-GDB
+dnl team at NVIDIA <cudatools@nvidia.com>.
 
 dnl Process this file with autoconf to produce a configure script.
 
@@ -68,7 +73,7 @@ dnl Set up for gettext.
 ZW_GNU_GETTEXT_SISTER_DIR
 
 # Create sub-directories for objects and dependencies.
-CONFIG_SRC_SUBDIR="arch gdbsupport nat target"
+CONFIG_SRC_SUBDIR="arch cuda gdbsupport nat target"
 AC_SUBST(CONFIG_SRC_SUBDIR)
 
 AC_CONFIG_COMMANDS([gdbdepdir],[
@@ -90,6 +95,21 @@ AC_CHECK_FUNCS(pread pwrite pread64)
 
 # Check the return and argument types of ptrace.
 GDB_AC_PTRACE
+
+# Enable CUDA
+AC_ARG_ENABLE(cuda,
+AS_HELP_STRING([--disable-cuda], [disable CUDA support (cuda-gdb)]),
+  [case $enableval in
+    yes | no)
+      ;;
+    *)
+      AC_MSG_ERROR([bad value $enableval for --enable-cuda]) ;;
+  esac],
+  [enable_cuda=yes])
+if test x"$enable_cuda" = xyes; then
+  AC_DEFINE(NVIDIA_CUDA_GDB, 1, [Define if building cuda-gdb.])
+fi
+AM_CONDITIONAL(ENABLE_CUDA, [test x"$enable_cuda" = xyes])
 
 # Check for UST
 ustlibs=""

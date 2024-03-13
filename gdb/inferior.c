@@ -178,9 +178,22 @@ inferior::do_all_continuations ()
 {
   while (!m_continuations.empty ())
     {
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA: We need to force the inferior to make function
+       * calls during attach to init the debug API. This is
+       * different from just about every other target. As a result,
+       * we get into the state where we may call continuations twice.
+       * We need to force the continuation to be removed from
+       * the list before calling it.
+       */
+      auto continuation = m_continuations.front ();
+      m_continuations.pop_front ();
+      (continuation) ();
+#else
       auto iter = m_continuations.begin ();
       (*iter) ();
       m_continuations.erase (iter);
+#endif
     }
 }
 
@@ -350,7 +363,12 @@ find_inferior_pid (process_stratum_target *targ, int pid)
   /* Looking for inferior pid == 0 is always wrong, and indicative of
      a bug somewhere else.  There may be more than one with pid == 0,
      for instance.  */
+  /* CUDA
+   * When restoring cuda focus without any inferior present, we end up
+   * looking for PID 0, do not assert here, let it return NULL. */
+#ifndef NVIDIA_CUDA_GDB
   gdb_assert (pid != 0);
+#endif
 
   for (inferior *inf : all_inferiors (targ))
     if (inf->pid == pid)

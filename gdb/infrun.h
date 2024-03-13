@@ -15,6 +15,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef INFRUN_H
 #define INFRUN_H 1
 
@@ -180,6 +185,9 @@ extern void prepare_for_detach (void);
 extern void fetch_inferior_event ();
 
 extern void init_wait_for_inferior (void);
+#ifdef NVIDIA_CUDA_GDB
+extern void cuda_wait_for_inferior (void);
+#endif
 
 extern void insert_step_resume_breakpoint_at_sal (struct gdbarch *,
 						  struct symtab_and_line ,

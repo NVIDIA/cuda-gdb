@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "gdbcmd.h"
 #include "cli/cli-cmds.h"
@@ -57,6 +62,12 @@
 #include "gdbsupport/pathstuff.h"
 #include "cli/cli-style.h"
 #include "pager.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-gdb.h"
+#include "cuda/cuda-exceptions.h"
+#include "cuda/cuda-tdep.h"
+#include "cuda/cuda-version.h"
+#endif
 
 /* readline include files.  */
 #include "readline/readline.h"
@@ -1437,9 +1448,26 @@ print_gdb_version (struct ui_file *stream, bool interactive)
      program to parse, and is just canonical program name and version
      number, which starts after last space.  */
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - cuda-gdb version information printed first. */
+  std::string v_str = string_printf ("NVIDIA (R) cuda-gdb %d.%d",
+                                     cuda_major_version (), cuda_minor_version ());
+  gdb_printf (stream, "%ps\n",
+	      styled_string (version_style.style (), v_str.c_str ()));
+
+  /* Print CUDA-GDB copyright notice as second line. */
+   gdb_printf (stream,
+	       "Portions Copyright (C) 2007-%s NVIDIA Corporation\n",
+	       cuda_current_year ());
+
+  /* Acknowledge upstream gdb version. */
+  std::string gdb_v_str = string_printf ("GNU gdb %s", version);
+  gdb_printf (stream, "Based on %s\n", gdb_v_str.c_str ());
+#else
   std::string v_str = string_printf ("GNU gdb %s%s", PKGVERSION, version);
   gdb_printf (stream, "%ps\n",
 	      styled_string (version_style.style (), v_str.c_str ()));
+#endif
 
   /* Second line is a copyright notice.  */
 
@@ -1466,7 +1494,11 @@ There is NO WARRANTY, to the extent permitted by law.",
 
   /* After the required info we print the configuration information.  */
 
+#ifdef NVIDIA_CUDA_GDB
+  gdb_printf (stream, "This CUDA-GDB was configured as \"");
+#else
   gdb_printf (stream, "This GDB was configured as \"");
+#endif
   if (strcmp (host_name, target_name) != 0)
     {
       gdb_printf (stream, "--host=%s --target=%s",
@@ -1489,11 +1521,19 @@ There is NO WARRANTY, to the extent permitted by law.",
 		  styled_string (file_name_style.style (),
 				 REPORT_BUGS_TO));
     }
+#ifdef NVIDIA_CUDA_GDB
+  gdb_printf (stream,
+	      _("Find the CUDA-GDB manual and other documentation \
+resources online at:\n    <%ps>."),
+	      styled_string (file_name_style.style (),
+			     "https://docs.nvidia.com/cuda/cuda-gdb/index.html"));
+#else
   gdb_printf (stream,
 	      _("Find the GDB manual and other documentation \
 resources online at:\n    <%ps>."),
 	      styled_string (file_name_style.style (),
 			     "http://www.gnu.org/software/gdb/documentation/"));
+#endif
   gdb_printf (stream, "\n\n");
   gdb_printf (stream, _("For help, type \"help\".\n"));
   gdb_printf (stream,
@@ -1505,10 +1545,17 @@ related to \"word\"."));
 void
 print_gdb_configuration (struct ui_file *stream)
 {
+#ifdef NVIDIA_CUDA_GDB
+  gdb_printf (stream, _("\
+This CUDA-GDB was configured as follows:\n\
+   configure --host=%s --target=%s\n\
+"), host_name, target_name);
+#else
   gdb_printf (stream, _("\
 This GDB was configured as follows:\n\
    configure --host=%s --target=%s\n\
 "), host_name, target_name);
+#endif
 
   gdb_printf (stream, _("\
 	     --with-auto-load-dir=%s\n\
@@ -1723,7 +1770,13 @@ kill_or_detach (inferior *inf, int from_tty)
   if (inf->pid == 0)
     return;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - any_thread_of_inferior() asserts that there is a thread,
+     only look for live ones. */
+  thread_info *thread = any_live_thread_of_inferior (inf);
+#else
   thread_info *thread = any_thread_of_inferior (inf);
+#endif
   if (thread != NULL)
     {
       switch_to_thread (thread);
@@ -1820,6 +1873,16 @@ quit_force (int *exit_arg, int from_tty)
 
   undo_terminal_modifications_before_exit ();
 
+#ifdef NVIDIA_CUDA_GDB
+  cuda_exception exp;
+  if (exp.valid ())
+    {
+      cuda_cleanup();
+
+      if (target_has_execution ())
+        target_kill ();
+    }
+#endif
   /* We want to handle any quit errors and exit regardless.  */
 
   /* Get out of tfind mode, and kill or detach all inferiors.  */

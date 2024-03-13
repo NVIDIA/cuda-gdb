@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "arch-utils.h"
 #include "symtab.h"
@@ -179,6 +184,20 @@ static struct cmd_list_element *functionlist;
 
 struct value
 {
+#ifdef NVIDIA_CUDA_GDB
+  explicit value (struct type *type_)
+    : modifiable (1),
+      lazy (1),
+      initialized (1),
+      stack (0),
+      is_zero (false),
+      cached (0),
+      extrapolated (0),
+      type (type_),
+      enclosing_type (type_)
+  {
+  }
+#else
   explicit value (struct type *type_)
     : modifiable (1),
       lazy (1),
@@ -189,6 +208,7 @@ struct value
       enclosing_type (type_)
   {
   }
+#endif
 
   ~value ()
   {
@@ -239,6 +259,14 @@ struct value
      otherwise.  */
   bool is_zero : 1;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - register cache */
+  /* True if this value was recovered from CUDA PTX cache */
+  bool cached : 1;
+  /* CUDA - regmap extrapolation */
+  /* True if this value has been extrapolated */
+  bool extrapolated : 1;
+#endif
   /* Location of value (if lval).  */
   union
   {
@@ -455,6 +483,30 @@ value_entirely_optimized_out (struct value *value)
   return value_entirely_covered_by_range_vector (value, value->optimized_out);
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - register cache */
+int
+value_cached (const struct value *value)
+{
+  return value->cached;
+}
+void
+set_value_cached (struct value *value, int val)
+{
+  value->cached = val;
+}
+/* CUDA - regmap extrapolation */
+int
+value_extrapolated (const struct value *value)
+{
+  return value->extrapolated;
+}
+void
+set_value_extrapolated (struct value *value, int val)
+{
+  value->extrapolated = val;
+}
+#endif
 /* Insert into the vector pointed to by VECTORP the bit range starting of
    OFFSET bits, and extending for the next LENGTH bits.  */
 
@@ -1074,7 +1126,16 @@ allocate_repeat_value (struct type *type, int count)
   struct type *array_type
     = lookup_array_range_type (type, low_bound, count + low_bound - 1);
 
+#ifdef NVIDIA_CUDA_GDB
+  struct value *val;
+  val = allocate_value (array_type);
+  /* CUDA - memory segments */
+  auto flags = val->type->instance_flags () | type->instance_flags ();
+  val->type->set_instance_flags (flags);
+  return val;
+#else
   return allocate_value (array_type);
+#endif
 }
 
 struct value *
@@ -4060,8 +4121,10 @@ value_fetch_lazy_register (struct value *val)
 	 (e.g. float or int from a double register).  Lazy
 	 register values should have the register's natural type,
 	 so they do not apply.  */
+#ifndef NVIDIA_CUDA_GDB
       gdb_assert (!gdbarch_convert_register_p (get_frame_arch (next_frame),
 					       regnum, type));
+#endif
 
       /* FRAME was obtained, above, via VALUE_NEXT_FRAME_ID.
 	 Since a "->next" operation was performed when setting
@@ -4181,6 +4244,22 @@ value_fetch_lazy (struct value *val)
   else if (VALUE_LVAL (val) == lval_computed
 	   && value_computed_funcs (val)->read != NULL)
     value_computed_funcs (val)->read (val);
+#ifdef NVIDIA_CUDA_GDB
+  else if (VALUE_LVAL (val) == lval_internalvar_component)
+    {
+      struct internalvar *var;
+      struct value *src_val;
+
+      var = val->location.internalvar;
+      /* No other type of internalvar makes sense here.  */
+      gdb_assert (var->kind == INTERNALVAR_VALUE);
+      src_val = var->u.value;
+      if (VALUE_LVAL (src_val) == lval_memory)
+        value_fetch_lazy_memory (val);
+      else
+        internal_error (_("Unexpected lazy value type."));
+    }
+#endif
   else
     internal_error (_("Unexpected lazy value type."));
 

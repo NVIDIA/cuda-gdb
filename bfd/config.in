@@ -243,6 +243,9 @@
    */
 #undef LT_OBJDIR
 
+/* Define if building cuda-gdb. */
+#undef NVIDIA_CUDA_GDB
+
 /* Name of package */
 #undef PACKAGE
 

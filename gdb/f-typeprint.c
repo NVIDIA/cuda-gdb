@@ -20,6 +20,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "gdbsupport/gdb_obstack.h"
 #include "bfd.h"
@@ -33,6 +38,15 @@
 #include "typeprint.h"
 #include "cli/cli-style.h"
 
+#ifdef NVIDIA_CUDA_GDB
+static int
+f_has_valid_type_name (struct type *type)
+{
+  return (type->name ()) &&
+        ((type->code () != TYPE_CODE_ARRAY && type->code() != TYPE_CODE_STRING) ||
+        strchr( type->name (), '(') != NULL);
+}
+#endif
 /* See f-lang.h.  */
 
 void
@@ -53,6 +67,9 @@ f_language::print_type (struct type *type, const char *varstring,
   enum type_code code;
 
   f_type_print_base (type, stream, show, level);
+#ifdef NVIDIA_CUDA_GDB
+  show &= f_has_valid_type_name (type);
+#endif
   code = type->code ();
   if ((varstring != NULL && *varstring != '\0')
       /* Need a space if going to print stars or brackets; but not if we
@@ -209,6 +226,13 @@ f_language::f_type_print_varspec_suffix (struct type *type,
 	    {
 	      LONGEST upper_bound = f77_get_upperbound (type);
 
+#ifdef NVIDIA_CUDA_GDB
+	      /* CUDA: Handle the case where we have a lower bound,
+	       * but no upper bound. */
+	      if (lower_bound > upper_bound)
+		gdb_printf (stream, "*");
+	      else
+#endif
 	      gdb_puts (plongest (upper_bound), stream);
 	    }
 	}
@@ -226,6 +250,11 @@ f_language::f_type_print_varspec_suffix (struct type *type,
       break;
 
     case TYPE_CODE_PTR:
+#ifdef NVIDIA_CUDA_GDB
+      f_type_print_varspec_suffix (type->target_type (), stream, 0, 1, 0,
+                                   arrayprint_recurse_level, false);
+      break;
+#endif
     case TYPE_CODE_REF:
       f_type_print_varspec_suffix (type->target_type (), stream, 0, 1, 0,
 				   arrayprint_recurse_level, false);
@@ -347,7 +376,11 @@ f_language::f_type_print_base (struct type *type, struct ui_file *stream,
       break;
 
     case TYPE_CODE_PTR:
+#ifdef NVIDIA_CUDA_GDB
+      gdb_printf (stream, "pointer, ");
+#else
       gdb_printf (stream, "%*sPTR TO -> ( ", level, "");
+#endif
       f_type_print_base (type->target_type (), stream, show, 0);
       break;
 

@@ -49,7 +49,11 @@
 #endif
 
 #if HAVE_SYS_SYSCTL_H
+#if defined(NVIDIA_CUDA_GDB) && defined(__ANDROID__)
+# include <linux/sysctl.h>
+#else
 # include <sys/sysctl.h>
+#endif
 #endif
 
 #if HAVE_SYS_SYSTEMCFG_H

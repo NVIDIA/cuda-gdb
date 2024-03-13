@@ -18,6 +18,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef GDBTHREAD_H
 #define GDBTHREAD_H
 
@@ -35,6 +40,11 @@ struct symtab;
 #include "displaced-stepping.h"
 #include "gdbsupport/intrusive_list.h"
 #include "thread-fsm.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-coords.h"
+/* Serial command to request all threads to stop when the target is running. */
+#define SERIAL_REMOTE_STOP_CMD  "\x04"
+#endif
 
 struct inferior;
 struct process_stratum_target;
@@ -535,6 +545,12 @@ public:
      expressions.  */
   std::vector<struct value *> stack_temporaries;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Used when we need to update the cuda coordinates during
+   * cuda_wait (). Handled during context_switch (). */
+  bool need_cuda_context_switch = false;
+  cuda_coords new_cuda_coords {};
+#endif
   /* Step-over chain.  A thread is in the step-over queue if this node is
      linked.  */
   intrusive_list_node<thread_info> step_over_list_node;
@@ -773,6 +789,11 @@ extern void switch_to_thread (struct thread_info *thr);
 /* Switch context to no thread selected.  */
 extern void switch_to_no_thread ();
 
+#ifdef NVIDIA_CUDA_GDB
+/* Switch from one thread to another.  Also sets the STOP_PC.
+   Do not invalidate the CUDA device context.  */
+extern void switch_to_thread_keep_cuda_focus (struct thread_info *);
+#endif
 /* Switch from one thread to another.  Does not read registers.  */
 extern void switch_to_thread_no_regs (struct thread_info *thread);
 
@@ -873,11 +894,17 @@ private:
      changes the current language to the frame's language if "set
      language auto".  */
   enum language m_lang;
+#ifdef NVIDIA_CUDA_GDB
+  cuda_coords m_cuda_coords;
+#endif
 };
 
 /* Returns a pointer into the thread_info corresponding to
    INFERIOR_PTID.  INFERIOR_PTID *must* be in the thread list.  */
 extern struct thread_info* inferior_thread (void);
+#ifdef NVIDIA_BUGFIX
+extern bool has_inferior_thread (void);
+#endif
 
 extern void update_thread_list (void);
 

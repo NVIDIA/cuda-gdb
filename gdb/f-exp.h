@@ -21,6 +21,7 @@
 #define FORTRAN_EXP_H
 
 #include "expop.h"
+#include "cuda/cuda-lang.h"
 
 extern struct value *eval_op_f_abs (struct type *expect_type,
 				    struct expression *exp,

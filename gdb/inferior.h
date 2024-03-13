@@ -213,6 +213,9 @@ extern void child_interrupt (struct target_ops *self);
    STARTUP_INFERIOR.  */
 extern ptid_t gdb_startup_inferior (pid_t pid, int num_traps);
 
+#ifdef NVIDIA_CUDA_GDB
+extern void cuda_insert_step_resume_breakpoint_at_caller (frame_info_ptr);
+#endif
 /* From infcmd.c */
 
 /* Initial inferior setup.  Determines the exec file is not yet known,
@@ -631,6 +634,10 @@ public:
   /* Per inferior data-pointers required by other GDB modules.  */
   registry<inferior> registry_fields;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA can only be intialized at most once per inferior */
+  bool cuda_initialized = false;
+#endif
 private:
 
   /* Unpush TARGET and assert that it worked.  */

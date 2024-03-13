@@ -100,11 +100,14 @@ ps_err_e
 ps_pglobal_lookup (struct ps_prochandle *ph, const char *obj,
 		   const char *name, psaddr_t *sym_addr)
 {
+  /* NVIDIA_CUDA_GDB - Bionic's libthread_db calls ps_pglobal_lookup with first two arguments set to NULL */
+#ifndef __ANDROID__
   inferior *inf = ph->thread->inf;
 
   scoped_restore_current_program_space restore_pspace;
 
   set_current_program_space (inf->pspace);
+#endif
 
   /* FIXME: kettenis/2000-09-03: What should we do with OBJ?  */
   bound_minimal_symbol ms = lookup_minimal_symbol (name, NULL, NULL);

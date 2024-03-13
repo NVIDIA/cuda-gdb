@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "value.h"
 #include "symtab.h"
@@ -57,6 +62,14 @@
 #include "cli/cli-style.h"
 #include "gdbsupport/buildargv.h"
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - print_args_frame */
+#include "cuda/cuda-state.h"
+#include "cuda/cuda-tdep.h"
+#include "cuda/cuda-options.h"
+#include "cuda/cuda-frame.h"
+#include "cuda/cuda-kernel.h"
+#endif
 /* The possible choices of "set print frame-arguments", and the value
    of this setting.  */
 
@@ -932,6 +945,27 @@ print_frame_args (const frame_print_options &fp_opts,
     }
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - print_args_frame */
+void
+print_args_frame (frame_info_ptr frame)
+{
+  struct symbol *func;
+  func = find_pc_function (get_frame_address_in_block (frame));
+  struct ui_out *uiout = current_uiout;
+  ui_out_emit_list list_emitter (uiout, "args");
+  try
+    {
+      print_frame_args (user_frame_print_options, func, frame, 0 /*numargs*/, gdb_stdout);
+    }
+  catch (const gdb_exception_error &e)
+    {
+    }
+  /* FIXME: ARGS must be a list. If one argument is a string it
+     will have " that will not be properly escaped.  */
+  QUIT;
+}
+#endif
 /* Set the current source and line to the location given by frame
    FRAME, if possible.  When CENTER is true, adjust so the relevant
    line is in the center of the next 'list'.  */
@@ -1373,6 +1407,18 @@ print_frame (const frame_print_options &fp_opts,
 	  annotate_frame_address_end ();
 	  uiout->text (" in ");
 	}
+
+#ifdef NVIDIA_CUDA_GDB
+    const char *cuda_assert_function = "__assert_fail";
+    /* CUDA - special handling for assert */
+    if (funname &&
+	!strncmp(funname.get (), cuda_assert_function, strlen (cuda_assert_function)) &&
+	cuda_frame_p (frame))
+      {
+	print_args = 0;
+	funname.reset (xstrdup (cuda_assert_function));
+      }
+#endif
     annotate_frame_function_name ();
 
     string_file stb;
@@ -1381,6 +1427,14 @@ print_frame (const frame_print_options &fp_opts,
     uiout->wrap_hint (3);
     annotate_frame_args ();
 
+#ifdef NVIDIA_CUDA_GDB
+    /* CUDA - kernel dimensions */
+    if (cuda_frame_outermost_p (frame))
+      {
+	kernel_t kernel = cuda_current_focus::get ().logical ().kernel ();
+	uiout->text (kernel_get_dimensions (kernel));
+      }
+#endif
     uiout->text (" (");
     if (print_args)
       {
@@ -1431,6 +1485,26 @@ print_frame (const frame_print_options &fp_opts,
 	uiout->text (":");
 	annotate_frame_source_line ();
 	uiout->field_signed ("line", sal.line);
+#ifdef NVIDIA_CUDA_GDB
+	if (pc_p)
+	  {
+	    struct cuda_debug_inline_info *inline_info = NULL;
+	    struct obj_section *section = find_pc_overlay (pc);
+	    find_pc_sect_line ((CORE_ADDR)pc, section, 0, &inline_info);
+	    if (inline_info)
+	      {
+		auto demangled = language_demangle (language_def (current_language->la_language),
+						     inline_info->function,
+						     DMGL_ANSI);
+		uiout->text         (" in ");
+		uiout->field_string ("inline_function", demangled ? demangled.get () : inline_info->function);
+		uiout->text         (" inlined from ");
+		uiout->field_string ("inline_filename", lbasename (inline_info->filename));
+		uiout->text         (":");
+		uiout->field_signed ("inline_line", inline_info->line);
+	      }
+	  }
+#endif
 	annotate_frame_source_end ();
       }
 

@@ -618,6 +618,15 @@
    */
 #undef LT_OBJDIR
 
+/* Define if building with NVIDIA bugfixes. */
+#undef NVIDIA_BUGFIX
+
+/* Define if building with NVIDIA CUDA support. */
+#undef NVIDIA_CUDA_GDB
+
+/* Define if building with NVIDIA dlopen python bindings. */
+#undef NVIDIA_PYTHON_DYNLIB
+
 /* Name of this package. */
 #undef PACKAGE
 

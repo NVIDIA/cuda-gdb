@@ -45,11 +45,16 @@ if {![fortran_runto_main]} {
 
 gdb_breakpoint $srclibfile:[gdb_get_line_number "i-is-2-in-lib" $srclibfile]
 gdb_continue_to_breakpoint "i-is-2-in-lib" ".*i-is-2-in-lib.*"
+gdb_test_no_output "maint print symbols symbols.txt"
 gdb_test "print var_i" " = 2" "print var_i in lib"
+gdb_test "print vAr_I" " = 2" "print vAr_I in lib"
+gdb_test "print VAR_I" " = 2" "print VAR_I in lib"
 
 gdb_breakpoint $srcfile:[gdb_get_line_number "i-is-2-in-main" $srcfile]
 gdb_continue_to_breakpoint "i-is-2-in-main" ".*i-is-2-in-main.*"
 gdb_test "print var_i" " = 2" "print var_i in main"
+gdb_test "print vAr_I" " = 2" "print vAr_I in main"
+gdb_test "print VAR_I" " = 2" "print VAR_I in main"
 
 gdb_test "print var_j" " = 3"
 gdb_test "print var_k" "No symbol \"var_k\" in current context\\."

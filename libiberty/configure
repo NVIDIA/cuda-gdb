@@ -710,6 +710,7 @@ with_target_subdir
 with_build_subdir
 with_cross_host
 with_newlib
+enable_cuda
 enable_maintainer_mode
 enable_multilib
 enable_install_libiberty
@@ -1336,6 +1337,7 @@ Optional Features:
   --disable-option-checking  ignore unrecognized --enable/--with options
   --disable-FEATURE       do not include FEATURE (same as --enable-FEATURE=no)
   --enable-FEATURE[=ARG]  include FEATURE [ARG=yes]
+  --disable-cuda          disable CUDA support (cuda-gdb)
   --enable-maintainer-mode
                           enable make rules and dependencies not useful
                           (and sometimes confusing) to the casual installer
@@ -2539,6 +2541,23 @@ ac_config_sub="$SHELL $ac_aux_dir/config.sub"  # Please don't use this var.
 ac_configure="$SHELL $ac_aux_dir/configure"  # Please don't use this var.
 
 
+
+# Enable CUDA
+# Check whether --enable-cuda was given.
+if test "${enable_cuda+set}" = set; then :
+  enableval=$enable_cuda; case "${enableval}" in
+    yes | no)   ;;
+    *)          as_fn_error $? "bad value $enableval for --enable-cuda" "$LINENO" 5 ;;
+  esac
+else
+  enable_cuda=yes
+fi
+
+if test x"$enable_cuda" = xyes; then
+
+$as_echo "#define NVIDIA_CUDA_GDB 1" >>confdefs.h
+
+fi
 
 
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking whether to enable maintainer-specific portions of Makefiles" >&5

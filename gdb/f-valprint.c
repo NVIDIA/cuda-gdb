@@ -20,6 +20,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "annotate.h"
 #include "symtab.h"
@@ -474,6 +479,14 @@ f_language::value_print_inner (struct value *val, struct ui_file *stream,
 	  int want_space = 0;
 
 	  addr = unpack_pointer (type, valaddr);
+#ifdef NVIDIA_CUDA_GDB
+	  if (addr < 65536)
+	    {
+	      /* Assume if the pointer is < 65536 it is probably not associated or associated with a bogus target.  */
+	      gdb_printf (stream, "<not associated>");
+	      break;
+	    }
+#endif
 	  elttype = check_typedef (type->target_type ());
 
 	  if (elttype->code () == TYPE_CODE_FUNC)
@@ -495,7 +508,12 @@ f_language::value_print_inner (struct value *val, struct ui_file *stream,
 	  /* For a pointer to char or unsigned char, also print the string
 	     pointed to, unless pointer is null.  */
 	  if (elttype->length () == 1
+#ifdef NVIDIA_CUDA_GDB
+	      && (elttype->code () == TYPE_CODE_INT
+		  || elttype->code () == TYPE_CODE_CHAR)
+#else
 	      && elttype->code () == TYPE_CODE_INT
+#endif
 	      && (options->format == 0 || options->format == 's')
 	      && addr != 0)
 	    {

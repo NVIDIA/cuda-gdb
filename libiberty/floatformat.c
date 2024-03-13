@@ -17,6 +17,11 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* This is needed to pick up the NAN macro on some systems.  */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
@@ -407,6 +412,41 @@ const struct floatformat floatformat_bfloat16_little =
   floatformat_always_valid,
   NULL
 };
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA: FP8 formats */
+const struct floatformat floatformat_nv_fp8_e5m2_big =
+{
+  floatformat_big, 8, 0, 1, 5, 15, 31, 6, 2,
+  floatformat_intbit_no,
+  "floatformat_nv_fp8_e5m2_big",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp8_e5m2_little =
+{
+  floatformat_little, 8, 0, 1, 5, 15, 31, 6, 2,
+  floatformat_intbit_no,
+  "floatformat_nv_fp8_e5m2_little",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp8_e4m3_big =
+{
+  floatformat_big, 8, 0, 1, 4, 7, 15, 5, 3,
+  floatformat_intbit_no,
+  "floatformat_nv_fp8_e4m3_big",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp8_e4m3_little =
+{
+  floatformat_little, 8, 0, 1, 4, 7, 15, 5, 3,
+  floatformat_intbit_no,
+  "floatformat_nv_fp8_e4m3_little",
+  floatformat_always_valid,
+  NULL
+};
+#endif
 
 #ifndef min
 #define min(a, b) ((a) < (b) ? (a) : (b))

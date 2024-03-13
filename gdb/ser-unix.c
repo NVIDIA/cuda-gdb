@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "serial.h"
 #include "ser-base.h"
@@ -165,10 +170,14 @@ hardwire_print_tty_state (struct serial *scb,
 static int
 hardwire_drain_output (struct serial *scb)
 {
+#if defined(NVIDIA_CUDA_GDB) && defined(__ANDROID__)
+  return ioctl (scb->fd, TCSBRK, 1);
+#else
   /* Ignore SIGTTOU which may occur during the drain.  */
   scoped_ignore_sigttou ignore_sigttou;
 
   return tcdrain (scb->fd);
+#endif
 }
 
 static int

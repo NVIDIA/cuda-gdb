@@ -16,6 +16,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #if !defined (BUILDSYM_H)
 #define BUILDSYM_H 1
 
@@ -241,6 +246,11 @@ struct buildsym_compunit
 
   void record_line (struct subfile *subfile, int line, CORE_ADDR pc,
 		    linetable_entry_flags flags);
+#ifdef NVIDIA_CUDA_GDB
+  void record_line (struct subfile *subfile, int line, CORE_ADDR pc,
+		    linetable_entry_flags flags, const char *inline_function,
+		    const char *context_filename, int context_line);
+#endif
 
   struct compunit_symtab *get_compunit_symtab ()
   {

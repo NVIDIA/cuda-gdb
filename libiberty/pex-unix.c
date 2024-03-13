@@ -366,7 +366,8 @@ pex_unix_close (struct pex_obj *obj ATTRIBUTE_UNUSED, int fd)
 
 /* Execute a child.  */
 
-#if defined(HAVE_SPAWNVE) && defined(HAVE_SPAWNVPE)
+/* CUDA */
+#if defined(HAVE_SPAWNVE) && defined(HAVE_SPAWNVPE) && !defined(__QNXNTO__)
 /* Implementation of pex->exec_child using the Cygwin spawn operation.  */
 
 /* Subroutine of pex_unix_exec_child.  Move OLD_FD to a new file descriptor

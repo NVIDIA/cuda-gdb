@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "frame.h"
 #include "frame-info.h"
@@ -44,6 +49,10 @@
 #include "hashtab.h"
 #include "valprint.h"
 #include "cli/cli-option.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-tdep.h"
+#include "cuda/cuda-frame.h"
+#endif
 
 /* The sentinel frame terminates the innermost end of the frame chain.
    If unwound, it returns the information needed to construct an
@@ -661,6 +670,14 @@ frame_unwind_caller_id (frame_info_ptr next_frame)
     return null_frame_id;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+bool get_frame_id_p (frame_info_ptr fi)
+{
+    if (fi == NULL)
+        return false;
+    return fi->this_id.p == frame_id_status::COMPUTED;
+}
+#endif
 const struct frame_id null_frame_id = { 0 }; /* All zeros.  */
 const struct frame_id sentinel_frame_id = { 0, 0, 0, FID_STACK_SENTINEL, 0, 1, 0 };
 const struct frame_id outer_frame_id = { 0, 0, 0, FID_STACK_OUTER, 0, 1, 0 };
@@ -2138,7 +2155,11 @@ get_prev_frame_maybe_check_cycle (frame_info_ptr this_frame)
 	 PREV_FRAME into the cache; if PREV_FRAME is unique then we do want
 	 it in the cache, but if it is a duplicate and CYCLE_DETECTION_P is
 	 false, then we don't want to unlink it.  */
+#ifdef NVIDIA_CUDA_GDB
+      if (!frame_stash_add (prev_frame.get ()) && cycle_detection_p && !cuda_current_focus::isDevice ())
+#else
       if (!frame_stash_add (prev_frame.get ()) && cycle_detection_p)
+#endif
 	{
 	  /* Another frame with the same id was already in the stash.  We just
 	     detected a cycle.  */
@@ -2248,6 +2269,18 @@ get_prev_frame_always_1 (frame_info_ptr this_frame)
       return NULL;
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - frames */
+  /* Stop unwinding if the current frame is the outermost CUDA device frame */
+  if (this_frame->level >= 0
+      && cuda_current_focus::isDevice ()
+      && cuda_frame_outermost_p (this_frame))
+    {
+      frame_debug_printf ("-> %s // Outermost CUDA frame", this_frame->to_string ().c_str ());
+      this_frame->stop_reason = UNWIND_NULL_ID;
+      return NULL;
+    }
+#endif
   /* Check that this frame's ID isn't inner to (younger, below, next)
      the next frame.  This happens when a frame unwind goes backwards.
      This check is valid only if this frame and the next frame are NORMAL.
@@ -2529,6 +2562,17 @@ get_prev_frame (frame_info_ptr this_frame)
       return NULL;
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - frames */
+  /* Stop unwinding if the current frame is the outermost CUDA device frame */
+  if (this_frame->level >= 0
+      && cuda_current_focus::isDevice ()
+      && cuda_frame_outermost_p (get_next_frame (this_frame)))
+    {
+      frame_debug_got_null_frame (this_frame, "outermost CUDA device frame");
+      return NULL;
+    }
+#endif
   /* If the user's backtrace limit has been exceeded, stop.  We must
      add two to the current level; one of those accounts for backtrace_limit
      being 1-based and the level being 0-based, and the other accounts for

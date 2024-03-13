@@ -827,6 +827,7 @@ with_gnu_ld
 enable_libtool_lock
 enable_plugins
 enable_largefile
+enable_cuda
 enable_checking
 enable_64_bit_bfd
 enable_targets
@@ -1492,6 +1493,7 @@ Optional Features:
   --disable-libtool-lock  avoid locking (might break parallel builds)
   --enable-plugins        Enable support for plugins
   --disable-largefile     omit support for large files
+  --disable-cuda          disable CUDA support (cuda-gdb)
   --enable-checking       enable run-time checks
   --enable-64-bit-bfd     64-bit support (on hosts with narrower word sizes)
   --enable-targets        alternative target configurations
@@ -11106,7 +11108,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11109 "configure"
+#line 11111 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -11212,7 +11214,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11215 "configure"
+#line 11217 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -11850,6 +11852,23 @@ else
   PLUGINS_FALSE=
 fi
 
+
+# Enable CUDA
+# Check whether --enable-cuda was given.
+if test "${enable_cuda+set}" = set; then :
+  enableval=$enable_cuda; case "${enableval}" in
+    yes | no)	;;
+    *)		as_fn_error $? "bad value $enableval for --enable-cuda" "$LINENO" 5 ;;
+  esac
+else
+  enable_cuda=yes
+fi
+
+if test x"$enable_cuda" = xyes; then
+
+$as_echo "#define NVIDIA_CUDA_GDB 1" >>confdefs.h
+
+fi
 
 ac_checking=
 . ${srcdir}/development.sh

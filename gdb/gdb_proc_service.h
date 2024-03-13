@@ -23,6 +23,15 @@
 
 struct thread_info;
 
+#ifdef NVIDIA_CUDA_GDB
+#ifndef HAVE_LWPID_T
+#ifndef __ANDROID__
+typedef unsigned int lwpid_t;
+#else
+#include <thread_db.h> /* for lwpid */
+#endif
+#endif
+#endif
 /* GDB specific structure that identifies the target process.  */
 struct ps_prochandle
 {

@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "frame.h"
 #include "inferior.h"
@@ -1909,6 +1914,16 @@ skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc, CORE_ADDR lim_pc,
 
 	  /* Another way to set up the frame pointer.  */
 	}
+#ifdef NVIDIA_CUDA_GDB
+      else if (op == 0x603e0000	/* oril r30, r1, 0x0 */)
+	{
+	  fdata->frameless = 0;
+	  framep = 1;
+	  fdata->alloca_reg = (tdep->ppc_gp0_regnum + 30);
+	  continue;
+	  /* Another way to set up the frame pointer.  */
+	}
+#endif
       else if (op == 0x603f0000	/* oril r31, r1, 0x0 */
 	       || op == 0x7c3f0b78)
 	{			/* mr r31, r1 */

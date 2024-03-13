@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "breakpoint.h"
 #include "inline-frame.h"
@@ -352,7 +357,13 @@ skip_inline_frames (thread_info *thread, bpstat *stop_chain)
   CORE_ADDR this_pc = get_frame_pc (get_current_frame ());
   frame_block = block_for_pc (this_pc);
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - inline frame support */
+  /* For the CUDA frames, we want to always expose the inlined frames */
+  if (frame_block != NULL && !cuda_current_focus::isDevice ())
+#else
   if (frame_block != NULL)
+#endif
     {
       cur_block = frame_block;
       while (cur_block->superblock ())

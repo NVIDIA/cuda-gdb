@@ -15,6 +15,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef NAT_GDB_THREAD_DB_H
 #define NAT_GDB_THREAD_DB_H
 
@@ -25,7 +30,11 @@
 #endif
 
 #ifndef LIBTHREAD_DB_SO
+#if defined(NVIDIA_CUDA_GDB) && defined(__ANDROID__)
+#define LIBTHREAD_DB_SO "libthread_db.so"
+#else
 #define LIBTHREAD_DB_SO "libthread_db.so.1"
+#endif
 #endif
 
 #ifndef LIBTHREAD_DB_SEARCH_PATH

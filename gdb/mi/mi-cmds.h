@@ -19,6 +19,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2023 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef MI_MI_CMDS_H
 #define MI_MI_CMDS_H
 
@@ -44,6 +49,20 @@ extern mi_cmd_argv_ftype mi_cmd_break_condition;
 extern mi_cmd_argv_ftype mi_cmd_break_commands;
 extern mi_cmd_argv_ftype mi_cmd_break_passcount;
 extern mi_cmd_argv_ftype mi_cmd_break_watch;
+#ifdef NVIDIA_CUDA_GDB
+extern mi_cmd_argv_ftype mi_cmd_cuda_info_devices;
+extern mi_cmd_argv_ftype mi_cmd_cuda_info_sms;
+extern mi_cmd_argv_ftype mi_cmd_cuda_info_warps;
+extern mi_cmd_argv_ftype mi_cmd_cuda_info_lanes;
+extern mi_cmd_argv_ftype mi_cmd_cuda_info_kernels;
+extern mi_cmd_argv_ftype mi_cmd_cuda_info_blocks;
+extern mi_cmd_argv_ftype mi_cmd_cuda_info_threads;
+extern mi_cmd_argv_ftype mi_cmd_cuda_info_launch_trace;
+extern mi_cmd_argv_ftype mi_cmd_cuda_info_launch_children;
+extern mi_cmd_argv_ftype mi_cmd_cuda_info_contexts;
+extern mi_cmd_argv_ftype mi_cmd_cuda_focus_query;
+extern mi_cmd_argv_ftype mi_cmd_cuda_focus_switch;
+#endif
 extern mi_cmd_argv_ftype mi_cmd_catch_assert;
 extern mi_cmd_argv_ftype mi_cmd_catch_exception;
 extern mi_cmd_argv_ftype mi_cmd_catch_handlers;

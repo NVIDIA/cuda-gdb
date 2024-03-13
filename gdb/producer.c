@@ -123,8 +123,10 @@ producer_is_icc (const char *producer, int *major, int *minor)
 bool
 producer_is_llvm (const char *producer)
 {
+  /* CUDA - add PGI support */
   return ((producer != NULL) && (startswith (producer, "clang ")
-				 || startswith (producer, " F90 Flang ")));
+                                 || startswith (producer, " F90 Flang ")
+                                 || startswith (producer, " PG")));
 }
 
 /* See producer.h.  */

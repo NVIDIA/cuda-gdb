@@ -22,6 +22,7 @@
 
 #include "expop.h"
 #include "objc-lang.h"
+#include "cuda/cuda-lang.h"
 
 extern struct value *eval_op_objc_selector (struct type *expect_type,
 					    struct expression *exp,

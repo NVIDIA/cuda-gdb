@@ -58,6 +58,11 @@
 #define X86_XSTATE_PKRU_SIZE	2696
 #define X86_XSTATE_MAX_SIZE	2696
 
+#ifdef NVIDIA_BUGFIX
+// Temporary workaround for newer chips with larger xstate sizes
+#undef X86_XSTATE_MAX_SIZE
+#define X86_XSTATE_MAX_SIZE	(32 * 1024)
+#endif
 
 /* In case one of the MPX XCR0 bits is set we consider we have MPX.  */
 #define HAS_MPX(XCR0) (((XCR0) & X86_XSTATE_MPX) != 0)
