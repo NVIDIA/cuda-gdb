@@ -307,6 +307,9 @@
 /* Define to 1 if `vfork' works. */
 #undef HAVE_WORKING_VFORK
 
+/* Define if building cuda-gdb. */
+#undef NVIDIA_CUDA_GDB
+
 /* Name of package */
 #undef PACKAGE
 

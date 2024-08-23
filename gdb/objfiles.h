@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #if !defined (OBJFILES_H)
 #define OBJFILES_H
 
@@ -43,6 +48,9 @@
 struct htab;
 struct objfile_data;
 struct partial_symbol;
+#ifdef NVIDIA_CUDA_GDB
+struct cuda_regmap_table;
+#endif
 
 /* This structure maintains information on a per-objfile basis about the
    "entry point" of the objfile, and the scope within which the entry point
@@ -328,6 +336,10 @@ struct objfile_per_bfd_storage
 
   minimal_symbol *msymbol_hash[MINIMAL_SYMBOL_HASH_SIZE] {};
 
+#ifdef NVIDIA_CUDA_GDB
+  /* This is a hash table used to index the minimal symbols by lowercase name.  */
+  struct minimal_symbol *msymbol_lowercase_hash[MINIMAL_SYMBOL_HASH_SIZE];
+#endif
   /* This hash table is used to index the minimal symbols by their
      demangled names.  Uses a language-specific hash function via
      search_name_hash.  */
@@ -588,24 +600,36 @@ public:
   void require_partial_symbols (bool verbose);
 
   /* Return the relocation offset applied to SECTION.  */
+#ifdef NVIDIA_CUDA_GDB
+  CORE_ADDR section_offset (bfd_section *section, int idx) const
+#else
   CORE_ADDR section_offset (bfd_section *section) const
+#endif
   {
     /* The section's owner can be nullptr if it is one of the _bfd_std_section
        section.  */
     gdb_assert (section->owner == nullptr || section->owner == this->obfd);
 
+#ifndef NVIDIA_CUDA_GDB
     int idx = gdb_bfd_section_index (this->obfd.get (), section);
+#endif
     return this->section_offsets[idx];
   }
 
   /* Set the relocation offset applied to SECTION.  */
+#ifdef NVIDIA_CUDA_GDB
+  void set_section_offset (bfd_section *section, int idx, CORE_ADDR offset)
+#else
   void set_section_offset (bfd_section *section, CORE_ADDR offset)
+#endif
   {
     /* The section's owner can be nullptr if it is one of the _bfd_std_section
        section.  */
     gdb_assert (section->owner == nullptr || section->owner == this->obfd);
 
+#ifndef NVIDIA_CUDA_GDB
     int idx = gdb_bfd_section_index (this->obfd.get (), section);
+#endif
     this->section_offsets[idx] = offset;
   }
 
@@ -770,6 +794,25 @@ public:
      store these here rather than in struct block.  Static links must be
      allocated on the objfile's obstack.  */
   htab_up static_links;
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - cuda_objfile */
+  bool cuda_objfile = false;
+  /* CUDA - Whether this objfile is in the process of being discarded or not.
+     This is used as a way to tell GDB that we no longer want types associated
+     with this particular CUDA objfile and therefore want the types to be
+     architecture-based.  */
+  int discarding = 0;
+  /* CUDA - regmap */
+  struct cuda_regmap_table *cuda_regmap = NULL;
+  /* CUDA - skip prologue */
+  int cuda_producer_is_open64 = 0;
+  /* A unique sequence identifier for the global linked list */
+  int id;
+  /* True if host shadow function name scanning has occured */
+  bool cuda_host_shadow_scan_complete = false;
+  /* True if this objfile contains host shadow functions */
+  bool cuda_host_shadow_found = false;
+#endif
 
   /* JIT-related data for this objfile, if the objfile is a JITer;
      that is, it produces JITed objfiles.  */
@@ -809,13 +852,21 @@ struct obj_section
   /* Relocation offset applied to the section.  */
   CORE_ADDR offset () const
   {
+#ifdef NVIDIA_CUDA_GDB
+    return this->objfile->section_offset (this->the_bfd_section, this->bfd_index);
+#else
     return this->objfile->section_offset (this->the_bfd_section);
+#endif
   }
 
   /* Set the relocation offset applied to the section.  */
   void set_offset (CORE_ADDR offset)
   {
+#ifdef NVIDIA_CUDA_GDB
+    this->objfile->set_section_offset (this->the_bfd_section, this->bfd_index, offset);
+#else
     this->objfile->set_section_offset (this->the_bfd_section, offset);
+#endif
   }
 
   /* The memory address of the section (vma + offset).  */
@@ -839,6 +890,10 @@ struct obj_section
 
   /* True if this "overlay section" is mapped into an "overlay region".  */
   int ovly_mapped;
+#ifdef NVIDIA_CUDA_GDB
+  /* Memoized BFD section index returned from gdb_bfd_section_index  */
+  int bfd_index;
+#endif
 };
 
 /* Declarations for functions defined in objfiles.c */

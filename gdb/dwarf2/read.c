@@ -24,6 +24,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* FIXME: Various die-reading functions need to be more careful with
    reading off the end of the section.
    E.g., load_partial_dies, read_partial_die.  */
@@ -93,6 +98,12 @@
 #include "split-name.h"
 #include "gdbsupport/parallel-for.h"
 #include "gdbsupport/thread-pool.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-tdep.h"
+/* Need forward declaration for CUDA */
+static struct type *dwarf2_init_float_type (struct objfile *objfile, int bits, const char *name, 
+					    const char *name_hint, enum bfd_endian byte_order); 
+#endif
 
 /* When == 1, print basic high level tracing messages.
    When > 1, be more verbose.
@@ -1315,6 +1326,20 @@ typedef std::unique_ptr<struct dwo_file> dwo_file_up;
 static void process_cu_includes (dwarf2_per_objfile *per_objfile);
 
 static void check_producer (struct dwarf2_cu *cu);
+
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - Memory Segments */
+typedef struct
+{
+  struct symbol *sym;
+  type_instance_flags flags;
+} cuda_sti_t;
+static std::vector<cuda_sti_t> cuda_types_to_be_segmented;
+static void cuda_dwarf2_process_segmented_types (void);
+static void cuda_dwarf2_add_address_class (struct objfile *, struct symbol *,
+                                           struct attribute *, bool);
+static void make_segmented_type (cuda_sti_t &);
+#endif
 
 /* Various complaints about symbol reading that don't abort the process.  */
 
@@ -8511,6 +8536,9 @@ process_full_comp_unit (dwarf2_cu *cu, enum language pretend_language)
 
   per_objfile->set_symtab (cu->per_cu, cust);
 
+#ifdef NVIDIA_CUDA_GDB
+  cuda_dwarf2_process_segmented_types ();
+#endif
   /* Push it for inclusion processing later.  */
   per_objfile->per_bfd->just_read_cus.push_back (cu->per_cu);
 
@@ -9037,11 +9065,20 @@ dwarf2_compute_name (const char *name,
 		      struct value_print_options opts;
 
 		      if (baton != NULL)
+#ifdef NVIDIA_CUDA_GDB
+			v = dwarf2_evaluate_loc_desc (type, NULL, 
+						      baton->data, 
+						      baton->size, 
+						      baton->per_cu, 
+						      baton->per_objfile,
+						      /* FIXME: What should be passed for object address here? */ 0); 
+#else
 			v = dwarf2_evaluate_loc_desc (type, NULL,
 						      baton->data,
 						      baton->size,
 						      baton->per_cu,
 						      baton->per_objfile);
+#endif
 		      else if (bytes != NULL)
 			{
 			  v = allocate_value (type);
@@ -12088,6 +12125,14 @@ read_func_scope (struct die_info *die, struct dwarf2_cu *cu)
       return;
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - intercept functions with 0x0 low_pc and high_pc */
+  /* With Lazy loading, CNP, and SM35, weak definitions of functions 
+     with no strong definition lead to DWARF nodes with zero addresses
+     that should just be ignored. */
+  if (lowpc == 0 && highpc == 0)
+    return;
+#endif
   lowpc = gdbarch_adjust_dwarf2_addr (gdbarch, lowpc + baseaddr);
   highpc = gdbarch_adjust_dwarf2_addr (gdbarch, highpc + baseaddr);
 
@@ -14620,6 +14665,39 @@ read_structure_type (struct die_info *die, struct dwarf2_cu *cu)
   struct attribute *attr;
   const char *name;
 
+#ifdef NVIDIA_CUDA_GDB
+  name = dwarf2_name (die, cu);
+  int nv_bits = 0;
+  /* Load __nv_fp8_e5m2 and __nv_fp8_e4m3 structs as float */
+  if (name && (!strcmp(name, "__nv_fp8_e5m2") || !strcmp(name, "__nv_fp8_e4m3")))
+    nv_bits = 8;
+  /* Load __half and __nv_bfloat16 structs as float */
+  if (name && (!strcmp(name, "__half") || !strcmp(name, "__nv_bfloat16")))
+    nv_bits = 16;
+  /* If nv_bits is non-zero, load the nv fp type structs as float. */
+  if (nv_bits)
+    {
+      enum bfd_endian byte_order = gdbarch_byte_order (objfile->arch ());
+      attr = dwarf2_attr (die, DW_AT_endianity, cu);
+      if (attr)
+	{
+	  int endianity = attr->as_unsigned ();
+	  switch (endianity)
+	    {
+	    case DW_END_big:
+	      byte_order = BFD_ENDIAN_BIG;
+	      break;
+	    case DW_END_little:
+	      byte_order = BFD_ENDIAN_LITTLE;
+	      break;
+	    }
+	}
+      type = dwarf2_init_float_type (objfile, nv_bits, name, name, byte_order);
+      type->set_name (name);
+      set_die_type (die, type, cu);
+      return type;
+    }
+#endif
   /* If the definition of this type lives in .debug_types, read that type.
      Don't follow DW_AT_specification though, that will take us back up
      the chain and we want to go down.  */
@@ -14933,6 +15011,12 @@ process_structure_scope (struct die_info *die, struct dwarf2_cu *cu)
   if (type == NULL)
     type = read_structure_type (die, cu);
 
+#ifdef NVIDIA_CUDA_GDB
+  const char *type_name = type->name ();
+  if (type_name && (!strcmp (type_name, "__half") || !strcmp(type_name, "__nv_bfloat16")
+		    || !strcmp(type_name, "__nv_fp8_e5m2") || !strcmp(type_name, "__nv_fp8_e4m3")))
+    return;
+#endif
   bool has_template_parameters = false;
   if (die->child != NULL && ! die_is_declaration (die, cu))
     {
@@ -15621,6 +15705,77 @@ quirk_ada_thick_pointer (struct die_info *die, struct dwarf2_cu *cu,
   return result;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - Memory Segments */
+static type *
+make_segmented_type_aux (type *t, type_instance_flags flags,
+			 htab_t marked_types)
+{
+  type_instance_flags old_flags = flags;
+  /* Bail out if sym_type has already been handled. */
+  void **slot = htab_find_slot (marked_types, t, INSERT);
+  if (*slot != NULL)
+    return (type *)*slot;
+  /* If this is a pointer or reference type, save off the current flags. */
+  if (t->code () == TYPE_CODE_PTR || t->code () == TYPE_CODE_REF
+      || t->code () == TYPE_CODE_RVALUE_REF)
+    {
+      flags = t->instance_flags ();
+    }
+  /* Create the address class for this symbol's type and add the updated type
+   * to the hash table slot. */
+  type *result = make_type_with_address_space (t, old_flags);
+  *slot = result;
+  /* CUDA Fix. If it's an enum type, we're done processing it. The 'type' of
+     its TYPE_FIELDS is undetermined, therefore there is no need to parse the
+     TYPE_FIELDS.  Enum types have no TARGET_TYPEs either. */
+  if (result->code () == TYPE_CODE_ENUM)
+    return result;
+  /* For arrays, segment only the index type */
+  if (result->code () == TYPE_CODE_ARRAY)
+    result->set_index_type (make_segmented_type_aux (result->index_type (),
+						     old_flags, marked_types));
+  else
+    /* We need to follow this type's fields, if there are any */
+    for (auto i = 0; i < result->num_fields (); ++i)
+      {
+	result->field (i).set_type (make_segmented_type_aux (
+	    result->field (i).type (), old_flags, marked_types));
+      }
+  /* We need to follow target types */
+  if (result->target_type ())
+    {
+      result->set_target_type (make_segmented_type_aux (result->target_type (),
+							flags, marked_types));
+    }
+  return result;
+}
+static void
+make_segmented_type (cuda_sti_t &sti)
+{
+  /* Sanity check */
+  if (!sti.sym)
+    return;
+  /* Create required hash tables */
+  htab_up marked_types (htab_create_alloc (
+      1, htab_hash_pointer, htab_eq_pointer, NULL, xcalloc, xfree));
+  /* First, we need to make a copy of the type, so it is not overwritten
+     with subsequent passes and so this pass doesn't overwrite any previous
+     passes. Try to do a deep copy. Otherwise we need a shallow copy. */
+  if (sti.sym->type ()->is_objfile_owned ())
+    {
+      htab_up copied_types = create_copied_types_hash ();
+      sti.sym->set_type (
+	  copy_type_recursive (sti.sym->type (), copied_types.get ()));
+    }
+  else
+    sti.sym->set_type (copy_type (sti.sym->type ()));
+  /* Then we mark the segment for each field of the type, marking the types
+     that have already been visited using marked_types. */
+  sti.sym->set_type (make_segmented_type_aux (sti.sym->type (), sti.flags,
+					      marked_types.get ()));
+}
+#endif /* NVIDIA_CUDA_GDB */
 /* Extract all information from a DW_TAG_array_type DIE and put it in
    the DIE's type field.  For now, this only handles one dimensional
    arrays.  */
@@ -16309,12 +16464,45 @@ read_tag_reference_type (struct die_info *die, struct dwarf2_cu *cu,
   if (type)
     return type;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - PGI generates void& DIEs. fixup to void* */
+  if (target_type->code () == TYPE_CODE_VOID)
+    type = lookup_pointer_type (target_type);
+  else
+    type = lookup_reference_type (target_type, refcode);
+
+  /* Track the DW_AT_address_class tags on reference dies. */
+  struct objfile *objfile = cu->per_objfile->objfile;
+  struct gdbarch *gdbarch = objfile->arch ();
+  int byte_size;
+  attr = dwarf2_attr (die, DW_AT_byte_size, cu);
+  if (attr != nullptr)
+    byte_size = attr->constant_value (cu_header->addr_size);
+  else
+    byte_size = cu_header->addr_size;
+  struct attribute *attr_address_class
+      = dwarf2_attr (die, DW_AT_address_class, cu);
+  if (attr_address_class)
+    {
+      int addr_class = attr_address_class->constant_value (DW_ADDR_none);
+      if (gdbarch_address_class_type_flags_p (gdbarch))
+	{
+	  type_instance_flags type_flags = gdbarch_address_class_type_flags (
+	      gdbarch, byte_size, addr_class);
+	  gdb_assert ((type_flags & ~TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL)
+		      == 0);
+	  type = make_type_with_address_space (type, type_flags);
+	}
+    }
+  type->set_length (byte_size);
+#else
   type = lookup_reference_type (target_type, refcode);
   attr = dwarf2_attr (die, DW_AT_byte_size, cu);
   if (attr != nullptr)
     type->set_length (attr->constant_value (cu_header->addr_size));
   else
     type->set_length (cu_header->addr_size);
+#endif
 
   maybe_set_alignment (cu, die, type);
   return set_die_type (die, type, cu);
@@ -16604,6 +16792,25 @@ read_subroutine_type (struct die_info *die, struct dwarf2_cu *cu)
   else
     TYPE_CALLING_CONVENTION (ftype) = DW_CC_normal;
 
+#ifdef NVIDIA_CUDA_GDB
+   /* Check for the calling convention. A DW_CC_program indicates that
+      the subroutine is the the "main" of the program. This needs
+      to be set for languages that don't have a predefined name
+      for the starting subroutines, such as FORTRAN. */
+  switch (TYPE_CALLING_CONVENTION (ftype))
+    {
+      case DW_CC_program:
+	/* Set this subroutine as the "main" subroutine
+	   for the program. */
+	if (ftype->name () != NULL)
+	  set_objfile_main_name (objfile, ftype->name (), cu->per_cu->lang ());
+	break;
+      case DW_CC_normal:
+      case DW_CC_nocall:
+	default:
+	break;
+    }
+#endif
   /* Record whether the function returns normally to its caller or not
      if the DWARF producer set that information.  */
   attr = dwarf2_attr (die, DW_AT_noreturn, cu);
@@ -17277,7 +17484,16 @@ read_base_type (struct die_info *die, struct dwarf2_cu *cu)
 	type = dwarf2_init_float_type (objfile, bits, name, name, byte_order);
 	break;
       case DW_ATE_signed:
+#ifdef NVIDIA_CUDA_GDB
+	if (bits == 0) {
+	  /* CUDA - PGI, a proprietary compiler, uses a signed integer of 0 bits to signal void */
+	  type = init_type (objfile, TYPE_CODE_VOID, 0, NULL);
+	} else {
+          type = dwarf2_init_integer_type (cu, objfile, bits, 0, name);
+	}
+#else
 	type = dwarf2_init_integer_type (cu, objfile, bits, 0, name);
+#endif
 	break;
       case DW_ATE_unsigned:
 	if (cu->lang () == language_fortran
@@ -19711,6 +19927,15 @@ dwarf2_attr (struct die_info *die, unsigned int name, struct dwarf2_cu *cu)
 
       for (i = 0; i < die->num_attrs; ++i)
 	{
+#ifdef NVIDIA_CUDA_GDB
+          /* CUDA - DW_AT_abstract_origin */
+          /* The Open64 compiler may incorrectly generate zero
+             DW_AT_abstract_origin attribute, Simply ignore the whole attribute
+             when it happens. */
+          if (die->attrs[i].name == DW_AT_abstract_origin &&
+              to_underlying (die->attrs[i].get_ref_die_offset ()) == 0)
+            continue;
+#endif
 	  if (die->attrs[i].name == name)
 	    return &die->attrs[i];
 	  if (die->attrs[i].name == DW_AT_specification
@@ -19937,6 +20162,15 @@ compute_include_file_name (const struct line_header *lh, const file_entry &fe,
 
 /* State machine to track the state of the line number program.  */
 
+#ifdef NVIDIA_CUDA_GDB
+/* Information for extended linenumber info */
+typedef struct
+{
+  unsigned int m_linenumber;
+  const char   *m_filename;
+} extended_inline_info;
+#endif
+
 class lnp_state_machine
 {
 public:
@@ -20018,6 +20252,10 @@ public:
   void handle_end_sequence ()
   {
     m_currently_recording_lines = true;
+#ifdef NVIDIA_CUDA_GDB
+    m_context = 0;
+    m_function_name = 0;
+#endif
   }
 
   /* Handle DW_LNS_set_prologue_end.  */
@@ -20026,6 +20264,17 @@ public:
     m_flags |= LEF_PROLOGUE_END;
   }
 
+#ifdef NVIDIA_CUDA_GDB
+  void handle_inlined_call (ULONGEST context, ULONGEST offset) 
+  { 
+    m_context = context; 
+    m_function_name = offset; 
+  } 
+  void handle_set_function_name (ULONGEST function_name) 
+  { 
+    m_function_name = function_name; 
+  } 
+#endif
 private:
   /* Advance the line by LINE_DELTA.  */
   void advance_line (int line_delta)
@@ -20082,6 +20331,14 @@ private:
      example, when discriminators are present.  PR 17276.  */
   unsigned int m_last_line = 0;
   bool m_line_has_non_zero_discriminator = false;
+
+#ifdef NVIDIA_CUDA_GDB
+  /* State machine additions for CUDA-specific inlined function
+     call-site annotations */
+  ULONGEST m_context = 0; 
+  ULONGEST m_function_name = 0; 
+  std::vector<extended_inline_info> m_context_stack; 
+#endif
 };
 
 void
@@ -20198,6 +20455,39 @@ dwarf_record_line_p (struct dwarf2_cu *cu,
 /* Use the CU's builder to record line number LINE beginning at
    address ADDRESS in the line table of subfile SUBFILE.  */
 
+#ifdef NVIDIA_CUDA_GDB
+static void
+dwarf_record_line_1 (struct gdbarch *gdbarch, struct subfile *subfile,
+                     unsigned int line, CORE_ADDR address,
+                     linetable_entry_flags flags, struct dwarf2_cu *cu,
+                     const char *inline_function, const char *context_filename,
+                     int context_line)
+{
+  CORE_ADDR addr = gdbarch_addr_bits_remove (gdbarch, address);
+  if (dwarf_line_debug)
+    {
+      if (inline_function)
+        {
+          gdb_printf (gdb_stdlog,
+                      "Recording line %u, file %s, address %s inline %s "
+                      "(context %s:%d)\n",
+                      line, lbasename (subfile->name.c_str ()),
+                      paddress (gdbarch, address), inline_function,
+                      context_filename, context_line);
+        }
+      else
+        {
+          gdb_printf (gdb_stdlog, "Recording line %u, file %s, address %s\n",
+                      line, lbasename (subfile->name.c_str ()),
+                      paddress (gdbarch, address));
+        }
+    }
+  if (cu != nullptr)
+    cu->get_builder ()->record_line (subfile, line, addr, flags,
+                                     inline_function, context_filename,
+                                     context_line);
+}
+#else
 static void
 dwarf_record_line_1 (struct gdbarch *gdbarch, struct subfile *subfile,
 		     unsigned int line, CORE_ADDR address,
@@ -20217,15 +20507,24 @@ dwarf_record_line_1 (struct gdbarch *gdbarch, struct subfile *subfile,
   if (cu != nullptr)
     cu->get_builder ()->record_line (subfile, line, addr, flags);
 }
+#endif /* NVIDIA_CUDA_GDB */
 
 /* Subroutine of dwarf_decode_lines_1 to simplify it.
    Mark the end of a set of line number records.
    The arguments are the same as for dwarf_record_line_1.
    If SUBFILE is NULL the request is ignored.  */
 
+#ifdef NVIDIA_CUDA_GDB
+static void 
+dwarf_finish_line (struct gdbarch *gdbarch, struct subfile *subfile, 
+		   CORE_ADDR address, struct dwarf2_cu *cu, 
+		   const char *inline_function_name, 
+		   const char *context_filename, ULONGEST context_line)
+#else
 static void
 dwarf_finish_line (struct gdbarch *gdbarch, struct subfile *subfile,
 		   CORE_ADDR address, struct dwarf2_cu *cu)
+#endif
 {
   if (subfile == NULL)
     return;
@@ -20238,12 +20537,31 @@ dwarf_finish_line (struct gdbarch *gdbarch, struct subfile *subfile,
 		  paddress (gdbarch, address));
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  dwarf_record_line_1 (gdbarch, subfile, 0, address, LEF_IS_STMT, cu, inline_function_name, context_filename, context_line);
+#else
   dwarf_record_line_1 (gdbarch, subfile, 0, address, LEF_IS_STMT, cu);
+#endif
 }
 
 void
 lnp_state_machine::record_line (bool end_sequence)
 {
+#ifdef NVIDIA_CUDA_GDB
+  if (dwarf_line_debug)
+    {
+      gdb_printf (gdb_stdlog,
+		  "Processing actual line %u: file %u,"
+		  " address %s, is_stmt %u, prologue_end %u, discrim %u"
+		  " context %lu %s\n",
+		  m_line, m_file,
+		  paddress (m_gdbarch, m_address),
+		  (m_flags & LEF_IS_STMT) != 0,
+		  (m_flags & LEF_PROLOGUE_END) != 0,
+		  m_discriminator, m_context,
+		  (end_sequence ? "\t(end sequence)" : ""));
+    }
+#else
   if (dwarf_line_debug)
     {
       gdb_printf (gdb_stdlog,
@@ -20256,6 +20574,28 @@ lnp_state_machine::record_line (bool end_sequence)
 		  m_discriminator,
 		  (end_sequence ? "\t(end sequence)" : ""));
     }
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
+  if (end_sequence)
+    m_context_stack.clear ();
+  else
+    {
+      extended_inline_info info;
+      info.m_filename = current_file ()->name;
+      info.m_linenumber = m_line;
+      m_context_stack.push_back (info);
+    }
+  unsigned int context_line = 0;
+  const char *context_filename = NULL;
+  const char *inline_function_name = NULL;
+  if (m_context && (m_context <= m_context_stack.size()))
+    {
+      inline_function_name = ((const char *)m_line_header->debug_str_base) + m_function_name;
+      context_line = m_context_stack[m_context - 1].m_linenumber;
+      context_filename = m_context_stack[m_context - 1].m_filename;
+    }
+#endif
 
   file_entry *fe = current_file ();
 
@@ -20291,8 +20631,15 @@ lnp_state_machine::record_line (bool end_sequence)
 
       if ((file_changed && !ignore_this_line) || end_sequence)
 	{
+#ifdef NVIDIA_CUDA_GDB
+	  dwarf_finish_line (m_gdbarch, m_last_subfile, m_address,
+			     m_currently_recording_lines ? m_cu : nullptr,
+			     inline_function_name,
+			     context_filename, context_line);
+#else
 	  dwarf_finish_line (m_gdbarch, m_last_subfile, m_address,
 			     m_currently_recording_lines ? m_cu : nullptr);
+#endif
 	}
 
       if (!end_sequence && !ignore_this_line)
@@ -20306,10 +20653,19 @@ lnp_state_machine::record_line (bool end_sequence)
 				   m_last_subfile))
 	    {
 	      buildsym_compunit *builder = m_cu->get_builder ();
+#ifdef NVIDIA_CUDA_GDB
+	      dwarf_record_line_1 (m_gdbarch,
+				   builder->get_current_subfile (),
+				   m_line, m_address, lte_flags,
+				   m_currently_recording_lines ? m_cu : nullptr,
+				   inline_function_name,
+				   context_filename, context_line);
+#else
 	      dwarf_record_line_1 (m_gdbarch,
 				   builder->get_current_subfile (),
 				   m_line, m_address, lte_flags,
 				   m_currently_recording_lines ? m_cu : nullptr);
+#endif
 	    }
 	  m_last_subfile = m_cu->get_builder ()->get_current_subfile ();
 	  m_last_line = m_line;
@@ -20432,6 +20788,7 @@ dwarf_decode_lines_1 (struct line_header *lh, struct dwarf2_cu *cu,
 	      extended_end = line_ptr + extended_len;
 	      extended_op = read_1_byte (abfd, line_ptr);
 	      line_ptr += 1;
+#ifndef NVIDIA_CUDA_GDB
 	      if (DW_LNE_lo_user <= extended_op
 		  && extended_op <= DW_LNE_hi_user)
 		{
@@ -20439,6 +20796,7 @@ dwarf_decode_lines_1 (struct line_header *lh, struct dwarf2_cu *cu,
 		  line_ptr = extended_end;
 		  break;
 		}
+#endif
 	      switch (extended_op)
 		{
 		case DW_LNE_end_sequence:
@@ -20492,9 +20850,35 @@ dwarf_decode_lines_1 (struct line_header *lh, struct dwarf2_cu *cu,
 		    state_machine.handle_set_discriminator (discr);
 		  }
 		  break;
+#ifdef NVIDIA_CUDA_GDB
+		case DW_LNE_inlined_call:
+		  {
+		    ULONGEST context = read_unsigned_leb128 (abfd, line_ptr, &bytes_read);
+		    line_ptr += bytes_read;
+		    ULONGEST offset = read_unsigned_leb128 (abfd, line_ptr, &bytes_read);
+		    line_ptr += bytes_read;
+
+		    state_machine.handle_inlined_call (context, offset);
+		  }
+		  break;
+		case DW_LNE_set_function_name:
+		  {
+		    ULONGEST function_name = read_unsigned_leb128 (abfd, line_ptr, &bytes_read);
+		    line_ptr += bytes_read;
+		    state_machine.handle_set_function_name (function_name);
+		  }
+		  break;
+#endif
 		default:
+#ifdef NVIDIA_CUDA_GDB
+		  /* Unknown extended opcode, warn and ignore it */
+		  complaint (_(".debug_line section: unknown extended opcode %d"), op_code);
+		  line_ptr = extended_end;
+		  break;
+#else
 		  complaint (_("mangled .debug_line section"));
 		  return;
+#endif
 		}
 	      /* Make sure that we parsed the extended op correctly.  If e.g.
 		 we expected a different address size than the producer used,
@@ -20567,6 +20951,9 @@ dwarf_decode_lines_1 (struct line_header *lh, struct dwarf2_cu *cu,
 	    default:
 	      {
 		/* Unknown standard opcode, ignore it.  */
+#ifdef NVIDIA_CUDA_GDB
+		complaint (_(".debug_line section: unknown standard opcode %d"), op_code);
+#endif
 		int i;
 
 		for (i = 0; i < lh->standard_opcode_lengths[op_code]; i++)
@@ -20753,6 +21140,53 @@ var_decode_location (struct attribute *attr, struct symbol *sym,
     cu->has_loclist = true;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - Memory Segments */
+/* Track the address class for all variables (not just pointers).  This will
+   be used to indicate which memory segment is associated with a given symbol.
+ */
+static void
+cuda_dwarf2_add_address_class (struct objfile *objf, struct symbol *sym,
+			       struct attribute *attr, bool is_variable)
+{
+  gdb_assert (objf);
+  gdb_assert (sym);
+  gdb_assert (attr);
+  int addr_class = attr->constant_value (DW_ADDR_none);
+  struct gdbarch *gdbarch = objf->arch ();
+  cuda_sti_t sti;
+  if (gdbarch_address_class_type_flags_p (gdbarch))
+    {
+      sti.flags = gdbarch_address_class_type_flags (
+	  gdbarch, sym->type ()->length (), addr_class);
+      gdb_assert ((sti.flags & ~TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL) == 0);
+    }
+  else
+    return;
+  sti.sym = sym;
+  /* CUDA - Managed variable */
+  if (sti.flags == TYPE_INSTANCE_FLAG_CUDA_GLOBAL && is_variable)
+    {
+      const char *name = sym->linkage_name ();
+      struct bound_minimal_symbol bmsym
+	  = lookup_minimal_symbol (name, nullptr, objf);
+      if (bmsym.minsym && bmsym.minsym->target_flag_1 ())
+	sti.flags = TYPE_INSTANCE_FLAG_CUDA_MANAGED;
+    }
+  cuda_types_to_be_segmented.emplace_back (std::move (sti));
+}
+static void
+cuda_dwarf2_process_segmented_types (void)
+{
+  if (cuda_types_to_be_segmented.size () == 0)
+    return;
+  for (auto &sti : cuda_types_to_be_segmented)
+    {
+      make_segmented_type (sti);
+    }
+  cuda_types_to_be_segmented.clear ();
+}
+#endif
 /* Given a pointer to a DWARF information entry, figure out if we need
    to make a symbol table entry for it, and if so, create a new entry
    and return a pointer to it.
@@ -20806,7 +21240,11 @@ new_symbol (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
       const char *linkagename = dw2_linkage_name (die, cu);
 
       if (linkagename == nullptr || cu->lang () == language_ada)
+#ifdef NVIDIA_CUDA_GDB
+	sym->set_linkage_name (name);
+#else
 	sym->set_linkage_name (physname);
+#endif
       else
 	{
 	  sym->set_demangled_name (physname, &objfile->objfile_obstack);
@@ -20826,6 +21264,31 @@ new_symbol (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 	sym->set_type (type);
       else
 	sym->set_type (die_type (die, cu));
+#ifdef NVIDIA_CUDA_GDB
+      /* Check for the calling convention. A DW_CC_program indicates that
+         the subroutine is the the "main" of the program. This needs
+         to be set for languages that don't have a predefined name
+         for the starting subroutines, such as FORTRAN. */
+      attr = dwarf2_attr (die, DW_AT_calling_convention, cu);
+      if (attr && (attr->as_unsigned () != 0))
+        {
+          switch (attr->as_unsigned ())
+            {
+            case DW_CC_program:
+              /* Set this subroutine as the "main" subroutine
+                 for the program. */
+              attr2 = dwarf2_attr (die, DW_AT_MIPS_linkage_name, cu);
+              set_objfile_main_name (objfile,
+				     attr2 ? attr2->as_string () : name,
+				     cu->per_cu->lang ());
+              break;
+            case DW_CC_normal:
+            case DW_CC_nocall:
+            default:
+              break;
+            }
+        }
+#endif
       attr = dwarf2_attr (die,
 			  inlined_func ? DW_AT_call_line : DW_AT_decl_line,
 			  cu);
@@ -20912,6 +21375,12 @@ new_symbol (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 	  if (sym->type ()->code () == TYPE_CODE_VOID)
 	    sym->set_type (objfile_type (objfile)->builtin_int);
 
+#ifdef NVIDIA_CUDA_GDB
+          /* CUDA - Memory Segments */
+          attr = dwarf2_attr (die, DW_AT_address_class, cu);
+          if (attr)
+            cuda_dwarf2_add_address_class (objfile, sym, attr, die->tag == DW_TAG_variable);
+#endif
 	  attr = dwarf2_attr (die, DW_AT_const_value, cu);
 	  /* In the case of DW_TAG_member, we should only be called for
 	     static const members.  */
@@ -21049,6 +21518,12 @@ new_symbol (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 		dwarf2_const_value (attr, sym, cu);
 	      }
 
+#ifdef NVIDIA_CUDA_GDB
+            /* CUDA - Memory Segments */
+            attr = dwarf2_attr (die, DW_AT_address_class, cu);
+            if (attr)
+              cuda_dwarf2_add_address_class (objfile, sym, attr, false);
+#endif
 	    list_to_add = cu->list_in_scope;
 	  }
 	  break;
@@ -22066,7 +22541,30 @@ dwarf2_name (struct die_info *die, struct dwarf2_cu *cu)
       && die->tag != DW_TAG_union_type
       && die->tag != DW_TAG_template_type_param
       && die->tag != DW_TAG_template_value_param)
+#ifdef NVIDIA_CUDA_GDB
+    {
+      /* Compiler support for some features such as OpenMP generates unnamed artificial
+       * subprograms. If GDB does not have an internal name for them, their local variables
+       * etc. will be invisible to GDB.
+       */
+      if ((die->tag == DW_TAG_subprogram) && dwarf2_attr (die, DW_AT_artificial, cu))
+	{     
+	  /* Look up the name used by the linker for the artificial subprogram to use
+	   * internally.
+	   */
+	  CORE_ADDR lowpc, highpc;
+	  if (dwarf2_get_pc_bounds (die, &lowpc, &highpc, cu, nullptr, nullptr))
+	    {
+	      struct bound_minimal_symbol bminsym = lookup_minimal_symbol_by_pc (lowpc);
+	      if (bminsym.minsym)
+		return bminsym.minsym->linkage_name ();
+	    }
+	}     
+      return NULL; 
+    }
+#else
     return NULL;
+#endif
 
   switch (die->tag)
     {
@@ -22464,10 +22962,17 @@ follow_die_ref (struct die_info *src_die, const struct attribute *attr,
 			    || cu->per_cu->is_dwz),
 			   ref_cu);
   if (!die)
+#ifdef NVIDIA_CUDA_GDB
+    warning (_("Dwarf Error: Cannot find DIE at %s referenced from DIE " 
+	   "at %s [in module %s]"), 
+	   sect_offset_str (sect_off), sect_offset_str (src_die->sect_off), 
+	   objfile_name (cu->per_objfile->objfile));
+#else
     error (_("Dwarf Error: Cannot find DIE at %s referenced from DIE "
 	   "at %s [in module %s]"),
 	   sect_offset_str (sect_off), sect_offset_str (src_die->sect_off),
 	   objfile_name (cu->per_objfile->objfile));
+#endif
 
   return die;
 }
@@ -23581,6 +24086,28 @@ dwarf2_per_cu_data::addr_size () const
   return this->get_header ()->addr_size;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - addr_size */
+/* Return the address size of the first compilation unit of the objfile. */
+int
+cuda_dwarf2_addr_size (struct objfile *objfile)
+{
+  int offset = 0; /* the offset of the first CU */
+  struct dwarf2_per_objfile *per_objfile = NULL;
+  gdb_byte *info_ptr = NULL;
+  struct comp_unit_head cu_header;
+  gdb_assert (objfile->cuda_objfile);
+  per_objfile = get_dwarf2_per_objfile (objfile);
+  /* Approximate addr_size from cuda gdbarch if .debug_info section is missing */
+  if (per_objfile->per_bfd->info.empty ())
+    return gdbarch_ptr_bit (cuda_get_gdbarch ()) / TARGET_CHAR_BIT;
+  info_ptr = (gdb_byte *) per_objfile->per_bfd->info.buffer + offset;
+  memset (&cu_header, 0, sizeof cu_header);
+  read_comp_unit_head (&cu_header, info_ptr, &per_objfile->per_bfd->info,
+		       rcuh_kind::COMPILE);
+  return cu_header.addr_size;
+}
+#endif
 /* See read.h.  */
 
 int
@@ -23663,8 +24190,12 @@ dwarf2_find_containing_comp_unit (sect_offset sect_off,
     {
       if (low == per_bfd->all_units.size () - 1
 	  && sect_off >= this_cu->sect_off + this_cu->length ())
+#ifdef NVIDIA_CUDA_GDB
+	complaint (_("invalid dwarf2 offset %s"), sect_offset_str (sect_off));
+#else
 	error (_("invalid dwarf2 offset %s"), sect_offset_str (sect_off));
       gdb_assert (sect_off < this_cu->sect_off + this_cu->length ());
+#endif
       return this_cu;
     }
 }
@@ -24147,3 +24678,153 @@ Warning: This option must be enabled before gdb reads the file."),
 			    selftests::find_containing_comp_unit::run_test);
 #endif
 }
+
+#ifdef NVIDIA_CUDA_GDB
+/******************************************************************************
+ *
+ * CUDA - line table
+ *
+ * Decode the .debug_line section when the .debug_info section is missing.
+ * Do this by setting up the dwarf2_per_objfile and related structures
+ * and then calling the standard dwarf_decode_line_header () and
+ * dwarf_decode_lines ().
+ *
+ *****************************************************************************/
+/* Add the objfile minimal_symbols to the block/symbol structure */
+static CORE_ADDR
+cuda_add_minsyms (struct dwarf2_cu *cu,
+		  struct objfile *objfile,
+		  const char *filename)
+{
+  struct cuda_symbol
+    {
+      minimal_symbol *msym;
+      CORE_ADDR start;
+      CORE_ADDR end;
+    };
+  /* Convert the list of minimal_symbols into a vector of cuda_symbol data */
+  std::vector<struct cuda_symbol> cuda_symbols;
+  for (auto msym : objfile->msymbols ())
+    {
+      cuda_symbols.push_back ({ msym,
+				msym->value_address (objfile),
+				msym->value_address (objfile) + msym->size () });
+    }
+  /* In the case of function cloning, the minimal symbol for the name of the CUDA
+     function will overlap the symbols for the cloned functions.
+     Search the cuda_symbols vector to detect if one symbol overlaps another. In this
+     case the end of the outer symbol is adjusted to no longer overlap. */
+  CORE_ADDR low_pc = (CORE_ADDR) ~0;
+  CORE_ADDR high_pc = 0;
+  for (auto &a : cuda_symbols)
+    {
+      for (auto &b : cuda_symbols)
+	{
+	  if (a.msym == b.msym)
+	    break;
+	  if ((a.start <= b.start) && (a.end >= b.end))
+	    {
+	      /* Shorten a_end to b_start if needed */
+	      if (a.end > b.start)
+		a.end = b.start;
+	    }
+	  else if ((b.start <= a.start) && (b.end >= a.end))
+	    {
+	      /* Shorten b_end to a_start if needed */
+	      if (b.end > a.start)
+		b.end = a.start;
+	    }
+	}
+      if (a.start < low_pc)
+	low_pc = a.start;
+      if (high_pc < a.end)
+	high_pc = a.end;
+    }
+  /* Create the compunit_symtab */
+  struct compunit_symtab *cust = cu->start_compunit_symtab (objfile->original_name, NULL, low_pc);
+  /* Create a filetable */
+  struct symtab *symtab = allocate_symtab (cust, filename);
+  cust->set_primary_filetab (symtab);
+  /* For each cuda_symbol, create a symbol for it in the file_symbols list
+     and create a corresponding block to place in the blockvector. */
+  for (auto &cuda_symbol : cuda_symbols)
+    {
+      minimal_symbol *msym = cuda_symbol.msym;
+      /* Allocate a new symbol and initialize its ownership by the
+	 objfile. */
+      symbol *sym = new (&objfile->objfile_obstack) symbol;
+      sym->set_domain (VAR_DOMAIN);
+      sym->set_aclass_index (LOC_BLOCK);
+      sym->set_type (objfile_type (objfile)->nodebug_text_symbol);
+      sym->set_value_address (msym->value_address (objfile));
+      sym->set_linkage_name (msym->linkage_name ());
+      /* Try to determine the language, falling back to language_cplus
+	 if necessary. */
+      enum language selected_language = msym->m_language;
+      if (selected_language == language_unknown)
+	selected_language = deduce_language_from_filename (filename);
+      if (selected_language == language_unknown)
+	selected_language = language_cplus;
+      sym->set_language (selected_language, &objfile->objfile_obstack);
+      sym->compute_and_set_names (msym->linkage_name (), false, objfile->per_bfd);
+      sym->set_symtab (cust->primary_filetab ()); /* dummy */
+      add_symbol_to_list (sym, cu->get_builder ()->get_file_symbols ());
+      cu->get_builder ()->finish_block (sym, NULL, NULL, cuda_symbol.start, cuda_symbol.end);
+    }
+  return high_pc;
+}
+void
+cuda_decode_line_table (struct objfile *objfile)
+{
+  /* Only force the decoding of the line table this way when there is no
+     .debug_info section. This function also has the side-effect (yuck!) to
+     initialize dwarf2_per_objfile. */
+  if (dwarf2_has_info (objfile, NULL))
+    return;
+  struct dwarf2_per_objfile *dwarf2_per_objfile = get_dwarf2_per_objfile (objfile);
+  if (!dwarf2_per_objfile->per_bfd->line.s.section)
+    return;
+  auto per_cu = create_cu_from_index_list (dwarf2_per_objfile->per_bfd,
+					   &dwarf2_per_objfile->per_bfd->line,
+					   0,
+					   (sect_offset)0,
+					   0);
+  if (!per_cu)
+    return;
+  dwarf2_cu *cu = new dwarf2_cu (per_cu.get (), dwarf2_per_objfile);
+  auto lang = objfile->per_bfd->language_of_main;
+  /* If the language is unknown assume C++ */
+  if (lang == language_unknown)
+    lang = language_cplus;
+  cu->language_defn = language_def (lang);
+  dwarf2_per_objfile->per_bfd->all_units.push_back (std::move (per_cu));
+  if (!cu)
+    return;
+  struct dwarf2_section_info *section = get_debug_line_section (cu);
+  if (!section)
+    return;
+  section->read (objfile);
+  if (!section->buffer)
+    return;
+  unsigned int bytes_read = 0;
+  bfd *abfd = section->get_bfd_owner ();
+  struct comp_unit_head *cu_header = &cu->header;
+  cu_header->length = read_initial_length (abfd, section->buffer, &bytes_read);
+  cu_header->initial_length_size = bytes_read;
+  cu_header->offset_size = (bytes_read == 4) ? 4 : 8;
+  cu_header->addr_size = gdbarch_ptr_bit (cuda_get_gdbarch ()) / TARGET_CHAR_BIT;
+  sect_offset line_offset = (sect_offset)0; /* assumption that lh starts at offset 0 */
+  CORE_ADDR high_pc = cuda_add_minsyms (cu, objfile, objfile->original_name);
+  do
+    {
+      /* We lack a proper file and directory entry for lineinfo. Pass in nullptr for the compdir. */
+      line_header_up lh = dwarf_decode_line_header ((sect_offset) line_offset, cu, nullptr);
+      if (lh == NULL)
+	break;
+      cu->line_header = lh.release ();
+      line_offset = cu->line_header->next_sect_off;
+      dwarf_decode_lines (cu->line_header, cu, 0, 1);
+    } while (to_underlying(line_offset) < get_dwarf2_per_objfile (objfile)->per_bfd->line.size);
+  cu->get_builder ()->end_compunit_symtab (high_pc, SECT_OFF_TEXT (objfile));
+}
+#endif

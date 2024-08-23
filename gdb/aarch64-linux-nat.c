@@ -18,6 +18,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 
 #include "inferior.h"
@@ -44,6 +49,10 @@
 #include <sys/utsname.h>
 #include <asm/ptrace.h>
 
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-linux-nat-template.h"
+#endif
+
 #include "gregset.h"
 #include "linux-tdep.h"
 #include "arm-tdep.h"
@@ -60,8 +69,13 @@
 #define TRAP_HWBKPT 0x0004
 #endif
 
+#ifdef NVIDIA_CUDA_GDB
+class aarch64_linux_nat_target
+  : public aarch64_nat_target<linux_nat_target>
+#else
 class aarch64_linux_nat_target final
   : public aarch64_nat_target<linux_nat_target>
+#endif
 {
 public:
   /* Add our register access methods.  */
@@ -110,7 +124,9 @@ public:
 		      const gdb::byte_vector &tags, int type) override;
 };
 
+#ifndef NVIDIA_CUDA_GDB
 static aarch64_linux_nat_target the_aarch64_linux_nat_target;
+#endif
 
 /* Called whenever GDB is no longer debugging process PID.  It deletes
    data structures that keep track of debug register state.  */
@@ -959,6 +975,9 @@ aarch64_linux_nat_target::store_memtags (CORE_ADDR address, size_t len,
   return false;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+static cuda_nat_linux<aarch64_linux_nat_target> the_aarch64_linux_nat_target;
+#endif
 void _initialize_aarch64_linux_nat ();
 void
 _initialize_aarch64_linux_nat ()
@@ -967,5 +986,9 @@ _initialize_aarch64_linux_nat ()
 
   /* Register the target.  */
   linux_target = &the_aarch64_linux_nat_target;
+#ifdef NVIDIA_CUDA_GDB
+  add_inf_child_target (linux_target);
+#else
   add_inf_child_target (&the_aarch64_linux_nat_target);
+#endif
 }

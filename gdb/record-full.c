@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "gdbcmd.h"
 #include "regcache.h"
@@ -2584,7 +2589,13 @@ record_full_base_target::save_record (const char *recfilename)
 	   bfd_errmsg (bfd_get_error ()));
   bfd_set_section_size (osec, save_size);
   bfd_set_section_vma (osec, 0);
+#ifdef NVIDIA_CUDA_GDB
+  /* bfs_set_section_alignment() could not fail. */
+  if (!bfd_set_section_alignment (osec, 0))
+    error (_("bfd_set_section_alignment() failed!"));
+#else
   bfd_set_section_alignment (osec, 0);
+#endif
 
   /* Save corefile state.  */
   write_gcore_file (obfd.get ());

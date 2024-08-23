@@ -685,9 +685,9 @@ distclean: clean
 maintainer-clean realclean: distclean
 	rm -f GDBvn.texi version.subst *.info* *.dvi *.ps *.html *.pdf $(MANS)
 
-install: install-info install-man
+install: install-man
 
-uninstall: uninstall-info uninstall-man
+uninstall: uninstall-man
 
 # Disable implicit make rules.
 include $(srcdir)/../disable-implicit-rules.mk

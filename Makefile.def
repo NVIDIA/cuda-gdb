@@ -19,6 +19,11 @@ AutoGen definitions Makefile.tpl;
 // You should have received a copy of the GNU General Public License
 // along with this program; see the file COPYING3.  If not see
 // <http://www.gnu.org/licenses/>.
+//
+// NVIDIA CUDA Debugger CUDA-GDB
+// Copyright (C) 2007-2024 NVIDIA Corporation
+// Modified from the original GDB file referenced above by the CUDA-GDB 
+// team at NVIDIA <cudatools@nvidia.com>.
 
 
 // "missing" indicates that that module doesn't supply
@@ -150,6 +155,7 @@ host_modules= { module= libcc1; extra_configure_flags=--enable-shared; };
 host_modules= { module= gotools; };
 host_modules= { module= libctf; bootstrap=true; };
 host_modules= { module= libsframe; bootstrap=true; };
+host_modules= { module= libcudacore; };
 
 target_modules = { module= libstdc++-v3;
 		   bootstrap=true;
@@ -439,6 +445,7 @@ dependencies = { module=all-gdb; on=all-libdecnumber; };
 dependencies = { module=all-gdb; on=all-libtermcap; };
 dependencies = { module=all-gdb; on=all-libctf; };
 dependencies = { module=all-gdb; on=all-libbacktrace; };
+dependencies = { module=all-gdb; on=all-libcudacore; };
 
 // Host modules specific to gdbserver.
 dependencies = { module=configure-gdbserver; on=all-gnulib; };

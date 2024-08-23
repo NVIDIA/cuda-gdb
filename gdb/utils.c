@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include <ctype.h>
 #include "gdbsupport/gdb_wait.h"
@@ -2225,6 +2230,17 @@ strncmp_iw_with_mode (const char *string1, const char *string2,
       if (*string1 == '\0' || string2 == end_str2)
 	break;
 
+#ifdef NVIDIA_CUDA_GDB
+      /* Handle addr segment markers */
+      if (*string1 == '@')
+        do ++string1; while (ISALPHA (*string1));
+      while (ISSPACE (*string1))
+        string1++;
+      if (*string2 == '@')
+        do ++string2; while (ISALPHA (*string2));
+      while (ISSPACE (*string2))
+        string2++;
+#endif
       /* Handle the :: operator.  */
       if (have_colon_op && string1[0] == ':' && string1[1] == ':')
 	{

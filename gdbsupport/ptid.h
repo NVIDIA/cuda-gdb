@@ -70,12 +70,20 @@ public:
   /* Return true if the ptid's tid member is non-zero.  */
 
   constexpr bool tid_p () const
+#if defined(NVIDIA_CUDA_GDB) && !defined(__QNXTARGET__)
+  { return m_lwp != 0; }
+#else
   { return m_tid != 0; }
+#endif
 
   /* Fetch the tid (thread id) component from a ptid.  */
 
   constexpr ULONGEST tid () const
+#if defined(NVIDIA_CUDA_GDB) && !defined(__QNXTARGET__)
+  { return m_lwp; }
+#else
   { return m_tid; }
+#endif
 
   /* Return true if the ptid represents a whole process, including all its
      lwps/threads.  Such ptids have the form of (pid, 0, 0), with

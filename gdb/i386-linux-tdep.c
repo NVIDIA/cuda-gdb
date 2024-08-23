@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "gdbcore.h"
 #include "frame.h"
@@ -464,7 +469,11 @@ i386_linux_intx80_sysenter_syscall_record (struct regcache *regcache)
 
   syscall_gdb = i386_canonicalize_syscall (syscall_native);
 
+#ifdef NVIDIA_CUDA_GDB
+  if ((int)syscall_gdb < 0)
+#else
   if (syscall_gdb < 0)
+#endif
     {
       gdb_printf (gdb_stderr,
 		  _("Process record and replay target doesn't "

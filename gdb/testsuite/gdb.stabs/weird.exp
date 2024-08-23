@@ -74,7 +74,8 @@ proc do_tests {} {
 	print_weird_var attr67
 	print_weird_var attr68
 	print_weird_var attr69
-	print_weird_var attr70
+#       - skip this test: according to XLF spec, this test is wrong.
+#	print_weird_var attr70
 	print_weird_var attr71
 	print_weird_var attr72
 	print_weird_var attr73

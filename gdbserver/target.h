@@ -18,6 +18,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef GDBSERVER_TARGET_H
 #define GDBSERVER_TARGET_H
 
@@ -509,6 +514,9 @@ public:
      Returns true if successful and false otherwise.  */
   virtual bool store_memtags (CORE_ADDR address, size_t len,
 			      const gdb::byte_vector &tags, int type);
+#ifdef NVIDIA_CUDA_GDB
+  virtual void unexpected_stop ();
+#endif
 };
 
 extern process_stratum_target *the_target;

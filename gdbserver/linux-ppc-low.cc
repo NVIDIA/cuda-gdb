@@ -17,8 +17,16 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "server.h"
 #include "linux-low.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "linux-cuda-low.h"
+#endif
 
 #include "elf/common.h"
 #include <sys/uio.h>
@@ -107,8 +115,11 @@ protected:
 };
 
 /* The singleton target ops object.  */
-
+#ifdef NVIDIA_CUDA_GDB
+static cuda_linux_process_target<ppc_target> the_ppc_target;
+#else
 static ppc_target the_ppc_target;
+#endif
 
 /* Holds the AT_HWCAP auxv entry.  */
 

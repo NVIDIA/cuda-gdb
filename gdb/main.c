@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "top.h"
 #include "target.h"
@@ -38,6 +43,10 @@
 #include "objfiles.h"
 #include "auto-load.h"
 #include "maint.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-gdb.h"
+#include "cuda/cuda-env-vars.h"
+#endif
 
 #include "filenames.h"
 #include "gdbsupport/filestuff.h"
@@ -56,6 +65,14 @@
 #include "observable.h"
 #include "serial.h"
 
+#ifdef NVIDIA_CUDA_GDB
+#ifdef HAVE_PYTHON
+#ifdef NVIDIA_PYTHON_DYNLIB
+/* Print the version of the libpython library loaded by the dynlib code */
+extern void python_print_library ();
+#endif
+#endif
+#endif
 /* The selected interpreter.  */
 std::string interpreter_p;
 
@@ -436,6 +453,20 @@ start_event_loop ()
 	    (*after_char_processing_hook) ();
 	  /* Maybe better to set a flag to be checked somewhere as to
 	     whether display the prompt or not.  */
+#ifdef NVIDIA_CUDA_GDB
+	  /* We may have gotten here due to a debugAPI error resulting
+	     in an exception throw. Turning off async operation
+	     prevents an infinite loop where a async fd event
+	     gdb_do_one_event() leads to state gathering through the
+	     debugAPI. This can throw an exception due to something
+	     like a CUDBG_ERROR_INVALID_WARP return value, but where
+	     the asyncio fd read event isn't cleared. Each following
+	     time through the loop we repeat this sequence.
+	  */
+
+	  if (target_has_execution ())
+	    target_async (0);
+#endif
 	}
 
       if (result < 0)
@@ -647,7 +678,14 @@ captured_main_1 (struct captured_main_args *context)
 
 #ifdef HAVE_USEFUL_SBRK
   /* Set this before constructing scoped_command_stats.  */
+# if defined(NVIDIA_CUDA_GDB) && defined(__clang__)
+#   pragma clang diagnostic push
+#   pragma clang diagnostic ignored "-Wdeprecated-declarations"
   lim_at_start = (char *) sbrk (0);
+#   pragma clang diagnostic pop
+# else
+  lim_at_start = (char *) sbrk (0);
+# endif
 #endif
 
   scoped_command_stats stat_reporter (false);
@@ -749,7 +787,15 @@ captured_main_1 (struct captured_main_args *context)
       OPT_EIX,
       OPT_EIEX,
       OPT_READNOW,
+#ifdef NVIDIA_CUDA_GDB
+      OPT_READNEVER,
+      OPT_CUDA_USE_LOCKFILE,
+#ifdef HAVE_PYTHON
+      OPT_CUDA_DISABLE_PYTHON
+#endif
+#else
       OPT_READNEVER
+#endif
     };
     /* This struct requires int* in the struct, but write_files is a bool.
        So use this temporary int that we write back after argument parsing.  */
@@ -825,6 +871,12 @@ captured_main_1 (struct captured_main_args *context)
       {"args", no_argument, &set_args, 1},
       {"l", required_argument, 0, 'l'},
       {"return-child-result", no_argument, &return_child_result, 1},
+#ifdef NVIDIA_CUDA_GDB
+      {"cuda-use-lockfile", required_argument, 0, OPT_CUDA_USE_LOCKFILE},
+#ifdef HAVE_PYTHON
+      {"disable-python", no_argument, 0, OPT_CUDA_DISABLE_PYTHON},
+#endif
+#endif
       {0, no_argument, 0, 0}
     };
 
@@ -882,6 +934,26 @@ captured_main_1 (struct captured_main_args *context)
 	    /* -nw is equivalent to -i=console.  */
 	    interpreter_p = INTERP_CONSOLE;
 	    break;
+#ifdef NVIDIA_CUDA_GDB
+	  case OPT_CUDA_USE_LOCKFILE:
+            {
+              /* Whether cuda-gdb should create a global lock file */
+              extern bool cuda_use_lockfile;
+              cuda_use_lockfile = (atoi (optarg) != 0);
+              break;
+            }
+#ifdef HAVE_PYTHON
+#ifdef NVIDIA_PYTHON_DYNLIB
+	  case OPT_CUDA_DISABLE_PYTHON:
+	    {
+	      /* Whether cuda-gdb should disable dylib python support. */
+	      extern bool cuda_disable_python;
+	      cuda_disable_python = true;
+	      break;
+	    }
+#endif
+#endif
+#endif
 	  case 'f':
 	    annotation_level = 1;
 	    break;
@@ -1108,6 +1180,13 @@ captured_main_1 (struct captured_main_args *context)
     {
       print_gdb_version (gdb_stdout, false);
       gdb_printf ("\n");
+#ifdef NVIDIA_CUDA_GDB
+#ifdef HAVE_PYTHON
+#ifdef NVIDIA_PYTHON_DYNLIB
+      python_print_library ();
+#endif
+#endif
+#endif
       exit (0);
     }
 
@@ -1121,6 +1200,13 @@ captured_main_1 (struct captured_main_args *context)
     {
       print_gdb_configuration (gdb_stdout);
       gdb_printf ("\n");
+#ifdef NVIDIA_CUDA_GDB
+#ifdef HAVE_PYTHON
+#ifdef NVIDIA_PYTHON_DYNLIB
+      python_print_library ();
+#endif
+#endif
+#endif
       exit (0);
     }
 
@@ -1136,6 +1222,13 @@ captured_main_1 (struct captured_main_args *context)
       if (symarg)
 	gdb_printf ("..");
       gdb_printf ("\n");
+#ifdef NVIDIA_CUDA_GDB
+#ifdef HAVE_PYTHON
+#ifdef NVIDIA_PYTHON_DYNLIB
+      python_print_library ();
+#endif
+#endif
+#endif
       gdb_flush (gdb_stdout);	/* Force to screen during slow
 				   operations.  */
     }
@@ -1156,6 +1249,13 @@ captured_main_1 (struct captured_main_args *context)
       if (symarg)
 	gdb_printf ("..");
       gdb_printf ("\n");
+#ifdef NVIDIA_CUDA_GDB
+#ifdef HAVE_PYTHON
+#ifdef NVIDIA_PYTHON_DYNLIB
+      python_print_library ();
+#endif
+#endif
+#endif
       gdb_flush (gdb_stdout);	/* Force to screen during slow
 				   operations.  */
     }
@@ -1266,6 +1366,10 @@ captured_main_1 (struct captured_main_args *context)
   /* Error messages should no longer be distinguished with extra output.  */
   warning_pre_print = _("warning: ");
 
+#ifdef NVIDIA_CUDA_GDB
+  ret = catch_command_errors (cuda_check_env_vars, NULL, !batch_flag);
+#endif
+
   /* Read the .gdbinit file in the current directory, *if* it isn't
      the same as the $HOME/.gdbinit file (it should exist, also).  */
   if (!local_gdbinit.empty ())
@@ -1275,8 +1379,13 @@ captured_main_1 (struct captured_main_args *context)
 
       if (!inhibit_gdbinit && auto_load_local_gdbinit)
 	{
+#ifdef NVIDIA_CUDA_GDB
+	  auto_load_debug_printf ("Loading .cuda-gdbinit file \"%s\".",
+				  local_gdbinit.c_str ());
+#else
 	  auto_load_debug_printf ("Loading .gdbinit file \"%s\".",
 				  local_gdbinit.c_str ());
+#endif
 
 	  if (file_is_auto_load_safe (local_gdbinit.c_str ()))
 	    {
@@ -1373,11 +1482,19 @@ print_gdb_help (struct ui_file *stream)
   /* Note: The options in the list below are only approximately sorted
      in the alphabetical order, so as to group closely related options
      together.  */
+#ifdef NVIDIA_CUDA_GDB
+  gdb_puts (_("\
+This is the GNU debugger with CUDA support.  Usage:\n\n\
+    cuda-gdb [options] [executable-file [core-file or process-id]]\n\
+    cuda-gdb [options] --args executable-file [inferior-arguments ...]\n\n\
+"), stream);
+#else
   gdb_puts (_("\
 This is the GNU debugger.  Usage:\n\n\
     gdb [options] [executable-file [core-file or process-id]]\n\
     gdb [options] --args executable-file [inferior-arguments ...]\n\n\
 "), stream);
+#endif
   gdb_puts (_("\
 Selection of debuggee and its files:\n\n\
   --args             Arguments after executable-file are passed to inferior.\n\
@@ -1391,6 +1508,22 @@ Selection of debuggee and its files:\n\n\
   --readnever        Do not read symbol files.\n\
   --write            Set writing into executable and core files.\n\n\
 "), stream);
+#ifdef NVIDIA_CUDA_GDB
+  gdb_puts (_("\
+Initial commands and command files:\n\n\
+  --command=FILE, -x Execute CUDA-GDB commands from FILE.\n\
+  --init-command=FILE, -ix\n\
+		     Like -x but execute commands before loading inferior.\n\
+  --eval-command=COMMAND, -ex\n\
+		     Execute a single CUDA-GDB command.\n\
+		     May be used multiple times and in conjunction\n\
+		     with --command.\n\
+  --init-eval-command=COMMAND, -iex\n\
+		     Like -ex but before loading inferior.\n\
+  --nh               Do not read ~/.cuda-gdbinit.\n\
+  --nx               Do not read any .cuda-gdbinit files in any directory.\n\n\
+"), stream);
+#else
   gdb_puts (_("\
 Initial commands and command files:\n\n\
   --command=FILE, -x Execute GDB commands from FILE.\n\
@@ -1405,6 +1538,7 @@ Initial commands and command files:\n\n\
   --nh               Do not read ~/.gdbinit.\n\
   --nx               Do not read any .gdbinit files in any directory.\n\n\
 "), stream);
+#endif
   gdb_puts (_("\
 Output and user interface control:\n\n\
   --fullname         Output information used by emacs-GDB interface.\n\
@@ -1423,6 +1557,42 @@ Output and user interface control:\n\n\
   -q, --quiet, --silent\n\
 		     Do not print version number on startup.\n\n\
 "), stream);
+#ifdef NVIDIA_CUDA_GDB
+  gdb_puts (_("\
+CUDA-specific options:\n\n\
+"), stream);
+  gdb_puts (_("\
+  --cuda-use-lockfile=VALUE\n\
+                     If VALUE == 1, create a lock file for cuda-gdb.\n\
+                     Default behavior is not to create a lock file.\n\
+"), stream);
+#ifdef HAVE_PYTHON
+  gdb_puts (_("\
+  --disable-python   Disable python integration.\n\n\
+"), stream);
+#else
+  gdb_puts (_("\n"), stream);
+#endif
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  gdb_puts (_("\
+Operating modes:\n\n\
+  --batch            Exit after processing options.\n\
+  --batch-silent     Like --batch, but suppress all cuda-gdb stdout output.\n\
+  --return-child-result\n\
+		     CUDA-GDB exit code will be the child's exit code.\n\
+  --configuration    Print details about CUDA-GDB configuration and then exit.\n\
+  --help             Print this message and then exit.\n\
+  --version          Print version information and then exit.\n\n\
+Remote debugging options:\n\n\
+  -b BAUDRATE        Set serial port baud rate used for remote debugging.\n\
+  -l TIMEOUT         Set timeout in seconds for remote debugging.\n\n\
+Other options:\n\n\
+  --cd=DIR           Change current directory to DIR.\n\
+  --data-directory=DIR, -D\n\
+		     Set CUDA-GDB's data-directory to DIR.\n\
+"), stream);
+#else
   gdb_puts (_("\
 Operating modes:\n\n\
   --batch            Exit after processing options.\n\
@@ -1440,10 +1610,18 @@ Other options:\n\n\
   --data-directory=DIR, -D\n\
 		     Set GDB's data-directory to DIR.\n\
 "), stream);
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  gdb_puts (_("\n\
+At startup, CUDA-GDB reads the following early init files and executes their\n\
+commands:\n\
+"), stream);
+#else
   gdb_puts (_("\n\
 At startup, GDB reads the following early init files and executes their\n\
 commands:\n\
 "), stream);
+#endif
   if (!home_gdbearlyinit.empty ())
     gdb_printf (stream, _("\
    * user-specific early init file: %s\n\
@@ -1451,9 +1629,15 @@ commands:\n\
   if (home_gdbearlyinit.empty ())
     gdb_printf (stream, _("\
    None found.\n"));
+#ifdef NVIDIA_CUDA_GDB
+  gdb_puts (_("\n\
+At startup, CUDA-GDB reads the following init files and executes their commands:\n\
+"), stream);
+#else
   gdb_puts (_("\n\
 At startup, GDB reads the following init files and executes their commands:\n\
 "), stream);
+#endif
   if (!system_gdbinit.empty ())
     {
       std::string output;
@@ -1479,16 +1663,25 @@ At startup, GDB reads the following init files and executes their commands:\n\
       && local_gdbinit.empty ())
     gdb_printf (stream, _("\
    None found.\n"));
+#ifdef NVIDIA_CUDA_GDB
+  gdb_puts (_("\n\
+For more information, type \"help\" from within CUDA-GDB, or consult the\n\
+CUDA-GDB manual (available as on-line info or a printed manual).\n\
+"), stream);
+#else
   gdb_puts (_("\n\
 For more information, type \"help\" from within GDB, or consult the\n\
 GDB manual (available as on-line info or a printed manual).\n\
 "), stream);
+#endif
   if (REPORT_BUGS_TO[0] && stream == gdb_stdout)
     gdb_printf (stream, _("\n\
 Report bugs to %ps.\n\
 "), styled_string (file_name_style.style (), REPORT_BUGS_TO));
+#ifndef NVIDIA_CUDA_GDB
   if (stream == gdb_stdout)
     gdb_printf (stream, _("\n\
 You can ask GDB-related questions on the GDB users mailing list\n\
 (gdb@sourceware.org) or on GDB's IRC channel (#gdb on Freenode).\n"));
+#endif
 }

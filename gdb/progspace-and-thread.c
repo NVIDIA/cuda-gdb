@@ -15,6 +15,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "progspace-and-thread.h"
 #include "inferior.h"
@@ -24,6 +29,17 @@
 void
 switch_to_program_space_and_thread (program_space *pspace)
 {
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - focus */
+  /* This is a limitation. We assume that there is only one program space (for
+     now). If the focus is already set on a CUDA device, we keep it there.
+     Otherwise, we let GDB behave normally. */
+  if (cuda_current_focus::isDevice ())
+    {
+      set_current_program_space (pspace);
+      return;
+    }
+#endif
   inferior *inf = find_inferior_for_program_space (pspace);
   gdb_assert (inf != nullptr);
 

@@ -294,8 +294,14 @@ find_separate_debug_file_in_section (struct objfile *objfile)
   gnu_debug_key.emplace (objfile->obfd.get (), abfd);
 
 #else
+#ifndef NVIDIA_CUDA_GDB
+/* CUDA: This comment has served as a source of confusion for our users. It pertains
+ * to system libraries built with MiniDebugInfo sections. This does not impact the
+ * debuggability of CUDA applications. Omitting the warning.
+ */
   warning (_("Cannot parse .gnu_debugdata section; LZMA support was "
 	     "disabled at compile time"));
+#endif
 #endif /* !HAVE_LIBLZMA */
 
   return abfd;

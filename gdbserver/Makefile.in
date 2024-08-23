@@ -14,6 +14,11 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# NVIDIA CUDA Debugger CUDA-GDB
+# Copyright (C) 2007-2024 NVIDIA Corporation
+# Modified from the original GDB file referenced above by the CUDA-GDB 
+# team at NVIDIA <cudatools@nvidia.com>.
 
 # Please keep lists in this file sorted alphabetically, with one item per line.
 # See gdb/Makefile.in for guidelines on ordering files and directories.
@@ -104,6 +109,25 @@ GDBSUPPORT = $(GDBSUPPORT_BUILDDIR)/libgdbsupport.a
 # Where is ust?  These will be empty if ust was not available.
 ustlibs = @ustlibs@
 ustinc = @ustinc@
+
+# CUDA
+@ENABLE_CUDA_TRUE@CUDA_SFILES = \
+@ENABLE_CUDA_TRUE@	$(srcdir)/../gdb/cuda/cuda-notifications.c \
+@ENABLE_CUDA_TRUE@	$(srcdir)/../gdb/cuda/cuda-utils.c \
+@ENABLE_CUDA_TRUE@	$(srcdir)/../gdb/cuda/cuda-version.c \
+@ENABLE_CUDA_TRUE@	$(srcdir)/../gdb/cuda/libcudbg.c \
+@ENABLE_CUDA_TRUE@	$(srcdir)/../gdb/cuda/libcudbgipc.c
+@ENABLE_CUDA_FALSE@CUDA_SFILES =
+
+@ENABLE_CUDA_TRUE@CUDA_OBS = \
+@ENABLE_CUDA_TRUE@	cuda/cuda-notifications.o \
+@ENABLE_CUDA_TRUE@	cuda/cuda-utils.o \
+@ENABLE_CUDA_TRUE@	cuda/cuda-version.o \
+@ENABLE_CUDA_TRUE@	cuda/libcudbg.o \
+@ENABLE_CUDA_TRUE@	cuda/libcudbgipc.o \
+@ENABLE_CUDA_TRUE@	cuda-packet-manager.o \
+@ENABLE_CUDA_TRUE@	cuda-tdep-server.o
+@ENABLE_CUDA_FALSE@CUDA_OBS =
 
 # gnulib
 GNULIB_PARENT_DIR = ..
@@ -228,7 +252,8 @@ SFILES = \
 	$(srcdir)/../gdb/nat/riscv-linux-tdesc.c \
 	$(srcdir)/../gdb/nat/fork-inferior.c \
 	$(srcdir)/../gdb/target/target.c \
-	$(srcdir)/../gdb/target/waitstatus.c
+	$(srcdir)/../gdb/target/waitstatus.c \
+	$(CUDA_SFILES)
 
 DEPFILES = @GDBSERVER_DEPFILES@
 
@@ -259,7 +284,8 @@ OBS = \
 	target/waitstatus.o \
 	$(DEPFILES) \
 	$(LIBOBJS) \
-	$(XML_BUILTIN)
+	$(XML_BUILTIN) \
+	$(CUDA_OBS)
 
 GDBREPLAY_OBS = \
 	gdbreplay.o \
@@ -535,6 +561,10 @@ gdbsupport/%-ipa.o: ../gdbsupport/%.cc
 
 arch/%.o: ../gdb/arch/%.c
 	$(COMPILE) -x c++ $<
+	$(POSTCOMPILE)
+
+cuda/%.o: ../gdb/cuda/%.c
+	$(COMPILE) $<
 	$(POSTCOMPILE)
 
 %.o: %-generated.cc

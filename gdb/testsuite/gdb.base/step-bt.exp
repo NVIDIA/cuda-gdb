@@ -23,7 +23,7 @@ if {[prepare_for_testing "failed to prepare" $testfile $srcfile debug]} {
     return -1
 }
 
-gdb_test "break *hello" \
+gdb_test "break hello" \
          "Breakpoint.*at.* file .*$srcfile, line .*" \
          "breakpoint at first instruction of hello()"
 

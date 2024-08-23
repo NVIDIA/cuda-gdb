@@ -17,10 +17,18 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef VALPRINT_H
 #define VALPRINT_H
 
 #include "cli/cli-option.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "gdbtypes.h"
+#endif
 
 /* This is used to pass formatting options to various value-printing
    functions.  */
@@ -252,6 +260,10 @@ struct format_data
     char size;
     bool print_tags;
 
+#ifdef NVIDIA_CUDA_GDB
+    /* CUDA - memory segments */
+    type_instance_flags segment_type;
+#endif
     /* True if the value should be printed raw -- that is, bypassing
        python-based formatters.  */
     unsigned char raw;

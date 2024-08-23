@@ -16,11 +16,20 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "server.h"
 #if HAVE_TERMIOS_H
 #include <termios.h>
 #endif
 #include "target.h"
+/* CUDA - Disable for QNX */
+#ifndef __QNX__
+#include "linux-low.h"
+#endif
 #include "gdbthread.h"
 #include "tdesc.h"
 #include "debug.h"
@@ -101,6 +110,9 @@ static int remote_is_stdio = 0;
 static int remote_desc = -1;
 static int listen_desc = -1;
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXHOST__)
+int using_threads = 0;
+#endif
 #ifdef USE_WIN32API
 /* gnulib wraps these as macros, undo them.  */
 # undef read
@@ -750,6 +762,17 @@ input_interrupt (int unused)
 	  fprintf (stderr, "client connection closed\n");
 	  return;
 	}
+#ifdef NVIDIA_CUDA_GDB
+      else if (cc == 1 && c == SERIAL_REMOTE_STOP_CMD)
+      {
+#ifdef __QNX__
+        the_target->request_interrupt ();
+#else
+	the_target->unexpected_stop ();
+#endif
+        return;
+      }
+#endif
       else if (cc != 1 || c != '\003')
 	{
 	  fprintf (stderr, "input_interrupt, count = %d c = %d ", cc, c);
@@ -1249,6 +1272,10 @@ prepare_resume_reply (char *buf, ptid_t ptid, const target_waitstatus &status)
 		 status.exit_status (), ptid.pid ());
       else
 	sprintf (buf, "W%02x", status.exit_status ());
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - Append the return value of api_finalize. */
+      cuda_append_api_finalize_res (buf + strlen (buf));
+#endif
       break;
     case TARGET_WAITKIND_SIGNALLED:
       if (cs.multi_process)
@@ -1256,6 +1283,10 @@ prepare_resume_reply (char *buf, ptid_t ptid, const target_waitstatus &status)
 		 status.sig (), ptid.pid ());
       else
 	sprintf (buf, "X%02x", status.sig ());
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - Append the return value of api_finalize. */
+      cuda_append_api_finalize_res (buf + strlen (buf));
+#endif
       break;
     case TARGET_WAITKIND_THREAD_EXITED:
       sprintf (buf, "w%x;", status.exit_status ());

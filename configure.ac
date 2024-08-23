@@ -15,6 +15,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; see the file COPYING3.  If not see
 # <http://www.gnu.org/licenses/>.
+#
+# NVIDIA CUDA Debugger CUDA-GDB
+# Copyright (C) 2007-2024 NVIDIA Corporation
+# Modified from the original GDB file referenced above by the CUDA-GDB
+# team at NVIDIA <cudatools@nvidia.com>.
 
 ##############################################################################
 ### WARNING: this file contains embedded tabs.  Do not run untabify on this file.
@@ -133,7 +138,7 @@ build_tools="build-texinfo build-flex build-bison build-m4 build-fixincludes"
 
 # these libraries are used by various programs built for the host environment
 #f
-host_libs="intl libiberty opcodes bfd readline tcl tk itcl libgui zlib libbacktrace libcpp libcody libdecnumber gmp mpfr mpc isl libiconv libctf libsframe"
+host_libs="intl libiberty opcodes bfd readline tcl tk itcl libgui zlib libbacktrace libcpp libcody libdecnumber gmp mpfr mpc isl libiconv libctf libsframe libcudacore"
 
 # these tools are built for the host environment
 # Note, the powerpc-eabi build depends on sim occurring before gdb in order to
@@ -471,6 +476,15 @@ enable_year2038=
 if test "${ENABLE_YEAR2038}" = "no" ; then
   enable_year2038=no
 fi
+# Enable CUDA
+AC_ARG_ENABLE(cuda,
+AS_HELP_STRING([--disable-cuda],
+  [disable CUDA support (cuda-gdb)]),
+ENABLE_CUDA=$enableval,
+ENABLE_CUDA=yes)
+if test "${ENABLE_CUDA}" = "no"; then
+  noconfigdirs="$noconfigdirs libcudacore"
+fi	      
 
 AC_ARG_ENABLE(libquadmath,
 AS_HELP_STRING([--disable-libquadmath],

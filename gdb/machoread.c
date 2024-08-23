@@ -18,6 +18,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -591,6 +596,9 @@ macho_add_oso_symfile (oso_el *oso, const gdb_bfd_ref_ptr &abfd,
      main_objfile);
 }
 
+#ifdef NVIDIA_CUDA_GDB
+static const char binary_cache_prefix[] = "/BinaryCache/";
+#endif
 /* Read symbols from the vector of oso files.
 
    Note that this function sorts OSO_VECTOR_PTR.  */
@@ -636,6 +644,10 @@ macho_symfile_read_all_oso (std::vector<oso_el> *oso_vector_ptr,
 						     gnutarget));
 	  if (archive_bfd == NULL)
 	    {
+#ifdef NVIDIA_CUDA_GDB
+	      /* Hide the warnings about OSOs in /BinaryCache/ folder */
+	      if (strncmp (archive_name.c_str (), binary_cache_prefix, sizeof (binary_cache_prefix) - 1) != 0)
+#endif
 	      warning (_("Could not open OSO archive file \"%s\""),
 		       archive_name.c_str ());
 	      ix = last_ix;
@@ -700,7 +712,12 @@ macho_symfile_read_all_oso (std::vector<oso_el> *oso_vector_ptr,
       else
 	{
 	  gdb_bfd_ref_ptr abfd (gdb_bfd_open (oso->name, gnutarget));
+#ifdef NVIDIA_CUDA_GDB
+	  /* Hide the warnings about BFDs in /BinaryCache/ folder */
+	  if (abfd == NULL && (strncmp (oso->name, binary_cache_prefix, sizeof (binary_cache_prefix) - 1) != 0))
+#else
 	  if (abfd == NULL)
+#endif
 	    warning (_("`%s': can't open to read symbols: %s."), oso->name,
 		     bfd_errmsg (bfd_get_error ()));
 	  else

@@ -19,6 +19,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 
 #include "defs.h"
 #include "arch-utils.h"
@@ -1000,7 +1005,14 @@ scoped_command_stats::~scoped_command_stats ()
   if (m_space_enabled && per_command_space)
     {
 #ifdef HAVE_USEFUL_SBRK
+#if defined(NVIDIA_CUDA_GDB) && defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
       char *lim = (char *) sbrk (0);
+#pragma clang diagnostic pop
+#else
+      char *lim = (char *) sbrk (0);
+#endif
 
       long space_now = lim - lim_at_start;
       long space_diff = space_now - m_start_space;
@@ -1040,7 +1052,14 @@ scoped_command_stats::scoped_command_stats (bool msg_type)
   if (!m_msg_type || per_command_space)
     {
 #ifdef HAVE_USEFUL_SBRK
+#if defined(NVIDIA_CUDA_GDB) && defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
       char *lim = (char *) sbrk (0);
+#pragma clang diagnostic pop
+#else
+      char *lim = (char *) sbrk (0);
+#endif
       m_start_space = lim - lim_at_start;
       m_space_enabled = 1;
 #endif

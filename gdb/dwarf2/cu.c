@@ -82,9 +82,12 @@ dwarf2_cu::start_compunit_symtab (const char *name, const char *comp_dir,
 
   list_in_scope = get_builder ()->get_file_symbols ();
 
+/* CUDA: For line-info, we lack a debug info header. Disable this assert. */
+#ifndef NVIDIA_CUDA_GDB
   /* DWARF versions are restricted to [2, 5], thanks to the check in
      read_comp_unit_head.  */
   gdb_assert (this->header.version >= 2 && this->header.version <= 5);
+#endif
   static const char *debugformat_strings[] = {
     "DWARF 2",
     "DWARF 3",

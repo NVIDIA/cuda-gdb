@@ -16,6 +16,11 @@
 # along with this program; see the file COPYING3.  If not see
 # <http://www.gnu.org/licenses/>.
 #
+# NVIDIA CUDA Debugger CUDA-GDB
+# Copyright (C) 2007-2024 NVIDIA Corporation
+# Modified from the original GDB file referenced above by the CUDA-GDB
+# team at NVIDIA <cudatools@nvidia.com>.
+#
 # Convert a canonical host type into a BFD host type.
 # Set shell variable targ to canonical target name, and run
 # using ``. config.bfd''.
@@ -294,6 +299,12 @@ case "${targ}" in
     targ_defvec=aarch64_elf64_be_vec
     targ_selvecs="aarch64_elf64_le_vec aarch64_elf32_le_vec aarch64_elf32_be_vec arm_elf32_be_vec arm_elf32_le_vec"
     want64=true
+    ;;
+  aarch64-*-qnx*)
+    targ_defvec=aarch64_elf64_le_vec
+    targ_selvecs="aarch64_elf64_be_vec aarch64_elf32_le_vec aarch64_elf32_be_vec arm_elf32_le_vec arm_elf32_be_vec"
+    want64=true
+    targ_cflags=-D__QNXTARGET__
     ;;
   alpha*-*-freebsd* | alpha*-*-kfreebsd*-gnu)
     targ_defvec=alpha_elf64_fbsd_vec
@@ -608,6 +619,7 @@ case "${targ}" in
   i[3-7]86-*-nto*)
     targ_defvec=i386_elf32_vec
     targ_selvecs="iamcu_elf32_vec i386_coff_vec"
+    targ_cflags=-D__QNXTARGET__
     ;;
   i[3-7]86-*-aros*)
     targ_defvec=i386_elf32_vec
@@ -710,6 +722,12 @@ case "${targ}" in
     targ_defvec=x86_64_elf64_vec
     targ_selvecs="i386_elf32_vec iamcu_elf32_vec i386_coff_vec i386_pei_vec x86_64_pe_vec x86_64_pei_vec"
     want64=true
+    ;;
+  x86_64-*-nto-*)
+    targ_defvec=x86_64_elf64_vec
+    targ_selvecs="i386_elf32_vec iamcu_elf32_vec x86_64_elf32_vec i386_aout_linux_vec l1om_elf64_vec k1om_elf64_vec i386_pei_vec x86_64_pei_vec"
+    want64=true
+    targ_cflags=-D__QNXTARGET__
     ;;
   x86_64-*-linux-*)
     targ_defvec=x86_64_elf64_vec
@@ -937,6 +955,11 @@ case "${targ}" in
   mips*-*-openbsd*)
     targ_defvec=mips_elf32_be_vec
     targ_selvecs="mips_elf32_le_vec mips_elf64_be_vec mips_elf64_le_vec mips_ecoff_be_vec mips_ecoff_le_vec"
+    ;;
+  mips*-*-nto*)
+    targ_defvec=mips_elf32_trad_be_vec
+    targ_selvecs="mips_elf32_trad_le_vec mips_elf64_trad_be_vec mips_elf64_trad_le_vec"
+    targ_cflags=-D__QNXTARGET__
     ;;
   mips64*el-*-linux*)
     targ_defvec=mips_elf32_ntrad_le_vec
@@ -1184,6 +1207,7 @@ case "${targ}" in
   powerpc-*-nto*)
     targ_defvec=powerpc_elf32_vec
     targ_selvecs="rs6000_xcoff_vec powerpc_elf32_le_vec powerpc_boot_vec"
+    targ_cflags=-D__QNXTARGET__
     ;;
   powerpc-*-vxworks* | powerpc-*-windiss*)
     targ_defvec=powerpc_elf32_vxworks_vec
@@ -1306,6 +1330,7 @@ case "${targ}" in
     targ_defvec=sh_elf32_vec
     targ_selvecs="sh_elf32_le_vec sh_coff_vec sh_coff_le_vec sh_coff_small_vec sh_coff_small_le_vec"
     targ_underscore=yes
+    targ_cflags=-D__QNXTARGET__
     ;;
   sh*-*-openbsd*)
     targ_defvec=sh_elf32_nbsd_le_vec

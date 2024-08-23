@@ -19,6 +19,11 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston,
    MA 02110-1301, USA.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /*
 INODE
 typedef bfd, Error reporting, BFD front end, BFD front end
@@ -2533,7 +2538,12 @@ bfd_demangle (bfd *abfd, const char *name, int options)
      on at least some symbols, so we remove all dots to avoid
      confusing the demangler.  */
   pre = name;
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - the $ character is used to encode cloned functions */
+  while (*name == '.')
+#else
   while (*name == '.' || *name == '$')
+#endif
     ++name;
   pre_len = name - pre;
 

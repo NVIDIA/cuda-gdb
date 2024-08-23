@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "symtab.h"
 #include "frame.h"
@@ -48,6 +53,9 @@
 #include "gdbsupport/def-vector.h"
 #include <algorithm>
 #include "inferior.h"
+#ifdef NVIDIA_CUDA_GDB
+#include <unordered_set>
+#endif
 
 /* An enumeration of the various things a user might attempt to
    complete for a linespec location.  */
@@ -358,9 +366,12 @@ static void initialize_defaults (struct symtab **default_symtab,
 
 CORE_ADDR linespec_expression_to_pc (const char **exp_ptr);
 
+/* CUDA - Disable Objective-C selectors lookup*/
+#ifndef NVIDIA_CUDA_GDB
 static std::vector<symtab_and_line> decode_objc (struct linespec_state *self,
 						 linespec *ls,
 						 const char *arg);
+#endif
 
 static std::vector<symtab *> symtabs_from_filename
   (const char *, struct program_space *pspace);
@@ -2487,10 +2498,13 @@ parse_linespec (linespec_parser *parser, const char *arg,
   /* Objective-C shortcut.  */
   if (parser->completion_tracker == NULL)
     {
+/* CUDA - Disable Objective-C selectors lookup*/
+#ifndef NVIDIA_CUDA_GDB
       std::vector<symtab_and_line> values
 	= decode_objc (PARSER_STATE (parser), PARSER_RESULT (parser), arg);
       if (!values.empty ())
 	return values;
+#endif
     }
   else
     {
@@ -3292,6 +3306,8 @@ linespec_expression_to_pc (const char **exp_ptr)
 
 
 
+/* CUDA - Disable Objective-C selectors lookup*/
+#ifndef NVIDIA_CUDA_GDB
 /* Here's where we recognise an Objective-C Selector.  An Objective C
    selector may be implemented by more than one class, therefore it
    may represent more than one method/function.  This gives us a
@@ -3362,6 +3378,7 @@ decode_objc (struct linespec_state *self, linespec *ls, const char *arg)
 
   return values;
 }
+#endif
 
 namespace {
 
@@ -3996,6 +4013,10 @@ decode_digits_list_mode (struct linespec_state *self,
 {
   gdb_assert (self->list_mode);
 
+#ifdef NVIDIA_CUDA_GDB
+  std::vector<symtab_and_line> inexact_values;
+  std::unordered_set<struct symtab *> seen_symtab;
+#endif
   std::vector<symtab_and_line> values;
 
   for (const auto &elt : ls->file_symtabs)
@@ -4006,17 +4027,44 @@ decode_digits_list_mode (struct linespec_state *self,
       program_space *pspace = elt->compunit ()->objfile ()->pspace;
       set_current_program_space (pspace);
 
+#ifdef NVIDIA_CUDA_GDB
+      int index = 0;
+      bool exact = false;
+      val.symtab = find_line_symtab (elt, val.line, &index, &exact);
+#else
       /* Simplistic search just for the list command.  */
       val.symtab = find_line_symtab (elt, val.line, NULL, NULL);
+#endif
       if (val.symtab == NULL)
 	val.symtab = elt;
       val.pspace = pspace;
       val.pc = 0;
       val.explicit_line = true;
 
+#ifdef NVIDIA_CUDA_GDB
+      /* Check to see if we have seen this symtab before.
+       * If we have, we want to ignore this entry to avoid
+       * duplicates. We run into this situation when we have
+       * a .cu file representing the shadow function and a
+       * cubin representing the real kernel. */
+      auto it = seen_symtab.find (val.symtab);
+      if (it != seen_symtab.end ())
+	continue;
+      seen_symtab.insert (val.symtab);
+      if (exact)
+	add_sal_to_sals (self, &values, &val, NULL, 0);
+      else
+	add_sal_to_sals (self, &inexact_values, &val, NULL, 0);
+#else
       add_sal_to_sals (self, &values, &val, NULL, 0);
+#endif
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* If we did not find any exact matches, allow the use of inexact matches. */
+  if (values.size () == 0)
+    values.swap (inexact_values);
+#endif
   return values;
 }
 

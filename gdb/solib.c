@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 
 #include <sys/types.h>
@@ -584,7 +589,21 @@ solib_map_sections (struct so_list *so)
     }
 
   if (abfd == NULL)
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+    {
+      /* On QNX, so_name is always a filename, not a path (except for dynamic linker).
+         Because of this, the sysroot setting is ingored. Try again with so_original_name
+         which will contain the full path and will be resolved against the sysroot. */
+      filename.reset (tilde_expand (so->so_original_name));
+      abfd = ops->bfd_open (filename.get ());
+      if (abfd == NULL)
+        {
+          return 0;
+        }
+    }
+#else
     return 0;
+#endif
 
   /* Leave bfd open, core_xfer_memory and "info files" need it.  */
   so->abfd = abfd.release ();
@@ -599,6 +618,17 @@ solib_map_sections (struct so_list *so)
     error (_("Shared library file name is too long."));
   strcpy (so->so_name, bfd_get_filename (so->abfd));
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+  gdb_assert (ops->validate != NULL);
+  if (ops->validate != NULL && !ops->validate (so))
+    {
+      warning (_("Shared object \"%s\" could not be validated "
+		 "and will be ignored."), so->so_name);
+      gdb_bfd_unref (so->abfd);
+      so->abfd = NULL;
+      return 0;
+    }
+#endif
   if (so->sections == nullptr)
     so->sections = new target_section_table;
   *so->sections = build_section_table (so->abfd);
@@ -684,6 +714,9 @@ free_so (struct so_list *so)
   clear_so (so);
   ops->free_so (so);
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+  xfree (so->build_id);
+#endif
   xfree (so);
 }
 
@@ -902,8 +935,16 @@ update_solib_list (int from_tty)
 
 	  try
 	    {
+#ifdef NVIDIA_CUDA_GDB
+	      /* Fill in the rest of the `struct so_list' node.
+		 Work around PR libc/13097.  */
+	      if (!solib_map_sections (i)
+		  && strcmp (i->so_original_name, "linux-vdso.so.1") != 0
+		  && strcmp (i->so_original_name, "linux-gate.so.1") != 0)
+#else
 	      /* Fill in the rest of the `struct so_list' node.  */
 	      if (!solib_map_sections (i))
+#endif
 		{
 		  not_found++;
 		  if (not_found_filename == NULL)
@@ -970,6 +1011,15 @@ libpthread_solib_p (struct so_list *so)
   return libpthread_name_p (so->so_name);
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* Return non-zero if SO is the CUDA library */
+static int
+libcuda_solib_p (struct so_list *so)
+{
+  return strstr (so->so_name, "/libcuda") != NULL;
+}
+#endif
+
 /* Read in symbolic information for any shared objects whose names
    match PATTERN.  (If we've already read a shared object's symbol
    info, leave it alone.)  If PATTERN is zero, read them all.
@@ -1024,8 +1074,14 @@ solib_add (const char *pattern, int from_tty, int readsyms)
 	     exception for the pthread library, because we sometimes
 	     need the library symbols to be loaded in order to provide
 	     thread support (x86-linux for instance).  */
+#ifdef NVIDIA_CUDA_GDB
+          /* CUDA - load libcuda symbols even if readsyms is 0 */
+          const int add_this_solib =
+            (readsyms || libpthread_solib_p (gdb) || libcuda_solib_p (gdb));
+#else
 	  const int add_this_solib =
 	    (readsyms || libpthread_solib_p (gdb));
+#endif
 
 	  any_matches = true;
 	  if (add_this_solib)
@@ -1072,6 +1128,21 @@ info_sharedlibrary_command (const char *pattern, int from_tty)
   int nr_libs;
   struct gdbarch *gdbarch = target_gdbarch ();
   struct ui_out *uiout = current_uiout;
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+  int verbose = 0;
+  if (pattern)
+    {
+      /* Check if there are options */
+      if (strstr(pattern, "-v") == pattern) {
+	verbose = 1;
+	pattern = pattern + strlen ("-v");
+	while (*pattern == ' ' || *pattern == '\t')
+	  pattern++;
+	if (*pattern == '\0')
+	  pattern = NULL;
+      }
+    }
+#endif
 
   if (pattern)
     {
@@ -1141,6 +1212,16 @@ info_sharedlibrary_command (const char *pattern, int from_tty)
 	else
 	  uiout->field_string ("syms-read", so->symbols_loaded ? "Yes" : "No");
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+        char buff[SO_NAME_MAX_PATH_SIZE * 2 + 100];
+        if (verbose)
+          {
+            snprintf (buff, sizeof (buff), "%s (%s)", so->so_name,
+                      so->so_original_name);
+            uiout->field_string ("name", buff);
+          }
+        else
+#endif
 	uiout->field_string ("name", so->so_name, file_name_style.style ());
 
 	uiout->text ("\n");

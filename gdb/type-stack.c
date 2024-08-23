@@ -28,6 +28,20 @@
 void
 type_stack::insert (enum type_pieces tp)
 {
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA BUGFIX: We use tp_space_identifier to represent explicit
+   * casts to CUDA address spaces. Consider the following expression:
+   *   print *(@global const unsigned char*)d
+   * We can have the case where we have the tp_space_identifier on the
+   * stack followed by const. In that case, we are overwriting part of
+   * the existing expression. Instead we want to push the tp onto the
+   * stack. */
+  gdb_assert (tp == tp_pointer || tp == tp_reference
+	      || tp == tp_rvalue_reference || tp == tp_const
+	      || tp == tp_volatile || tp == tp_restrict
+	      || tp == tp_atomic);
+  push (tp);
+#else
   union type_stack_elt element;
   int slot;
 
@@ -47,6 +61,7 @@ type_stack::insert (enum type_pieces tp)
 
   element.piece = tp;
   insert_into (slot, element);
+#endif
 }
 
 /* See type-stack.h.  */
@@ -54,6 +69,17 @@ type_stack::insert (enum type_pieces tp)
 void
 type_stack::insert (struct expr_builder *pstate, const char *string)
 {
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA BUGFIX: We use tp_space_identifier to represent explicit
+   * casts to CUDA address spaces. This method is buggy upstream.
+   * It inserts the tp_space_identifier into the stack but then
+   * overwrites that with the type instance flags for that space
+   * identifier. Instead, we want to push the type instance flags
+   * followed by the tp_space_identifier. */
+  push (address_space_name_to_type_instance_flags (pstate->gdbarch (),
+						   string));
+  push (tp_space_identifier);
+#else
   union type_stack_elt element;
   int slot;
 
@@ -71,6 +97,7 @@ type_stack::insert (struct expr_builder *pstate, const char *string)
     = address_space_name_to_type_instance_flags (pstate->gdbarch (),
 						 string);
   insert_into (slot, element);
+#endif
 }
 
 /* See type-stack.h.  */

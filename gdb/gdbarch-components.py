@@ -17,6 +17,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+# NVIDIA CUDA Debugger CUDA-GDB
+# Copyright (C) 2007-2024 NVIDIA Corporation
+# Modified from the original GDB file referenced above by the CUDA-GDB
+# team at NVIDIA <cudatools@nvidia.com>.
+
 # How to add to gdbarch:
 #
 # There are four kinds of fields in gdbarch:
@@ -184,12 +189,46 @@ machine.
 
 Value(
     comment="""
-The ABI default bit-size and format for "bfloat16", "half", "float", "double", and
-"long double".  These bit/format pairs should eventually be combined
+The ABI default bit-size and format for "nv_fp8", "bfloat16", "half", "float",
+"double", and "long double".  These bit/format pairs should eventually be combined
 into a single object.  For the moment, just initialize them as a pair.
 Each format describes both the big and little endian layouts (if
 useful).
 """,
+    type="int",
+    name="nv_fp8_e5m2_bit",
+    predefault="TARGET_CHAR_BIT",
+    invalid=False,
+    cudaonly=True,
+)
+
+Value(
+    type="const struct floatformat **",
+    name="nv_fp8_e5m2_format",
+    postdefault="floatformats_nv_fp8_e5m2",
+    invalid=True,
+    printer="pformat (gdbarch, gdbarch->nv_fp8_e5m2_format)",
+    cudaonly=True,
+)
+
+Value(
+    type="int",
+    name="nv_fp8_e4m3_bit",
+    predefault="TARGET_CHAR_BIT",
+    invalid=False,
+    cudaonly=True,
+)
+
+Value(
+    type="const struct floatformat **",
+    name="nv_fp8_e4m3_format",
+    postdefault="floatformats_nv_fp8_e4m3",
+    invalid=True,
+    printer="pformat (gdbarch, gdbarch->nv_fp8_e4m3_format)",
+    cudaonly=True,
+)
+
+Value(
     type="int",
     name="bfloat16_bit",
     predefault="2*TARGET_CHAR_BIT",

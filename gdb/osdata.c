@@ -29,7 +29,14 @@
 std::unique_ptr<osdata>
 osdata_parse (const char *xml)
 {
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - XML warning */
+  /* No need to warn since an error will be raised next if this function
+     returns NULL. Avoids unnecessary warning messages in the MI clients. */
+  static int have_warned = 1;
+#else
   static int have_warned;
+#endif
 
   if (!have_warned)
     {

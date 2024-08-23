@@ -778,6 +778,9 @@ DEBUGINFOD_CFLAGS
 PKG_CONFIG_LIBDIR
 PKG_CONFIG_PATH
 PKG_CONFIG
+ENABLE_CUDA_FALSE
+ENABLE_CUDA_TRUE
+LIBCUDACORE
 HAVE_NATIVE_GCORE_TARGET
 TARGET_OBS
 ENABLE_BFD_64_BIT_FALSE
@@ -914,6 +917,7 @@ with_auto_load_dir
 with_auto_load_safe_path
 enable_targets
 enable_64_bit_bfd
+enable_cuda
 enable_gdbmi
 enable_tui
 enable_gdbtk
@@ -942,6 +946,7 @@ with_libmpfr_prefix
 with_libmpfr_type
 with_python
 with_python_libdir
+with_python_inc
 with_guile
 enable_source_highlight
 enable_threading
@@ -1632,6 +1637,7 @@ Optional Features:
   --enable-targets=TARGETS
                           alternative target configurations
   --enable-64-bit-bfd     64-bit support (on hosts with narrower word sizes)
+  --disable-cuda          disable CUDA support (cuda-gdb)
   --disable-gdbmi         disable machine-interface (MI)
   --enable-tui            enable full-screen terminal user interface (TUI)
   --enable-gdbtk          enable gdbtk graphical user interface (GUI)
@@ -1709,6 +1715,7 @@ Optional Packages:
                           (auto/yes/no/<python-program>)
   --with-python-libdir[=DIR]
                           search for python's libraries in DIR
+  --with-python-inc[=DIR] CPP search flags for python's includes
   --with-guile[=GUILE]    include guile support
                           (auto/yes/no/<guile-version>/<pkg-config-program>)
   --with-intel-pt         include Intel Processor Trace support (auto/yes/no)
@@ -11452,7 +11459,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11455 "configure"
+#line 11462 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -11558,7 +11565,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 11561 "configure"
+#line 11568 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -18028,6 +18035,42 @@ _ACEOF
 
 fi
 
+# Enable CUDA
+# Check whether --enable-cuda was given.
+if test "${enable_cuda+set}" = set; then :
+  enableval=$enable_cuda; case $enableval in
+    yes | no)
+      ;;
+    *)
+      as_fn_error $? "bad value $enableval for --enable-cuda" "$LINENO" 5 ;;
+  esac
+else
+  enable_cuda=yes
+fi
+
+if test x"$enable_cuda" = xyes; then
+
+$as_echo "#define NVIDIA_CUDA_GDB 1" >>confdefs.h
+
+
+$as_echo "#define NVIDIA_BUGFIX 1" >>confdefs.h
+
+  LIBCUDACORE="\$(top_builddir)/../libcudacore/libcudacore.a"
+  CONFIG_OBS="$CONFIG_OBS \$(SUBDIR_CUDA_OBS)"
+  CONFIG_DEPS="$CONFIG_DEPS \$(SUBDIR_CUDA_DEPS)"
+  CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_CUDA_SRCS)"
+  ENABLE_CFLAGS="$ENABLE_CFLAGS \$(SUBDIR_CUDA_CFLAGS)"
+fi
+
+ if test x"$enable_cuda" = xyes; then
+  ENABLE_CUDA_TRUE=
+  ENABLE_CUDA_FALSE='#'
+else
+  ENABLE_CUDA_TRUE='#'
+  ENABLE_CUDA_FALSE=
+fi
+
+
 # Enable MI.
 # Check whether --enable-gdbmi was given.
 if test "${enable_gdbmi+set}" = set; then :
@@ -20512,8 +20555,12 @@ case $host_os in
     ;;
 esac
 
-# These are the libraries checked by Readline.
-{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing tgetent" >&5
+# NVIDIA: We don't want to pull in deps like tinfo if we asked
+# for curses to be disabled.
+if test x"$enable_cuda" = xyes; then
+  if test x"curses_found" = xyes; then
+    # These are the libraries checked by Readline.
+    { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing tgetent" >&5
 $as_echo_n "checking for library containing tgetent... " >&6; }
 if ${ac_cv_search_tgetent+:} false; then :
   $as_echo_n "(cached) " >&6
@@ -20569,6 +20616,69 @@ if test "$ac_res" != no; then :
 
 fi
 
+  else
+    # Default to stub-termcap.
+    ac_cv_search_tgetent="no"
+  fi
+else
+  # These are the libraries checked by Readline.
+  { $as_echo "$as_me:${as_lineno-$LINENO}: checking for library containing tgetent" >&5
+$as_echo_n "checking for library containing tgetent... " >&6; }
+if ${ac_cv_search_tgetent+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  ac_func_search_save_LIBS=$LIBS
+cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+/* Override any GCC internal prototype to avoid an error.
+   Use char because int might match the return type of a GCC
+   builtin and then its argument prototype would still apply.  */
+#ifdef __cplusplus
+extern "C"
+#endif
+char tgetent ();
+int
+main ()
+{
+return tgetent ();
+  ;
+  return 0;
+}
+_ACEOF
+for ac_lib in '' termcap tinfow tinfo curses ncursesw ncurses; do
+  if test -z "$ac_lib"; then
+    ac_res="none required"
+  else
+    ac_res=-l$ac_lib
+    LIBS="-l$ac_lib  $ac_func_search_save_LIBS"
+  fi
+  if ac_fn_c_try_link "$LINENO"; then :
+  ac_cv_search_tgetent=$ac_res
+fi
+rm -f core conftest.err conftest.$ac_objext \
+    conftest$ac_exeext
+  if ${ac_cv_search_tgetent+:} false; then :
+  break
+fi
+done
+if ${ac_cv_search_tgetent+:} false; then :
+
+else
+  ac_cv_search_tgetent=no
+fi
+rm conftest.$ac_ext
+LIBS=$ac_func_search_save_LIBS
+fi
+{ $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_search_tgetent" >&5
+$as_echo "$ac_cv_search_tgetent" >&6; }
+ac_res=$ac_cv_search_tgetent
+if test "$ac_res" != no; then :
+  test "$ac_res" = "none required" || LIBS="$ac_res $LIBS"
+
+fi
+
+fi
 
 if test "$ac_cv_search_tgetent" = no; then
   CONFIG_OBS="$CONFIG_OBS stub-termcap.o"
@@ -22507,6 +22617,56 @@ test -n "$python_prog_path" || python_prog_path="missing"
         python_prog=missing
       fi
       ;;
+    dyn)
+      # Assume python3 is being used for dynlib
+      python_prog=python3
+      # Extract the first word of "${python_prog}", so it can be a program name with args.
+set dummy ${python_prog}; ac_word=$2
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for $ac_word" >&5
+$as_echo_n "checking for $ac_word... " >&6; }
+if ${ac_cv_path_python_prog_path+:} false; then :
+  $as_echo_n "(cached) " >&6
+else
+  case $python_prog_path in
+  [\\/]* | ?:[\\/]*)
+  ac_cv_path_python_prog_path="$python_prog_path" # Let the user override the test with a path.
+  ;;
+  *)
+  as_save_IFS=$IFS; IFS=$PATH_SEPARATOR
+for as_dir in $PATH
+do
+  IFS=$as_save_IFS
+  test -z "$as_dir" && as_dir=.
+    for ac_exec_ext in '' $ac_executable_extensions; do
+  if as_fn_executable_p "$as_dir/$ac_word$ac_exec_ext"; then
+    ac_cv_path_python_prog_path="$as_dir/$ac_word$ac_exec_ext"
+    $as_echo "$as_me:${as_lineno-$LINENO}: found $as_dir/$ac_word$ac_exec_ext" >&5
+    break 2
+  fi
+done
+  done
+IFS=$as_save_IFS
+
+  test -z "$ac_cv_path_python_prog_path" && ac_cv_path_python_prog_path="missing"
+  ;;
+esac
+fi
+python_prog_path=$ac_cv_path_python_prog_path
+if test -n "$python_prog_path"; then
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: $python_prog_path" >&5
+$as_echo "$python_prog_path" >&6; }
+else
+  { $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+$as_echo "no" >&6; }
+fi
+
+
+      if test "${python_prog_path}" = missing; then
+        { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: unable to find python program ${python_prog}" >&5
+$as_echo "$as_me: WARNING: unable to find python program ${python_prog}" >&2;}
+	python_prog=missing
+      fi
+      ;;
     *)
       # While we can't run python compiled for $host (unless host == build),
       # the user could write a script that provides the needed information,
@@ -22571,19 +22731,26 @@ fi
 	as_fn_error $? "failure running python-config --includes" "$LINENO" 5
       fi
     fi
-    python_libs=`${python_prog} ${srcdir}/python/python-config.py --ldflags`
-    if test $? != 0; then
-      have_python_config=failed
-      if test "${with_python}" != auto; then
-	as_fn_error $? "failure running python-config --ldflags" "$LINENO" 5
+    # Skip tests for dlopen libpython - we don't need to link
+    if test "${with_python}" != dyn; then
+      python_libs=`${python_prog} ${srcdir}/python/python-config.py --ldflags`
+      if test $? != 0; then
+        have_python_config=failed
+        if test "${with_python}" != auto; then
+	  as_fn_error $? "failure running python-config --ldflags" "$LINENO" 5
+        fi
       fi
-    fi
-    python_prefix=`${python_prog} ${srcdir}/python/python-config.py --exec-prefix`
-    if test $? != 0; then
-      have_python_config=failed
-      if test "${with_python}" != auto; then
-	as_fn_error $? "failure running python-config --exec-prefix" "$LINENO" 5
+      python_prefix=`${python_prog} ${srcdir}/python/python-config.py --exec-prefix`
+      if test $? != 0; then
+        have_python_config=failed
+        if test "${with_python}" != auto; then
+	  as_fn_error $? "failure running python-config --exec-prefix" "$LINENO" 5
+	fi
       fi
+    else
+      # do not set for dlopen libpython
+      python_libs=
+      python_prefix=
     fi
   else
     # We do not have a python executable we can use to determine where
@@ -22601,7 +22768,12 @@ fi
   # python in turn.
 
   have_libpython=no
-  if test "${have_python_config}" = yes; then
+  # Bypass checks if we are using dlopen libpython
+  if test "${with_python}" = dyn; then
+    # FIXME: Probably should be doing a AC_CHECK_HEADERS test here...
+    PYTHON_CPPFLAGS=${python_includes}
+    have_libpython=yes
+  elif test "${have_python_config}" = yes; then
 
 
   new_CPPFLAGS=${python_includes}
@@ -22706,6 +22878,15 @@ else
 fi
 
 
+
+# Check whether --with-python-inc was given.
+if test "${with_python_inc+set}" = set; then :
+  withval=$with_python_inc;
+    PYTHON_CPPFLAGS="${with_python_inc}"
+
+fi
+
+
 if test "${have_libpython}" != no; then
 
 $as_echo "#define HAVE_PYTHON 1" >>confdefs.h
@@ -22745,6 +22926,15 @@ cat >>confdefs.h <<_ACEOF
 _ACEOF
 
 
+  fi
+
+  # Check for added NVIDIA dynlib support
+  if test "${with_python}" = dyn; then
+
+$as_echo "#define NVIDIA_PYTHON_DYNLIB 1" >>confdefs.h
+
+    CONFIG_OBS="$CONFIG_OBS \$(SUBDIR_PYTHON_DYNLIB_OBS)"
+    CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_PYTHON_DYNLIB_SRCS)"
   fi
 
   # Flags needed to compile Python code (taken from python-config --cflags).
@@ -28037,6 +28227,9 @@ case $host_os in
     gdbinit=.gdbinit
     ;;
 esac
+if test x"$enable_cuda" = xyes; then
+    gdbinit=.cuda-gdbinit
+fi
 
 cat >>confdefs.h <<_ACEOF
 #define GDBINIT "$gdbinit"
@@ -31393,6 +31586,10 @@ Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${ENABLE_BFD_64_BIT_TRUE}" && test -z "${ENABLE_BFD_64_BIT_FALSE}"; then
   as_fn_error $? "conditional \"ENABLE_BFD_64_BIT\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${ENABLE_CUDA_TRUE}" && test -z "${ENABLE_CUDA_FALSE}"; then
+  as_fn_error $? "conditional \"ENABLE_CUDA\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 if test -z "${HAVE_PYTHON_TRUE}" && test -z "${HAVE_PYTHON_FALSE}"; then

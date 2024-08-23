@@ -14,6 +14,11 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# NVIDIA CUDA Debugger CUDA-GDB
+# Copyright (C) 2007-2024 NVIDIA Corporation
+# Modified from the original GDB file referenced above by the CUDA-GDB 
+# team at NVIDIA <cudatools@nvidia.com>.
 
 # Please keep lists in this file sorted alphabetically, with one item per line.
 # Here are the general guidelines for ordering files and directories:
@@ -262,6 +267,66 @@ LIBSUPPORT = $(SUPPORT)/libgdbsupport.a
 INCSUPPORT = -I$(srcdir)/.. -I..
 
 #
+# CUDA file definitions
+#
+SUBDIR_CUDA_SRCS = \
+	cuda/cuda-api.c \
+	cuda/cuda-asm.c \
+	cuda/cuda-autostep.c \
+	cuda/cuda-bitset.c \
+	cuda/cuda-commands.c \
+	cuda/cuda-context.c \
+	cuda/cuda-convvars.c \
+	cuda/cuda-coords.c \
+	cuda/cuda-corelow.c \
+	cuda/cuda-elf-image.c \
+	cuda/cuda-events.c \
+	cuda/cuda-exceptions.c \
+	cuda/cuda-frame.c \
+	cuda/cuda-functions.c \
+	cuda/cuda-kernel.c \
+	cuda/cuda-lang.c \
+	cuda/cuda-linux-nat.c \
+	cuda/cuda-modules.c \
+	cuda/cuda-notifications.c \
+	cuda/cuda-options.c \
+	cuda/cuda-packet-manager.c \
+	cuda/cuda-regmap.c \
+	cuda/cuda-special-register.c \
+	cuda/cuda-state.c \
+	cuda/cuda-tdep.c \
+	cuda/cuda-utils.c \
+	cuda/cuda-version.c \
+	cuda/self-bt.c \
+	cuda/libcudbg.c \
+	cuda/libcudbgipc.c \
+	cuda/cuda-env-vars.c
+
+@ENABLE_CUDA_TRUE@SUBDIR_CUDA_SFILE_SRCS = cuda/cuda-parser.exp.y cuda/cuda-parser.lex.l
+@ENABLE_CUDA_FALSE@SUBDIR_CUDA_SFILE_SRCS =
+
+@ENABLE_CUDA_TRUE@SUBDIR_CUDA_YYFILES = cuda-parser.lex.c cuda-parser.tab.c
+@ENABLE_CUDA_FALSE@SUBDIR_CUDA_YYFILES =
+
+@ENABLE_CUDA_TRUE@SUBDIR_CUDA_MI_SRCS = cuda/mi-cuda.c
+@ENABLE_CUDA_FALSE@SUBDIR_CUDA_MI_SRCS =
+
+# f-module.c is a cuda-gdb extension to support Fortran modules
+#@ENABLE_CUDA_TRUE@SUBDIR_CUDA_COMMON_SFILES = f-module.c
+@ENABLE_CUDA_TRUE@SUBDIR_CUDA_COMMON_SFILES =
+@ENABLE_CUDA_FALSE@SUBDIR_CUDA_COMMON_SFILES =
+
+@ENABLE_CUDA_TRUE@SUBDIR_CUDA_GENERATED_FILES = cuda-parser.lex.c
+@ENABLE_CUDA_FALSE@SUBDIR_CUDA_GENERATED_FILES =
+
+SUBDIR_CUDA_OBS = $(patsubst %.c,%.o,$(SUBDIR_CUDA_SRCS))
+
+LIBCUDACORE = @LIBCUDACORE@
+SUBDIR_CUDA_DEPS = @LIBCUDACORE@
+SUBDIR_CUDA_LDFLAGS =
+SUBDIR_CUDA_CFLAGS =
+
+#
 # CLI sub directory definitons
 #
 SUBDIR_CLI_SRCS = \
@@ -298,7 +363,8 @@ SUBDIR_MI_SRCS = \
 	mi/mi-main.c \
 	mi/mi-out.c \
 	mi/mi-parse.c \
-	mi/mi-symbol-cmds.c
+	mi/mi-symbol-cmds.c \
+	$(SUBDIR_CUDA_MI_SRCS)
 
 SUBDIR_MI_OBS = $(patsubst %.c,%.o,$(SUBDIR_MI_SRCS))
 
@@ -440,6 +506,11 @@ SUBDIR_PYTHON_SRCS = \
 	python/python.c
 
 SUBDIR_PYTHON_OBS = $(patsubst %.c,%.o,$(SUBDIR_PYTHON_SRCS))
+
+SUBDIR_PYTHON_DYNLIB_SRCS = \
+	python/python-dynobj.c
+
+SUBDIR_PYTHON_DYNLIB_OBS = $(patsubst %.c,%.o,$(SUBDIR_PYTHON_DYNLIB_SRCS))
 
 SUBDIR_PYTHON_DEPS =
 SUBDIR_PYTHON_LDFLAGS =
@@ -591,7 +662,7 @@ CONFIG_INSTALL = @CONFIG_INSTALL@
 CONFIG_UNINSTALL = @CONFIG_UNINSTALL@
 HAVE_NATIVE_GCORE_TARGET = @HAVE_NATIVE_GCORE_TARGET@
 
-CONFIG_SRC_SUBDIR = arch cli dwarf2 mi compile tui unittests guile python \
+CONFIG_SRC_SUBDIR = arch cli cuda dwarf2 mi compile tui unittests guile python \
 	target nat
 CONFIG_DEP_SUBDIR = $(addsuffix /$(DEPDIR),$(CONFIG_SRC_SUBDIR))
 
@@ -659,7 +730,7 @@ CLIBS = $(SIM) $(READLINE) $(OPCODES) $(LIBCTF) $(BFD) $(ZLIB) $(ZSTD_LIBS) \
 	$(LIBEXPAT) $(LIBLZMA) $(LIBBABELTRACE) $(LIBIPT) \
 	$(WIN32LIBS) $(LIBGNU) $(LIBGNU_EXTRA_LIBS) $(LIBICONV) \
 	$(LIBMPFR) $(LIBGMP) $(SRCHIGH_LIBS) $(LIBXXHASH) $(PTHREAD_LIBS) \
-	$(DEBUGINFOD_LIBS) $(LIBBABELTRACE_LIB)
+	$(DEBUGINFOD_LIBS) $(LIBBABELTRACE_LIB) $(LIBCUDACORE)
 CDEPS = $(NAT_CDEPS) $(SIM) $(BFD) $(READLINE_DEPS) $(CTF_DEPS) \
 	$(OPCODES) $(INTL_DEPS) $(LIBIBERTY) $(CONFIG_DEPS) $(LIBGNU) \
 	$(LIBSUPPORT)
@@ -696,6 +767,7 @@ TARGET_OBS = @TARGET_OBS@
 # All target-dependent objects files that require 64-bit CORE_ADDR
 # (used with --enable-targets=all --enable-64-bit-bfd).
 ALL_64_TARGET_OBS = \
+	cuda/cuda-tdep.o \
 	aarch64-fbsd-tdep.o \
 	aarch64-linux-tdep.o \
 	aarch64-newlib-tdep.o \
@@ -1212,7 +1284,8 @@ COMMON_SFILES = \
 	varobj.c \
 	xml-support.c \
 	xml-syscall.c \
-	xml-tdesc.c
+	xml-tdesc.c \
+	$(SUBDIR_CUDA_COMMON_SFILES)
 
 # Links made at configuration time should not be specified here, since
 # SFILES is used in building the distribution archive.
@@ -1241,6 +1314,7 @@ SFILES = \
 	ui-file.h \
 	mi/mi-common.c \
 	$(SUBDIR_CLI_SRCS) \
+	$(SUBDIR_CUDA_SFILE_SRCS) \
 	$(SUBDIR_TARGET_SRCS) \
 	$(COMMON_SFILES) \
 	$(SUBDIR_GCC_COMPILE_SRCS)
@@ -1297,6 +1371,42 @@ HFILES_NO_SRCDIR = \
 	cp-abi.h \
 	cp-support.h \
 	csky-tdep.h \
+	cuda/cuda-api.h \
+	cuda/cuda-asm.h \
+	cuda/cuda-autostep.h \
+	cuda/cuda-bitset.h \
+	cuda/cuda-commands.h \
+	cuda/cuda-context.h \
+	cuda/cuda-convvars.h \
+	cuda/cuda-coords.h \
+	cuda/cuda-coord-set.h \
+	cuda/cuda-corelow.h \
+	cuda/cuda-defs.h \
+	cuda/cuda-elf-image.h \
+	cuda/cuda-events.h \
+	cuda/cuda-exceptions.h \
+	cuda/cuda-frame.h \
+	cuda/cuda-gdb.h \
+	cuda/cuda-kernel.h \
+	cuda/cuda-lang.h \
+	cuda/cuda-linux-nat.h \
+	cuda/cuda-modules.h \
+	cuda/cuda-notifications.h \
+	cuda/cuda-options.h \
+	cuda/cuda-packet-manager.h \
+	cuda/cuda-parser.h \
+	cuda/cuda-regmap.h \
+	cuda/cuda-special-register.h \
+	cuda/cuda-state.h \
+	cuda/cuda-tdep.h \
+	cuda/cuda-utils.h \
+	cuda/cuda-version.h \
+	cuda/libcudbg.h \
+	cuda/libcudbgipc.h \
+	cuda/libcudbgtrace.h \
+	cuda/remote-cuda.h \
+	cuda/self-bt.h \
+	cuda/cuda-env-vars.h \
 	d-lang.h \
 	darwin-nat.h \
 	dcache.h \
@@ -1323,6 +1433,7 @@ HFILES_NO_SRCDIR = \
 	extension-priv.h \
 	f-array-walker.h \
 	f-lang.h \
+	f-module.h \
 	fbsd-nat.h \
 	fbsd-tdep.h \
 	filesystem.h \
@@ -1850,14 +1961,18 @@ COMMON_OBS = $(DEPFILES) $(CONFIG_OBS) $(YYOBJ) \
 	$(SUBDIR_TARGET_OBS) \
 	$(SUBDIR_GCC_COMPILE_OBS)
 
-SUBDIRS = doc @subdirs@ data-directory
+#CUDA - We don't want to include the doc subdir as we don't ship documentation.
+@ENABLE_CUDA_TRUE@SUBDIRS = @subdirs@ data-directory
+@ENABLE_CUDA_FALSE@SUBDIRS = doc @subdirs@ data-directory
 CLEANDIRS = $(SUBDIRS)
 
 # List of subdirectories in the build tree that must exist.
 # This is used to force build failures in existing trees when
 # a new directory is added.
 # The format here is for the `case' shell command.
-REQUIRED_SUBDIRS = doc | testsuite | data-directory
+#CUDA - We don't want to include the doc subdir as we don't ship documentation.
+#REQUIRED_SUBDIRS = doc | testsuite | data-directory
+REQUIRED_SUBDIRS = testsuite | data-directory
 
 # Parser intermediate files.
 YYFILES = \
@@ -1869,11 +1984,13 @@ YYFILES = \
 	f-exp.c \
 	go-exp.c \
 	m2-exp.c \
-	p-exp.c
+	p-exp.c \
+	$(SUBDIR_CUDA_YYFILES)
 
 # ada-lex.c is included by another file, so it shouldn't wind up as a
 # .o itself.
-YYOBJ = $(filter-out ada-lex.o,$(patsubst %.c,%.o,$(YYFILES)))
+# CUDA - Same is true for cuda-parser.lex.c
+YYOBJ = $(filter-out ada-lex.o cuda-parser.lex.o,$(patsubst %.c,%.o,$(YYFILES)))
 
 # Things which need to be built when making a distribution.
 
@@ -1886,7 +2003,8 @@ generated_files = \
 	config.h \
 	jit-reader.h \
 	$(NAT_GENERATED_FILES) \
-	$(NM_H)
+	$(NM_H) \
+	$(SUBDIR_CUDA_GENERATED_FILES)
 
 # Flags needed to compile Python code
 PYTHON_CFLAGS = @PYTHON_CFLAGS@
@@ -2114,6 +2232,7 @@ test-cp-name-parser$(EXEEXT): test-cp-name-parser.o $(LIBIBERTY)
 
 INIT_FILES_FILTER_OUT = \
 	cp-name-parser.o \
+	cuda-parser.tab.o \
 	init.o \
 	version.o \
 	xml-builtin.o \
@@ -2145,11 +2264,11 @@ libgdb.a: $(LIBGDB_OBS)
 	$(RANLIB) libgdb.a
 
 # Removing the old gdb first works better if it is running, at least on SunOS.
-gdb$(EXEEXT): gdb.o $(LIBGDB_OBS) $(CDEPS) $(TDEPLIBS)
+gdb$(EXEEXT): gdb.o $(LIBGDB_OBS) $(CDEPS) $(TDEPLIBS) $(LIBCUDACORE)
 	$(SILENCE) rm -f gdb$(EXEEXT)
 	$(ECHO_CXXLD) $(CC_LD) $(INTERNAL_LDFLAGS) $(WIN32LDAPP) \
 		-o gdb$(EXEEXT) gdb.o $(LIBGDB_OBS) \
-		$(TDEPLIBS) $(TUI_LIBRARY) $(CLIBS) $(LOADLIBES)
+		$(TDEPLIBS) $(TUI_LIBRARY) $(CLIBS) $(LOADLIBES) $(INTERNAL_LDFLAGS)
 ifneq ($(CODESIGN_CERT),)
 	$(ECHO_SIGN) $(CODESIGN) -s $(CODESIGN_CERT) gdb$(EXEEXT)
 endif
@@ -2222,6 +2341,8 @@ local-maintainer-clean:
 	rm -f c-exp.c \
 		cp-name-parser.c \
 		ada-lex.c ada-exp.c \
+		cuda-parser.lex.c \
+		cuda-parser.tab.c \
 		d-exp.c f-exp.c go-exp.c m2-exp.c p-exp.c
 	rm -f TAGS
 	rm -f $(YYFILES)
@@ -2462,6 +2583,13 @@ po/$(PACKAGE).pot: force
 	-test -d po || mkdir po
 	sh -e $(srcdir)/po/gdbtext $(XGETTEXT) $(PACKAGE) . $(srcdir)
 
+#
+# YACC/LEX helper files for the CUDA commands
+#
+cuda-parser.tab.c: $(srcdir)/cuda/cuda-parser.exp.y
+	$(YACC) -d -p cuda_parser_ -b cuda-parser $<
+cuda-parser.lex.c: $(srcdir)/cuda/cuda-parser.lex.l cuda-parser.tab.c
+	$(FLEX) -ocuda-parser.lex.c -Pcuda_parser_ $<
 
 #
 # YACC/LEX dependencies

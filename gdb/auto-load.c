@@ -132,9 +132,15 @@ static void
 show_auto_load_local_gdbinit (struct ui_file *file, int from_tty,
 			      struct cmd_list_element *c, const char *value)
 {
+#ifdef NVIDIA_CUDA_GDB
+  gdb_printf (file, _("Auto-loading of .cuda-gdbinit script from current "
+		      "directory is %s.\n"),
+	      value);
+#else
   gdb_printf (file, _("Auto-loading of .gdbinit script from current "
 		      "directory is %s.\n"),
 	      value);
+#endif
 }
 
 /* Directory list from which to load auto-loaded scripts.  It is not checked
@@ -1358,15 +1364,31 @@ static void
 info_auto_load_local_gdbinit (const char *args, int from_tty)
 {
   if (auto_load_local_gdbinit_pathname == NULL)
+#ifdef NVIDIA_CUDA_GDB
+    gdb_printf (_("Local .cuda-gdbinit file was not found.\n"));
+#else
     gdb_printf (_("Local .gdbinit file was not found.\n"));
+#endif
   else if (auto_load_local_gdbinit_loaded)
+#ifdef NVIDIA_CUDA_GDB
+    gdb_printf (_("Local .cuda-gdbinit file \"%ps\" has been loaded.\n"),
+		styled_string (file_name_style.style (),
+			       auto_load_local_gdbinit_pathname));
+#else
     gdb_printf (_("Local .gdbinit file \"%ps\" has been loaded.\n"),
 		styled_string (file_name_style.style (),
 			       auto_load_local_gdbinit_pathname));
+#endif
   else
+#ifdef NVIDIA_CUDA_GDB
+    gdb_printf (_("Local .cuda-gdbinit file \"%ps\" has not been loaded.\n"),
+		styled_string (file_name_style.style (),
+			       auto_load_local_gdbinit_pathname));
+#else
     gdb_printf (_("Local .gdbinit file \"%ps\" has not been loaded.\n"),
 		styled_string (file_name_style.style (),
 			       auto_load_local_gdbinit_pathname));
+#endif
 }
 
 /* Print an "unsupported script" warning if it has not already been printed.
@@ -1514,11 +1536,19 @@ auto_load_info_cmdlist_get (void)
   static struct cmd_list_element *retval;
 
   if (retval == NULL)
+#ifdef NVIDIA_CUDA_GDB
+    add_prefix_cmd ("auto-load", class_info, info_auto_load_cmd, _("\
+Print current status of auto-loaded files.\n\
+Print whether various files like Python scripts or .cuda-gdbinit files have been\n\
+found and/or loaded."),
+		    &retval, 0/*allow-unknown*/, &infolist);
+#else
     add_prefix_cmd ("auto-load", class_info, info_auto_load_cmd, _("\
 Print current status of auto-loaded files.\n\
 Print whether various files like Python scripts or .gdbinit files have been\n\
 found and/or loaded."),
 		    &retval, 0/*allow-unknown*/, &infolist);
+#endif
 
   return &retval;
 }
@@ -1556,6 +1586,20 @@ This option has security implications for untrusted inferiors."),
 Usage: info auto-load gdb-scripts [REGEXP]"),
 	   auto_load_info_cmdlist_get ());
 
+#ifdef NVIDIA_CUDA_GDB
+  add_setshow_boolean_cmd ("local-gdbinit", class_support,
+			   &auto_load_local_gdbinit, _("\
+Enable or disable auto-loading of .cuda-gdbinit script in current directory."), _("\
+Show whether auto-loading .cuda-gdbinit script in current directory is enabled."),
+			   _("\
+If enabled, canned sequences of commands are loaded when debugger starts\n\
+from .cuda-gdbinit file in current directory.  Such files are deprecated,\n\
+use a script associated with inferior executable file instead.\n\
+This option has security implications for untrusted inferiors."),
+			   NULL, show_auto_load_local_gdbinit,
+			   auto_load_set_cmdlist_get (),
+			   auto_load_show_cmdlist_get ());
+#else
   add_setshow_boolean_cmd ("local-gdbinit", class_support,
 			   &auto_load_local_gdbinit, _("\
 Enable or disable auto-loading of .gdbinit script in current directory."), _("\
@@ -1568,17 +1612,32 @@ This option has security implications for untrusted inferiors."),
 			   NULL, show_auto_load_local_gdbinit,
 			   auto_load_set_cmdlist_get (),
 			   auto_load_show_cmdlist_get ());
+#endif
 
+#ifdef NVIDIA_CUDA_GDB
+  add_cmd ("local-gdbinit", class_info, info_auto_load_local_gdbinit,
+	   _("Print whether current directory .cuda-gdbinit file has been loaded.\n\
+Usage: info auto-load local-gdbinit"),
+	   auto_load_info_cmdlist_get ());
+#else
   add_cmd ("local-gdbinit", class_info, info_auto_load_local_gdbinit,
 	   _("Print whether current directory .gdbinit file has been loaded.\n\
 Usage: info auto-load local-gdbinit"),
 	   auto_load_info_cmdlist_get ());
+#endif
 
   suffix = ext_lang_auto_load_suffix (get_ext_lang_defn (EXT_LANG_GDB));
+#ifdef NVIDIA_CUDA_GDB
+  gdb_name_help
+    = xstrprintf (_("\
+CUDA-GDB scripts:    OBJFILE%s\n"),
+		  suffix);
+#else
   gdb_name_help
     = xstrprintf (_("\
 GDB scripts:    OBJFILE%s\n"),
 		  suffix);
+#endif
   python_name_help = NULL;
 #ifdef HAVE_PYTHON
   suffix = ext_lang_auto_load_suffix (get_ext_lang_defn (EXT_LANG_PYTHON));

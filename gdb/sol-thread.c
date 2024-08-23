@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* This module implements a sort of half target that sits between the
    machine-independent parts of GDB and the /proc interface (procfs.c)
    to provide access to the Solaris user-mode thread implementation.
@@ -605,9 +610,11 @@ check_for_thread_db (void)
   td_err_e err;
   ptid_t ptid;
 
+#ifndef NVIDIA_CUDA_GDB
   /* Don't attempt to use thread_db for remote targets.  */
   if (!(target_can_run () || core_bfd))
     return;
+#endif
 
   /* Do nothing if we couldn't load libthread_db.so.1.  */
   if (p_td_ta_new == NULL)

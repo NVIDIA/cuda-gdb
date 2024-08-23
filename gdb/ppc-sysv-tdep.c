@@ -18,6 +18,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "gdbcore.h"
 #include "inferior.h"
@@ -313,9 +318,24 @@ ppc_sysv_abi_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 
 		  if (write_pass)
 		    {
+#ifdef NVIDIA_CUDA_GDB
+                      if (byte_order == BFD_ENDIAN_BIG)
+                        {
+                          regcache->cooked_write (tdep->ppc_fp0_regnum + freg, val);
+                          regcache->cooked_write (tdep->ppc_fp0_regnum + freg + 1,
+                                                  val + 8);
+                        }
+                      else
+                        {
+                          regcache->cooked_write (tdep->ppc_fp0_regnum + freg + 1, val);
+                          regcache->cooked_write (tdep->ppc_fp0_regnum + freg,
+                                                  val + 8);
+                        }
+#else
 		      regcache->cooked_write (tdep->ppc_fp0_regnum + freg, val);
 		      regcache->cooked_write (tdep->ppc_fp0_regnum + freg + 1,
 					      val + 8);
+#endif
 		    }
 		}
 	      else
@@ -598,12 +618,22 @@ ppc_sysv_abi_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 }
 
 /* Handle the return-value conventions for Decimal Floating Point values.  */
+#ifdef NVIDIA_CUDA_GDB
+static enum return_value_convention
+get_decimal_float_return_value (struct gdbarch *gdbarch, struct type *valtype,
+				struct regcache *regcache, gdb_byte *readbuf,
+				const gdb_byte *writebuf, int index)
+#else
 static enum return_value_convention
 get_decimal_float_return_value (struct gdbarch *gdbarch, struct type *valtype,
 				struct regcache *regcache, gdb_byte *readbuf,
 				const gdb_byte *writebuf)
+#endif
 {
   ppc_gdbarch_tdep *tdep = gdbarch_tdep<ppc_gdbarch_tdep> (gdbarch);
+#ifdef NVIDIA_CUDA_GDB
+  int offset = index * valtype->length ();
+#endif
 
   gdb_assert (valtype->code () == TYPE_CODE_DECFLOAT);
 
@@ -616,6 +646,16 @@ get_decimal_float_return_value (struct gdbarch *gdbarch, struct type *valtype,
 	  const gdb_byte *p;
 
 	  /* 32-bit decimal float is right aligned in the doubleword.  */
+#ifdef NVIDIA_CUDA_GDB
+	  if (valtype->length () == 4
+              && gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
+	    {
+	      memcpy (regval + 4, writebuf + offset, 4);
+	      p = regval;
+	    }
+	  else
+	    p = writebuf + offset;
+#else
 	  if (valtype->length () == 4)
 	    {
 	      memcpy (regval + 4, writebuf, 4);
@@ -623,6 +663,7 @@ get_decimal_float_return_value (struct gdbarch *gdbarch, struct type *valtype,
 	    }
 	  else
 	    p = writebuf;
+#endif
 
 	  regcache->cooked_write (tdep->ppc_fp0_regnum + 1, p);
 	}
@@ -631,8 +672,14 @@ get_decimal_float_return_value (struct gdbarch *gdbarch, struct type *valtype,
 	  regcache->cooked_read (tdep->ppc_fp0_regnum + 1, readbuf);
 
 	  /* Left align 32-bit decimal float.  */
+#ifdef NVIDIA_CUDA_GDB
+	  if (valtype->length () == 4
+              && gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
+	    memcpy (readbuf + offset, readbuf + offset + 4, 4);
+#else
 	  if (valtype->length () == 4)
 	    memcpy (readbuf, readbuf + 4, 4);
+#endif
 	}
     }
   /* 128-bit decimal floats in f2,f3.  */
@@ -644,12 +691,26 @@ get_decimal_float_return_value (struct gdbarch *gdbarch, struct type *valtype,
 
 	  for (i = 0; i < 2; i++)
 	    {
+#ifdef NVIDIA_CUDA_GDB
+	      int regnum;
+	      if (gdbarch_byte_order (gdbarch) == BFD_ENDIAN_BIG)
+		regnum = tdep->ppc_fp0_regnum + 2 + i + 2 * index;
+	      else
+		regnum = tdep->ppc_fp0_regnum + 3 - i + 2 * index;
+	      if (writebuf != NULL)
+		regcache->cooked_write (regnum,
+					writebuf + offset + i * 8);
+	      if (readbuf != NULL)
+		regcache->cooked_read (regnum,
+				       readbuf + offset + i * 8);
+#else
 	      if (writebuf != NULL)
 		regcache->cooked_write (tdep->ppc_fp0_regnum + 2 + i,
 					writebuf + i * 8);
 	      if (readbuf != NULL)
 		regcache->cooked_read (tdep->ppc_fp0_regnum + 2 + i,
 				       readbuf + i * 8);
+#endif
 	    }
 	}
     }
@@ -777,8 +838,13 @@ do_ppc_sysv_return_value (struct gdbarch *gdbarch, struct type *func_type,
       return RETURN_VALUE_REGISTER_CONVENTION;
     }
   if (type->code () == TYPE_CODE_DECFLOAT && !tdep->soft_float)
+#ifdef NVIDIA_CUDA_GDB
+    return get_decimal_float_return_value (gdbarch, type, regcache, readbuf,
+					   writebuf, 0);
+#else
     return get_decimal_float_return_value (gdbarch, type, regcache, readbuf,
 					   writebuf);
+#endif
   else if ((type->code () == TYPE_CODE_INT
 	    || type->code () == TYPE_CODE_CHAR
 	    || type->code () == TYPE_CODE_BOOL

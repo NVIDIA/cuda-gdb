@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "gdbtypes.h"
 #include "floatformat.h"
@@ -261,11 +266,54 @@ put_field (unsigned char *data, enum floatformat_byteorders order,
     }
   if (cur_bitshift > -FLOATFORMAT_CHAR_BIT)
     {
+#ifdef NVIDIA_CUDA_GDB
+      /* 
+       * Bugfix: Upstream has a long standing bug that manifests itself
+       * when assigning a negative value to a non-float/double/long double
+       * float type. The following is masking off the bits we are about to
+       * do assignment on. This has an off-by-n error when start + len fits
+       * entirely in the byte we are about to assign. 
+       *
+       * We are currently operating on the least significant byte in the 
+       * current field.
+       * 
+       * If the field fits entirely within the least significant byte,
+       * taking into account start will cause us to incorrectly calculate the mask.
+       * There is no spill. The mask would be larger than the number of bits
+       * we are about to assign.
+       *
+       * If the least significant byte has spill from the next most significant
+       * byte, we need to take into account start to determine how many bits
+       * spilled here.
+       */
+      if ((start + len) <= FLOATFORMAT_CHAR_BIT)
+	*(data + cur_byte) &=
+	  ~(((1 << (len % FLOATFORMAT_CHAR_BIT)) - 1)
+	    << (-cur_bitshift));
+      else
+	*(data + cur_byte) &=
+	  ~(((1 << ((start + len) % FLOATFORMAT_CHAR_BIT)) - 1)
+	    << (-cur_bitshift));
+      /* 
+       * Bugfix: This was potentially assigning bits beyond the starting
+       * position. Guard against that edge case. If we are spilling from
+       * the most significant bit there is no issue. If start is > 0
+       * and the field fits entirely within the byte, we should ensure
+       * we mask off the upper bits passed in from stuff_to_put.
+       */
+      int upper_mask = ((1 << FLOATFORMAT_CHAR_BIT) - 1);
+      if ((start + len) <= FLOATFORMAT_CHAR_BIT)
+	upper_mask = upper_mask >> start;
+      *(data + cur_byte) |=
+	(((stuff_to_put & ((1 << FLOATFORMAT_CHAR_BIT) - 1)) << (-cur_bitshift))
+	 & upper_mask);
+#else
       *(data + cur_byte) &=
 	~(((1 << ((start + len) % FLOATFORMAT_CHAR_BIT)) - 1)
 	  << (-cur_bitshift));
       *(data + cur_byte) |=
 	(stuff_to_put & ((1 << FLOATFORMAT_CHAR_BIT) - 1)) << (-cur_bitshift);
+#endif
     }
   cur_bitshift += FLOATFORMAT_CHAR_BIT;
   if (order == floatformat_little)

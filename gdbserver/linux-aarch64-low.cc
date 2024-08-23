@@ -19,8 +19,16 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "server.h"
 #include "linux-low.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "linux-cuda-low.h"
+#endif
 #include "nat/aarch64-linux.h"
 #include "nat/aarch64-linux-hw-point.h"
 #include "arch/aarch64-insn.h"
@@ -146,8 +154,11 @@ protected:
 };
 
 /* The singleton target ops object.  */
-
+#ifdef NVIDIA_CUDA_GDB
+static cuda_linux_process_target<aarch64_target> the_aarch64_target;
+#else
 static aarch64_target the_aarch64_target;
+#endif
 
 bool
 aarch64_target::low_cannot_fetch_register (int regno)

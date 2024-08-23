@@ -28,6 +28,14 @@
 #include "language.h"
 #include "arch-utils.h"
 
+#ifdef NVIDIA_PYTHON_DYNLIB
+/* Redefine NULL to nullptr to avoid warnings due to passing
+ * NULL to long int with the generated wrappers. */
+#undef NULL
+#define NULL nullptr
+#endif
+
+
 /* Parameter constants and their values.  */
 static struct {
   const char *name;

@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 
 #include "elf/external.h"
@@ -34,6 +39,10 @@
 #include "regcache.h"
 #include "gdbthread.h"
 #include "observable.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "source.h"
+#define NOTE_GNU_BUILD_ID_NAME  ".note.gnu.build-id"
+#endif
 
 #include "solist.h"
 #include "solib.h"
@@ -47,6 +56,15 @@
 #include "probe.h"
 
 #include <map>
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+# include "gdbsupport/rsp-low.h"
+# include "nto-tdep.h"
+# include "nto-share/qnx_linkmap_note.h"
+#endif
+#if defined(NVIDIA_CUDA_GDB) && defined(TODO__QNXTARGET__)
+/* Allow using core_bfd if exec_bfd is not present.  */
+#define exec_bfd ((exec_bfd != NULL) ? exec_bfd : core_bfd)
+#endif
 
 static struct link_map_offsets *svr4_fetch_link_map_offsets (void);
 static int svr4_have_link_map_offsets (void);
@@ -170,6 +188,12 @@ svr4_same_1 (const char *gdb_so_name, const char *inferior_so_name)
       && strcmp (inferior_so_name, "/lib/sparcv9/ld.so.1") == 0)
     return 1;
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+  if ((strcmp (gdb_so_name, "/usr/lib/ldqnx.so.2") == 0
+      || strcmp (gdb_so_name, "/usr/lib/ldqnx-64.so.2") == 0)
+      && strcmp (inferior_so_name, "libc.so.3") == 0)
+    return 1;
+#endif
   return 0;
 }
 
@@ -215,6 +239,10 @@ lm_info_read (CORE_ADDR lm_addr)
 					       ptr_type);
       lm_info->l_name = extract_typed_address (&lm[lmo->l_name_offset],
 					       ptr_type);
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+      lm_info->l_path = extract_typed_address (&lm[lmo->l_path_offset],
+					       ptr_type);
+#endif
     }
 
   return lm_info;
@@ -228,7 +256,11 @@ has_lm_dynamic_from_link_map (void)
   return lmo->l_ld_offset >= 0;
 }
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+CORE_ADDR
+#else
 static CORE_ADDR
+#endif
 lm_addr_check (const struct so_list *so, bfd *abfd)
 {
   lm_info_svr4 *li = (lm_info_svr4 *) so->lm_info;
@@ -1022,6 +1054,13 @@ svr4_copy_library_list (struct so_list *src)
       lm_info_svr4 *src_li = (lm_info_svr4 *) src->lm_info;
       newobj->lm_info = new lm_info_svr4 (*src_li);
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+      if (newobj->build_id != NULL)
+	{
+	  newobj->build_id = (gdb_byte *) xmalloc (src->build_idsz);
+	  memcpy (newobj->build_id, src->build_id, src->build_idsz);
+	}
+#endif
       newobj->next = NULL;
       *link = newobj;
       link = &newobj->next;
@@ -1054,6 +1093,13 @@ library_list_start_library (struct gdb_xml_parser *parser,
     = (ULONGEST *) xml_find_attribute (attributes, "l_addr")->value.get ();
   ULONGEST *l_ldp
     = (ULONGEST *) xml_find_attribute (attributes, "l_ld")->value.get ();
+
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+  const struct gdb_xml_value *const att_build_id
+    = xml_find_attribute (attributes, "build-id");
+  const char *const hex_build_id
+    = (const char *)(att_build_id ? att_build_id->value.get () : NULL);
+#endif
   struct so_list *new_elem;
 
   new_elem = XCNEW (struct so_list);
@@ -1067,6 +1113,27 @@ library_list_start_library (struct gdb_xml_parser *parser,
   new_elem->so_name[sizeof (new_elem->so_name) - 1] = 0;
   strcpy (new_elem->so_original_name, new_elem->so_name);
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+  if (hex_build_id != NULL)
+    {
+      const size_t hex_build_id_len = strlen (hex_build_id);
+      if (hex_build_id_len > 0)
+	{
+	  new_elem->build_id = (gdb_byte *)xmalloc (hex_build_id_len / 2);
+	  new_elem->build_idsz = hex2bin (hex_build_id, new_elem->build_id,
+					  hex_build_id_len);
+	  if (new_elem->build_idsz != (hex_build_id_len / 2))
+	    {
+	      warning (_("Gdbserver returned invalid hex encoded build_id '%s'"
+			 "(%zu/%zu)\n"),
+		       hex_build_id, hex_build_id_len, new_elem->build_idsz);
+	      xfree (new_elem->build_id);
+	      new_elem->build_id = NULL;
+	      new_elem->build_idsz = 0;
+	    }
+	}
+    }
+#endif
   /* Older versions did not supply lmid.  Put the element into the flat
      list of the special namespace zero in that case.  */
   gdb_xml_value *at_lmid = xml_find_attribute (attributes, "lmid");
@@ -1138,6 +1205,9 @@ static const struct gdb_xml_attribute svr4_library_attributes[] =
   { "l_addr", GDB_XML_AF_NONE, gdb_xml_parse_attr_ulongest, NULL },
   { "l_ld", GDB_XML_AF_NONE, gdb_xml_parse_attr_ulongest, NULL },
   { "lmid", GDB_XML_AF_NONE, gdb_xml_parse_attr_ulongest, NULL },
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+  { "build-id", GDB_XML_AF_OPTIONAL, NULL, NULL },
+#endif
   { NULL, GDB_XML_AF_NONE, NULL, NULL }
 };
 
@@ -1308,6 +1378,30 @@ svr4_read_so_list (svr4_info *info, CORE_ADDR lm, CORE_ADDR prev_lm,
       /* Extract this shared object's name.  */
       gdb::unique_xmalloc_ptr<char> buffer
 	= target_read_string (li->l_name, SO_NAME_MAX_PATH_SIZE - 1);
+
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+# ifndef PATH_MAX
+#   define PATH_MAX 1024
+# endif
+      /* Always get l_path and stuff it in so_original_name. */
+	{
+	  /* Try l_path */
+	  gdb::unique_xmalloc_ptr<char> pathbuff
+	    = target_read_string (li->l_path, PATH_MAX - 1);
+	  if (pathbuff != nullptr)
+	    {
+	      if (buffer == nullptr)
+		{
+		  if (svr4_same_1 (pathbuff.get (), "libc.so.3"))
+		    buffer.reset (xstrdup ("libc.so.3"));
+		  else
+		    buffer.reset (xstrdup (lbasename (pathbuff.get ())));
+		}
+	      strncpy (newobj->so_original_name, pathbuff.get (),
+		       SO_NAME_MAX_PATH_SIZE - 1);
+	    }
+	}
+#endif
       if (buffer == nullptr)
 	{
 	  /* If this entry's l_name address matches that of the
@@ -1321,7 +1415,10 @@ svr4_read_so_list (svr4_info *info, CORE_ADDR lm, CORE_ADDR prev_lm,
 
       strncpy (newobj->so_name, buffer.get (), SO_NAME_MAX_PATH_SIZE - 1);
       newobj->so_name[SO_NAME_MAX_PATH_SIZE - 1] = '\0';
+/* NVIDIA_CUDA_GDB change handled above */
+#ifndef __QNXTARGET__
       strcpy (newobj->so_original_name, newobj->so_name);
+#endif
 
       /* If this entry has no name, or its name matches the name
 	 for the main executable, don't include it in the list.  */
@@ -1337,6 +1434,152 @@ svr4_read_so_list (svr4_info *info, CORE_ADDR lm, CORE_ADDR prev_lm,
   return 1;
 }
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+#define BFD_QNT_LINK_MAP	11
+#define BFD_QNT_LINK_MAP_SEC_NAME ".qnx_link_map"
+#define SWAP_UINT(var_ui, byte_order) \
+  extract_unsigned_integer ((gdb_byte *)&var_ui, \
+			    sizeof (var_ui), byte_order);
+static struct qnx_link_map_64
+swap_link_map (const gdb_byte *const lm)
+{
+  struct qnx_link_map_64 ret;
+  struct link_map_offsets *lmo = nto_generic_svr4_fetch_link_map_offsets ();
+  struct type *ptr_type = builtin_type (target_gdbarch ())->builtin_data_ptr;
+  ret.l_addr = extract_typed_address (&lm[lmo->l_addr_offset],
+                                                    ptr_type);
+  ret.l_name = extract_typed_address (&lm[lmo->l_name_offset],
+                                                    ptr_type);
+  ret.l_ld = extract_typed_address (&lm[lmo->l_ld_offset],
+                                                    ptr_type);
+  ret.l_next = extract_typed_address (&lm[lmo->l_next_offset],
+                                                    ptr_type);
+  ret.l_prev = extract_typed_address (&lm[lmo->l_prev_offset],
+                                                    ptr_type);
+  ret.l_path = extract_typed_address (&lm[lmo->l_path_offset],
+                                                    ptr_type);
+  ret.l_refname = 0; /* unused */
+  ret.l_loaded  = 0; /* unused */
+  return ret;
+}
+static struct qnx_linkmap_note_header
+swap_header (const struct qnx_linkmap_note_header *const hp)
+{
+  enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
+  struct qnx_linkmap_note_header header;
+  header.version      = SWAP_UINT (hp->version, byte_order);
+  header.linkmapsz    = SWAP_UINT (hp->linkmapsz, byte_order);
+  header.strtabsz     = SWAP_UINT (hp->strtabsz, byte_order);
+  header.buildidtabsz = SWAP_UINT (hp->buildidtabsz, byte_order);
+  return header;
+}
+static struct qnx_linkmap_note_buildid *
+get_buildid_at (const struct qnx_linkmap_note_buildid *const buildidtab,
+                const size_t buildidtabsz, const size_t index)
+{
+    enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
+    const struct qnx_linkmap_note_buildid *buildid;
+    size_t n;
+    for (n = 0, buildid = buildidtab; (uintptr_t)buildid < (uintptr_t)buildidtab + buildidtabsz; n++) {
+        uint16_t descsz;
+	uint16_t desctype;
+	descsz = SWAP_UINT (buildid->descsz, byte_order);
+	desctype = SWAP_UINT (buildid->desctype, byte_order);
+        if (index == n) {
+	  struct qnx_linkmap_note_buildid *const ptr
+	    = (struct qnx_linkmap_note_buildid *) xcalloc (1, descsz + sizeof (descsz) + sizeof (desctype));
+	  ptr->descsz = descsz;
+	  ptr->desctype = desctype;
+	  memcpy (ptr->desc, buildid->desc, descsz);
+	  return ptr;
+	}
+        buildid = (struct qnx_linkmap_note_buildid *)((char *)buildid + sizeof(uint32_t) + descsz);
+    }
+    return NULL;
+}
+static struct so_list *
+nto_solist_from_qnx_linkmap_note (void)
+{
+  struct so_list *head = NULL;
+  struct so_list **tailp = NULL;
+  const asection *qnt_link_map_sect;
+  struct qnx_linkmap_note *qlmp;
+  struct qnx_linkmap_note_header header;
+  const char *strtab;
+  const gdb_byte *lmtab;
+  const struct qnx_linkmap_note_buildid *buildidtab;
+  int n;
+  size_t r_debug_sz = IS_64BIT() ? sizeof(struct qnx_r_debug_64) : sizeof(struct qnx_r_debug_32);
+  size_t linkmap_sz = IS_64BIT() ? sizeof(struct qnx_link_map_64) : sizeof(struct qnx_link_map_32);
+  if (core_bfd == NULL)
+    return NULL;
+  /* Load link map from .qnx_link_map  */
+  qnt_link_map_sect = bfd_get_section_by_name (core_bfd,
+					       BFD_QNT_LINK_MAP_SEC_NAME);
+  if (qnt_link_map_sect == NULL)
+    return NULL;
+  qlmp = (struct qnx_linkmap_note *) xmalloc (bfd_section_size (qnt_link_map_sect));
+  bfd_get_section_contents (core_bfd, (asection *)qnt_link_map_sect, qlmp, 0,
+			    bfd_section_size (qnt_link_map_sect));
+  header = swap_header (&qlmp->header);
+  strtab = (char *) &qlmp->data[qlmp->header.linkmapsz >> 2];
+  lmtab = (gdb_byte *) &qlmp->data[(r_debug_sz + 3) >> 2];
+  buildidtab = (struct qnx_linkmap_note_buildid *) &qlmp->data
+    [((header.linkmapsz + 3) >> 2) + ((header.strtabsz + 3) >> 2)];
+  for (n = 0; (n+1)*linkmap_sz <= header.linkmapsz; n++)
+    {
+      const struct qnx_link_map_64 lm = swap_link_map (lmtab+n*linkmap_sz);
+      /* First static exe? */
+      if (lm.l_next == lm.l_prev && lm.l_next == 1U)
+	/* Artificial entry; skip it. */
+	continue;
+      if (lm.l_name < header.strtabsz)
+	{
+	  const char *soname = &strtab[lm.l_name];
+	  const char *path = &strtab[lm.l_path];
+	  struct so_list *new_elem;
+	  int compressedpath = 0;
+	  struct qnx_linkmap_note_buildid *bldid;
+	  if (lm.l_prev == 0
+	      && (strcmp (soname, "PIE") == 0 || strcmp (soname, "EXE") == 0))
+	    /* Executable entry, skip it. */
+	    continue;
+	  new_elem = new so_list;
+	  lm_info_svr4 *lm_info = new lm_info_svr4;
+	  lm_info->lm_addr = 0;
+	  lm_info->l_addr_p = 1; /* Do not calculate l_addr. */
+	  lm_info->l_addr = lm.l_addr;
+	  /* On QNX we always set l_addr to image base address. */
+	  lm_info->l_addr_inferior = lm.l_addr;
+	  lm_info->l_ld = lm.l_ld;
+	  new_elem->lm_info = lm_info;
+	  strncpy (new_elem->so_name, soname, sizeof (new_elem->so_name) - 1);
+	  new_elem->so_name [sizeof (new_elem->so_name) - 1] = 0;
+	  compressedpath = path[strlen(path)-1] == '/';
+	  snprintf (new_elem->so_original_name,
+		    sizeof (new_elem->so_original_name),
+		    "%s%s", path, compressedpath ? soname : "");
+	  new_elem->addr_low = lm.l_addr;
+	  new_elem->addr_high = lm.l_addr;
+	  bldid = get_buildid_at (buildidtab, header.buildidtabsz, n);
+	  if (bldid != NULL && bldid->descsz != 0)
+	    {
+	      new_elem->build_idsz = bldid->descsz;
+	      new_elem->build_id = (gdb_byte *) xcalloc (1, bldid->descsz);
+	      memcpy (new_elem->build_id, bldid->desc, bldid->descsz);
+	      xfree (bldid);
+	    }
+	  if (head == NULL)
+	    head = new_elem;
+	  else
+	    *tailp = new_elem;
+	  tailp = &new_elem->next;
+	}
+    }
+  xfree (qlmp);
+  return head;
+}
+#endif /* __QNXTARGET__ */
 /* Read the full list of currently loaded shared objects directly
    from the inferior, without referring to any libraries read and
    stored by the probes interface.  Handle special cases relating
@@ -1362,6 +1605,14 @@ svr4_current_sos_direct (struct svr4_info *info)
 
   info->using_xfer = svr4_current_sos_via_xfer_libraries (&library_list,
 							  NULL);
+  /* FIXME: The 12.1 mechanism is broken.
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+  	head = nto_solist_from_qnx_linkmap_note ();
+  	if (head != NULL)
+    	  return head;
+#endif
+  */
+
   if (info->using_xfer)
     {
       if (library_list.main_lm)
@@ -1419,6 +1670,8 @@ svr4_current_sos_direct (struct svr4_info *info)
 	}
     }
 
+/* NVIDIA_CUDA_GDB change */
+#ifndef __QNXTARGET__ /* not needed and assumes ld->prev == NULL */
   /* On Solaris, the dynamic linker is not in the normal list of
      shared objects, so make sure we pick it up too.  Having
      symbol information for the dynamic linker is quite crucial
@@ -1439,6 +1692,7 @@ svr4_current_sos_direct (struct svr4_info *info)
 	  svr4_read_so_list (info, debug_base, 0, &sos, 0);
 	}
     }
+#endif
 
   cleanup.release ();
 }
@@ -2101,6 +2355,22 @@ svr4_handle_solib_event (void)
   cleanup.release ();
 }
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+static int
+cmp_host_to_target_word (bfd *abfd, CORE_ADDR host_addr, CORE_ADDR target_addr)
+{
+  unsigned host_word, target_word;
+
+  if (bfd_seek(abfd, host_addr, SEEK_SET) != 0
+      || bfd_bread ((gdb_byte*)&host_word, sizeof (host_word), abfd)
+	 != sizeof (host_word))
+    return -1;
+  if (target_read_memory(target_addr, (gdb_byte*)&target_word,
+			 sizeof (target_word)))
+    return -1;
+  return (host_word-target_word);
+}
+#endif
 /* Helper function for svr4_update_solib_event_breakpoints.  */
 
 static bool
@@ -2429,6 +2699,9 @@ enable_break (struct svr4_info *info, int from_tty)
       int load_addr_found = 0;
       int loader_found_in_list = 0;
       struct target_ops *tmp_bfd_target;
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__) 
+      struct so_list *so_save = nullptr;
+#endif
 
       sym_addr = 0;
 
@@ -2442,14 +2715,35 @@ enable_break (struct svr4_info *info, int from_tty)
 	 mechanism to find the dynamic linker's base address.  */
 
       gdb_bfd_ref_ptr tmp_bfd;
+#if !defined(NVIDIA_CUDA_GDB)
       try
 	{
+#endif
 	  tmp_bfd = solib_bfd_open (interp_name);
+#if !defined(NVIDIA_CUDA_GDB)
 	}
       catch (const gdb_exception &ex)
 	{
 	}
+#endif
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+      if (tmp_bfd == NULL)
+	{
+	  /* Internal knowledge: */
+	  if (strcmp (interp_name, "/usr/lib/ldqnx.so.2") == 0 ||
+	      strcmp (interp_name, "/usr/lib/ldqnx-64.so.2") == 0)
+	    {
+	      /* We "know" it's libc.so.3 */
+	      tmp_bfd = solib_bfd_open ("libc.so.3");
+	      if (tmp_bfd != NULL)
+		{
+		  /* Change interp name. */
+		  interp_name = "libc.so.3";
+		}
+	    }
+	}
+#endif
       if (tmp_bfd == NULL)
 	goto bkpt_at_symbol;
 
@@ -2466,6 +2760,9 @@ enable_break (struct svr4_info *info, int from_tty)
 	      load_addr_found = 1;
 	      loader_found_in_list = 1;
 	      load_addr = lm_addr_check (so, tmp_bfd.get ());
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+	      so_save = so;
+#endif
 	      break;
 	    }
 	}
@@ -2555,6 +2852,37 @@ enable_break (struct svr4_info *info, int from_tty)
 	    break;
 	}
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+      if (sym_addr == 0 && load_addr_found)
+	{
+	  CORE_ADDR r_debug_sym_addr;
+	  const struct link_map_offsets *const lmo
+	    = svr4_fetch_link_map_offsets ();
+	  /* Unrelocated: */
+	  r_debug_sym_addr = gdb_bfd_lookup_symbol (tmp_bfd.get (),
+						    cmp_name_and_sec_flags,
+						    (void *) "_r_debug");
+	  if (r_debug_sym_addr != 0)
+	    {
+	      gdb_byte r_brk_addr[8];
+              unsigned ptr_bytes = IS_64BIT() ? 8 : 4;
+	      if (target_read_memory (load_addr + r_debug_sym_addr + lmo->r_brk_offset,
+				      r_brk_addr, ptr_bytes == 0))
+		{
+		  CORE_ADDR target_r_brk_addr
+		    = extract_unsigned_integer (r_brk_addr, ptr_bytes,
+					gdbarch_byte_order (target_gdbarch ()));
+		  /* Is target_r_brk_addr in ldd text segment?
+		     If so, it's relocated already. */
+		  if (target_r_brk_addr >= info->interp_text_sect_low
+		      && target_r_brk_addr < info->interp_text_sect_high)
+		    sym_addr = target_r_brk_addr - load_addr;
+		  else
+		    sym_addr = target_r_brk_addr;
+		}
+	    }
+	}
+#endif
       if (sym_addr != 0)
 	/* Convert 'sym_addr' from a function pointer to an address.
 	   Because we pass tmp_bfd_target instead of the current
@@ -2562,6 +2890,17 @@ enable_break (struct svr4_info *info, int from_tty)
 	sym_addr = gdbarch_convert_from_func_ptr_addr (target_gdbarch (),
 						       sym_addr,
 						       tmp_bfd_target);
+
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+	if (sym_addr != 0
+	    && cmp_host_to_target_word (tmp_bfd.get (), sym_addr,
+					sym_addr+load_addr) != 0)
+	  /* This warning is being parsed by the IDE, the
+	   * format should not change without consultations with
+	   * IDE team.  */
+	  warning ("Host file %s does not match target file %s",
+		   interp_name, so_save ? so_save->so_original_name : "<?>");
+#endif
 
       /* We're done with both the temporary bfd and target.  Closing
 	 the target closes the underlying bfd, because it holds the
@@ -2731,6 +3070,8 @@ svr4_exec_displacement (CORE_ADDR *displacementp)
      looking at a different file than the one used by the kernel - for
      instance, "gdb program" connected to "gdbserver :PORT ld.so program".  */
 
+/* NVIDIA_CUDA_GDB change */
+#ifndef __QNXTARGET__ /* the way our corefiles are created, these checks will fail.. */
   if (bfd_get_flavour (current_program_space->exec_bfd ())
       == bfd_target_elf_flavour)
     {
@@ -3043,6 +3384,7 @@ svr4_exec_displacement (CORE_ADDR *displacementp)
 	    return 0;
 	}
     }
+#endif /* !__QNXTARGET__ */
 
   if (info_verbose)
     {
@@ -3457,6 +3799,117 @@ svr4_iterate_over_objfiles_in_search_order
 	return;
     }
 }
+#ifdef NVIDIA_CUDA_GDB
+#ifdef __QNXTARGET__
+int svr4_r_debug_state (void);
+/* Fetch state of r_debug structure */
+int svr4_r_debug_state (void)
+{
+  const CORE_ADDR address = elf_locate_base ();
+  gdb_byte myaddr[128];
+  unsigned int len = sizeof (myaddr);
+  struct link_map_offsets *lmo = svr4_fetch_link_map_offsets ();
+  unsigned int rt_state;
+  enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
+  if (!lmo || address == 0)
+    return 1;
+  if (target_read_memory (address, myaddr, len))
+    return 1;
+  rt_state = extract_unsigned_integer (&myaddr[lmo->r_state_offset],
+				       lmo->r_state_size, byte_order);
+  return rt_state;
+}
+#endif
+#ifdef __QNXTARGET__
+/* Validate SO by comparing build-id from the associated bfd and
+   corresponding build-id from target memory.  */
+static int
+svr4_validate (const struct so_list *const so)
+{
+  gdb_byte *build_id;
+  size_t build_idsz;
+  gdb_assert (so != NULL);
+  if (so->abfd == NULL)
+    return 1;
+  if (!bfd_check_format (so->abfd, bfd_object)
+      || bfd_get_flavour (so->abfd) != bfd_target_elf_flavour
+      || so->abfd->build_id == NULL)
+    return 1;
+  build_id = so->build_id;
+  build_idsz = so->build_idsz;
+  if (build_id == NULL)
+    {
+      /* Get build_id from NOTE_GNU_BUILD_ID_NAME section.
+         This is a fallback mechanism for targets that do not
+	 implement TARGET_OBJECT_SOLIB_SVR4.  */
+      const asection *const asec
+	= bfd_get_section_by_name (so->abfd, NOTE_GNU_BUILD_ID_NAME);
+      ULONGEST bfd_sect_size;
+      if (asec == NULL)
+	return 1;
+      bfd_sect_size = bfd_section_size (asec);
+      if ((asec->flags & SEC_LOAD) == SEC_LOAD
+	  && bfd_sect_size != 0
+	  && strcmp (bfd_section_name (asec),
+		     NOTE_GNU_BUILD_ID_NAME) == 0)
+	{
+	  const enum bfd_endian byte_order
+	    = gdbarch_byte_order (target_gdbarch ());
+	  gdb::unique_xmalloc_ptr<Elf_External_Note> note 
+		  ((Elf_External_Note *) xmalloc (bfd_sect_size));
+	  if (target_read_memory (bfd_section_vma (asec)
+				  + lm_addr_check (so, so->abfd),
+				  (gdb_byte *)note.get (), bfd_sect_size) == 0)
+	    {
+	      build_idsz
+		= extract_unsigned_integer ((gdb_byte *) note.get ()->descsz,
+					    sizeof (note.get ()->descsz),
+					    byte_order);
+	      if (build_idsz == so->abfd->build_id->size)
+		{
+		  const char gnu[] = "GNU";
+		  if (memcmp (note.get ()->name, gnu, sizeof (gnu)) == 0)
+		    {
+		      ULONGEST namesz
+			= extract_unsigned_integer ((gdb_byte *) note.get ()->namesz,
+						    sizeof (note.get ()->namesz),
+						    byte_order);
+		      CORE_ADDR build_id_offs;
+		      /* Rounded to next 4 byte boundary.  */
+		      namesz = (namesz + 3) & ~((ULONGEST) 3U);
+		      build_id_offs = (sizeof (note.get ()->namesz)
+				       + sizeof (note.get ()->descsz)
+				       + sizeof (note.get ()->type) + namesz);
+		      build_id = (gdb_byte *) xmalloc (build_idsz);
+		      memcpy (build_id, (gdb_byte *)note.get () + build_id_offs, build_idsz);
+		    }
+		}
+	      if (build_id == NULL)
+		{
+		  /* If we are here, it means target memory read succeeded
+		     but note was not where it was expected according to the
+		     abfd.  Allow the logic below to perform the check
+		     with an impossible build-id and fail validation.  */
+		  build_idsz = 0;
+		  build_id = (gdb_byte*) xstrdup ("");
+		}
+	    }
+	}
+    }
+  if (build_id != NULL)
+    {
+      const int match
+	= so->abfd->build_id->size == build_idsz
+	  && memcmp (build_id, so->abfd->build_id->data,
+		     so->abfd->build_id->size) == 0;
+      if (build_id != so->build_id)
+	xfree (build_id);
+      return match;
+    }
+  return 1;
+}
+#endif
+#endif /* NVIDIA_CUDA_GDB */
 
 const struct target_so_ops svr4_so_ops =
 {
@@ -3474,6 +3927,9 @@ const struct target_so_ops svr4_so_ops =
   svr4_keep_data_in_core,
   svr4_update_solib_event_breakpoints,
   svr4_handle_solib_event,
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+  svr4_validate,
+#endif
 };
 
 void _initialize_svr4_solib ();

@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "elf-bfd.h"
 #include "infcall.h"
@@ -38,6 +43,10 @@
 #include "gdbsupport/gdb_unlinker.h"
 #include "gdbsupport/byte-vector.h"
 #include "gdbsupport/scope-exit.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-api.h"
+#include "cudadebugger.h"
+#endif // NVIDIA_CUDA_GDB
 
 /* The largest amount of memory to read from the target at once.  We
    must throttle it to limit the amount of memory used by GDB during
@@ -95,7 +104,13 @@ write_gcore_file_1 (bfd *obfd)
 	   bfd_errmsg (bfd_get_error ()));
 
   bfd_set_section_vma (note_sec, 0);
+#ifdef NVIDIA_CUDA_GDB
+  /* bfd_set_section_alignemnt() could not fail. */
+  if (!bfd_set_section_alignment (note_sec, 0))
+    error (_("bfd_set_section_alignment() failed."));
+#else
   bfd_set_section_alignment (note_sec, 0);
+#endif
   bfd_set_section_size (note_sec, note_size);
 
   /* Now create the memory/load sections.  */
@@ -122,8 +137,156 @@ write_gcore_file (bfd *obfd)
 /* gcore_command -- implements the 'gcore' command.
    Generate a core file from the inferior process.  */
 
+#if 0
+static std::string help_msg;
+
+struct gcore_params
+{
+  std::string cuda_core_file;
+  std::string cpu_core_file;
+  std::string cuda_flags;
+  bool lightweight;
+  bool no_cpu;
+  bool no_gpu;
+};
+
+using namespace gdb::option;
+
+static const option_def gcore_opt_defs[] = {
+  flag_option_def<gcore_params> {
+    "-no-cpu",
+    [] (gcore_params *params) { return &params->no_cpu; },
+    "Disable CPU coredump generation."
+  },
+
+  flag_option_def<gcore_params> {
+    "-no-gpu",
+    [] (gcore_params *params) { return &params->no_gpu; },
+    "Disable GPU coredump generation."
+  },
+
+  flag_option_def<gcore_params> {
+    "-cuda-lightweight",
+    [] (gcore_params *params) { return &params->lightweight; },
+    "Generate a lightweight coredump. This is equivalent to:\n" \
+      "--cuda-flags skip_nonrelocated_elf_images,skip_global_memory,skip_shared_memory,skip_local_memory"
+  },
+
+  string_option_def<gcore_params> {
+    "-cuda-core-file",
+    [] (gcore_params *params) { return &params->cuda_core_file; },
+    nullptr,
+    "Set the CUDA coredump filename."
+  },
+
+  string_option_def<gcore_params> {
+    "-cuda-flags",
+    [] (gcore_params *params) { return &params->cuda_flags; },
+    nullptr,
+    "Set a comma-separated list of coredump generation flags to apply.\n" \
+      "Can be any of the following:\n"                                    \
+      "\tskip_nonrelocated_elf_images\n"                                  \
+      "\tskip_global_memory\n"                                            \
+      "\tskip_shared_memory\n"                                            \
+      "\tskip_local_memory"
+  }
+};
+
+static inline option_def_group
+make_gcore_opt_def_group(gcore_params *params)
+{
+  return {{gcore_opt_defs}, params};
+}
+
+static void
+gcore_command_completer(struct cmd_list_element *ignore,
+                        completion_tracker &tracker,
+                        const char *text, const char * /* word */)
+{
+  const auto def_grp = make_gcore_opt_def_group(nullptr);
+
+  if (gdb::option::complete_options
+      (tracker, &text, gdb::option::PROCESS_OPTIONS_UNKNOWN_IS_OPERAND, def_grp))
+    return;
+
+  const char *word = advance_to_expression_complete_word_point (tracker, text);
+  expression_completer (ignore, tracker, text, word);
+}
+
+static CUDBGCoredumpGenerationFlags parse_cuda_core_flags(std::string& flags)
+{
+  if (flags.empty ())
+    return CUDBG_COREDUMP_DEFAULT_FLAGS;
+
+  size_t pos = 0;
+  size_t start = 0;
+  int result = CUDBG_COREDUMP_DEFAULT_FLAGS;
+
+  do
+  {
+    pos = flags.find (',', start);
+    std::string flag (flags.begin () + start, pos == std::string::npos ? flags.end () : flags.begin () + pos);
+    start = pos + 1;
+
+    if (!flag.compare ("skip_nonrelocated_elf_images"))
+      result |= CUDBG_COREDUMP_SKIP_NONRELOCATED_ELF_IMAGES;
+    else if (!flag.compare ("skip_global_memory"))
+      result |= CUDBG_COREDUMP_SKIP_GLOBAL_MEMORY;
+    else if (!flag.compare ("skip_shared_memory"))
+      result |= CUDBG_COREDUMP_SKIP_SHARED_MEMORY;
+    else if (!flag.compare ("skip_local_memory"))
+      result |= CUDBG_COREDUMP_SKIP_LOCAL_MEMORY;
+    else
+      error (_("Unknown CUDA core dump flag: %s"), flag.c_str ());
+  } while (pos != std::string::npos);
+
+  return static_cast<CUDBGCoredumpGenerationFlags> (result);
+}
+
+static void gcore_command_cpu (const char *args, int from_tty);
+
 static void
 gcore_command (const char *args, int from_tty)
+{
+  gcore_params params{};
+  const auto def_grp = make_gcore_opt_def_group (&params);
+
+  const char *curr = args;
+  if (curr && !process_options (&curr, PROCESS_OPTIONS_UNKNOWN_IS_ERROR, def_grp))
+    params.cpu_core_file = curr;
+
+  if (!params.no_gpu)
+  {
+    CUDBGCoredumpGenerationFlags flags =
+      params.lightweight ? CUDBG_COREDUMP_LIGHTWEIGHT_FLAGS
+                         : parse_cuda_core_flags (params.cuda_flags);
+
+    gdb_printf ("Generating GPU core dump ...\n");
+    try
+    {
+      cuda_debugapi::generate_coredump (params.cuda_core_file.empty ()
+                                          ? NULL : params.cuda_core_file.c_str (),
+                                        flags);
+    }
+    catch (gdb_exception_error& e)
+    {
+      warning (_("Cannot create GPU core dump: %s"), e.what ());
+    }
+  }
+
+  if (!params.no_cpu)
+  {
+    gdb_printf ("Generating CPU core dump ...\n");
+    gcore_command_cpu (params.cpu_core_file.c_str (), from_tty);
+  }
+}
+
+static void
+gcore_command_cpu (const char *args, int from_tty)
+#else
+static void
+gcore_command (const char *args, int from_tty)
+#endif /* NVIDIA_CUDA_GDB */
 {
   gdb::unique_xmalloc_ptr<char> corefilename;
 
@@ -688,11 +851,39 @@ void _initialize_gcore ();
 void
 _initialize_gcore ()
 {
-  cmd_list_element *generate_core_file_cmd
-    = add_com ("generate-core-file", class_files, gcore_command, _("\
+  cmd_list_element *generate_core_file_cmd;
+
+#if 0
+  const auto def_grp = make_gcore_opt_def_group(nullptr);
+  help_msg = build_help(_("\
+Save a core file with the current state of the debugged process.\n\
+By default, both CPU and CUDA coredumps are generated.\n\
+\n\
+The GPU core dump is created in the current working directory, it is named 'core_TIME_HOSTNAME_PID.nvcudmp'.\n\
+- TIME is the number of seconds since the Epoch\n\
+- HOSTNAME is the host name of the machine running the CUDA application\n\
+- PID is the process identifier of the CUDA application\n\
+\n\
+Default CPU core dump filename is 'core.PID'.\n\
+\n\
+Usage: generate-core-file [--cuda-flags x,y,z] [--cuda-lightweight] [--no-cpu] [--no-gpu] [--cuda-core-file gpu_filename] [cpu_filename]\n\
+\n\
+Options:\n\
+%OPTIONS%"), def_grp);
+
+  generate_core_file_cmd = add_com ("generate-core-file",
+                                    class_files,
+                                    gcore_command,
+                                    help_msg.c_str());
+
+  set_cmd_completer_handle_brkchars (generate_core_file_cmd,
+                                     gcore_command_completer);
+#else
+  generate_core_file_cmd = add_com ("generate-core-file", class_files, gcore_command, _("\
 Save a core file with the current state of the debugged process.\n\
 Usage: generate-core-file [FILENAME]\n\
 Argument is optional filename.  Default filename is 'core.PROCESS_ID'."));
+#endif
 
   add_com_alias ("gcore", generate_core_file_cmd, class_files, 1);
 }

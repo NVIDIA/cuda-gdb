@@ -807,6 +807,7 @@ enable_gprofng
 enable_compressed_debug_sections
 enable_default_compressed_debug_sections_algorithm
 enable_year2038
+enable_cuda
 enable_libquadmath
 enable_libquadmath_support
 enable_libada
@@ -1549,6 +1550,7 @@ Optional Features:
                           Default compression algorithm for
                           --enable-compressed-debug-sections.
   --enable-year2038       enable support for timestamps past the year 2038
+  --disable-cuda          disable CUDA support (cuda-gdb)
   --disable-libquadmath   do not build libquadmath directory
   --disable-libquadmath-support
                           disable libquadmath support for Fortran
@@ -2821,7 +2823,7 @@ build_tools="build-texinfo build-flex build-bison build-m4 build-fixincludes"
 
 # these libraries are used by various programs built for the host environment
 #f
-host_libs="intl libiberty opcodes bfd readline tcl tk itcl libgui zlib libbacktrace libcpp libcody libdecnumber gmp mpfr mpc isl libiconv libctf libsframe"
+host_libs="intl libiberty opcodes bfd readline tcl tk itcl libgui zlib libbacktrace libcpp libcody libdecnumber gmp mpfr mpc isl libiconv libctf libsframe libcudacore"
 
 # these tools are built for the host environment
 # Note, the powerpc-eabi build depends on sim occurring before gdb in order to
@@ -3202,6 +3204,17 @@ fi
 enable_year2038=
 if test "${ENABLE_YEAR2038}" = "no" ; then
   enable_year2038=no
+fi
+# Enable CUDA
+# Check whether --enable-cuda was given.
+if test "${enable_cuda+set}" = set; then :
+  enableval=$enable_cuda; ENABLE_CUDA=$enableval
+else
+  ENABLE_CUDA=yes
+fi
+
+if test "${ENABLE_CUDA}" = "no"; then
+  noconfigdirs="$noconfigdirs libcudacore"
 fi
 
 # Check whether --enable-libquadmath was given.

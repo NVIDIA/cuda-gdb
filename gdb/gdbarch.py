@@ -78,6 +78,7 @@ class Info(_Component):
         super().__init__(name=name, type=type, printer=printer)
         # This little hack makes the generator a bit simpler.
         self.predicate = None
+        self.cudaonly = None
 
 
 class Value(_Component):
@@ -94,6 +95,8 @@ class Value(_Component):
         postdefault=None,
         invalid=None,
         printer=None,
+        cudaonly=None,
+        cudamodified=None,
     ):
         super().__init__(
             comment=comment,
@@ -104,6 +107,8 @@ class Value(_Component):
             postdefault=postdefault,
             invalid=invalid,
             printer=printer,
+            cudaonly=cudaonly,
+            cudamodified=cudamodified,
         )
 
 
@@ -124,6 +129,10 @@ class Function(_Component):
         printer=None,
         param_checks=None,
         result_checks=None,
+        cudaonly=None,
+        cudamodified=None,
+        cudatype=None,
+        cudaparams=None,
     ):
         super().__init__(
             comment=comment,
@@ -137,6 +146,10 @@ class Function(_Component):
             params=params,
             param_checks=param_checks,
             result_checks=result_checks,
+            cudaonly=cudaonly,
+            cudamodified=cudamodified,
+            cudatype=cudatype,
+            cudaparams=cudaparams,
         )
 
     def ftype(self):
@@ -147,6 +160,10 @@ class Function(_Component):
         "Return the formal parameter list as a string."
         return join_params(self.params)
 
+    def cuda_param_list(self):
+        "Return the formal cuda parameter list as a string."
+        return join_params(self.cudaparams)
+
     def set_list(self):
         """Return the formal parameter list of the caller function,
         as a string.  This list includes the gdbarch."""
@@ -154,10 +171,20 @@ class Function(_Component):
         arch_tuple = [arch_arg]
         return join_params(arch_tuple + list(self.params))
 
+    def cuda_set_list(self):
+        """Return the formal cuda parameter list of the caller function,
+        as a string.  This list includes the gdbarch."""
+        arch_arg = ("struct gdbarch *", "gdbarch")
+        arch_tuple = [arch_arg]
+        return join_params(arch_tuple + list(self.cudaparams))
+
     def actuals(self):
         "Return the actual parameters to forward, as a string."
         return ", ".join([p[1] for p in self.params])
 
+    def cuda_actuals(self):
+        "Return the actual cuda parameters to forward, as a string."
+        return ", ".join([p[1] for p in self.cudaparams])
 
 class Method(Function):
     "A Method is like a Function but passes the gdbarch through."
@@ -166,11 +193,19 @@ class Method(Function):
         "See superclass."
         return self.set_list()
 
+    def cuda_param_list(self):
+        "See superclass."
+        return self.cuda_set_list()
+
     def actuals(self):
         "See superclass."
         result = ["gdbarch"] + [p[1] for p in self.params]
         return ", ".join(result)
 
+    def cuda_actuals(self):
+        "See superclass."
+        result = ["gdbarch"] + [p[1] for p in self.cudaparams]
+        return ", ".join(result)
 
 # Read the components.
 with open("gdbarch-components.py") as fd:
@@ -236,6 +271,10 @@ with open("gdbarch-gen.h", "w") as f:
             print(f"extern bool gdbarch_{c.name}_p (struct gdbarch *gdbarch);", file=f)
 
         print(file=f)
+
+        if c.cudaonly or c.cudamodified:
+            print(f"#ifdef NVIDIA_CUDA_GDB", file=f)
+
         if isinstance(c, Value):
             print(
                 f"extern {c.type} gdbarch_{c.name} (struct gdbarch *gdbarch);",
@@ -247,6 +286,23 @@ with open("gdbarch-gen.h", "w") as f:
             )
         else:
             assert isinstance(c, Function)
+            if c.cudamodified:
+                print(
+                    f"typedef {c.cudatype} ({c.ftype()}) ({c.cuda_param_list()});",
+                    file=f,
+                )
+                print(
+                    f"extern {c.cudatype} gdbarch_{c.name} ({c.cuda_set_list()});",
+                    file=f,
+                )
+                print(
+                    f"extern void set_gdbarch_{c.name} (struct gdbarch *gdbarch, {c.ftype()} *{c.name});",
+                    file=f,
+                )
+                print(
+                    f"#else",
+                    file=f,
+                )
             print(
                 f"typedef {c.type} ({c.ftype()}) ({c.param_list()});",
                 file=f,
@@ -259,6 +315,9 @@ with open("gdbarch-gen.h", "w") as f:
                 f"extern void set_gdbarch_{c.name} (struct gdbarch *gdbarch, {c.ftype()} *{c.name});",
                 file=f,
             )
+
+        if c.cudaonly or c.cudamodified:
+            print(f"#endif", file=f)
 
 with open("gdbarch.c", "w") as f:
     print(copyright, file=f)
@@ -291,6 +350,8 @@ with open("gdbarch.c", "w") as f:
     print("  void **data = nullptr;", file=f)
     print(file=f)
     for c in filter(not_info, components):
+        if c.cudaonly:
+            print(f"#ifdef NVIDIA_CUDA_GDB", file=f)
         if isinstance(c, Function):
             print(f"  gdbarch_{c.name}_ftype *", file=f, end="")
         else:
@@ -303,6 +364,8 @@ with open("gdbarch.c", "w") as f:
         else:
             assert isinstance(c, Function)
             print("nullptr;", file=f)
+        if c.cudaonly:
+            print(f"#endif", file=f)
     print("};", file=f)
     print(file=f)
     #
@@ -349,6 +412,8 @@ with open("gdbarch.c", "w") as f:
         file=f,
     )
     for c in filter(not_info, components):
+        if c.cudaonly:
+            print(f"#ifdef NVIDIA_CUDA_GDB", file=f)
         if c.invalid is False:
             print(f"  /* Skip verify of {c.name}, invalid_p == 0 */", file=f)
         elif c.predicate:
@@ -378,6 +443,8 @@ with open("gdbarch.c", "w") as f:
             # above cases matches, or we need additional cases adding
             # here.
             raise Exception("unhandled case when generating gdbarch validation")
+        if c.cudaonly:
+            print(f"#endif", file=f)
     print("  if (!log.empty ())", file=f)
     print(
         """    internal_error (_("verify_gdbarch: the following are invalid ...%s"),""",
@@ -404,6 +471,8 @@ with open("gdbarch.c", "w") as f:
     print("""	      "gdbarch_dump: GDB_NM_FILE = %s\\n",""", file=f)
     print("	      gdb_nm_file);", file=f)
     for c in components:
+        if c.cudaonly:
+            print(f"#ifdef NVIDIA_CUDA_GDB", file=f)
         if c.predicate:
             print("  gdb_printf (file,", file=f)
             print(
@@ -428,6 +497,8 @@ with open("gdbarch.c", "w") as f:
             print("  gdb_printf (file,", file=f)
             print(f"""	      "gdbarch_dump: {c.name} = %s\\n",""", file=f)
             print(f"	      {printer});", file=f)
+        if c.cudaonly:
+            print(f"#endif", file=f)
     print("  if (gdbarch->dump_tdep != NULL)", file=f)
     print("    gdbarch->dump_tdep (gdbarch, file);", file=f)
     print("}", file=f)
@@ -446,6 +517,40 @@ with open("gdbarch.c", "w") as f:
             print("}", file=f)
         if isinstance(c, Function):
             print(file=f)
+            if c.cudamodified:
+                print(f"#ifdef NVIDIA_CUDA_GDB", file=f)
+                print(f"{c.cudatype}", file=f)
+                print(f"gdbarch_{c.name} ({c.cuda_set_list()})", file=f)
+                print("{", file=f)
+                print("  gdb_assert (gdbarch != NULL);", file=f)
+                print(f"  gdb_assert (gdbarch->{c.name} != NULL);", file=f)
+                if c.predicate and c.predefault:
+                    # Allow a call to a function with a predicate.
+                    print(
+                        f"  /* Do not check predicate: {c.get_predicate()}, allow call.  */",
+                        file=f,
+                    )
+                print("  if (gdbarch_debug >= 2)", file=f)
+                print(
+                    f"""    gdb_printf (gdb_stdlog, "gdbarch_{c.name} called\\n");""",
+                    file=f,
+                )
+                print("  ", file=f, end="")
+                if c.cudatype != "void":
+                    print("return ", file=f, end="")
+                print(f"gdbarch->{c.name} ({c.cuda_actuals()});", file=f)
+                print("}", file=f)
+                print(file=f)
+                print("void", file=f)
+                print(f"set_gdbarch_{c.name} (struct gdbarch *gdbarch,", file=f)
+                print(
+                    f"            {' ' * len(c.name)}  gdbarch_{c.name}_ftype {c.name})",
+                    file=f,
+                )
+                print("{", file=f)
+                print(f"  gdbarch->{c.name} = {c.name};", file=f)
+                print("}", file=f)
+                print("#else", file=f)
             print(f"{c.type}", file=f)
             print(f"gdbarch_{c.name} ({c.set_list()})", file=f)
             print("{", file=f)
@@ -487,8 +592,12 @@ with open("gdbarch.c", "w") as f:
             print("{", file=f)
             print(f"  gdbarch->{c.name} = {c.name};", file=f)
             print("}", file=f)
+            if c.cudamodified:
+                print(f"#endif", file=f)
         elif isinstance(c, Value):
             print(file=f)
+            if c.cudaonly:
+                print(f"#ifdef NVIDIA_CUDA_GDB", file=f)
             print(f"{c.type}", file=f)
             print(f"gdbarch_{c.name} (struct gdbarch *gdbarch)", file=f)
             print("{", file=f)
@@ -517,6 +626,8 @@ with open("gdbarch.c", "w") as f:
             print("{", file=f)
             print(f"  gdbarch->{c.name} = {c.name};", file=f)
             print("}", file=f)
+            if c.cudaonly:
+                print(f"#endif", file=f)
         else:
             assert isinstance(c, Info)
             print(file=f)

@@ -18,6 +18,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "top.h"
 #include "mi-cmds.h"
@@ -238,6 +243,22 @@ add_builtin_mi_commands ()
   add_mi_cmd_mi ("catch-catch", mi_cmd_catch_catch,
                  &mi_suppress_notification.breakpoint),
   add_mi_cmd_mi ("complete", mi_cmd_complete);
+#ifdef NVIDIA_CUDA_GDB
+  add_mi_cmd_mi ("cuda-info-devices", mi_cmd_cuda_info_devices);
+  add_mi_cmd_mi ("cuda-info-sms", mi_cmd_cuda_info_sms);
+  add_mi_cmd_mi ("cuda-info-warps", mi_cmd_cuda_info_warps);
+  add_mi_cmd_mi ("cuda-info-lanes", mi_cmd_cuda_info_lanes);
+  add_mi_cmd_mi ("cuda-info-kernels", mi_cmd_cuda_info_kernels);
+  add_mi_cmd_mi ("cuda-info-blocks", mi_cmd_cuda_info_blocks);
+  add_mi_cmd_mi ("cuda-info-threads", mi_cmd_cuda_info_threads);
+  add_mi_cmd_mi ("cuda-info-launch-trace", mi_cmd_cuda_info_launch_trace);
+  add_mi_cmd_mi ("cuda-info-contexts", mi_cmd_cuda_info_contexts);
+  add_mi_cmd_mi ("cuda-info-launch-children", mi_cmd_cuda_info_launch_children);
+  add_mi_cmd_mi ("cuda-info-managed",  mi_cmd_cuda_info_managed);
+  add_mi_cmd_mi ("cuda-info-line",  mi_cmd_cuda_info_line);
+  add_mi_cmd_mi ("cuda-focus-query", mi_cmd_cuda_focus_query);
+  add_mi_cmd_mi ("cuda-focus-switch", mi_cmd_cuda_focus_switch);
+#endif
   add_mi_cmd_mi ("data-disassemble", mi_cmd_disassemble);
   add_mi_cmd_mi ("data-evaluate-expression", mi_cmd_data_evaluate_expression);
   add_mi_cmd_mi ("data-list-changed-registers",

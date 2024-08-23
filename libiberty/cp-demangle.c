@@ -28,6 +28,11 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA. 
 */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* This code implements a demangler for the g++ V3 ABI.  The ABI is
    described on this web page:
        https://itanium-cxx-abi.github.io/cxx-abi/abi.html#mangling
@@ -1234,9 +1239,14 @@ d_make_sub (struct d_info *di, const char *name, int len)
 
    TOP_LEVEL is non-zero when called at the top level.  */
 
+#ifdef NVIDIA_CUDA_GDB
+static struct demangle_component *
+cplus_demangle_mangled_base_name (struct d_info *di, int top_level)
+#else
 CP_STATIC_IF_GLIBCPP_V3
 struct demangle_component *
 cplus_demangle_mangled_name (struct d_info *di, int top_level)
+#endif
 {
   struct demangle_component *p;
 
@@ -1262,6 +1272,28 @@ cplus_demangle_mangled_name (struct d_info *di, int top_level)
   return p;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - allow demangling of cuda cloned functions
+   <cuda-mangled-name> ::= $ <mangled-name> $ <mangled-name>
+   The first mangled name is the kernel, and the second one is the cloned function.
+   this function wraps the original cplus_demangle_mangled_name */
+CP_STATIC_IF_GLIBCPP_V3
+struct demangle_component *
+cplus_demangle_mangled_name (struct d_info *di, int top_level)
+{
+  struct demangle_component *comp_kernel;
+  struct demangle_component *comp_function;
+  /* if the mangled name doesn't start with a $, just demangle as usual */
+  if (!(di->options & DMGL_CUDA) || !top_level || !d_check_char(di, '$'))
+    return cplus_demangle_mangled_base_name (di, top_level);
+  comp_kernel = cplus_demangle_mangled_base_name (di, top_level);
+  if (!d_check_char(di, '$'))
+    /* if there's no $ after the first mangled name, just return the first mangled name */
+    return comp_kernel;
+  comp_function = cplus_demangle_mangled_base_name (di, top_level);
+  return d_make_comp (di, DEMANGLE_COMPONENT_CLONE, comp_function, comp_kernel);
+}
+#endif
 /* Return whether a function should have a return type.  The argument
    is the function name, which may be qualified in various ways.  The
    rules are that template functions have return types with some
@@ -2962,6 +2994,11 @@ d_parmlist (struct d_info *di)
       char peek = d_peek_char (di);
       if (peek == '\0' || peek == 'E' || peek == '.')
 	break;
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - $ is a marker for cloned functions */
+      if (peek == '$')
+	break;
+#endif
       if ((peek == 'R' || peek == 'O')
 	  && d_peek_next_char (di) == 'E')
 	/* Function ref-qualifier, not a ref prefix for a parameter type.  */
@@ -6493,7 +6530,13 @@ d_demangle_callback (const char *mangled, int options,
   struct demangle_component *dc;
   int status;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - $ is a marker for cloned functions */
+  const int prefix_offset = (mangled[0] == '$') ? 1 : 0;
+  if (mangled[prefix_offset + 0] == '_' && mangled[prefix_offset + 1] == 'Z')
+#else
   if (mangled[0] == '_' && mangled[1] == 'Z')
+#endif
     type = DCT_MANGLED;
   else if (strncmp (mangled, "_GLOBAL_", 8) == 0
 	   && (mangled[8] == '.' || mangled[8] == '_' || mangled[8] == '$')

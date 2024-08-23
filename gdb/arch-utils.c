@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 
 #include "arch-utils.h"
@@ -297,8 +302,28 @@ default_floatformat_for_type (struct gdbarch *gdbarch,
   if (name != nullptr && strcmp (name, "__bf16") == 0
       && len == gdbarch_bfloat16_bit (gdbarch))
     format = gdbarch_bfloat16_format (gdbarch);
+#ifdef NVIDIA_CUDA_GDB
+  /* fp8 are the same length for both e5m2 and e4m3 */
+  else if (len == gdbarch_nv_fp8_e5m2_bit (gdbarch))
+    {
+      /* CUDA - nv_fp8 support */
+      if (name && !strcmp(name, "__nv_fp8_e5m2"))
+	format = gdbarch_nv_fp8_e5m2_format (gdbarch);
+      else if (name && !strcmp(name, "__nv_fp8_e4m3"))
+	format = gdbarch_nv_fp8_e4m3_format (gdbarch);
+    }
+  else if (len == gdbarch_half_bit (gdbarch))
+    {
+      /* CUDA - nv_bfloat16 support */
+      if (name && !strcmp(name, "__nv_bfloat16"))
+	format = gdbarch_bfloat16_format (gdbarch);
+      else
+	format = gdbarch_half_format (gdbarch);
+    }
+#else
   else if (len == gdbarch_half_bit (gdbarch))
     format = gdbarch_half_format (gdbarch);
+#endif
   else if (len == gdbarch_float_bit (gdbarch))
     format = gdbarch_float_format (gdbarch);
   else if (len == gdbarch_double_bit (gdbarch))
@@ -1273,10 +1298,13 @@ gdbarch_register (enum bfd_architecture bfd_architecture,
        (*curr) != NULL;
        curr = &(*curr)->next)
     {
+/* CUDA - BFD architecture - we re-use the bfd_arch_m68k arch. */
+#ifndef NVIDIA_CUDA_GDB
       if (bfd_architecture == (*curr)->bfd_architecture)
 	internal_error (_("gdbarch: Duplicate registration "
 			  "of architecture (%s)"),
 			bfd_arch_info->printable_name);
+#endif
     }
   /* log it */
   if (gdbarch_debug)

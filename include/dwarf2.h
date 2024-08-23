@@ -39,6 +39,11 @@
    This file also now contains definitions from the DWARF 3 specification
    published Dec 20, 2005, available from: http://dwarf.freestandards.org.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef _DWARF2_H
 #define _DWARF2_H
 
@@ -268,6 +273,9 @@ enum dwarf_line_number_x_ops
     DW_LNE_HP_source_file_correlation  = 0x80,
 
     DW_LNE_lo_user = 0x80,
+    /* CUDA extensions. */
+    DW_LNE_inlined_call = 0x90,
+    DW_LNE_set_function_name = 0x91,
     DW_LNE_hi_user = 0xff
   };
 

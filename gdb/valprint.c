@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -33,6 +38,9 @@
 #include "gdbsupport/gdb_obstack.h"
 #include "charset.h"
 #include "typeprint.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "regcache.h"
+#endif
 #include <ctype.h>
 #include <algorithm>
 #include "gdbsupport/byte-vector.h"
@@ -2632,7 +2640,11 @@ val_print_string (struct type *elttype, const char *encoding,
 
   /* Determine found_nul by looking at the last character read.  */
   found_nul = 0;
+#ifdef NVIDIA_CUDA_GDB
+  if (bytes_read >= 0)
+#else
   if (bytes_read >= width)
+#endif
     found_nul = extract_unsigned_integer (buffer.get () + bytes_read - width,
 					  width, byte_order) == 0;
   if (len == -1 && !found_nul)

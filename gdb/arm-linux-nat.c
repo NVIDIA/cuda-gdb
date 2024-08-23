@@ -16,6 +16,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "inferior.h"
 #include "gdbcore.h"
@@ -107,7 +112,11 @@ public:
   void low_forget_process (pid_t pid) override;
 };
 
+#ifdef NVIDIA_CUDA_GDB
+static cuda_nat_linux<arm_linux_nat_target> the_cuda_arm_linux_nat_target;
+#else
 static arm_linux_nat_target the_arm_linux_nat_target;
+#endif
 
 /* Get the whole floating point state of the process and store it
    into regcache.  */
@@ -1304,6 +1313,11 @@ void
 _initialize_arm_linux_nat ()
 {
   /* Register the target.  */
+#ifdef NVIDIA_CUDA_GDB
+  linux_target = &the_cuda_arm_linux_nat_target;
+  add_inf_child_target (&the_cuda_arm_linux_nat_target);
+#else
   linux_target = &the_arm_linux_nat_target;
   add_inf_child_target (&the_arm_linux_nat_target);
+#endif
 }

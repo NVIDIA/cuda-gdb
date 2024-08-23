@@ -638,9 +638,15 @@ process_options (const char **args,
       auto ov = parse_option (options_group, mode, have_delimiter, args);
       if (!ov)
 	{
+#ifdef NVIDIA_BUGFIX
+          /* According to cli-option.h, process_option() returns `true` if
+           * options were fully parsed and `false` if anything remains. */
+          return **args == '\0';
+#else
 	  if (processed_any)
 	    return true;
 	  return false;
+#endif // NVIDIA_BUGFIX
 	}
 
       processed_any = true;

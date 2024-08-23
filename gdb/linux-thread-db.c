@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include <dlfcn.h>
 #include "gdb_proc_service.h"
@@ -49,6 +54,9 @@
 #include "gdbsupport/pathstuff.h"
 #include "valprint.h"
 #include "cli/cli-style.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-api.h"
+#endif
 
 /* GNU/Linux libthread_db support.
 
@@ -1264,6 +1272,15 @@ check_thread_signals (void)
 static void
 check_for_thread_db (void)
 {
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - detach */
+  /* While detaching from a running CUDA application, we may
+     need to resume the application temporarily, which might cause
+     libthread_db to be reinitialized and cause problems. This must
+     be prevented. */
+  if (cuda_debugapi::get_attach_state () == CUDA_ATTACH_STATE_DETACHING)
+    return;
+#endif
   /* Do nothing if we couldn't load libthread_db.so.1.  */
   if (!thread_db_load ())
     return;

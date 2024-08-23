@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #if !defined (SYMTAB_H)
 #define SYMTAB_H 1
 
@@ -584,24 +589,46 @@ struct general_symbol_info
      valid.  */
   unsigned int ada_mangled : 1;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* Only true for CPU symbols. Is this symbol a CUDA runtime host
+     shadow function. Cache if we've already checked this symbol or not */
+  unsigned int cuda_host_shadow : 1;
+  unsigned int cuda_host_shadow_checked : 1;
+#endif
+
   /* Which section is this symbol in?  This is an index into
      section_offsets for this objfile.  Negative means that the symbol
      does not get relocated relative to a section.  */
 
+#ifdef NVIDIA_CUDA_GDB
+  /* NVIDIA: We need to support elf images with more than SHRT_MAX sections. */
+  int m_section;
+#else
   short m_section;
+#endif
 
   /* Set the index into the obj_section list (within the containing
      objfile) for the section that contains this symbol.  See M_SECTION
      for more details.  */
 
+#ifdef NVIDIA_CUDA_GDB
+  /* NVIDIA: We need to support elf images with more than SHRT_MAX sections. */
+  void set_section_index (int idx)
+#else
   void set_section_index (short idx)
+#endif
   { m_section = idx; }
 
   /* Return the index into the obj_section list (within the containing
      objfile) for the section that contains this symbol.  See M_SECTION
      for more details.  */
 
+#ifdef NVIDIA_CUDA_GDB
+  /* NVIDIA: We need to support elf images with more than SHRT_MAX sections. */
+  int section_index () const
+#else
   short section_index () const
+#endif
   { return m_section; }
 
   /* Return the obj_section from OBJFILE for this symbol.  The symbol
@@ -629,6 +656,14 @@ extern CORE_ADDR get_symbol_address (const struct symbol *sym);
 
 extern gdb::unique_xmalloc_ptr<char> symbol_find_demangled_name
      (struct general_symbol_info *gsymbol, const char *mangled);
+#ifdef NVIDIA_CUDA_GDB
+/* Macro that tests a symbol for a match against a specified name
+   string.  It tests against SYMBOL_NATURAL_NAME, and it ignores
+   whitespace and trailing parentheses.  (See strcmp_iw for details
+   about its behavior.)  */
+#define SYMBOL_MATCHES_NATURAL_NAME(symbol, name)			\
+  (strcmp_iw (symbol->natural_name (), (name)) == 0)
+#endif
 
 /* Return true if NAME matches the "search" name of GSYMBOL, according
    to the symbol's language.  */
@@ -846,6 +881,7 @@ struct minimal_symbol : public general_symbol_info
 
   /* Minimal symbols are stored in two different hash tables.  This is
      the `next' pointer for the demangled hash table.  */
+  /* CUDA - Minimal symbols are stored in three different hash tables. */
 
   struct minimal_symbol *demangled_hash_next;
 
@@ -856,6 +892,10 @@ struct minimal_symbol : public general_symbol_info
   /* True if MSYMBOL is of some text type.  */
 
   bool text_p () const;
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - This is the `next' pointer for the lowercase hash table.  */
+  struct minimal_symbol *lowercase_hash_next;
+#endif
 };
 
 #include "minsyms.h"
@@ -1213,6 +1253,10 @@ struct symbol : public general_symbol_info, public allocate_on_obstack
       language_specific.obstack = nullptr;
       m_language = language_unknown;
       ada_mangled = 0;
+#ifdef NVIDIA_CUDA_GDB
+      cuda_host_shadow = 0;
+      cuda_host_shadow_checked = 0;
+#endif
       m_section = -1;
       /* GCC 4.8.5 (on CentOS 7) does not correctly compile class-
 	 initialization of unions, so we initialize it manually here.  */
@@ -1538,6 +1582,15 @@ struct rust_vtable_symbol : public symbol
   struct type *concrete_type = nullptr;
 };
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA debug_line extension information */
+struct cuda_debug_inline_info
+{
+  int line;
+  const char *filename;
+  const char *function;
+};
+#endif
 
 /* Each item represents a line-->pc (or the reverse) mapping.  This is
    somewhat more wasteful of space than one might wish, but since only
@@ -1558,6 +1611,9 @@ struct linetable_entry
 
   /* The address for this entry.  */
   CORE_ADDR pc;
+#ifdef NVIDIA_CUDA_GDB
+  struct cuda_debug_inline_info *inline_info;
+#endif
 };
 
 /* The order of entries in the linetable is significant.  They should
@@ -2297,6 +2353,11 @@ extern struct symtab_and_line find_pc_line (CORE_ADDR, int);
 extern struct symtab_and_line find_pc_sect_line (CORE_ADDR,
 						 struct obj_section *, int);
 
+#ifdef NVIDIA_CUDA_GDB
+extern struct symtab_and_line find_pc_sect_line (CORE_ADDR,
+						 struct obj_section *, int,
+						 struct cuda_debug_inline_info **inline_info);
+#endif
 /* Wrapper around find_pc_line to just return the symtab.  */
 
 extern struct symtab *find_pc_line_symtab (CORE_ADDR);
@@ -2308,6 +2369,10 @@ extern bool find_line_pc (struct symtab *, int, CORE_ADDR *);
 extern bool find_line_pc_range (struct symtab_and_line, CORE_ADDR *,
 				CORE_ADDR *);
 
+#ifdef NVIDIA_CUDA_GDB
+extern bool find_line_pc_range (struct symtab_and_line, CORE_ADDR *,
+				CORE_ADDR *, struct cuda_debug_inline_info **inline_info);
+#endif
 extern void resolve_sal_pc (struct symtab_and_line *);
 
 /* solib.c */
@@ -2858,4 +2923,12 @@ extern void info_sources_worker (struct ui_out *uiout,
 				 bool group_by_objfile,
 				 const info_sources_filter &filter);
 
+#ifdef NVIDIA_CUDA_GDB
+/* Used for finding host shadow functions by linkage name */
+extern struct block_symbol
+cuda_lookup_symbol_in_objfile_from_linkage_name (struct objfile *objfile,
+						 const char *linkage_name,
+						 enum language lang,
+						 domain_enum domain);
+#endif
 #endif /* !defined(SYMTAB_H) */

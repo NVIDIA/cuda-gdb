@@ -18,6 +18,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 
 #include "gdbarch.h"
@@ -56,6 +61,9 @@
 
 #include "elf/common.h"
 #include "elf/aarch64.h"
+#ifdef NVIDIA_BUGFIX
+#include "gdbthread.h"
+#endif
 
 /* For inferior_ptid and current_inferior ().  */
 #include "inferior.h"
@@ -2002,7 +2010,14 @@ aarch64_remove_non_address_bits (struct gdbarch *gdbarch, CORE_ADDR pointer)
      should be the same across threads of a process.  Since we may not have
      access to the current thread (gdb may have switched to no inferiors
      momentarily), we use the inferior ptid.  */
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - We may have switched the underlying thread tdep over to our
+   * special target. In that case, tdep isn't aarch64_gdbarch_tdep.
+   * Skip if so. */
+  if (inferior_ptid != null_ptid && !cuda_current_focus::isDevice ())
+#else
   if (inferior_ptid != null_ptid)
+#endif
     {
       /* If we do have an inferior, attempt to fetch its thread's thread_info
 	 struct.  */

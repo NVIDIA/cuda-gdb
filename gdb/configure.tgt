@@ -122,6 +122,9 @@ case "${targ}" in
 	os_obs="obsd-tdep.o solib-svr4.o";;
 esac
 
+gdb_target_qnx_obs="aarch64-tdep.o aarch64-nto-tdep.o solib-svr4.o \
+			nto-tdep.o arch/aarch64-insn.o"
+
 # 3. Get the rest of objects.
 
 case "${targ}" in
@@ -143,6 +146,12 @@ aarch64*-*-linux*)
 			arm-tdep.o arm-linux-tdep.o \
 			glibc-tdep.o linux-tdep.o solib-svr4.o \
 			symfile-mem.o linux-record.o"
+	;;
+
+aarch64*-*-nto*)
+	# Target: AArch64 nto (QNX)
+	gdb_target_obs="aarch64-tdep.o aarch64-nto-tdep.o solib-svr4.o \
+			nto-tdep.o arch/aarch64-insn.o"
 	;;
 
 alpha*-*-linux*)
@@ -193,6 +202,11 @@ arm*-*-freebsd*)
 arm*-*-netbsd* | arm*-*-knetbsd*-gnu)
 	# Target: NetBSD/arm
 	gdb_target_obs="arm-netbsd-tdep.o"
+	;;
+arm*-*-nto*)
+	# Target: nto/arm
+	gdb_target_obs="arm.o arm-get-next-pcs.o arm-tdep.o solib-svr4.o \
+			arm-nto-tdep.o nto-tdep.o"
 	;;
 arm*-*-openbsd*)
 	# Target: OpenBSD/arm
@@ -294,6 +308,15 @@ i[34567]86-*-nto*)
 	# Target: Intel 386 running qnx6.
 	gdb_target_obs="solib-svr4.o \
 			i386-nto-tdep.o nto-tdep.o"
+	if test "x$enable_64_bit_bfd" = "xyes"; then
+	    # Target: nto x86-64
+	    gdb_target_obs="amd64-tdep.o amd64-nto-tdep.o ${gdb_target_obs}"
+	fi
+	;;
+x86_64-*-nto*)
+	# Target: x86_64 running qnx6
+	gdb_target_obs="i386-tdep.o i387-tdep.o amd64-tdep.o amd64-nto-tdep.o \
+			i386-nto-tdep.o nto-tdep.o solib-svr4.o"
 	;;
 i[34567]86-*-solaris2* | x86_64-*-solaris2*)
 	# Target: Solaris x86_64
@@ -310,6 +333,9 @@ i[34567]86-*-linux*)
 	if test "x$enable_64_bit_bfd" = "xyes"; then
 	    # Target: GNU/Linux x86-64
 	    gdb_target_obs="amd64-linux-tdep.o ${gdb_target_obs}"
+	fi
+	if test "x$enable_qnx" = "xyes"; then
+	    gdb_target_obs="${gdb_target_qnx_obs} ${gdb_target_obs}"
 	fi
 	;;
 i[34567]86-*-gnu*)
@@ -802,6 +828,10 @@ m68*-*-openbsd* | m88*-*-openbsd* | vax-*-openbsd*) ;;
 powerpc-*-aix* | rs6000-*-* | powerpc64-*-aix*)
                 gdb_osabi=GDB_OSABI_AIX ;;
 esac
+
+if test "x$enable_qnx" = "xyes"; then
+   gdb_osabi=GDB_OSABI_QNXNTO
+fi
 
 # Check whether this target supports gcore.
 # Such target has to call set_gdbarch_find_memory_regions.

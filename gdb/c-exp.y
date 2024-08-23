@@ -16,6 +16,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* Parse a C expression from text in a string,
    and return the result as a  struct expression  pointer.
    That structure contains arithmetic operations in reverse polish,
@@ -244,6 +249,10 @@ static void c_print_token (FILE *file, int type, YYSTYPE value);
 %token <sval> DOLLAR_VARIABLE
 
 %token <opcode> ASSIGN_MODIFY
+/* CUDA */
+%token <opcode> UNOP_INTRINSIC
+%token <opcode> BINOP_INTRINSIC
+/* end CUDA */
 
 /* C++ */
 %token TRUEKEYWORD
@@ -592,6 +601,62 @@ exp	:	UNKNOWN_CPP_NAME '('
 			}
 	;
 
+/* CUDA */
+exp     :       UNOP_INTRINSIC '(' exp ')'
+			{
+#ifdef NVIDIA_CUDA_GDB
+			  switch ($1)
+			    {
+			    case UNOP_ISINF:
+			      pstate->wrap<cuda_isinf_operation> ();
+			      break;
+			    case UNOP_ISNAN:
+			      pstate->wrap<cuda_isnan_operation> ();
+			      break;
+			    case UNOP_ISFINITE:
+			      pstate->wrap<cuda_isfinite_operation> ();
+			      break;
+			    case UNOP_ISNORMAL:
+			      pstate->wrap<cuda_isnormal_operation> ();
+			      break;
+			    case UNOP_CREAL:
+			      pstate->wrap<cuda_creal_operation> ();
+			      break;
+			    case UNOP_CIMAG:
+			      pstate->wrap<cuda_cimag_operation> ();
+			      break;
+			    case UNOP_ABS:
+			    case UNOP_FABS:
+			      pstate->wrap<cuda_abs_operation> ();
+			      break;
+			    case UNOP_CEIL:
+			      pstate->wrap<cuda_ceil_operation> ();
+			      break;
+			    case UNOP_FLOOR:
+			      pstate->wrap<cuda_floor_operation> ();
+			      break;
+			    default:
+			      gdb_assert_not_reached ("unhandled intrinsic");
+			    }
+#endif
+			}
+	;
+
+exp     :       BINOP_INTRINSIC '(' exp ',' exp ')'
+			{
+#ifdef NVIDIA_CUDA_GDB
+			  switch ($1)
+			    {
+			    case BINOP_FMOD:
+			      pstate->wrap2<cuda_fmod_operation> ();
+			      break;
+			    default:
+			      gdb_assert_not_reached ("unhandled intrinsic");
+			    }
+#endif
+			}
+	;
+/* END CUDA */
 lcurly	:	'{'
 			{ pstate->start_arglist (); }
 	;
@@ -1271,6 +1336,16 @@ single_qualifier:
 		  cpstate->type_stack.insert (pstate,
 					      copy_name ($2.stoken).c_str ());
 		}
+/* CUDA */
+	/* We support address space identifiers in typecasts via @global, @generic,
+	   @local etc. We need to handle the case where the address space identifier
+	   conflicts with a typename in the inferior. */
+	|	'@' TYPENAME
+		{
+		  cpstate->type_stack.insert (pstate,
+					      copy_name ($2.stoken).c_str ());
+		}
+/* END CUDA */
 	;
 
 qualifier_seq_noopt:
@@ -2614,6 +2689,22 @@ static bool last_was_structop;
 /* Depth of parentheses.  */
 static int paren_depth;
 
+#ifdef NVIDIA_CUDA_GDB
+static const struct token cuda_intrinsics[] =
+  {
+    {"isinf", UNOP_INTRINSIC, UNOP_ISINF},
+    {"isnan", UNOP_INTRINSIC, UNOP_ISNAN},
+    {"isfinite", UNOP_INTRINSIC, UNOP_ISFINITE},
+    {"isnormal", UNOP_INTRINSIC, UNOP_ISNORMAL},
+    {"creal", UNOP_INTRINSIC, UNOP_CREAL},
+    {"cimag", UNOP_INTRINSIC, UNOP_CIMAG},
+    {"abs", UNOP_INTRINSIC, UNOP_ABS},
+    {"fabs", UNOP_INTRINSIC, UNOP_FABS},
+    {"fmod", BINOP_INTRINSIC, BINOP_FMOD},
+    {"ceil", UNOP_INTRINSIC, UNOP_CEIL},
+    {"floor", UNOP_INTRINSIC, UNOP_FLOOR},
+  };
+#endif
 /* Read one token, getting characters through lexptr.  */
 
 static int
@@ -2950,6 +3041,15 @@ lex_one_token (struct parser_state *par_state, bool *is_quoted_name)
 
   tryname:
 
+#ifdef NVIDIA_CUDA_GDB
+  for (const auto &intrinsic : cuda_intrinsics)
+    if (strlen (intrinsic.oper) == namelen
+	&& strncmp (tokstart, intrinsic.oper, namelen) == 0)
+    {
+      yylval.opcode = intrinsic.opcode;
+      return intrinsic.token;
+    }
+#endif
   yylval.sval.ptr = tokstart;
   yylval.sval.length = namelen;
 

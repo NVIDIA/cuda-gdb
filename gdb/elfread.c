@@ -19,6 +19,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "bfd.h"
 #include "elf-bfd.h"
@@ -51,6 +56,9 @@
 #include "gdbsupport/scoped_fd.h"
 #include "debuginfod-support.h"
 #include "dwarf2/public.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-tdep.h"
+#endif
 
 /* The struct elfinfo is available only during ELF symbol table and
    psymtab reading.  It is destroyed at the completion of psymtab-reading.
@@ -133,6 +141,8 @@ elf_symfile_segments (bfd *abfd)
 	    break;
 	  }
 
+      /* CUDA: Disable warning, we get this for the embedded fatbins. */
+#ifndef NVIDIA_CUDA_GDB
       /* We should have found a segment for every non-empty section.
 	 If we haven't, we will not relocate this section by any
 	 offsets we apply to the segments.  As an exception, do not
@@ -151,6 +161,7 @@ elf_symfile_segments (bfd *abfd)
 	  && (bfd_section_flags (sect) & SEC_LOAD) != 0)
 	warning (_("Loadable section \"%s\" outside of ELF segments\n  in %s"),
 		 bfd_section_name (sect), bfd_get_filename (abfd));
+#endif
     }
 
   return data;
@@ -1301,6 +1312,10 @@ elf_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
     }
 
   elf_read_minimal_symbols (objfile, symfile_flags, &ei);
+#ifdef NVIDIA_CUDA_GDB
+  /* Will early out if we've already scanned the objfile */
+  cuda_find_objfile_host_shadow_functions (objfile);
+#endif
 
   /* ELF debugging information is inserted into the psymtab in the
      order of least informative first - most informative last.  Since

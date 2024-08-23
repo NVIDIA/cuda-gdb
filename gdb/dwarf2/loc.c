@@ -19,6 +19,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "ui-out.h"
 #include "value.h"
@@ -46,6 +51,12 @@
 #include <unordered_set>
 #include "gdbsupport/underlying.h"
 #include "gdbsupport/byte-vector.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-frame.h"
+#include "cuda/cuda-utils.h"
+#include "cuda/cuda-regmap.h"
+#include "cuda/cuda-tdep.h"
+#endif
 
 static struct value *dwarf2_evaluate_loc_desc_full
   (struct type *type, frame_info_ptr frame, const gdb_byte *data,
@@ -4134,3 +4145,33 @@ conversational style, when possible."),
 			   &set_dwarf_cmdlist,
 			   &show_dwarf_cmdlist);
 }
+#ifdef NVIDIA_CUDA_GDB
+/**
+ * CUDA PTX cache local variable iterator
+ * If local variable is mapped to a PTX register, we want to cache its value.
+ * Evaluate the result of the symbol. We will cache it during evaluation.
+ */
+void
+cuda_ptx_cache_local_vars_iterator (const char *name, struct symbol *symbol, frame_info_ptr frame)
+{
+  struct dwarf2_loclist_baton *dlbaton = (struct dwarf2_loclist_baton *) SYMBOL_LOCATION_BATON (symbol);
+  const gdb_byte *data;
+  size_t size;
+  if (symbol->aclass () != LOC_COMPUTED) return;
+  if (SYMBOL_COMPUTED_OPS (symbol) != &dwarf2_loclist_funcs) return;
+  data = dwarf2_find_location_expression (dlbaton, &size,
+                frame ? get_frame_address_in_block (frame): 0);
+  if (!data || size == 0 ) return;
+  dwarf_expr_context ctx (dlbaton->per_objfile, dlbaton->per_cu->addr_size ());
+  
+  try
+    {
+      ctx.evaluate (data, size, true, dlbaton->per_cu, frame, nullptr,
+		    symbol->type ());
+    }
+  catch (const gdb_exception_error &ex)
+    {
+      return;
+    }
+}
+#endif

@@ -25,6 +25,11 @@
    Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA
    02110-1301, USA.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2024 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 
 #if !defined (DEMANGLE_H)
 #define DEMANGLE_H
@@ -57,9 +62,11 @@ extern "C" {
 #define DMGL_GNAT	 (1 << 15)
 #define DMGL_DLANG	 (1 << 16)
 #define DMGL_RUST	 (1 << 17)	/* Rust wraps GNU_V3 style mangling.  */
+/* CUDA */
+#define DMGL_CUDA	 (1 << 18)	/* CUDA - wraps GNU_V3 style mangling.  */
 
 /* If none of these are set, use 'current_demangling_style' as the default. */
-#define DMGL_STYLE_MASK (DMGL_AUTO|DMGL_GNU_V3|DMGL_JAVA|DMGL_GNAT|DMGL_DLANG|DMGL_RUST)
+#define DMGL_STYLE_MASK (DMGL_AUTO|DMGL_GNU_V3|DMGL_JAVA|DMGL_GNAT|DMGL_DLANG|DMGL_RUST|DMGL_CUDA)
 
 /* Disable a limit on the depth of recursion in mangled strings.
    Note if this limit is disabled then stack exhaustion is possible when
@@ -89,7 +96,8 @@ extern enum demangling_styles
   java_demangling = DMGL_JAVA,
   gnat_demangling = DMGL_GNAT,
   dlang_demangling = DMGL_DLANG,
-  rust_demangling = DMGL_RUST
+  rust_demangling = DMGL_RUST,
+  cuda_demangling = DMGL_CUDA
 } current_demangling_style;
 
 /* Define string names for the various demangling styles. */
@@ -101,6 +109,7 @@ extern enum demangling_styles
 #define GNAT_DEMANGLING_STYLE_STRING          "gnat"
 #define DLANG_DEMANGLING_STYLE_STRING         "dlang"
 #define RUST_DEMANGLING_STYLE_STRING          "rust"
+#define CUDA_DEMANGLING_STYLE_STRING          "cuda"
 
 /* Some macros to test what demangling style is active. */
 
@@ -111,6 +120,7 @@ extern enum demangling_styles
 #define GNAT_DEMANGLING (((int) CURRENT_DEMANGLING_STYLE) & DMGL_GNAT)
 #define DLANG_DEMANGLING (((int) CURRENT_DEMANGLING_STYLE) & DMGL_DLANG)
 #define RUST_DEMANGLING (((int) CURRENT_DEMANGLING_STYLE) & DMGL_RUST)
+#define CUDA_DEMANGLING (((int) CURRENT_DEMANGLING_STYLE) & DMGL_CUDA)
 
 /* Provide information about the available demangle styles. This code is
    pulled from gdb into libiberty because it is useful to binutils also.  */
