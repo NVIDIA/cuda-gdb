@@ -119,7 +119,6 @@ extern int bin2hex (const gdb_byte *bin, char *hex, int count);
 void cuda_remote_query_device_spec (remote_target *ops,
 				    uint32_t dev_id, uint32_t *num_sms, uint32_t *num_warps, uint32_t *num_lanes,
 				    uint32_t *num_registers,
-				    uint32_t *num_uregisters,
 				    char **dev_type, char **sm_type);
 
 /* Notifications */

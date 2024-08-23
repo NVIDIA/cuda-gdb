@@ -21,6 +21,7 @@
 #include <map>
 
 #include "breakpoint.h"
+#include "inferior.h"
 #include "source.h"
 
 #include "cuda-context.h"
@@ -78,6 +79,8 @@ cuda_elf_image_new (void *image, uint64_t size, module_t module)
 void
 cuda_elf_image_delete (elf_image_t elf_image)
 {
+  gdb_assert (elf_image);
+
   if (elf_image->prev)
     elf_image->prev->next = elf_image->next;
   if (elf_image->next)
@@ -85,7 +88,6 @@ cuda_elf_image_delete (elf_image_t elf_image)
   if (elf_image_chain == elf_image)
     elf_image_chain = elf_image->next;
 
-  gdb_assert (elf_image);
   xfree (elf_image);
 }
 
@@ -310,8 +312,8 @@ cuda_elf_image_load (elf_image_t elf_image, bool is_system)
     error (_("Error: Failed to add symbols from device ELF symbol file!\n"));
 
   /* Identify this gdb objfile as being cuda-specific */
-  objfile->cuda_objfile   = true;
-  objfile->per_bfd->gdbarch        = cuda_get_gdbarch ();
+  objfile->cuda_objfile     = true;
+  objfile->per_bfd->gdbarch = cuda_get_gdbarch ();
   /* CUDA - skip prologue - temporary */
   objfile->cuda_producer_is_open64 = cuda_producer_is_open64;
 
@@ -343,9 +345,12 @@ cuda_elf_image_load (elf_image_t elf_image, bool is_system)
   if (!objfile->compunit_symtabs)
     cuda_decode_line_table (objfile);
   
-  cuda_resolve_breakpoints (0, elf_image);
-
-  cuda_elf_image_auto_breakpoints_update_locations ();
+  /* Don't try to update/set breakpoints for corefiles */
+  if (target_has_execution ())
+    {
+      cuda_resolve_breakpoints (0, elf_image);
+      cuda_elf_image_auto_breakpoints_update_locations ();
+    }
 
   current_elf_image = nullptr;
 
@@ -385,11 +390,15 @@ cuda_elf_image_unload (elf_image_t elf_image)
   /* Remove any still pending locations from the map for this key. */
   cuda_kernel_entry_points.erase (elf_image);
 
-  /* Update the forced breakpoints to remove locations for this image. */
-  cuda_auto_breakpoints_remove_locations (elf_image);
+  /* Don't try to update/set breakpoints for corefiles */
+  if (target_has_execution ())
+    {
+      /* Update the forced breakpoints to remove locations for this image. */
+      cuda_auto_breakpoints_remove_locations (elf_image);
 
-  /* Remove any user set breakpoints for this image. */
-  cuda_unresolve_breakpoints (elf_image);
+      /* Remove any user set breakpoints for this image. */
+      cuda_unresolve_breakpoints (elf_image);
+    }
 }
 
 elf_image_t

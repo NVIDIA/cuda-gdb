@@ -883,7 +883,7 @@ Options:\n\
 Save a core file with the current state of the debugged process.\n\
 Usage: generate-core-file [FILENAME]\n\
 Argument is optional filename.  Default filename is 'core.PROCESS_ID'."));
-#endif
+#endif // NVIDIA_CUDA_GDB
 
   add_com_alias ("gcore", generate_core_file_cmd, class_files, 1);
 }

@@ -50,10 +50,16 @@ void
 context_delete (context_t ctx)
 {
   gdb_assert (ctx);
-  gdb_assert (get_current_context () != ctx);
 
-  cuda_trace ("delete context dev_id %u context_id 0x%llx",
+  cuda_trace ("Delete context dev_id %u context_id 0x%llx",
               ctx->dev_id, (unsigned long long)ctx->context_id);
+
+  // Handle deleting the current context
+  if (ctx == get_current_context ())
+    {
+      cuda_trace ("Clearing current context");
+      set_current_context (nullptr);
+    }
 
   modules_delete (context_get_modules (ctx));
   xfree (ctx);
@@ -128,6 +134,16 @@ context_remove_context_from_list (context_t context, list_elt_t *list_head)
 
   /* Return the context associated with the removed element */
   return removed_context;
+}
+
+void
+context_flush_disasm_caches (context_t context)
+{
+  gdb_assert (context);
+
+  auto modules = context_get_modules (context);
+  if (modules)
+    modules_flush_disasm_caches (modules);
 }
 
 /******************************************************************************
@@ -400,6 +416,14 @@ uint32_t
 contexts_get_list_size (contexts_t ctx)
 {
   return ctx->list_size;
+}
+
+void
+contexts_flush_disasm_caches (contexts_t contexts)
+{
+  gdb_assert (contexts);
+  for (auto elem = contexts->list; elem; elem = elem->next)
+    context_flush_disasm_caches (elem->context);
 }
 
 /******************************************************************************

@@ -577,6 +577,10 @@ qnx_getpkt (remote_target *ops, gdb::char_vector* buf, int forever)
 	      continue;
 	    }
 	}
+      else if (recv.pkt.hdr.cmd == DStMsg_disconnect)
+	{
+	  return -1;
+	}
       else
 	{
 	  error ("Received invalid CUDA response packet");
@@ -1101,6 +1105,7 @@ nto_send_recv (const DScomm_t *const tran, DScomm_t *const recv,
   /* CUDA: unblocking gdb 10.1 upgrade */
   int stashed = 0;
   unsigned tries;
+  unsigned recv_tries;
 
   if (current_session->desc == NULL)
     {
@@ -1133,6 +1138,24 @@ nto_send_recv (const DScomm_t *const tran, DScomm_t *const recv,
       else
 	stashed = 0;
 
+      recv_tries = 0;
+
+recv_again:
+      if (recv_tries++ >= MAX_RECV_TRIES)
+	{
+	  unsigned char err = DSrMsg_err;
+
+	  printf_unfiltered ("Remote exhausted %d retries.\n", recv_tries);
+	  if (gdbarch_byte_order (target_gdbarch ()) == BFD_ENDIAN_BIG)
+	    err |= DSHDR_MSG_BIG_ENDIAN;
+	  recv->pkt.hdr.cmd = err;
+	  recv->pkt.err.err = EIO;
+	  recv->pkt.err.err = EXTRACT_SIGNED_INTEGER (&recv->pkt.err.err,
+						      4, byte_order);
+	  rlen = sizeof (recv->pkt.err);
+	  break;
+	}
+
       for (;;)
 	{
 	  rlen = getpkt (recv, 0);
@@ -1161,7 +1184,8 @@ nto_send_recv (const DScomm_t *const tran, DScomm_t *const recv,
       }
       else
       {
-	error ("mid mismatch! tran_mid=%d, recv_mid=%d, unexpected_cmd=%d", tran->pkt.hdr.mid, recv->pkt.hdr.mid, recv->pkt.hdr.cmd);
+	internal_warning ("A packet {cmd=%d} came out of order tran_mid=%d, recv_mid=%d", recv->pkt.hdr.cmd, tran->pkt.hdr.mid, recv->pkt.hdr.mid);
+	goto recv_again;
       }
     }
   /* Getpkt() sets channelrd to indicate where the message came from.

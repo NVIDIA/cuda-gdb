@@ -203,12 +203,16 @@ count_instructions (uint64_t pc, uint64_t end_pc)
   int count = 0;
   uint32_t inst_size = 0;
   module_t module = kernel_get_module (kernel);
+  gdb_assert (module);
+
+  auto disassembler = module_disassembler (module);
+  gdb_assert (disassembler);
 
   cuda_adjust_device_code_address (pc, &pc);
   for (; pc < end_pc; pc += inst_size)
     {
       std::string inst;
-      auto found = module->disassembler->disassemble (pc, inst, inst_size);
+      auto found = disassembler->disassemble (pc, inst, inst_size);
       /* Stop counting if pc is outside of the routine boundary */
       if (!found)
         return count;
@@ -285,7 +289,7 @@ astep_warp_valid_p (cuda_coords &coords)
 
   const auto &p = coords.physical ();
 
-  if (cuda_state::warp_get_active_virtual_pc (p.dev (), p.sm (), p.wp ())
+  if (cuda_state::warp_get_active_pc (p.dev (), p.sm (), p.wp ())
       != (uint64_t)astep_state.start_pc)
     return false;
 
@@ -357,7 +361,7 @@ select_next_valid_warp (void)
 
           const auto &p = next_coord.physical ();
           const auto &l = next_coord.logical ();
-          CORE_ADDR warp_pc = cuda_state::warp_get_active_virtual_pc (
+          CORE_ADDR warp_pc = cuda_state::warp_get_active_pc (
               p.dev (), p.sm (), p.wp ());
 
           cuda_trace_domain (
@@ -401,7 +405,7 @@ set_next_device_iteration (void)
 
   /* A valid warp is already in place and we are starting to step this warp
      from the start.  */
-  uint64_t cur_pc = (CORE_ADDR)cuda_state::warp_get_active_virtual_pc (
+  uint64_t cur_pc = (CORE_ADDR)cuda_state::warp_get_active_pc (
       p.dev (), p.sm (), p.wp ());
   struct symtab_and_line cur_sal = find_pc_line (cur_pc, 0);
   uint64_t end_pc = -1;
@@ -668,7 +672,7 @@ update_device_autostep_state (CORE_ADDR pc)
 
   /* Fetch the updated PC for the active warp.  Also fetch its line number
      information.  */
-  uint64_t after_pc = cuda_state::warp_get_active_virtual_pc (
+  uint64_t after_pc = cuda_state::warp_get_active_pc (
       c.physical ().dev (), c.physical ().sm (), c.physical ().wp ());
   struct symtab_and_line after_sal = find_pc_line (after_pc, 0);
 

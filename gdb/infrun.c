@@ -3214,6 +3214,10 @@ proceed (CORE_ADDR addr, enum gdb_signal siggnal)
 
   /* We'll update this if & when we switch to a new thread.  */
   previous_inferior_ptid = inferior_ptid;
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - focus */
+  previous_cuda_coords = cuda_current_focus::get ();
+#endif
 
   regcache = get_current_regcache ();
   gdbarch = regcache->arch ();
@@ -4057,10 +4061,6 @@ wait_for_inferior (inferior *inf)
 
   SCOPE_EXIT { delete_just_stopped_threads_infrun_breakpoints (); };
 
-#ifdef NVIDIA_CUDA_GDB
-  /* CUDA - focus */
-  previous_cuda_coords = cuda_current_focus::get ();
-#endif
   /* If an error happens while handling the event, propagate GDB's
      knowledge of the executing state to the frontend/user running
      state.  */
@@ -4248,10 +4248,6 @@ fetch_inferior_event ()
   {
     SCOPE_EXIT { reinstall_readline_callback_handler_cleanup (); };
 
-#ifdef NVIDIA_CUDA_GDB
-    if (valid_event)
-      previous_cuda_coords = cuda_current_focus::get ();
-#endif
     /* We're handling a live event, so make sure we're doing live
        debugging.  If we're looking at traceframes while the target is
        running, we're going to need to get back to that mode after
@@ -7485,18 +7481,27 @@ process_event_stop_test (struct execution_control_state *ecs)
 #ifdef NVIDIA_CUDA_GDB
   /* CUDA - stepping */
   /* we want to continue stepping if this thread is still not active. */
-  if (ecs->event_thread->control.step_range_end == 1 &&
-      cuda_current_focus::isDevice ())
-  {
-    const auto& p = cuda_current_focus::get ().physical ();
-    if (!cuda_state::lane_active (p.dev (), p.sm (), p.wp (), p.ln ()))
+  if (ecs->event_thread->control.step_range_end == 1
+      && cuda_current_focus::isDevice ())
     {
-      if (debug_infrun)
-        gdb_printf (gdb_stdlog, "infrun: cuda thread still not active\n");
-      keep_going (ecs);
-      return;
+      const auto &p = cuda_current_focus::get ().physical ();
+      if (cuda_options_step_divergent_lanes_enabled ()
+	  && !cuda_state::lane_active (p.dev (), p.sm (), p.wp (), p.ln ()))
+	{
+	  infrun_debug_printf ("cuda thread focus is not active");
+	  /* The print check will enforce that we print the message once per
+	   * step operation. It gets reset the next time we begin stepping. */
+	  if (cuda_print_divergent_stepping ())
+	    {
+	      cuda_current_focus::printFocus (false);
+	      warning (_ (
+		  "Current CUDA focus is no longer active. Stepping divergent "
+		  "CUDA threads until current CUDA focus is active again."));
+	    }
+	  keep_going (ecs);
+	  return;
+	}
     }
-  }
 #endif
   if (ecs->event_thread->control.step_range_end == 1)
     {
@@ -8915,14 +8920,16 @@ normal_stop (void)
 	  target_terminal::ours_for_output ();
 #ifdef NVIDIA_CUDA_GDB
 	  /* CUDA - focus */
-	  if (cuda_current_focus::isDevice () && 
-		(current_uiout->is_mi_like_p () ||
-		 previous_cuda_coords != cuda_current_focus::get ()))
+	  if (cuda_current_focus::isDevice ()
+	      && (current_uiout->is_mi_like_p ()
+		  || previous_cuda_coords != cuda_current_focus::get ()))
 	    cuda_current_focus::printFocus (true);
 	  /* CUDA - focus */
-	  if (!cuda_current_focus::isDevice () && previous_inferior_ptid != inferior_ptid)
-	    gdb_printf (_("[Switching to %s]\n"),
-			     target_pid_to_str (inferior_ptid).c_str ());
+	  if (!cuda_current_focus::isDevice ()
+	      && (previous_cuda_coords.valid ()
+		  || previous_inferior_ptid != inferior_ptid))
+	    gdb_printf (_ ("[Switching to %s]\n"),
+			target_pid_to_str (inferior_ptid).c_str ());
 #else
 	  gdb_printf (_("[Switching to %s]\n"),
 		      target_pid_to_str (inferior_ptid).c_str ());

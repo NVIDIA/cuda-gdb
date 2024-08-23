@@ -61,8 +61,6 @@
 #include "inf-loop.h"
 #include "top.h"
 
-extern struct lwp_info *cuda_find_lwp_pid (ptid_t ptid);
-
 bool cuda_debugging_enabled = false;
 
 struct cuda_cudart_symbols_st cuda_cudart_symbols;
@@ -600,17 +598,11 @@ switch_to_cuda_thread (const cuda_coords &coords)
   registers_changed ();
 
   if (const_cast<cuda_coords &> (coords).isValidOnDevice ())
-    pc = cuda_state::lane_get_virtual_pc (
+    pc = cuda_state::lane_get_pc (
 	coords.physical ().dev (), coords.physical ().sm (),
 	coords.physical ().wp (), coords.physical ().ln ());
   else
     pc = (CORE_ADDR)~0;
-
-#if !defined(__QNXTARGET__)
-  struct lwp_info *lp = cuda_find_lwp_pid (inferior_ptid);
-  if (lp)
-    lp->stop_pc = pc;
-#endif
 
   thread_info *thr = find_thread_ptid (current_inferior ()->process_target (),
 				       inferior_ptid);

@@ -357,9 +357,9 @@ cuda_abi_frame_prev_pc (frame_info_ptr next_frame)
     }
 
   if (level == 0)
-    pc = cuda_state::lane_get_virtual_pc (c.dev (), c.sm (), c.wp (), c.ln ());
+    pc = cuda_state::lane_get_pc (c.dev (), c.sm (), c.wp (), c.ln ());
   else if (level <= call_depth)
-    pc = cuda_state::lane_get_virtual_return_address (
+    pc = cuda_state::lane_get_return_address (
         c.dev (), c.sm (), c.wp (), c.ln (), level - 1);
   else
     pc = 0;
@@ -372,7 +372,7 @@ cuda_noabi_frame_prev_pc (frame_info_ptr next_frame)
 {
   const auto &c = cuda_current_focus::get ().physical ();
   uint64_t pc
-      = cuda_state::lane_get_virtual_pc (c.dev (), c.sm (), c.wp (), c.ln ());
+      = cuda_state::lane_get_pc (c.dev (), c.sm (), c.wp (), c.ln ());
 
   return (CORE_ADDR)pc;
 }

@@ -237,6 +237,9 @@ public:
   static bool get_device_info_sizes (uint32_t dev, CUDBGDeviceInfoSizes* sizes);
   static bool get_device_info (uint32_t dev, CUDBGDeviceInfoQueryType_t type, void *buffer, uint32_t length, uint32_t *data_length);
 
+  // Internal debugging commands
+  static bool execute_internal_command (const char *command, char *resultBuffer, uint32_t sizeInBytes);
+
 private:
   // Everyone else can use the getters
   typedef enum

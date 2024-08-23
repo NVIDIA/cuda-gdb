@@ -395,9 +395,14 @@ cuda_event_functions_loaded (uint32_t dev_id,
   /* Load the ELF image from the filesystem, creating a new objfile */
   cuda_elf_image_load (elf_image, is_system);
 
-  // Flush the module disassembly caches
-  // module->disassembler->flush_elf_cache ();
-  module->disassembler->flush_device_cache ();
+  // Flush the module disassembly caches as we've just updated the
+  // ELF image
+  auto disassembler = module->disassembler;
+  if (disassembler)
+    {
+      disassembler->flush_elf_cache ();
+      disassembler->flush_device_cache ();
+    }
 }
 #endif
 

@@ -207,9 +207,10 @@ regmap_get_half_register (regmap_t regmap, uint32_t idx,
   gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx])
 	      == REG_CLASS_REG_HALF);
 
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (cuda_get_gdbarch ());
   raw_register = REGMAP_REG (regmap->output.raw_value[idx]);
   *in_higher_16_bits = raw_register & 1;
-  return raw_register / 2;
+  return tdep->first_regnum + (raw_register / 2);
 }
 
 uint32_t
@@ -220,7 +221,8 @@ regmap_get_register (regmap_t regmap, uint32_t idx)
   gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx])
 	      == REG_CLASS_REG_FULL);
 
-  return REGMAP_REG (regmap->output.raw_value[idx]);
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (cuda_get_gdbarch ());
+  return REGMAP_REG (regmap->output.raw_value[idx]) + tdep->first_regnum;
 }
 
 uint32_t
@@ -235,9 +237,10 @@ regmap_get_half_uregister (regmap_t regmap, uint32_t idx,
   gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx])
 	      == REG_CLASS_UREG_HALF);
 
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (cuda_get_gdbarch ());
   raw_register = REGMAP_REG (regmap->output.raw_value[idx]);
   *in_higher_16_bits = raw_register & 1;
-  return raw_register / 2;
+  return tdep->first_uregnum + (raw_register / 2);
 }
 
 uint32_t
@@ -248,7 +251,8 @@ regmap_get_uregister (regmap_t regmap, uint32_t idx)
   gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx])
 	      == REG_CLASS_UREG_FULL);
 
-  return REGMAP_REG (regmap->output.raw_value[idx]);
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (cuda_get_gdbarch ());
+  return REGMAP_REG (regmap->output.raw_value[idx]) + tdep->first_uregnum;
 }
 
 uint32_t
@@ -259,7 +263,8 @@ regmap_get_sp_register (regmap_t regmap, uint32_t idx)
   gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx])
 	      == REG_CLASS_LMEM_REG_OFFSET);
 
-  return REGMAP_SP_REG (regmap->output.raw_value[idx]);
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (cuda_get_gdbarch ());
+  return REGMAP_SP_REG (regmap->output.raw_value[idx]) + tdep->first_regnum;
 }
 
 uint32_t
@@ -884,19 +889,24 @@ regmap_table_search (struct objfile *objfile, const char *func_name,
 int
 cuda_decode_physical_register (uint64_t reg, int32_t *result)
 {
-  uint32_t dev_id = cuda_current_focus::get ().physical ().dev ();
-  uint32_t num_regs = cuda_state::device_get_num_registers (dev_id);
-  ULONGEST last_regnum = num_regs - 1;
-
-  if (reg < last_regnum)
-    {
-      *result = (int32_t)reg;
-      return 0;
-    }
+  cuda_gdbarch_tdep *tdep
+      = gdbarch_tdep<cuda_gdbarch_tdep> (cuda_get_gdbarch ());
 
   if (REGMAP_CLASS (reg) == REG_CLASS_REG_FULL)
     {
-      *result = (int32_t)REGMAP_REG (reg);
+      if (REGMAP_REG (reg) == CUDA_REG_ZERO_REGISTER)
+	*result = (int32_t)tdep->zero_regnum;
+      else
+	*result = (int32_t)(REGMAP_REG (reg) + tdep->first_regnum);
+      return 0;
+    }
+
+  if (REGMAP_CLASS (reg) == REG_CLASS_UREG_FULL)
+    {
+      if (REGMAP_REG (reg) == CUDA_UREG_ZERO_REGISTER)
+	*result = (int32_t)tdep->zero_uregnum;
+      else
+	*result = (int32_t)(REGMAP_REG (reg) + tdep->first_uregnum);
       return 0;
     }
 

@@ -33,6 +33,7 @@ modules_t      context_get_modules       (context_t);
 void           context_print             (context_t);
 
 module_t       context_find_module_by_id (context_t, uint64_t module_id);
+void           context_flush_disasm_caches (context_t);
 
 /* Contexts */
 contexts_t     contexts_new              (void);
@@ -51,6 +52,7 @@ context_t      contexts_find_context_by_id      (contexts_t, uint64_t context_id
 context_t      contexts_find_context_by_address (contexts_t, CORE_ADDR addr);
 
 uint32_t       contexts_get_list_size           (contexts_t);
+void           contexts_flush_disasm_caches     (contexts_t);
 
 /* Current Context */
 context_t get_current_context     (void);

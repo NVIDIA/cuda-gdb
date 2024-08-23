@@ -196,7 +196,6 @@ cuda_initialize_remote_target (struct target_ops *ops)
   uint32_t num_warps = 0;
   uint32_t num_lanes = 0;
   uint32_t num_registers = 0;
-  uint32_t num_uregisters = 0;
   uint32_t dev_id = 0;
   bool driver_is_compatible;
   char *dev_type;
@@ -297,11 +296,10 @@ cuda_initialize_remote_target (struct target_ops *ops)
   for (dev_id = 0; dev_id < cuda_state::get_num_devices (); dev_id++)
     {
       cuda_remote_query_device_spec (remote, dev_id, &num_sms, &num_warps,
-				     &num_lanes, &num_registers,
-				     &num_uregisters, &dev_type, &sm_type);
+				     &num_lanes, &num_registers, &dev_type,
+				     &sm_type);
       cuda_state::set_device_spec (dev_id, num_sms, num_warps, num_lanes,
-				   num_registers, num_uregisters, dev_type,
-				   sm_type);
+				   num_registers, dev_type, sm_type);
     }
   cuda_remote_set_option (remote);
   cuda_gdb_session_create ();
@@ -812,56 +810,19 @@ cuda_remote_target<parent>::wait (ptid_t ptid, struct target_waitstatus *ws,
 template <class parent>
 void
 cuda_remote_target<parent>::fetch_registers (struct regcache *regcache,
-					     int regno)
+                                             int regno)
 {
-  uint64_t val = 0;
   struct gdbarch *gdbarch = regcache->arch ();
-  uint32_t pc_regnum = gdbarch_pc_regnum (gdbarch);
-  enum register_status status;
 
-  /* delegate to the host routines when not on the device */
-  if (!cuda_current_focus::isDevice ())
-    {
-      parent::fetch_registers (regcache, regno);
-      return;
-    }
+  // If all the registers are wanted, then we need the host registers and the
+  // device PC, otherwise read the CUDA register
+  if ((regno == -1) && cuda_current_focus::isDevice ())
+    cuda_register_read (gdbarch, regcache, gdbarch_pc_regnum (gdbarch));
 
-  const auto &c = cuda_current_focus::get ().physical ();
-
-  /* if all the registers are wanted, then we need the host registers and the
-     device PC */
-  if (regno == -1)
-    {
-      parent::fetch_registers (regcache, regno);
-      val = cuda_state::lane_get_virtual_pc (c.dev (), c.sm (), c.wp (),
-					     c.ln ());
-      regcache->raw_supply (pc_regnum, &val);
-      return;
-    }
-
-  /* get the PC */
-  if (regno == pc_regnum)
-    {
-      val = cuda_state::lane_get_virtual_pc (c.dev (), c.sm (), c.wp (),
-					     c.ln ());
-      regcache->raw_supply (pc_regnum, &val);
-      return;
-    }
-
-  if (cuda_regular_register_p (gdbarch, regno))
-    {
-      /* raw register */
-      val = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (),
-					   regno);
-      regcache->raw_supply (regno, &val);
-      return;
-    }
-
-  status
-      = cuda_pseudo_register_read (gdbarch, regcache, regno, (gdb_byte *)&val);
-  gdb_assert (status == REG_VALID);
-
-  regcache->raw_supply (regno, &val);
+  if ((regno == -1) || !cuda_current_focus::isDevice ())
+    parent::fetch_registers (regcache, regno);
+  else
+    cuda_register_read (gdbarch, regcache, regno);
 }
 
 template <class parent>

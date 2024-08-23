@@ -1158,6 +1158,12 @@ jit_inferior_init (inferior *inf)
   struct gdbarch *gdbarch = inf->gdbarch;
   program_space *pspace = inf->pspace;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* Skip initializing JIT for corefiles */
+  if (!target_has_execution ())
+    return;
+#endif
+  
   jit_debug_printf ("called");
 
   jit_prepend_unwinder (gdbarch);

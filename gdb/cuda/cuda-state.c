@@ -228,7 +228,7 @@ cuda_state::resolve_breakpoints (int bp_number_from)
 
   elf_image_t elf_image;
   CUDA_ALL_LOADED_ELF_IMAGES (elf_image)
-  cuda_resolve_breakpoints (bp_number_from, elf_image);
+    cuda_resolve_breakpoints (bp_number_from, elf_image);
 }
 
 void
@@ -236,9 +236,9 @@ cuda_state::cleanup_breakpoints (void)
 {
   CUDA_STATE_TRACE ("");
 
-  elf_image_t elf_image;
-  CUDA_ALL_LOADED_ELF_IMAGES (elf_image)
-  cuda_unresolve_breakpoints (elf_image);
+  // Passing in nullptr unresolves all CUDA breakpoints
+  // across all elf_image objects in a single call
+  cuda_unresolve_breakpoints (nullptr);
 }
 
 void
@@ -281,12 +281,12 @@ cuda_state::flush_disasm_caches ()
 {
   CUDA_STATE_TRACE ("");
 
-  /* This is less than ideal, we want to iternate on modules, not on kernels */
-  for (auto kernel = kernels_get_first_kernel (); kernel;
-       kernel = kernels_get_next_kernel (kernel))
+  // Iterate over all contexts (modules)
+  for (auto dev_id = 0; dev_id < get_num_devices (); ++dev_id)
     {
-      module_t module = kernel_get_module (kernel);
-      module->disassembler->flush_device_cache ();
+      auto contexts = device_get_contexts (dev_id);
+      if (contexts)
+	contexts_flush_disasm_caches (contexts);
     }
 }
 
@@ -332,6 +332,14 @@ cuda_device::cuda_device (uint32_t idx) : m_dev_id (idx)
   CUDA_STATE_TRACE_DEV (this, "initialize");
 
   // Collect information about this device that doesn't change
+  cuda_debugapi::get_sm_type (dev_idx (), m_sm_type, sizeof (m_sm_type));
+
+  cuda_debugapi::get_device_name (dev_idx (), m_dev_name, sizeof (m_dev_name));
+  cuda_debugapi::get_device_type (dev_idx (), m_dev_type, sizeof (m_dev_type));
+
+  auto sm_version = get_sm_version ();
+  m_insn_size = (sm_version < 70) ? 8 : 16;
+
   cuda_debugapi::get_num_sms (dev_idx (), &m_num_sms);
 
   cuda_debugapi::get_num_warps (dev_idx (), &m_num_warps);
@@ -345,14 +353,6 @@ cuda_device::cuda_device (uint32_t idx) : m_dev_id (idx)
 
   cuda_debugapi::get_num_uregisters (dev_idx (), &m_num_uregisters);
   cuda_debugapi::get_num_upredicates (dev_idx (), &m_num_upredicates);
-
-  cuda_debugapi::get_sm_type (dev_idx (), m_sm_type, sizeof (m_sm_type));
-
-  cuda_debugapi::get_device_name (dev_idx (), m_dev_name, sizeof (m_dev_name));
-  cuda_debugapi::get_device_type (dev_idx (), m_dev_type, sizeof (m_dev_type));
-
-  auto sm_version = get_sm_version ();
-  m_insn_size = (sm_version < 70) ? 8 : 16;
 
   // Clear to start with, including the attribute size arrays
   m_info_sizes = { 0 };
@@ -457,9 +457,9 @@ cuda_device::update (CUDBGDeviceInfoQueryType_t type)
     {
       if (incremental ())
 	{
-	  CUDA_STATE_TRACE_DEV (this, "Incremental update");
+	  CUDA_STATE_TRACE_DEV (this, "Incremental update - invalidate device");
 	  invalidate (!debug_invalidate, true);
-	  CUDA_STATE_TRACE_DEV (this, "Incremental update done");
+	  CUDA_STATE_TRACE_DEV (this, "Incremental update - invalidate done");
 	}
       else
 	{
@@ -764,8 +764,7 @@ cuda_device::suspend ()
 void
 cuda_device::set_device_spec (uint32_t num_sms, uint32_t num_warps,
 			      uint32_t num_lanes, uint32_t num_registers,
-			      uint32_t num_uregisters, const char *dev_type,
-			      const char *sm_type)
+			      const char *dev_type, const char *sm_type)
 {
   gdb_assert (cuda_remote);
 
@@ -781,8 +780,6 @@ cuda_device::set_device_spec (uint32_t num_sms, uint32_t num_warps,
   m_num_warps = num_warps;
   m_num_lanes = num_lanes;
   m_num_registers = num_registers;
-  m_num_uregisters = num_uregisters;
-
   strcpy (m_dev_type, dev_type);
   strcpy (m_sm_type, sm_type);
 
@@ -790,14 +787,9 @@ cuda_device::set_device_spec (uint32_t num_sms, uint32_t num_warps,
     error ("unknown sm_type %s", m_sm_type);
 
   m_sm_version = atoi (&m_sm_type[3]);
-  m_insn_size = (m_sm_version < 70) ? 8 : 16;
-
-  // If num_uregisters==0, it's probably not in the device spec
-  // Query it directly here
-  if (!m_num_uregisters)
-    cuda_debugapi::get_num_uregisters (dev_idx (), &m_num_uregisters);
-
   m_sm_version_p = true;
+
+  m_insn_size = (m_sm_version < 70) ? 8 : 16;
 }
 
 /******************************************************************************
@@ -841,8 +833,8 @@ cuda_sm::invalidate (bool quietly, bool recurse)
 
   // Quietly invalidate the Warps/Lanes if requested
   if (recurse)
-    for (auto &warp : m_warps)
-      warp->invalidate (true, true);
+    for (auto &wp : m_warps)
+      wp->invalidate (true, true);
 }
 
 bool
@@ -856,8 +848,8 @@ cuda_sm::reset_sm_exception_info ()
 {
   m_sm_exception_info_p = false;
   m_exception = CUDBG_EXCEPTION_NONE;
-  m_error_pc_available = false;
   m_error_pc = 0;
+  m_error_pc_available = false;
 }
 
 bool
@@ -956,7 +948,7 @@ cuda_sm::resume_warps_until_pc (cuda_api_warpmask *mask, uint64_t pc)
   // No point in resuming warps, if one of them is already there
   for (auto wp_id = 0; wp_id < device ()->get_num_warps (); ++wp_id)
     if (cuda_api_get_bit (mask, wp_id)
-	&& (pc == warp (wp_id)->get_active_virtual_pc ()))
+	&& (pc == warp (wp_id)->get_active_pc ()))
       {
 	CUDA_STATE_TRACE_SM (
 	    this, "Skipping resume: warp %u already at pc 0x%llx", wp_id, pc);
@@ -1075,7 +1067,7 @@ cuda_sm::single_step_warp (uint32_t wp_id, uint32_t lane_id_hint,
 	  "Stepped warp mask %" WARP_MASK_FORMAT
 	  " active lanes 0x%08x active pc 0x%llx",
 	  cuda_api_mask_string (single_stepped_warp_mask), active_lanes_mask,
-	  active_lanes_mask ? warp (wp_id)->get_active_virtual_pc () : 0);
+	  active_lanes_mask ? warp (wp_id)->get_active_pc () : 0);
     }
 
   // Return single-step success/failure
@@ -1090,7 +1082,17 @@ cuda_sm::update_state ()
       CUDA_STATE_TRACE_SM (this, "timestamp %lu clock %lu", timestamp (),
 			   cuda_clock ());
 
+      // Invalidate the SM state
+      // Warp invalidation is handled by the loop below
       invalidate (!debug_invalidate, false);
+
+      // Update all the valid warps
+      for (auto &wp : m_warps)
+	if (warp_valid (wp->warp_idx ()))
+	  wp->update_state ();
+	else
+	  wp->invalidate (true, true);
+
       set_timestamp (cuda_clock ());
 
       CUDA_STATE_TRACE_SM (this, "done");
@@ -1139,9 +1141,6 @@ cuda_warp::get_uregister (uint32_t regno)
 {
   gdb_assert (valid ());
 
-  if (regno == CUDA_STATE_REGISTER_RZ)
-    return 0;
-
   // If requesting uniform register values on a device w/o uniform
   // registers, simply return 0. This is to support commands like
   // "info registers"
@@ -1152,13 +1151,15 @@ cuda_warp::get_uregister (uint32_t regno)
   // them all in.
   if (regno >= m_uregisters.size ())
     m_uregisters.resize (sm ()->device ()->get_num_uregisters ());
+  gdb_assert (m_uregisters.size () == sm ()->device ()->get_num_uregisters ());
 
   // m_uregisters_p was sized in the constructor.
   if (!m_uregisters_p[regno])
     {
-      cuda_debugapi::read_uregister_range (
-	  dev_idx (), sm_idx (), warp_idx (), 0,
-	  sm ()->device ()->get_num_uregisters (), &m_uregisters.front ());
+      cuda_debugapi::read_uregister_range (dev_idx (), sm_idx (), warp_idx (),
+					   0, sm ()->device ()->get_num_uregisters (),
+					   &m_uregisters[0]);
+
       // We read them all
       m_uregisters_p.fill (true);
     }
@@ -1187,7 +1188,7 @@ cuda_warp::set_uregister (uint32_t regno, uint32_t value)
   // If uniform registers are accessed, just allocate and read them
   // all in. Each warp gets the full set anyways unlike general
   // purpose registers.
-  if (regno > m_uregisters.size ())
+  if (m_uregisters.size () == 0)
     m_uregisters.resize (sm ()->device ()->get_num_uregisters ());
 
   m_uregisters[regno] = value;
@@ -1203,17 +1204,17 @@ cuda_warp::get_upredicate (uint32_t pred)
 
   // If there are no uniform predicate registers in this device,
   // simply return false.
-  if (!sm ()->device ()->get_num_upredicates ())
+  const auto num_upreds = sm ()->device ()->get_num_upredicates ();
+  if (!num_upreds)
     return false;
 
-  gdb_assert (pred < sm ()->device ()->get_num_upredicates ());
+  gdb_assert (pred < num_upreds);
 
   if (!(m_upredicates_p & (1 << pred)))
     {
-      cuda_debugapi::read_upredicates (
-	  dev_idx (), sm_idx (), warp_idx (),
-	  sm ()->device ()->get_num_upredicates (), m_upredicates);
-      m_upredicates_p = (1 << sm ()->device ()->get_num_upredicates ()) - 1;
+      cuda_debugapi::read_upredicates (dev_idx (), sm_idx (), warp_idx (),
+                                       num_upreds, m_upredicates);
+      m_upredicates_p = (1 << num_upreds) - 1;
     }
 
   return m_upredicates[pred] != 0;
@@ -1562,8 +1563,8 @@ cuda_lane::invalidate (bool quietly)
   if (!quietly)
     CUDA_STATE_TRACE_LANE (this, "");
 
-  m_virtual_pc = 0;
-  m_virtual_pc_p = false;
+  m_pc = 0;
+  m_pc_p = false;
 
   m_thread_idx = { 0, 0, 0 };
   m_thread_idx_p = false;
@@ -1572,9 +1573,6 @@ cuda_lane::invalidate (bool quietly)
   m_exception_p = false;
 
   // The following fields are read on demand, so they need predicate flags
-  m_pc_p = false;
-  m_pc = 0;
-
   m_call_depth_p = false;
   m_call_depth = 0;
 
@@ -1589,7 +1587,7 @@ cuda_lane::invalidate (bool quietly)
   m_registers.clear ();
   m_registers_p.fill (false);
 
-  m_virtual_return_address.clear ();
+  m_return_address.clear ();
 
   // Just clear the valid predicate bits
   m_predicates_p = 0;
@@ -1610,39 +1608,10 @@ cuda_lane::divergent ()
 }
 
 uint64_t
-cuda_lane::get_virtual_pc ()
-{
-  if (!m_virtual_pc_p)
-    warp ()->update_state ();
-
-  return m_virtual_pc;
-}
-
-uint64_t
 cuda_lane::get_pc ()
 {
   if (!m_pc_p)
-    {
-      if (active ())
-	{
-	  uint64_t pc = 0;
-	  cuda_debugapi::read_pc (dev_idx (), sm_idx (), warp_idx (),
-				  lane_idx (), &pc);
-
-	  // Optimization: all the active lanes share the same PC (including
-	  // this one)
-	  auto num_lanes = warp ()->sm ()->device ()->get_num_lanes ();
-	  for (auto ln_id = 0; ln_id < num_lanes; ++ln_id)
-	    {
-	      if (warp ()->lane_valid (ln_id) && warp ()->lane_active (ln_id))
-		warp ()->lane (ln_id)->set_pc (pc, true);
-	      else
-		warp ()->lane (ln_id)->set_pc (0, false);
-	    }
-	}
-      else
-	set_pc (0, false);
-    }
+    warp ()->update_state ();
 
   return m_pc;
 }
@@ -1658,17 +1627,17 @@ cuda_lane::get_register (uint32_t regno)
   auto start_regno = regno & ~(reg_range_size - 1);
 
   // end_regno is the number just past the last register we want to read.
-  // Some of the older UD-generated coredumps encode 255 instead of
-  // 256 for the number of registers, so just use RZ as the end of the
-  // range.
+  // Some of the UD backends and generated coredumps encode 255 instead of
+  // 256 for the number of registers, but exclude the zero register from
+  // the range
   auto end_regno
-      = std::min (start_regno + reg_range_size, CUDA_STATE_REGISTER_RZ);
+      = std::min (start_regno + reg_range_size, CUDA_REG_MAX_REGISTERS);
 
   gdb_assert (end_regno > start_regno);
   gdb_assert (regno < end_regno);
 
   // Expand the register vectors as needed
-  if (end_regno >= m_registers.size ())
+  if (end_regno > m_registers.size ())
     m_registers.resize (end_regno);
 
   // m_registers_p already sized in the constructor
@@ -1717,7 +1686,7 @@ cuda_lane::get_predicate (uint32_t pred)
       cuda_debugapi::read_predicates (dev_idx (), sm_idx (), warp_idx (),
 				      lane_idx (), num_predicates,
 				      m_predicates);
-      m_predicates_p = (num_predicates - 1);
+      m_predicates_p = (1 << num_predicates) - 1;
     }
 
   return m_predicates[pred] != 0;
@@ -1796,17 +1765,17 @@ cuda_lane::get_syscall_call_depth ()
 }
 
 uint64_t
-cuda_lane::get_virtual_return_address (int32_t level)
+cuda_lane::get_return_address (int32_t level)
 {
-  auto iter = m_virtual_return_address.find (level);
-  if (iter != m_virtual_return_address.end ())
+  auto iter = m_return_address.find (level);
+  if (iter != m_return_address.end ())
     return iter->second;
 
   uint64_t ra = 0;
   cuda_debugapi::read_virtual_return_address (
       dev_idx (), sm_idx (), warp_idx (), lane_idx (), level, &ra);
 
-  m_virtual_return_address[level] = ra;
+  m_return_address[level] = ra;
 
   return ra;
 }
@@ -1823,8 +1792,8 @@ cuda_lane::update (const CUDBGLaneState &state)
   // Clear cached data
   invalidate (!debug_invalidate);
 
-  m_virtual_pc_p = true;
-  m_virtual_pc = state.virtualPC;
+  m_pc_p = true;
+  m_pc = state.virtualPC;
 
   m_thread_idx_p = true;
   m_thread_idx = state.threadIdx;
@@ -1931,15 +1900,15 @@ cuda_lane::decode (const CUDBGDeviceInfoSizes &info_sizes,
   m_thread_idx_p = true;
 
   // These fields are always valid, so don't need m_*_p predicates
-  m_virtual_pc = lane_info->virtualPC;
-  m_virtual_pc_p = true;
+  m_pc = lane_info->virtualPC;
+  m_pc_p = true;
 
   set_timestamp (cuda_clock ());
 
   CUDA_STATE_TRACE_DOMAIN_LANE (
       CUDA_TRACE_STATE_DECODE, this,
-      "Decoded Lane at offset %lu: virtual pc 0x%lx thread (%u, %u, %u)",
-      start_offset, m_virtual_pc, m_thread_idx.x, m_thread_idx.y,
+      "Decoded Lane at offset %lu: pc 0x%lx thread (%u, %u, %u)",
+      start_offset, m_pc, m_thread_idx.x, m_thread_idx.y,
       m_thread_idx.z);
 }
 

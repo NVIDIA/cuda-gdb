@@ -293,32 +293,41 @@ cuda_current_focus::invalidate ()
 /*Update the current coordinates.
  *
  * Thread Selection Policy:
- *  (1) choose the thread that was previously current if it matches the
- *      selection criteria.
- *  (2) if not, choose either the thread with lowest logical coordinates
- *      (blockIdx/threadIdx) or the thread with the lowest physical
+ *  (1) Choose the thread that was previously current if it is still
+ *      valid and active. (step_divergent_lanes disabled for active)
+ *  (2) If the previously current thread is no longer valid/active,
+ *      select the nearest neighbor thread. (step_divergent_lanes disabled for active)
+ *  (3) If there was no thread, choose either the thread with lowest logical
+ *      coordinates (blockIdx/threadIdx) or the thread with the lowest physical
  *      coordinates (dev/sm/wp/ln). The choice is left to the user
  *      a CUDA option. */
 void
 cuda_current_focus::update ()
 {
-  /* Try to sort the coords based on the nearest neighbor if the previous
-   * coords are valid. We need to grab a copy before calling isValidOnDevice
-   * as that will reset valid. */
-  gdb::optional<cuda_coords> origin;
-  if (m_current_focus.m_coords.valid ())
-    origin = m_current_focus.m_coords;
-
   /* First try the previous set of current coordinates (fast). */
-  if (m_current_focus.m_coords.valid ()
-      || m_current_focus.m_coords.isValidOnDevice ())
+  if (m_current_focus.m_coords.valid ())
     {
-      cuda_trace ("found exact valid coordinates");
+      cuda_trace ("Previous focus is still cached valid.");
       return;
     }
 
-  /* We changed away from current, brute-force it */
-  cuda_trace ("could not find exact valid coordinates, trying brute force");
+  /* Try the previous set of current coordinates if they are still valid and
+   * active. */
+  if (m_current_focus.m_coords.isValidOnDevice ())
+    {
+      const auto &p = m_current_focus.m_coords.physical ();
+      if (cuda_options_step_divergent_lanes_enabled ()
+	  || cuda_state::lane_active (p.dev (), p.sm (), p.wp (), p.ln ()))
+	{
+	  cuda_trace (
+	      "Previous focus is still valid and active on the device.");
+	  return;
+	}
+    }
+
+  /* We changed away from current, find a new coordinate to focus on. */
+  cuda_trace ("Could not find exact valid coordinates. Searching for nearest "
+	      "valid and active neighbor.");
 
   cuda_coords res;
 
@@ -327,53 +336,102 @@ cuda_current_focus::update ()
     {
       const auto &l = m_current_focus.m_coords.logical ();
       cuda_coords filter{ CUDA_WILDCARD,   CUDA_WILDCARD, CUDA_WILDCARD,
-                          CUDA_WILDCARD,   l.kernelId (), l.gridId (),
-                          l.clusterIdx (), l.blockIdx (), l.threadIdx () };
+			  CUDA_WILDCARD,   l.kernelId (), l.gridId (),
+			  l.clusterIdx (), l.blockIdx (), l.threadIdx () };
       cuda_coord_set<cuda_coord_set_type::threads, select_valid | select_sngl>
-          coord{ filter };
+	  coord{ filter };
       if (coord.size ())
-        {
-          res = *coord.begin ();
-          cuda_current_focus::set (res);
-          const auto &p = m_current_focus.m_coords.physical ();
-          cuda_trace ("%s() found valid exact coordinates (%u, %u, %u, %u)",
-                      __FUNCTION__, p.dev (), p.sm (), p.wp (), p.ln ());
-          return;
-        }
+	{
+	  res = *coord.begin ();
+	  const auto &p = res.physical ();
+	  /* If step_divergent_threads is on, we want to lock the focus to the
+	   * current CUDA thread even if it is no longer active. Otherwise
+	   * ensure that the thread is still active. */
+	  if (cuda_options_step_divergent_lanes_enabled ()
+	      || cuda_state::lane_active (p.dev (), p.sm (), p.wp (), p.ln ()))
+	    {
+	      cuda_current_focus::set (res);
+	      cuda_trace ("Software preemption enabled. Found new physical "
+			  "coordinates (%u, %u, %u, %u)",
+			  p.dev (), p.sm (), p.wp (), p.ln ());
+	      return;
+	    }
+	}
     }
+
+  /* Try to sort the coords based on the nearest neighbor if the previous
+   * coords are valid. We need to grab a copy before calling isValidOnDevice
+   * as that will reset valid. */
+  gdb::optional<cuda_coords> origin;
+  if (m_current_focus.m_coords.valid ())
+    origin = m_current_focus.m_coords;
 
   if (cuda_options_thread_selection_logical ())
     {
       /* Logical selection needs to iterate over the entire physical device,
        * and sort the coordinates logically. We cannot rely on select_sngl here
        * as it will iterate over the device in sequential physical coords.*/
-      cuda_coord_set<cuda_coord_set_type::threads, select_valid,
-                    cuda_coord_compare_type::logical>
-          coord{ cuda_coords::wild (), origin };
-      if (coord.size ())
-        res = *coord.begin ();
+
+      /* Also check if step_divergent_threads is on. If it is, we want to lock
+       * the focus to the current CUDA thread even if it is no longer active.
+       */
+      if (cuda_options_step_divergent_lanes_enabled ())
+	{
+	  cuda_coord_set<cuda_coord_set_type::threads, select_valid,
+			 cuda_coord_compare_type::logical>
+	      coord{ cuda_coords::wild (), origin };
+	  if (coord.size ())
+	    res = *coord.begin ();
+	}
+      else
+	{
+	  cuda_coord_set<cuda_coord_set_type::threads,
+			 select_valid | select_active,
+			 cuda_coord_compare_type::logical>
+	      coord{ cuda_coords::wild (), origin };
+	  if (coord.size ())
+	    res = *coord.begin ();
+	}
     }
   else
     {
       /* Physical can use select_sngl as we will always encounter the lowest
-       * physical coordinate first. */
-      cuda_coord_set<cuda_coord_set_type::threads, select_valid | select_sngl,
-                    cuda_coord_compare_type::physical>
-          coord{ cuda_coords::wild (), origin };
-      if (coord.size ())
-        res = *coord.begin ();
+       * active physical coordinate first. */
+
+      /* Also check if step_divergent_threads is on. If it is, we want to lock
+       * the focus to the current CUDA thread even if it is no longer active.
+       */
+      if (cuda_options_step_divergent_lanes_enabled ())
+	{
+	  cuda_coord_set<cuda_coord_set_type::threads,
+			 select_valid | select_sngl,
+			 cuda_coord_compare_type::physical>
+	      coord{ cuda_coords::wild (), origin };
+	  if (coord.size ())
+	    res = *coord.begin ();
+	}
+      else
+	{
+	  cuda_coord_set<cuda_coord_set_type::threads,
+			 select_valid | select_active | select_sngl,
+			 cuda_coord_compare_type::physical>
+	      coord{ cuda_coords::wild (), origin };
+	  if (coord.size ())
+	    res = *coord.begin ();
+	}
     }
 
   // If we found valid coords, switch to them.
   if (res.valid ())
     {
-      cuda_trace ("found valid coordinates");
+      cuda_trace ("Found new valid and active coordinates.");
       cuda_current_focus::set (res);
       return;
     }
 
   // No coords to switch to!
-  cuda_trace ("%s() failed to find valid coordinates", __FUNCTION__);
+  cuda_trace ("Failed to find valid and active coordinates. Switching back to "
+	      "host focus.");
   cuda_current_focus::invalidate ();
 }
 

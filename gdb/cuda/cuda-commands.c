@@ -923,7 +923,7 @@ public:
         cuda_state::warp_get_block_idx (m_device, m_sm, m_wp));
     m_threadIdx = dim3_to_string (cuda_state::lane_get_thread_idx (
         m_device, m_sm, m_wp, __builtin_ctz (active_lanes_mask)));
-    m_pc = to_hex (cuda_state::warp_get_active_virtual_pc (m_device, m_sm, m_wp));
+    m_pc = to_hex (cuda_state::warp_get_active_pc (m_device, m_sm, m_wp));
   }
 
   /* Getters */
@@ -993,7 +993,7 @@ info_cuda_warps_command (const char *arg)
   struct
   {
     size_t current, wp, active_lanes_mask, divergent_lanes_mask,
-        active_physical_pc, kernel_id, blockIdx, threadIdx;
+        active_pc, kernel_id, blockIdx, threadIdx;
   } width;
 
   /* column headers */
@@ -1001,7 +1001,7 @@ info_cuda_warps_command (const char *arg)
   const std::string header_wp{ "Wp" };
   const std::string header_active_lanes_mask{ "Active Lanes Mask" };
   const std::string header_divergent_lanes_mask{ "Divergent Lanes Mask" };
-  const std::string header_active_physical_pc{ "Active PC" };
+  const std::string header_active_pc{ "Active PC" };
   const std::string header_kernel_id{ "Kernel" };
   const std::string header_blockIdx{ "BlockIdx" };
   const std::string header_threadIdx{ "First Active ThreadIdx" };
@@ -1022,7 +1022,7 @@ info_cuda_warps_command (const char *arg)
   width.wp = header_wp.length ();
   width.active_lanes_mask = header_active_lanes_mask.length ();
   width.divergent_lanes_mask = header_divergent_lanes_mask.length ();
-  width.active_physical_pc = header_active_physical_pc.length ();
+  width.active_pc = header_active_pc.length ();
   width.kernel_id = header_kernel_id.length ();
   width.blockIdx = header_blockIdx.length ();
   width.threadIdx = header_threadIdx.length ();
@@ -1035,8 +1035,8 @@ info_cuda_warps_command (const char *arg)
                                              wp.divergent_lanes ().length ());
       width.blockIdx = std::max (width.blockIdx, wp.blockIdx ().length ());
       width.threadIdx = std::max (width.threadIdx, wp.threadIdx ().length ());
-      width.active_physical_pc
-          = std::max (width.active_physical_pc, wp.pc ().length ());
+      width.active_pc
+          = std::max (width.active_pc, wp.pc ().length ());
     }
 
   /* print table header */
@@ -1048,8 +1048,8 @@ info_cuda_warps_command (const char *arg)
                        header_active_lanes_mask);
   uiout->table_header (width.divergent_lanes_mask, ui_right,
                        "divergent_lanes_mask", header_divergent_lanes_mask);
-  uiout->table_header (width.active_physical_pc, ui_right,
-                       "active_physical_pc", header_active_physical_pc);
+  uiout->table_header (width.active_pc, ui_right,
+                       "active_physical_pc", header_active_pc);
   uiout->table_header (width.kernel_id, ui_right, "kernel", header_kernel_id);
   uiout->table_header (width.blockIdx, ui_right, "blockIdx", header_blockIdx);
   uiout->table_header (width.threadIdx, ui_right, "threadIdx",
@@ -1145,7 +1145,7 @@ public:
 
     m_threadIdx = dim3_to_string (
         cuda_state::lane_get_thread_idx (m_device, m_sm, m_wp, m_ln));
-    m_pc = to_hex (cuda_state::lane_get_virtual_pc (m_device, m_sm, m_wp, m_ln));
+    m_pc = to_hex (cuda_state::lane_get_pc (m_device, m_sm, m_wp, m_ln));
     auto active = cuda_state::lane_active (m_device, m_sm, m_wp, m_ln);
     m_state = active ? std::string{ "active" } : std::string{ "divergent" };
     auto exception
@@ -1217,14 +1217,14 @@ info_cuda_lanes_command (const char *arg)
 {
   struct
   {
-    size_t current, ln, state, physical_pc, thread_idx, exception;
+    size_t current, ln, state, pc, thread_idx, exception;
   } width;
 
   /* column headers */
   const std::string header_current{ " " };
   const std::string header_ln{ "Ln" };
   const std::string header_state{ "State" };
-  const std::string header_physical_pc{ "PC" };
+  const std::string header_pc{ "PC" };
   const std::string header_thread_idx{ "ThreadIdx" };
   const std::string header_exception{ "Exception" };
   struct ui_out *uiout = current_uiout;
@@ -1243,7 +1243,7 @@ info_cuda_lanes_command (const char *arg)
   width.current = header_current.length ();
   width.ln = header_ln.length ();
   width.state = header_state.length ();
-  width.physical_pc = header_physical_pc.length ();
+  width.pc = header_pc.length ();
   width.thread_idx = header_thread_idx.length ();
   width.exception = header_exception.length ();
 
@@ -1251,7 +1251,7 @@ info_cuda_lanes_command (const char *arg)
     {
       width.thread_idx
           = std::max (width.thread_idx, ln.threadIdx ().length ());
-      width.physical_pc = std::max (width.physical_pc, ln.pc ().length ());
+      width.pc = std::max (width.pc, ln.pc ().length ());
       width.state = std::max (width.state, ln.state ().length ());
       width.exception = std::max (width.exception, ln.exception ().length ());
     }
@@ -1262,8 +1262,8 @@ info_cuda_lanes_command (const char *arg)
   uiout->table_header (width.current, ui_right, "current", header_current);
   uiout->table_header (width.ln, ui_right, "lane", header_ln);
   uiout->table_header (width.state, ui_center, "state", header_state);
-  uiout->table_header (width.physical_pc, ui_center, "physical_pc",
-                       header_physical_pc);
+  uiout->table_header (width.pc, ui_center, "physical_pc",
+                       header_pc);
   uiout->table_header (width.thread_idx, ui_right, "threadIdx",
                        header_thread_idx);
   uiout->table_header (width.exception, ui_center, "exception",
@@ -2093,7 +2093,7 @@ public:
     const auto &l = coords.logical ();
 
     auto kernel = kernels_find_kernel_by_grid_id (p.dev (), l.gridId ());
-    m_pc = cuda_state::lane_get_virtual_pc (p.dev (), p.sm (), p.wp (),
+    m_pc = cuda_state::lane_get_pc (p.dev (), p.sm (), p.wp (),
                                             p.ln ());
 
     /* If we are filtering by bp - this thread may be invalid. */
@@ -2211,7 +2211,7 @@ info_cuda_threads_command (const char *arg)
   const std::string header_end_block_idx{ "To BlockIdx" };
   const std::string header_end_thread_idx{ "To ThreadIdx" };
   const std::string header_count{ "Count" };
-  const std::string header_pc{ "Virtual PC" };
+  const std::string header_pc{ "PC" };
   const std::string header_device{ "Dev" };
   const std::string header_sm{ "SM" };
   const std::string header_warp{ "Wp" };

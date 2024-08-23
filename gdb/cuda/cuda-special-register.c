@@ -61,7 +61,7 @@ cuda_special_register_has_matching_values (regmap_t regmap)
   for (i = 0; i < num_entries; ++i)
     {
       location_index = regmap_get_location_index (regmap, i);
-      if (max_location_index == ~0U ||  location_index > max_location_index)
+      if (max_location_index == ~0U || location_index > max_location_index)
         max_location_index = location_index;
     }
   gdb_assert (max_location_index != ~0U);
@@ -140,6 +140,7 @@ cuda_special_register_read_entry (regmap_t regmap,
   gdb_assert (regmap_is_readable (regmap));
 
   const auto& c = cuda_current_focus::get ().physical ();
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (cuda_get_gdbarch ());
 
   sz = sizeof *buf;
 
@@ -147,7 +148,7 @@ cuda_special_register_read_entry (regmap_t regmap,
   {
     case REG_CLASS_REG_FULL:
       regnum = regmap_get_register (regmap, entry_idx);
-      *buf = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (), regnum);
+      *buf = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (), regnum - tdep->first_regnum);
       break;
 
     case REG_CLASS_MEM_LOCAL:
@@ -160,24 +161,24 @@ cuda_special_register_read_entry (regmap_t regmap,
       gdb_assert (cuda_current_active_elf_image_uses_abi ());
       sp_regnum = regmap_get_sp_register (regmap, entry_idx);
       offset = regmap_get_sp_offset (regmap, entry_idx);
-      stack_addr = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (), sp_regnum);
+      stack_addr = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (), sp_regnum - tdep->first_regnum);
       cuda_debugapi::read_local_memory (c.dev (), c.sm (), c.wp (), c.ln (), stack_addr + offset, buf, sz);
       break;
 
     case REG_CLASS_REG_HALF:
       regnum = regmap_get_half_register (regmap, entry_idx, &high);
-      tmp = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (), regnum);
+      tmp = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (), regnum - tdep->first_regnum);
       *buf = high ? tmp >> 16 : tmp & 0xffff;
       break;
 
     case REG_CLASS_UREG_FULL:
       regnum = regmap_get_uregister (regmap, entry_idx);
-      *buf = cuda_state::warp_get_uregister (c.dev (), c.sm (), c.wp (), regnum);
+      *buf = cuda_state::warp_get_uregister (c.dev (), c.sm (), c.wp (), regnum - tdep->first_uregnum);
       break;
 
     case REG_CLASS_UREG_HALF:
       regnum = regmap_get_half_uregister (regmap, entry_idx, &high);
-      tmp = cuda_state::warp_get_uregister (c.dev (), c.sm (), c.wp (), regnum);
+      tmp = cuda_state::warp_get_uregister (c.dev (), c.sm (), c.wp (), regnum - tdep->first_uregnum);
       *buf = high ? tmp >> 16 : tmp & 0xffff;
       break;
 

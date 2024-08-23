@@ -135,59 +135,16 @@ cuda_core_target::fetch_registers (struct regcache *regcache, int regno)
 void
 cuda_core_fetch_registers (struct regcache *regcache, int regno)
 {
-  unsigned reg_no, reg_value, num_regs;
-  uint64_t pc;
-  struct gdbarch *gdbarch = cuda_get_gdbarch ();
-  uint32_t pc_regnum = gdbarch ? gdbarch_pc_regnum (gdbarch) : 256;
-
   if (!cuda_current_focus::isDevice ())
     return;
 
-  const auto &p = cuda_current_focus::get ().physical ();
+  // Lazily created by cuda_get_gdbarch(), should always be non-null
+  struct gdbarch *gdbarch = cuda_get_gdbarch ();
+  gdb_assert (gdbarch);
 
-  num_regs = cuda_state::device_get_num_registers (p.dev ());
-  for (reg_no = 0; reg_no < num_regs; ++reg_no)
-    {
-      reg_value = cuda_state::lane_get_register (p.dev (), p.sm (), p.wp (),
-						 p.ln (), reg_no);
-      regcache->raw_supply (reg_no, &reg_value);
-    }
-
-  /* Save PC as well */
-  pc = cuda_state::lane_get_virtual_pc (p.dev (), p.sm (), p.wp (), p.ln ());
-  regcache->raw_supply (pc_regnum, &pc);
-
-  if (gdbarch)
-    {
-      int i;
-
-      num_regs = cuda_state::device_get_num_uregisters (p.dev ());
-      for (reg_no = 0; reg_no < num_regs; ++reg_no)
-	{
-	  int reg = CUDA_REG_CLASS_AND_REGNO (REG_CLASS_UREG_FULL, reg_no);
-	  int regnum = cuda_reg_to_regnum (gdbarch, reg);
-
-	  reg_value = cuda_state::warp_get_uregister (p.dev (), p.sm (),
-						      p.wp (), reg_no);
-	  regcache->raw_supply (regnum, &reg_value);
-	}
-
-      num_regs = cuda_state::device_get_num_upredicates (p.dev ());
-      for (reg_no = 0; reg_no < num_regs; ++reg_no)
-	{
-	  int reg = CUDA_REG_CLASS_AND_REGNO (REG_CLASS_UREG_PRED, reg_no);
-	  int regnum = cuda_reg_to_regnum (gdbarch, reg);
-
-	  reg_value = cuda_state::warp_get_upredicate (p.dev (), p.sm (),
-						       p.wp (), reg_no);
-	  regcache->raw_supply (regnum, &reg_value);
-	}
-
-      /* Mark all registers not found in the core as unavailable.  */
-      for (i = 0; i < gdbarch_num_regs (gdbarch); i++)
-	if (regcache->get_register_status (i) == REG_UNKNOWN)
-	  regcache->raw_supply (i, NULL);
-    }
+  // Read in all available registers
+  for (auto regnum = 0; regnum < gdbarch_num_regs (gdbarch); regnum++)
+    cuda_register_read (gdbarch, regcache, regnum);
 }
 
 #define CUDA_CORE_PID 966617
@@ -262,6 +219,10 @@ cuda_core_initialize_events_exceptions (void)
   /* Drain the event queue */
   while (true)
     {
+      // This loop will take a very long time on corefiles
+      // with 1,000+ cubins. Give the user the oppertunity to CTRL-C
+      QUIT;
+      
       cuda_debugapi::get_next_sync_event (&event);
 
       if (event.kind == CUDBG_EVENT_INVALID)
@@ -346,7 +307,7 @@ cuda_find_first_valid_lane (void)
 static void
 cuda_core_target_open (const char *filename, int from_tty)
 {
-  struct inferior *inf;
+  struct inferior *inf = nullptr;
   gdbarch *old_gdbarch = nullptr;
 
   target_preopen (from_tty);
@@ -422,7 +383,8 @@ cuda_core_target_open (const char *filename, int from_tty)
     {
       if (e.reason < 0)
 	{
-	  inf->pop_all_targets_at_and_above (process_stratum);
+	  if (inf != nullptr)
+	    inf->pop_all_targets_at_and_above (process_stratum);
 
 	  if (old_gdbarch != nullptr)
 	    set_target_gdbarch (old_gdbarch);

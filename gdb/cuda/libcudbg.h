@@ -194,6 +194,9 @@ typedef enum {
     CUDBGAPIREQ_readAllVirtualReturnAddresses,
     CUDBGAPIREQ_getSupportedDebuggerCapabilities,
     CUDBGAPIREQ_readSmException,
+
+    /* 12.6 Extensions */
+    CUDBGAPIREQ_executeInternalCommand,
 } CUDBGAPIREQ_t;
 
 typedef enum {

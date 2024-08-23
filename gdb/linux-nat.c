@@ -853,15 +853,6 @@ find_lwp_pid (ptid_t ptid)
   return (struct lwp_info *) htab_find (lwp_lwpid_htab, &dummy);
 }
 
-#ifdef NVIDIA_CUDA_GDB
-/* CUDA - external linkage for find_lwp_pid */
-extern struct lwp_info *cuda_find_lwp_pid (ptid_t ptid);
-struct lwp_info *
-cuda_find_lwp_pid (ptid_t ptid)
-{
-  return find_lwp_pid (ptid);
-}
-#endif
 /* See nat/linux-nat.h.  */
 
 struct lwp_info *

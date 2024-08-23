@@ -312,8 +312,8 @@ cv_update_lineno_var (void)
   if (cuda_current_focus::isDevice ())
     {
       const auto &c = cuda_current_focus::get ().physical ();
-      pc = cuda_state::lane_get_virtual_pc (c.dev (), c.sm (), c.wp (),
-                                            c.ln ());
+      pc = cuda_state::lane_get_pc (c.dev (), c.sm (), c.wp (),
+                                    c.ln ());
       lineno = find_pc_line (pc, 0).line;
     }
 

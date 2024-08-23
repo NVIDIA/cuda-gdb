@@ -57,6 +57,7 @@
 #include "linux-tdep.h"
 #include "main.h"
 #include "objfiles.h"
+#include "observable.h"
 #include "osabi.h"
 #include "regcache.h"
 #include "reggroups.h"
@@ -141,99 +142,6 @@ cuda_gdb_get_tid_or_pid (ptid_t ptid)
 
 /* CUDA - skip prologue */
 bool cuda_producer_is_open64;
-
-/* Predicates for checking if register belongs to specified register group */
-bool
-cuda_regular_register_p (struct gdbarch *gdbarch, int regnum)
-{
-  return regnum < 256;
-}
-
-static inline bool
-cuda_special_regnum_p (struct gdbarch *gdbarch, int regnum)
-{
-  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
-  return regnum == tdep->special_regnum;
-}
-
-static inline bool
-cuda_invalid_regnum_p (struct gdbarch *gdbarch, int regnum)
-{
-  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
-  return regnum == tdep->invalid_lo_regnum
-         || regnum == tdep->invalid_hi_regnum;
-}
-
-/* Used externally to check if the gdb regnum is valid. */
-bool
-cuda_is_regnum_valid (struct gdbarch *gdbarch, int regnum)
-{
-  return !cuda_invalid_regnum_p (gdbarch, regnum);
-}
-
-static inline bool
-cuda_pred_regnum_p (struct gdbarch *gdbarch, int regnum)
-{
-  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
-  return regnum >= tdep->first_pred_regnum && regnum <= tdep->last_pred_regnum;
-}
-
-static inline bool
-cuda_upred_regnum_p (struct gdbarch *gdbarch, int regnum)
-{
-  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
-  return regnum >= tdep->first_upred_regnum
-         && regnum <= tdep->last_upred_regnum;
-}
-
-static inline bool
-cuda_uregnum_p (struct gdbarch *gdbarch, int regnum)
-{
-  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
-  return regnum >= tdep->first_uregnum && regnum <= tdep->last_uregnum;
-}
-
-static inline bool
-cuda_pc_regnum_p (struct gdbarch *gdbarch, int regnum)
-{
-  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
-  return regnum == tdep->pc_regnum;
-}
-
-static inline bool
-cuda_cc_regnum_p (struct gdbarch *gdbarch, int regnum)
-{
-  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
-  return regnum == tdep->cc_regnum;
-}
-
-static inline bool
-cuda_error_pc_regnum_p (struct gdbarch *gdbarch, int regnum)
-{
-  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
-  return regnum == tdep->error_pc_regnum;
-}
-
-int
-cuda_abi_sp_regnum (struct gdbarch *gdbarch)
-{
-  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
-  return tdep->sp_regnum;
-}
-
-int
-cuda_special_regnum (struct gdbarch *gdbarch)
-{
-  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
-  return tdep->special_regnum;
-}
-
-int
-cuda_pc_regnum (struct gdbarch *gdbarch)
-{
-  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
-  return tdep->pc_regnum;
-}
 
 /* CUDA - siginfo */
 static int cuda_signo = 0;
@@ -505,80 +413,92 @@ cuda_check_dwarf2_reg_ptx_virtual_register (uint64_t dwarf2_reg)
   return dwarf2_reg;
 }
 
-/* Return the name of register REGNUM. */
+// Return the name of register REGNUM.
 static const char *
 cuda_register_name (struct gdbarch *gdbarch, int regnum)
 {
-  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
-  uint32_t device_num_regs;
-  static const int size = CUDA_GDB_TMP_BUF_SIZE;
   static char buf[CUDA_GDB_TMP_BUF_SIZE];
-  regmap_t regmap;
 
+  // Ignore registers not supported by this device
   buf[0] = '\0';
 
-  /* Ignore registers not supported by this device */
   gdb_assert (cuda_current_focus::isDevice ());
-  device_num_regs = cuda_state::device_get_num_registers (
-      cuda_current_focus::get ().physical ().dev ());
+  const auto &c = cuda_current_focus::get ().physical ();
 
-  // Older debugger backends mistakenly returned 255 for the number of
-  // registers instead of the expected 256. This raised an assert
-  // failure when regnum==255 was requested. Work around this by
-  // explicitly checking for 255 (RZ).
-  if ((regnum == 255) || (regnum < device_num_regs))
+  // Explicitly check for RZ
+  if (cuda_zero_register_p (gdbarch, regnum))
+    return "RZ";
+
+  // General purpose SASS registers
+  if (cuda_regular_register_p (gdbarch, regnum))
     {
-      snprintf (buf, sizeof (buf), "R%d", regnum);
+      const auto tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+      snprintf (buf, sizeof (buf), "R%d", regnum - tdep->first_regnum);
       return buf;
     }
 
-  /* The PC register */
+  // The PC register
   if (cuda_pc_regnum_p (gdbarch, regnum))
     return "pc";
 
-  /* Invalid register */
+  // Error PC register
+  if (cuda_error_pc_regnum_p (gdbarch, regnum))
+    return "errorpc";
+
+  // CC register
+  if (cuda_cc_regnum_p (gdbarch, regnum))
+    return "CC";
+
+  // Invalid register
   if (cuda_invalid_regnum_p (gdbarch, regnum))
     return "(dummy internal register)";
 
-  /* The special CUDA register: stored in the regmap. */
+  // The special CUDA register: stored in the regmap.
   if (cuda_special_regnum_p (gdbarch, regnum))
     {
-      regmap = regmap_get_search_result ();
-      cuda_special_register_name (regmap, buf, size);
+      const auto regmap = regmap_get_search_result ();
+      cuda_special_register_name (regmap, buf, sizeof (buf));
       return buf;
     }
 
-  /* Predicate registers */
+  // Predicate registers
   if (cuda_pred_regnum_p (gdbarch, regnum))
     {
+      const auto tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
       snprintf (buf, sizeof (buf), "P%d", regnum - tdep->first_pred_regnum);
       return buf;
     }
 
-  /* CC register */
-  if (cuda_cc_regnum_p (gdbarch, regnum))
-    return "CC";
-
-  /* The Error PC register */
-  if (cuda_error_pc_regnum_p (gdbarch, regnum))
-    return "errorpc";
-
-  /* Uniform registers */
-  if (cuda_uregnum_p (gdbarch, regnum))
+  // Uniform registers
+  const auto num_uregs = cuda_state::device_get_num_uregisters (c.dev ());
+  if (num_uregs > 0)
     {
-      snprintf (buf, sizeof (buf), "UR%d", regnum - tdep->first_uregnum);
-      return buf;
+      // Uniform zero register
+      if (cuda_uniform_zero_register_p (gdbarch, regnum))
+	return "URZ";
+
+      // Uniform scalar registers
+      if (cuda_uregnum_p (gdbarch, regnum))
+	{
+	  const auto tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+	  const auto uregnum = regnum - tdep->first_uregnum;
+	  if (uregnum < num_uregs)
+	    snprintf (buf, sizeof (buf), "UR%d", uregnum);
+	  return buf;
+	}
+
+      // Uniform Predicate registers
+      if (cuda_upred_regnum_p (gdbarch, regnum))
+	{
+	  const auto tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+	  snprintf (buf, sizeof (buf), "UP%d",
+		    regnum - tdep->first_upred_regnum);
+	  return buf;
+	}
     }
 
-  /* Uniform Predicate registers */
-  if (cuda_upred_regnum_p (gdbarch, regnum))
-    {
-      snprintf (buf, sizeof (buf), "UP%d", regnum - tdep->first_upred_regnum);
-      return buf;
-    }
-
-  /* (everything else) */
-  return NULL;
+  // (everything else) - zero length string
+  return "";
 }
 
 static struct type *
@@ -706,7 +626,7 @@ cuda_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int reg)
         }
       else if (regmap_get_class (regmap, 0) == REG_CLASS_UREG_FULL)
         {
-          regno = regmap_get_uregister (regmap, 0) + tdep->first_uregnum;
+          regno = regmap_get_uregister (regmap, 0);
           return regno;
         }
     }
@@ -765,7 +685,7 @@ cuda_reg_to_regnum_extrapolated (struct gdbarch *gdbarch, int reg)
   if (regmap_get_num_entries (regmap) == 2)
     {
       if (regmap_get_class (regmap, 1) == REG_CLASS_REG_FULL)
-        return (int)regmap_get_register (regmap, 1);
+        return (int)(regmap_get_register (regmap, 1) + tdep->first_regnum);
 
       if (regmap_get_class (regmap, 1) == REG_CLASS_UREG_FULL)
         return (int)(regmap_get_uregister (regmap, 1) + tdep->first_uregnum);
@@ -781,185 +701,261 @@ cuda_reg_to_regnum (struct gdbarch *gdbarch, int reg)
   cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
 
   if (REGMAP_CLASS (reg) == REG_CLASS_REG_FULL)
-    return REGMAP_REG (reg);
+    return (REGMAP_REG (reg) == CUDA_REG_ZERO_REGISTER)
+	       ? tdep->zero_regnum
+	       : REGMAP_REG (reg) + tdep->first_regnum;
 
   if (REGMAP_CLASS (reg) == REG_CLASS_REG_PRED)
-    return (REGMAP_REG (reg) + tdep->first_pred_regnum);
+    return REGMAP_REG (reg) + tdep->first_pred_regnum;
 
   if (REGMAP_CLASS (reg) == REG_CLASS_UREG_FULL)
-    return (REGMAP_REG (reg) + tdep->first_uregnum);
+    return (REGMAP_REG (reg) == CUDA_UREG_ZERO_REGISTER)
+	       ? tdep->zero_uregnum
+	       : REGMAP_REG (reg) + tdep->first_uregnum;
 
   if (REGMAP_CLASS (reg) == REG_CLASS_UREG_PRED)
-    return (REGMAP_REG (reg) + tdep->first_upred_regnum);
+    return REGMAP_REG (reg) + tdep->first_upred_regnum;
 
   error (_ ("Invalid register."));
 
   return -1;
 }
 
-int
-cuda_regnum_to_reg (struct gdbarch *gdbarch, uint32_t regnum)
+int cuda_regnum_to_reg (struct gdbarch * gdbarch, uint32_t regnum)
 {
   cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
 
+  if (cuda_zero_register_p (gdbarch, regnum))
+    return CUDA_REG_CLASS_AND_REGNO (REG_CLASS_REG_FULL,
+				     CUDA_REG_ZERO_REGISTER);
+
   if (cuda_regular_register_p (gdbarch, regnum))
-    return CUDA_REG_CLASS_AND_REGNO (REG_CLASS_REG_FULL, regnum);
+    return CUDA_REG_CLASS_AND_REGNO (REG_CLASS_REG_FULL,
+				     regnum - tdep->first_regnum);
 
   if (cuda_pred_regnum_p (gdbarch, regnum))
     return CUDA_REG_CLASS_AND_REGNO (REG_CLASS_REG_PRED,
-                                     regnum - tdep->first_pred_regnum);
+				     regnum - tdep->first_pred_regnum);
 
-  if (cuda_upred_regnum_p (gdbarch, regnum))
-    return CUDA_REG_CLASS_AND_REGNO (REG_CLASS_UREG_PRED,
-                                     regnum - tdep->first_upred_regnum);
+  if (cuda_uniform_zero_register_p (gdbarch, regnum))
+    return CUDA_REG_CLASS_AND_REGNO (REG_CLASS_UREG_FULL,
+				     CUDA_UREG_ZERO_REGISTER);
 
   if (cuda_uregnum_p (gdbarch, regnum))
     return CUDA_REG_CLASS_AND_REGNO (REG_CLASS_UREG_FULL,
-                                     regnum - tdep->first_uregnum);
+				     regnum - tdep->first_uregnum);
+
+  if (cuda_upred_regnum_p (gdbarch, regnum))
+    return CUDA_REG_CLASS_AND_REGNO (REG_CLASS_UREG_PRED,
+				     regnum - tdep->first_upred_regnum);
 
   error (_ ("Invalid register."));
 
   return CUDA_REG_CLASS_AND_REGNO (REG_CLASS_INVALID, 0);
 }
 
-enum register_status
-cuda_pseudo_register_read (struct gdbarch *gdbarch,
-                           readable_regcache *regcache, int regnum,
-                           gdb_byte *buf)
+void
+cuda_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
+	      	    int regnum)
 {
-  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
-  regmap_t regmap;
+  gdb_assert (gdbarch);
+
+  gdb_assert (cuda_current_focus::isDevice ());
   const auto &c = cuda_current_focus::get ().physical ();
 
-  /* Invalid Register */
-  if (cuda_invalid_regnum_p (gdbarch, regnum))
-    {
-      *((uint32_t *)buf) = 0U;
-      return REG_UNAVAILABLE;
-    }
-
-  /* Any combination of SASS register, SP + offset, LMEM offset locations */
-  if (cuda_special_regnum_p (gdbarch, regnum))
-    {
-      regmap = regmap_get_search_result ();
-      cuda_special_register_read (regmap, buf);
-      return REG_VALID;
-    }
-
-  /* PC register */
+  // PC register
   if (cuda_pc_regnum_p (gdbarch, regnum))
     {
-      *(CORE_ADDR *)buf = cuda_state::lane_get_virtual_pc (c.dev (), c.sm (),
-                                                           c.wp (), c.ln ());
-      return REG_VALID;
-    }
-
-  /* Predicate register */
-  if (cuda_pred_regnum_p (gdbarch, regnum))
-    {
-      *buf = cuda_state::lane_get_predicate (c.dev (), c.sm (), c.wp (),
-                                             c.ln (),
-                                             regnum - tdep->first_pred_regnum);
-      return REG_VALID;
-    }
-
-  /* Uniform predicate register */
-  if (cuda_upred_regnum_p (gdbarch, regnum))
-    {
-      *buf = cuda_state::warp_get_upredicate (
-          c.dev (), c.sm (), c.wp (), regnum - tdep->first_upred_regnum);
-      return REG_VALID;
-    }
-
-  /* Uniform register */
-  if (cuda_uregnum_p (gdbarch, regnum))
-    {
-      *(uint32_t *)buf = cuda_state::warp_get_uregister (
-          c.dev (), c.sm (), c.wp (), regnum - tdep->first_uregnum);
-      return REG_VALID;
-    }
-
-  /* CC register*/
-  if (cuda_cc_regnum_p (gdbarch, regnum))
-    {
-      *buf = cuda_state::lane_get_cc_register (c.dev (), c.sm (), c.wp (),
-                                               c.ln ());
-      return REG_VALID;
-    }
-
-  /* ErrorPC register */
-  if (cuda_error_pc_regnum_p (gdbarch, regnum))
-    {
-      if (!cuda_state::warp_has_error_pc (c.dev (), c.sm (), c.wp ()))
-        return REG_UNAVAILABLE;
-      *(CORE_ADDR *)buf
-          = cuda_state::warp_get_error_pc (c.dev (), c.sm (), c.wp ());
-      return REG_VALID;
-    }
-
-  /* single SASS register */
-  *buf = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (),
-                                        regnum);
-  return REG_VALID;
-}
-
-void
-cuda_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
-                     int regnum, const gdb_byte *buf)
-{
-  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
-  uint32_t val;
-  bool bval;
-
-  const auto &c = cuda_current_focus::get ().physical ();
-
-  /* invalid register */
-  if (cuda_invalid_regnum_p (gdbarch, regnum))
-    {
-      error (_ ("Invalid register."));
+      const uint64_t pc = cuda_state::lane_get_pc (c.dev (), c.sm (),
+						   c.wp (), c.ln ());
+      regcache->raw_supply (regnum, &pc);
       return;
     }
 
-  if (cuda_pc_regnum_p (gdbarch, regnum))
+  // ErrorPC register
+  if (cuda_error_pc_regnum_p (gdbarch, regnum))
     {
-      error (_ ("PC register not writable"));
+      if (cuda_state::warp_has_error_pc (c.dev (), c.sm (), c.wp ()))
+	{
+	  const uint64_t error_pc
+	      = cuda_state::warp_get_error_pc (c.dev (), c.sm (), c.wp ());
+	  regcache->raw_supply (regnum, &error_pc);
+	}
+      else
+	regcache->raw_supply (regnum, NULL);
+      return;
+    }
+
+  // CC register
+  if (cuda_cc_regnum_p (gdbarch, regnum))
+    {
+      const uint32_t cc = cuda_state::lane_get_cc_register (c.dev (), c.sm (),
+							    c.wp (), c.ln ());
+      regcache->raw_supply (regnum, &cc);
+      return;
+    }
+
+  // Single SASS register
+  if (cuda_zero_register_p (gdbarch, regnum))
+    {
+      const uint32_t zero = 0;
+      regcache->raw_supply (regnum, &zero);
       return;
     }
 
   if (cuda_regular_register_p (gdbarch, regnum))
     {
-      /* single SASS register */
-      val = *(uint32_t *)buf;
-      cuda_state::lane_set_register (c.dev (), c.sm (), c.wp (), c.ln (),
-                                     regnum, val);
+      const auto tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+      const uint32_t regval = cuda_state::lane_get_register (
+	  c.dev (), c.sm (), c.wp (), c.ln (), regnum - tdep->first_regnum);
+      regcache->raw_supply (regnum, &regval);
       return;
     }
 
-  /* Predicate register */
+  // Predicate register
   if (cuda_pred_regnum_p (gdbarch, regnum))
     {
-      bval = *(bool *)buf;
+      const auto tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+      const uint32_t pred = cuda_state::lane_get_predicate (
+	  c.dev (), c.sm (), c.wp (), c.ln (),
+	  regnum - tdep->first_pred_regnum);
+      regcache->raw_supply (regnum, &pred);
+      return;
+    }
+
+  // Uniform registers
+  if (cuda_state::device_get_num_uregisters (c.dev ()) > 0)
+    {
+      if (cuda_uniform_zero_register_p (gdbarch, regnum))
+	{
+	  uint32_t zero = 0;
+	  regcache->raw_supply (regnum, &zero);
+	  return;
+	}
+
+      if (cuda_uregnum_p (gdbarch, regnum))
+	{
+	  const auto *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+	  const int uregnum = regnum - tdep->first_uregnum;
+	  if (uregnum < cuda_state::device_get_num_uregisters (c.dev ()))
+	    {
+	      const uint32_t ureg = cuda_state::warp_get_uregister (
+		  c.dev (), c.sm (), c.wp (), uregnum);
+	      regcache->raw_supply (regnum, &ureg);
+	    }
+	  else
+	    regcache->raw_supply (regnum, NULL);
+	  return;
+	}
+
+      if (cuda_upred_regnum_p (gdbarch, regnum))
+	{
+	  const auto tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+	  const uint32_t upred = cuda_state::warp_get_upredicate (
+	      c.dev (), c.sm (), c.wp (), regnum - tdep->first_upred_regnum);
+	  regcache->raw_supply (regnum, &upred);
+	  return;
+	}
+    }
+
+  // Invalid register
+  regcache->raw_supply (regnum, NULL);
+}
+
+enum register_status
+cuda_pseudo_register_read (struct gdbarch *gdbarch,
+			   readable_regcache *regcache, int regnum,
+			   gdb_byte *buf)
+{
+  gdb_assert (cuda_current_focus::isDevice ());
+
+  /* Any combination of SASS register, SP + offset, LMEM offset locations */
+  if (cuda_special_regnum_p (gdbarch, regnum))
+    {
+      const auto regmap = regmap_get_search_result ();
+      cuda_special_register_read (regmap, buf);
+      return REG_VALID;
+    }
+
+  *(uint32_t *)buf = 0;
+  return REG_UNAVAILABLE;
+}
+
+void
+cuda_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
+		     int regnum, const gdb_byte *buf)
+{
+  gdb_assert (cuda_current_focus::isDevice ());
+  const auto &c = cuda_current_focus::get ().physical ();
+
+  // Filter out the registers that can't be written to
+  if (cuda_invalid_regnum_p (gdbarch, regnum))
+    error (_ ("Invalid register."));
+
+  if (cuda_pc_regnum_p (gdbarch, regnum))
+    error (_ ("PC register not writable"));
+
+  if (cuda_error_pc_regnum_p (gdbarch, regnum))
+    error (_ ("Error PC register not writable"));
+
+  if (regnum == CUDA_REG_ZERO_REGISTER)
+    error ("Cannot write to RZ register");
+
+  if (cuda_uniform_zero_register_p (gdbarch, regnum))
+    error ("Cannot write to URZ register");
+
+  // CC register
+  if (cuda_cc_regnum_p (gdbarch, regnum))
+    {
+      cuda_state::lane_set_cc_register (c.dev (), c.sm (), c.wp (), c.ln (),
+					*(uint32_t *)buf);
+      return;
+    }
+
+  // single SASS register
+  if (cuda_regular_register_p (gdbarch, regnum))
+    {
+      cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+      cuda_state::lane_set_register (c.dev (), c.sm (), c.wp (), c.ln (),
+				     regnum - tdep->first_regnum,
+				     *(uint32_t *)buf);
+      return;
+    }
+
+  // Predicate register
+  if (cuda_pred_regnum_p (gdbarch, regnum))
+    {
+      cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
       cuda_state::lane_set_predicate (c.dev (), c.sm (), c.wp (), c.ln (),
-                                      regnum - tdep->first_pred_regnum, bval);
+				      regnum - tdep->first_pred_regnum,
+				      *(uint32_t *)buf);
       return;
     }
 
-  /* Uniform predicate register */
-  if (cuda_upred_regnum_p (gdbarch, regnum))
+  // Uniform registers (Turing+)
+  if (cuda_state::device_get_num_uregisters (c.dev ()) > 0)
     {
-      bval = *(bool *)buf;
-      cuda_state::warp_set_upredicate (
-          c.dev (), c.sm (), c.wp (), regnum - tdep->first_upred_regnum, bval);
-      return;
-    }
+      cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
 
-  /* Uniform register */
-  if (cuda_uregnum_p (gdbarch, regnum))
-    {
-      val = *(uint32_t *)buf;
-      cuda_state::warp_set_uregister (c.dev (), c.sm (), c.wp (),
-                                      regnum - tdep->first_uregnum, val);
-      return;
+      // Uniform predicate register
+      if (cuda_upred_regnum_p (gdbarch, regnum))
+	{
+	  cuda_state::warp_set_upredicate (c.dev (), c.sm (), c.wp (),
+					   regnum - tdep->first_upred_regnum,
+					   *(uint32_t *)buf);
+	  return;
+	}
+
+      // Uniform registers
+      if (cuda_uregnum_p (gdbarch, regnum))
+	{
+	  const auto uregnum = regnum - tdep->first_uregnum;
+	  if (uregnum >= cuda_state::device_get_num_uregisters (c.dev ()))
+	    error ("Register UR%u is out of range", uregnum);
+	  cuda_state::warp_set_uregister (c.dev (), c.sm (), c.wp (), uregnum,
+					  *(uint32_t *)buf);
+	  return;
+	}
     }
 
   error (_ ("Invalid register write"));
@@ -967,75 +963,28 @@ cuda_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
 
 static void
 cuda_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
-                            int regnum, const gdb_byte *buf)
+			    int regnum, const gdb_byte *buf)
 {
-  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
-  uint32_t val;
-  bool bval;
-  regmap_t regmap;
-
-  const auto &c = cuda_current_focus::get ().physical ();
-
-  /* invalid register */
+  // Invalid register
   if (cuda_invalid_regnum_p (gdbarch, regnum))
     {
-      error (_ ("Invalid register."));
+      error (_ ("Invalid pseudo register."));
       return;
     }
 
-  /* Any combination of SASS register, SP + offset, LMEM offset locations */
+  // Any combination of SASS register, SP + offset, LMEM offset locations
   if (cuda_special_regnum_p (gdbarch, regnum))
     {
-      regmap = regmap_get_search_result ();
+      const auto regmap = regmap_get_search_result ();
       cuda_special_register_write (regmap, buf);
       return;
     }
-
-  /* Predicate register */
-  if (cuda_pred_regnum_p (gdbarch, regnum))
-    {
-      bval = *(bool *)buf;
-      cuda_state::lane_set_predicate (c.dev (), c.sm (), c.wp (), c.ln (),
-                                      regnum - tdep->first_pred_regnum, bval);
-      return;
-    }
-
-  /* Uniform predicate register */
-  if (cuda_upred_regnum_p (gdbarch, regnum))
-    {
-      bval = *(bool *)buf;
-      cuda_state::warp_set_upredicate (
-          c.dev (), c.sm (), c.wp (), regnum - tdep->first_upred_regnum, bval);
-      return;
-    }
-
-  /* CC register */
-  if (cuda_cc_regnum_p (gdbarch, regnum))
-    {
-      val = *(uint32_t *)buf;
-      cuda_state::lane_set_cc_register (c.dev (), c.sm (), c.wp (), c.ln (),
-                                        val);
-      return;
-    }
-
-  /* Uniform register */
-  if (cuda_uregnum_p (gdbarch, regnum))
-    {
-      val = *(uint32_t *)buf;
-      cuda_state::warp_set_uregister (c.dev (), c.sm (), c.wp (),
-                                      regnum - tdep->first_uregnum, val);
-      return;
-    }
-
-  /* single SASS register */
-  val = *(uint32_t *)buf;
-  cuda_state::lane_set_register (c.dev (), c.sm (), c.wp (), c.ln (), regnum,
-                                 val);
+  error ("Unknown pseudo register %u", regnum);
 }
 
 static int
 cuda_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
-                          const struct reggroup *group)
+			  const struct reggroup *group)
 {
   /* Do not include special and invalid registers in any group */
   if (cuda_invalid_regnum_p (gdbarch, regnum)
@@ -1043,10 +992,10 @@ cuda_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
     return 0;
 
   /* Include predicates and CC register in special and all register groups */
-  if (cuda_pred_regnum_p (gdbarch, regnum)
-      || cuda_cc_regnum_p (gdbarch, regnum)
-      || cuda_error_pc_regnum_p (gdbarch, regnum))
-    return group == system_reggroup || group == all_reggroup;
+  if ((cuda_pred_regnum_p (gdbarch, regnum)
+       || cuda_cc_regnum_p (gdbarch, regnum))
+      && (group == system_reggroup || group == all_reggroup))
+    return 1;
 
   return default_register_reggroup_p (gdbarch, regnum, group);
 }
@@ -1063,14 +1012,20 @@ cuda_print_insn (bfd_vma pc, disassemble_info *info)
 
   /* decode the instruction at the pc */
   auto kernel = cuda_current_focus::get ().logical ().kernel ();
+  gdb_assert (kernel);
 
+  module_t module = kernel_get_module (kernel);
+  gdb_assert (module);
+
+  auto disassembler = module_disassembler (module);
+  gdb_assert (disassembler);
+  
   std::string inst;
   uint32_t inst_size;
-  module_t module = kernel_get_module (kernel);
-  auto found = module->disassembler->disassemble (pc, inst, inst_size);
+  auto found = disassembler->disassemble (pc, inst, inst_size);
   if (!found)
     info->fprintf_func (info->stream,
-                        "Cannot disassemble instruction at pc 0x%lx", pc);
+			"Cannot disassemble instruction at pc 0x%lx", pc);
   else
     info->fprintf_func (info->stream, "%s", inst.c_str ());
 
@@ -1095,24 +1050,24 @@ cuda_is_device_code_address (CORE_ADDR addr)
     {
       section = osect->the_bfd_section;
       if (!section)
-        continue;
+	continue;
       /* Check if addr belongs to CUDA ELF */
       if (objfile->cuda_objfile)
-        {
-          /* Skip sections that do not have code */
-          if (!(section->flags & SEC_CODE))
-            continue;
-          /* skip sections that are unrelocated */
-          if (section->vma == 0)
-            continue;
-          if (section->vma > addr || section->vma + section->size <= addr)
-            continue;
-          return true;
-        }
+	{
+	  /* Skip sections that do not have code */
+	  if (!(section->flags & SEC_CODE))
+	    continue;
+	  /* skip sections that are unrelocated */
+	  if (section->vma == 0)
+	    continue;
+	  if (section->vma > addr || section->vma + section->size <= addr)
+	    continue;
+	  return true;
+	}
 
       /* Check if address belongs to one of the host ELFs */
       if (osect->addr () <= addr && osect->endaddr () > addr)
-        found_in_cpu_symtab = true;
+	found_in_cpu_symtab = true;
     }
 
   /* If address was found on CPU and wasn't found on any of the CUDA ELFs -
@@ -1133,7 +1088,7 @@ cuda_is_bfd_cuda (bfd *obfd)
   /* elf_header is a single element array in elf_obj_tdata,
      i.e. it can't be null if elf_obj_data is not null */
   return (obfd && elf_tdata (obfd)
-          && elf_tdata (obfd)->elf_header[0].e_machine == EM_CUDA);
+	  && elf_tdata (obfd)->elf_header[0].e_machine == EM_CUDA);
 }
 
 /* Return the CUDA ELF ABI version.  If obfd points to a CUDA ELF
@@ -1199,11 +1154,11 @@ cuda_current_active_elf_image_uses_abi (void)
    evaluate gdbarch_has_global_breakpoints (gdbarch) in the right context. */
 int
 cuda_breakpoint_address_match (struct gdbarch *gdbarch,
-                               const address_space *aspace1, CORE_ADDR addr1,
-                               const address_space *aspace2, CORE_ADDR addr2)
+			       const address_space *aspace1, CORE_ADDR addr1,
+			       const address_space *aspace2, CORE_ADDR addr2)
 {
   return ((gdbarch_has_global_breakpoints (gdbarch) || aspace1 == aspace2)
-          && addr1 == addr2);
+	  && addr1 == addr2);
 }
 
 CORE_ADDR
@@ -1212,7 +1167,7 @@ cuda_get_symbol_address (const char *name)
   struct bound_minimal_symbol msym = lookup_minimal_symbol (name, NULL, NULL);
 
   if (msym.minsym)
-    return msym.minsym->value_address(msym.objfile);
+    return msym.minsym->value_address (msym.objfile);
 
   return 0;
 }
@@ -1249,11 +1204,11 @@ cuda_get_last_driver_api_error_func_name_size (void)
       /* This should never happen. If we hit the breakpoint we should have
        * the symbol */
       error (_ ("Cannot determine the address of the last driver API error "
-                "function name size.\n"));
+		"function name size.\n"));
     }
 
   target_read_memory (error_func_name_size_addr, (gdb_byte *)&res,
-                      sizeof (uint64_t));
+		      sizeof (uint64_t));
   return res;
 }
 
@@ -1272,7 +1227,7 @@ cuda_get_last_driver_api_error_func_name (char **name)
       /* This should never happen. If we hit the breakpoint we should have
        * the symbol */
       warning (_ ("Cannot retrieve the last driver API error function name "
-                  "size.\n"));
+		  "size.\n"));
       return;
     }
 
@@ -1281,7 +1236,7 @@ cuda_get_last_driver_api_error_func_name (char **name)
     {
       /* Buffer for function name string should be created successfully  */
       error (
-          _ ("Cannot allocate memory to save the reported function name.\n"));
+	  _ ("Cannot allocate memory to save the reported function name.\n"));
     }
 
   error_func_name_core_addr = cuda_get_symbol_address (
@@ -1291,11 +1246,11 @@ cuda_get_last_driver_api_error_func_name (char **name)
       /* This should never happen. If we hit the breakpoint we should have
        * the symbol */
       error (_ ("Cannot retrieve the last driver API error function name "
-                "addr.\n"));
+		"addr.\n"));
     }
 
   target_read_memory (error_func_name_core_addr,
-                      (gdb_byte *)&error_func_name_addr, sizeof (uint64_t));
+		      (gdb_byte *)&error_func_name_addr, sizeof (uint64_t));
   target_read_memory (error_func_name_addr, (gdb_byte *)func_name, size);
   if (!func_name[0])
     {
@@ -1329,7 +1284,7 @@ static void
 cuda_sigpipe_handler (int signo)
 {
   fprintf (stderr, "Error: A SIGPIPE has been received, this is likely due to "
-                   "a crash from the CUDA backend.\n");
+		   "a crash from the CUDA backend.\n");
   fflush (stderr);
 
   cuda_cleanup ();
@@ -2301,6 +2256,7 @@ cuda_write_memory (CORE_ADDR address, const gdb_byte *buf, struct type *type)
 static struct
 {
   bool active;
+  bool warned_on_divergent_stepping;
   bool grid_id_active;
   ptid_t ptid;
   cuda_coords coord;
@@ -2321,6 +2277,24 @@ bool
 cuda_sstep_is_active (void)
 {
   return cuda_sstep_info.active;
+}
+
+/* We only want to warn the user once about stepping
+ * divergent threads. We use an observer to reset
+ * if we have warned the user. */
+static void
+cuda_sstep_about_to_proceed (void)
+{
+  cuda_sstep_info.warned_on_divergent_stepping = false;
+}
+
+bool
+cuda_print_divergent_stepping (void)
+{
+  if (cuda_sstep_info.warned_on_divergent_stepping)
+    return false;
+  cuda_sstep_info.warned_on_divergent_stepping = true;
+  return true;
 }
 
 ptid_t
@@ -2509,7 +2483,11 @@ cuda_find_next_control_flow_instruction (uint64_t pc, uint64_t range_start_pc,
   while (end_pc <= range_end_pc)
     {
       module_t module = kernel_get_module (kernel);
-      bool found = module->disassembler->disassemble (end_pc, inst, inst_size);
+      gdb_assert (module);
+      auto disassembler = module_disassembler (module);
+      gdb_assert (disassembler);
+
+      bool found = disassembler->disassemble (end_pc, inst, inst_size);
       if (!found)
         {
           cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
@@ -2606,7 +2584,7 @@ cuda_sstep_fast (ptid_t ptid)
    * unset it*/
   struct address_space *aspace = target_thread_address_space (ptid);
   uint64_t active_pc
-      = cuda_state::warp_get_active_virtual_pc (c.dev (), c.sm (), c.wp ());
+      = cuda_state::warp_get_active_pc (c.dev (), c.sm (), c.wp ());
 
   if (breakpoint_here_p (aspace, pc))
     cuda_debugapi::unset_breakpoint (c.dev (), pc);
@@ -2688,7 +2666,7 @@ cuda_sstep_execute (ptid_t ptid)
   cuda_sstep_info.before_lane_mask
       = cuda_state::warp_get_active_lanes_mask (p.dev (), p.sm (), p.wp ());
   cuda_sstep_info.before_pc
-      = cuda_state::warp_get_active_virtual_pc (p.dev (), p.sm (), p.wp ());
+      = cuda_state::warp_get_active_pc (p.dev (), p.sm (), p.wp ());
 
   /* Do not try to single step if grid-id changed */
   if (grid_id_changed)
@@ -2727,7 +2705,7 @@ cuda_sstep_execute (ptid_t ptid)
       if (!cuda_sstep_fast (ptid))
         {
           uint32_t flags = 0;
-          if (cuda_get_autostep_pending())
+          if (cuda_get_autostep_pending() || !cuda_options_step_divergent_lanes_enabled ())
             flags |= CUDBG_SINGLE_STEP_FLAGS_NO_STEP_OVER_WARP_BARRIERS;
           rc = cuda_sstep_do_step (p.dev (), p.sm (), p.wp (), p.ln (),
                                    nsteps, flags, warp_mask);
@@ -2744,7 +2722,7 @@ cuda_sstep_execute (ptid_t ptid)
             /* Set hint to an invalid lane, let the backend decide */
             constexpr uint32_t lane_id_hint = ~0;
             uint32_t flags = 0;
-            if (cuda_get_autostep_pending())
+            if (cuda_get_autostep_pending() || !cuda_options_step_divergent_lanes_enabled ())
               flags |= CUDBG_SINGLE_STEP_FLAGS_NO_STEP_OVER_WARP_BARRIERS;
             rc = cuda_sstep_do_step (p.dev (), p.sm (), wp, lane_id_hint,
                                      nsteps, flags, warp_mask);
@@ -3229,9 +3207,7 @@ cuda_value_to_register (frame_info_ptr frame, int regnum,
 
   /* Ignore attempts to modify error pc */
   if (cuda_error_pc_regnum_p (gdbarch, regnum))
-    {
-      return;
-    }
+    return;
 
   put_frame_register (frame, regnum, from);
 }
@@ -3447,11 +3423,14 @@ void
 _initialize_cuda_tdep ()
 {
   gdbarch_register (bfd_arch_m68k, cuda_gdbarch_init);
-  
+
   add_internal_function ("_cuda_const_bank", _("\
 $_cuda_const_bank - returns the GPU address of an offset within a constant bank.\n\
 Usage: $_cuda_const_bank(bank, offset)\n"),
 			 cuda_constant_bank_addr_internal_fn, NULL);
+
+  gdb::observers::about_to_proceed.attach (cuda_sstep_about_to_proceed,
+					   "cuda_sstep");
 }
 
 bool

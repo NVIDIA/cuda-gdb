@@ -8930,6 +8930,10 @@ cuda_resolve_breakpoints (int bp_number_from, elf_image_t elf_image)
  encountered upon installing the default breakpoint.  The default
  breakpoint will become active the next time a valid stack comes into
  focus.
+
+ Pass in nullptr for elf_image to unreslove all CUDA breakpoints. Used
+ by cuda_state::cleanup_breakpoints() which was originally iterating over all
+ the elf_image_t objects, calling this for each one.
 */
 void
 cuda_unresolve_breakpoints (elf_image_t elf_image)
@@ -8948,8 +8952,11 @@ cuda_unresolve_breakpoints (elf_image_t elf_image)
           warning(_("Breakpoint %d is disabled because device address may change on the next run."), b->number);
           disable_breakpoint (b);
         }
+
+      // Unresolve if the elf_image matches, or if elf_image is nullptr
       for(bp_location **ploc = &b->loc; *ploc; )
-        if ((*ploc)->cuda_elf_image == elf_image)
+        if ((elf_image && ((*ploc)->cuda_elf_image == elf_image))
+	    || (!elf_image && ((*ploc)->cuda_elf_image != nullptr)))
           {
             cuda_trace_breakpoint ("  -> unresolved CUDA breakpoint %d addr %p",
 				   b->number, (*ploc)->address);
@@ -16973,8 +16980,4 @@ user-query to see if a pending breakpoint should be created."),
 				&breakpoint_show_cmdlist);
   conditional_pending_break_support = AUTO_BOOLEAN_AUTO;
 #endif /* NVIDIA_CUDA_GDB */
-  gdb::observers::about_to_proceed.attach (breakpoint_about_to_proceed,
-					   "breakpoint");
-  gdb::observers::thread_exit.attach (remove_threaded_breakpoints,
-				      "breakpoint");
 }

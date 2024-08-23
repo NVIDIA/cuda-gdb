@@ -74,6 +74,10 @@ static const char *gdbpy_should_print_stack = python_excp_message;
 #include "event-top.h"
 #include "py-event.h"
 
+#ifdef NVIDIA_CUDA_GDB
+#include "py-cuda.h"
+#endif
+
 /* True if Python has been successfully initialized, false
    otherwise.  */
 
@@ -2701,6 +2705,11 @@ Return the name of the currently selected language." },
   { "print_options", gdbpy_print_options, METH_NOARGS,
     "print_options () -> dict\n\
 Return the current print options." },
+
+#ifdef NVIDIA_CUDA_GDB
+  { "execute_internal_command", gdbpy_cuda_execute_internal_command, METH_VARARGS,
+    "execute internal command" },
+#endif
 
   {NULL, NULL, 0, NULL}
 };

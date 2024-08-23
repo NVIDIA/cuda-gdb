@@ -483,7 +483,6 @@ cuda_remote_query_device_spec (remote_target *ops,
 			       uint32_t dev_id, uint32_t *num_sms, uint32_t *num_warps,
                                uint32_t *num_lanes,
 			       uint32_t *num_registers,
-			       uint32_t *num_uregisters,
                                char **dev_type, char **sm_type)
 {
   char *p;
@@ -506,9 +505,6 @@ cuda_remote_query_device_spec (remote_target *ops,
   extract_bin (NULL, (gdb_byte *) num_registers, sizeof (num_registers));
   *dev_type = extract_string (NULL);
   *sm_type  = extract_string (NULL);
-
-  // FIXME: until we add number of uregisters to the remote protocol
-  *num_uregisters = 0;
 }
 
 bool

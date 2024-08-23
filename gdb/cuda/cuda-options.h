@@ -60,6 +60,7 @@ bool cuda_options_trace_domain_enabled (cuda_trace_domain_t);
 void cuda_options_set_trace_domain (cuda_trace_domain_t domain, bool enabled);
 uint32_t cuda_options_trace_domain_enabled_flags ();
 bool cuda_options_single_stepping_optimizations_enabled (void);
+bool cuda_options_step_divergent_lanes_enabled (void);
 /* Return GDB_SIGNAL_TRAP or GDB_SIGNAL_URG */
 unsigned cuda_options_stop_signal (void);
 bool cuda_options_device_resume_on_cpu_dynamic_function_call (void);

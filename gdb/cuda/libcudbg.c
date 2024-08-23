@@ -2510,6 +2510,41 @@ cudbgReadSmException (uint32_t dev, uint32_t sm, CUDBGException_t *exception,
   return result;
 }
 
+static CUDBGResult
+cudbgExecuteInternalCommand (const char* command, char* resultBuffer,
+              uint32_t sizeInBytes)
+{
+  if (!command || !resultBuffer || !sizeInBytes)
+    return CUDBG_ERROR_INVALID_ARGS;
+  
+  uint32_t command_size = strlen(command) + 1;
+  uint32_t result_length;
+  char *ipc_buf;
+  CUDBGResult result;
+
+  CUDBG_IPC_PROFILE_START ();
+
+  CUDBG_IPC_BEGIN (CUDBGAPIREQ_executeInternalCommand);
+  CUDBG_IPC_APPEND (&sizeInBytes, sizeof (sizeInBytes));
+  CUDBG_IPC_APPEND (&command_size, sizeof (command_size));
+  
+  if (command)
+      CUDBG_IPC_APPEND(command, command_size);
+
+  CUDBG_IPC_REQUEST ((void **)&ipc_buf);
+  CUDBG_IPC_RECEIVE (&result, &ipc_buf);
+
+  if (result == CUDBG_SUCCESS)
+    {
+      CUDBG_IPC_RECEIVE(&result_length, &ipc_buf);
+      CUDBG_IPC_RECEIVE_ARRAY(resultBuffer, result_length, &ipc_buf);
+    }
+
+  CUDBG_IPC_PROFILE_END (CUDBGAPIREQ_executeInternalCommand, "executeInternalCommand");
+
+  return result;
+}
+
 static const struct CUDBGAPI_st cudbgCurrentApi={
     /* Initialization */
     cudbgInitialize,
@@ -2700,6 +2735,9 @@ static const struct CUDBGAPI_st cudbgCurrentApi={
     cudbgReadAllVirtualReturnAddresses,
     cudbgGetSupportedDebuggerCapabilities,
     cudbgReadSmException,
+
+    /* 12.6 Extensions */
+    cudbgExecuteInternalCommand,
 };
 
 CUDBGResult

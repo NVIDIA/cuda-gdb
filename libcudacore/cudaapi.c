@@ -1944,6 +1944,9 @@ static const struct CUDBGAPI_st cudbgCoreApi = {
     API_CALL(readAllVirtualReturnAddresses),
     API_CALL(notSupported), /* getSupportedDebuggerCapabilities */
     API_CALL(readSmException),
+
+    /* 12.6 Extensions */
+    API_CALL(notSupported), /* executeInternalCommand */
 };
 
 CUDBGAPI cuCoreGetApi(CudaCore *cc)

@@ -180,13 +180,17 @@ cuda_coord_distance (bool &res, const T &origin, const T &lhs, const T &rhs)
 template <>
 inline bool
 cuda_coord_distance<CuDim3> (bool &res, const CuDim3 &origin,
-                             const CuDim3 &lhs, const CuDim3 &rhs)
+			     const CuDim3 &lhs, const CuDim3 &rhs)
 {
-  if (cuda_coord_distance<decltype (origin.x)> (res, origin.x, lhs.x, rhs.x))
+  /* Want to compare slowest to fastest varying dimension */
+  /* Check z dimension. */
+  if (cuda_coord_distance<decltype (origin.z)> (res, origin.z, lhs.z, rhs.z))
     return true;
+  /* Check y dimension. */
   if (cuda_coord_distance<decltype (origin.y)> (res, origin.y, lhs.y, rhs.y))
     return true;
-  if (cuda_coord_distance<decltype (origin.z)> (res, origin.z, lhs.z, rhs.z))
+  /* Check x dimension. */
+  if (cuda_coord_distance<decltype (origin.x)> (res, origin.x, lhs.x, rhs.x))
     return true;
   return false;
 }

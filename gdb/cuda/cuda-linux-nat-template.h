@@ -60,8 +60,6 @@
 #include "inf-child.h"
 #include "top.h"
 
-extern struct lwp_info *cuda_find_lwp_pid (ptid_t ptid);
-
 template <class BaseTarget> cuda_nat_linux<BaseTarget>::cuda_nat_linux ()
 {
   char shortname[128];
@@ -437,11 +435,6 @@ cuda_nat_linux<BaseTarget>::resume (ptid_t ptid, int sstep, enum gdb_signal ts)
   bool cuda_event_found = false;
   int host_want_sstep = cuda_host_want_singlestep;
   CUDBGEvent event;
-
-  /* We're about to resume - so flush the device-disassembly disasm cache.
-     ELF disassembly is kept as the ELF file contents do not change except
-     for lazy-loading. See cuda-asm.c and cuda-functions.c */
-  cuda_state::flush_disasm_caches ();
 
   cuda_trace ("cuda_resume: sstep %d", sstep);
   cuda_host_want_singlestep = 0;
@@ -911,10 +904,7 @@ void
 cuda_nat_linux<BaseTarget>::fetch_registers (struct regcache *regcache,
 					     int regno)
 {
-  uint64_t val = 0;
   struct gdbarch *gdbarch = regcache->arch ();
-  uint32_t pc_regnum = gdbarch_pc_regnum (gdbarch);
-  enum register_status status;
 
   /* delegate to the host routines when not on the device */
   if (!cuda_current_focus::isDevice ())
@@ -923,42 +913,35 @@ cuda_nat_linux<BaseTarget>::fetch_registers (struct regcache *regcache,
       return;
     }
 
-  const auto &c = cuda_current_focus::get ().physical ();
+  // If all the registers are wanted (regno == -1), then we need the host
+  // registers and the device PC & ErrorPC
 
-  /* if all the registers are wanted, then we need the host registers and the
-     device PC */
+  // Always get the PC (the PC is always available)
+  if ((regno == -1) || cuda_pc_regnum_p (gdbarch, regno))
+    {
+      cuda_register_read (gdbarch, regcache, gdbarch_pc_regnum (gdbarch));
+      if (regno != -1)
+        return;
+    }
+
+  // Always try to get the ErrorPC (but it may be unavailable)
+  if ((regno == -1) || cuda_error_pc_regnum_p (gdbarch, regno))
+    {
+      const auto tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+      cuda_register_read (gdbarch, regcache, tdep->error_pc_regnum);
+      if (regno != -1)
+        return;
+    }
+
+  // Get the host registers if requested
   if (regno == -1)
     {
       BaseTarget::fetch_registers (regcache, regno);
-      val = cuda_state::lane_get_virtual_pc (c.dev (), c.sm (), c.wp (),
-					     c.ln ());
-      regcache->raw_supply (pc_regnum, &val);
       return;
     }
 
-  /* get the PC */
-  if (regno == pc_regnum)
-    {
-      val = cuda_state::lane_get_virtual_pc (c.dev (), c.sm (), c.wp (),
-					     c.ln ());
-      regcache->raw_supply (pc_regnum, &val);
-      return;
-    }
-
-  if (cuda_regular_register_p (gdbarch, regno))
-    {
-      /* raw register */
-      val = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (),
-					   regno);
-      regcache->raw_supply (regno, &val);
-      return;
-    }
-
-  status
-      = cuda_pseudo_register_read (gdbarch, regcache, regno, (gdb_byte *)&val);
-  gdb_assert (status == REG_VALID);
-
-  regcache->raw_supply (regno, &val);
+  // Try to read any other CUDA register
+  cuda_register_read (gdbarch, regcache, regno);
 }
 
 template <class BaseTarget>

@@ -50,6 +50,19 @@ extern bool cuda_producer_is_open64;
 #define CUDA_ELF_TEXT_PREFIX                                                  \
   ".text." /* CUDA ELF text section format: ".text.KERNEL" */
 
+// Maximum numbers of registers and predicates, both regular and uniform
+// Do not count the "virtual" zero register as a regular register
+#define CUDA_REG_MAX_REGISTERS  255u
+#define CUDA_REG_ZERO_REGISTER  255u
+#define CUDA_REG_MAX_PREDICATES 8u
+
+// Do not count the "virtual" zero register as a uniform register
+#define CUDA_UREG_MAX_REGISTERS  255u
+#define CUDA_UREG_MAX_PREDICATES 8u
+
+// Encoded register for the zero register
+#define CUDA_UREG_ZERO_REGISTER  255u
+
 /*Return values that exceed 384-bits in size are returned in memory.
    (R4-R15 = 12 4-byte registers = 48-bytes = 384-bits that can be
    used to return values in registers). */
@@ -97,66 +110,179 @@ bool cuda_is_cuda_gdbarch (struct gdbarch *);
 /* CUDA architecture specific information.  */
 struct cuda_gdbarch_tdep : gdbarch_tdep_base
 {
-  /* 256 registers + 1 PC + 8 regular predicates + 64 uniform registers + 8
-   * uniform predicates */
-  static constexpr int num_regs = 256 + 1 + 8 + 64 + 8;
-  /* 1 for CC, 4 for special/invalid */
-  static constexpr int num_pseudo_regs = 5;
-
   /* Pointer size: 32-bits on i686, 64-bits on x86_64. So that we do not need
      to have 2 versions of the cuda-tdep file */
   static constexpr int ptr_size = TARGET_CHAR_BIT * sizeof (CORE_ADDR);
 
-  /* Registers */
+  // PC
+  static constexpr int pc_regnum = 0;
+  
+  // ErrorPC register
+  static constexpr int error_pc_regnum = pc_regnum + 1;
 
-  /* always */
-  static constexpr int pc_regnum = 256;
+  // Regular registers
+  static constexpr int first_regnum = error_pc_regnum + 1;
+  static constexpr int last_regnum = first_regnum + (CUDA_REG_MAX_REGISTERS - 1);
+  static constexpr int zero_regnum = last_regnum + 1;
 
-  /* ABI only */
-  static constexpr int sp_regnum = 1; /* ABI only, SP is in R1 */
-  static constexpr int first_rv_regnum = 4; /* ABI only, First RV is in R4, also used to pass args */
-  static constexpr int last_rv_regnum = 15; /* ABI only, Last RV is in R15, also used to pass args */
-  static constexpr int rz_regnum = 63; /* ABI only, Zero is in R63 */
-  static constexpr int max_reg_rv_size = (last_rv_regnum - first_rv_regnum + 1) * 4;
+  // Predicate Registers
+  static constexpr int first_pred_regnum = zero_regnum + 1;
+  static constexpr int last_pred_regnum = first_pred_regnum + (CUDA_REG_MAX_PREDICATES - 1);
 
-  /* Predicate Registers */
-  static constexpr int first_pred_regnum = pc_regnum + 1;
-  static constexpr int last_pred_regnum = first_pred_regnum + 7;
-
-  /* Uniform Registers */
-  static constexpr int num_uregs = 64;
+  // Uniform Registers
   static constexpr int first_uregnum = last_pred_regnum + 1;
-  static constexpr int last_uregnum = first_uregnum + num_uregs - 1;
-  static constexpr int first_upred_regnum = last_uregnum + 1;
-  static constexpr int last_upred_regnum = first_upred_regnum + 7;
+  static constexpr int last_uregnum = first_uregnum + (CUDA_UREG_MAX_REGISTERS - 1);
+  static constexpr int zero_uregnum = last_uregnum + 1;
+  static constexpr int first_upred_regnum = zero_uregnum + 1;
+  static constexpr int last_upred_regnum = first_upred_regnum + (CUDA_UREG_MAX_PREDICATES - 1);
 
-  /* CC register */
+  // CC register
   static constexpr int cc_regnum = last_upred_regnum + 1;
 
-  /* ErrorPC register */
-  static constexpr int error_pc_regnum = cc_regnum + 1;
+  // Regular registers, predicates, uniform registers, uniform predicates, PC
+  static constexpr int num_regs = cc_regnum + 1;
 
-  /* Pseudo-Registers */
+  // Pseudo-Registers
+  static constexpr int first_pseudo_regnum = num_regs;
 
-  /* Special register to indicate to look at the regmap search result */
-  static constexpr int special_regnum = error_pc_regnum + 1;
+  // Special register to indicate to look at the regmap search result
+  static constexpr int special_regnum = first_pseudo_regnum;
 
-  /* Register number to tell the debugger that no valid register was found.
-     Used to avoid returning errors and having nice warning messages and
-     consistent garbage return values instead (zero sounds good).
-     invalid_lo_regnum is used for variables that aren't live and are
-     stored in a single register.  The combination of invalid_lo_regnum
-     and invalid_hi_regnum is needed when a variable isn't live and is
-     stored in multiple registers. */
+  // Register number to tell the debugger that no valid register was found.
+  // Used to avoid returning errors and having nice warning messages and
+  // consistent garbage return values instead (zero sounds good).
+  // invalid_lo_regnum is used for variables that aren't live and are
+  // stored in a single register.  The combination of invalid_lo_regnum
+  // and invalid_hi_regnum is needed when a variable isn't live and is
+  // stored in multiple registers.
   static constexpr int invalid_lo_regnum = special_regnum + 1;
   static constexpr int invalid_hi_regnum = invalid_lo_regnum + 1;
+  static constexpr int last_pseudo_regnum = invalid_hi_regnum;
+
+  // Pseudo reg count
+  static constexpr int num_pseudo_regs = last_pseudo_regnum - first_pseudo_regnum + 1;
+
+  // ABI only
+  static constexpr int sp_regnum = first_regnum + 1;       // ABI only, SP is in R1
+  static constexpr int first_rv_regnum = first_regnum + 4; // ABI only, First RV is in R4, also used to pass args
+  static constexpr int last_rv_regnum = first_regnum + 15; // ABI only, Last RV is in R15, also used to pass args
+  static constexpr int max_reg_rv_size = (last_rv_regnum - first_rv_regnum + 1) * 4;
 };
 
+/* Predicates for checking if register belongs to specified register group */
+static inline bool
+cuda_regular_register_p (struct gdbarch *gdbarch, int regnum)
+{
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+  return regnum >= tdep->first_regnum && regnum <= tdep->last_regnum;
+}
+
+static inline bool
+cuda_zero_register_p (struct gdbarch *gdbarch, int regnum)
+{
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+  return regnum == tdep->zero_regnum;
+}
+
+static inline bool
+cuda_special_regnum_p (struct gdbarch *gdbarch, int regnum)
+{
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+  return regnum == tdep->special_regnum;
+}
+
+static inline bool
+cuda_invalid_regnum_p (struct gdbarch *gdbarch, int regnum)
+{
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+  return regnum == tdep->invalid_lo_regnum
+         || regnum == tdep->invalid_hi_regnum;
+}
+
+static inline bool
+cuda_is_regnum_valid (struct gdbarch *gdbarch, int regnum)
+{
+  return !cuda_invalid_regnum_p (gdbarch, regnum);
+}
+
+static inline bool
+cuda_pred_regnum_p (struct gdbarch *gdbarch, int regnum)
+{
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+  return regnum >= tdep->first_pred_regnum && regnum <= tdep->last_pred_regnum;
+}
+
+static inline bool
+cuda_upred_regnum_p (struct gdbarch *gdbarch, int regnum)
+{
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+  return regnum >= tdep->first_upred_regnum
+         && regnum <= tdep->last_upred_regnum;
+}
+
+static inline bool
+cuda_uniform_zero_register_p (struct gdbarch *gdbarch, int regnum)
+{
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+  return regnum == tdep->zero_uregnum;
+}
+
+static inline bool
+cuda_uregnum_p (struct gdbarch *gdbarch, int regnum)
+{
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+  return regnum >= tdep->first_uregnum && regnum <= tdep->last_uregnum;
+}
+
+static inline bool
+cuda_pc_regnum_p (struct gdbarch *gdbarch, int regnum)
+{
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+  return regnum == tdep->pc_regnum;
+}
+
+static inline bool
+cuda_cc_regnum_p (struct gdbarch *gdbarch, int regnum)
+{
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+  return regnum == tdep->cc_regnum;
+}
+
+static inline bool
+cuda_error_pc_regnum_p (struct gdbarch *gdbarch, int regnum)
+{
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+  return regnum == tdep->error_pc_regnum;
+}
+
+static inline int
+cuda_abi_sp_regnum (struct gdbarch *gdbarch)
+{
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+  return tdep->sp_regnum;
+}
+
+static inline int
+cuda_special_regnum (struct gdbarch *gdbarch)
+{
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+  return tdep->special_regnum;
+}
+
+static inline int
+cuda_pc_regnum (struct gdbarch *gdbarch)
+{
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+  return tdep->pc_regnum;
+}
+
+// CUDART symbols
 struct cuda_cudart_symbols_st
 {
   struct objfile *objfile;
 };
 
+// Signal handling information
 struct cuda_signal_info_st
 {
   bool saved;
@@ -216,6 +342,7 @@ void cuda_trace (const char *, ...);
 
 /*Single-Stepping */
 bool cuda_sstep_is_active (void);
+bool cuda_print_divergent_stepping (void);
 uint32_t cuda_sstep_dev_id (void);
 uint64_t cuda_sstep_grid_id (void);
 uint32_t cuda_sstep_wp_id (void);
@@ -242,9 +369,10 @@ bool cuda_is_regnum_valid (struct gdbarch *gdbarch, int regnum);
 enum register_status cuda_pseudo_register_read (struct gdbarch *gdbarch,
                                                 readable_regcache *regcache,
                                                 int regnum, gdb_byte *buf);
+void cuda_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
+                         int regnum);
 void cuda_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
                           int regnum, const gdb_byte *buf);
-bool cuda_regular_register_p (struct gdbarch *gdbarch, int regnum);
 
 /*Storage addresses and names */
 void cuda_print_lmem_address_type (void);

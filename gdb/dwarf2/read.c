@@ -20579,21 +20579,32 @@ lnp_state_machine::record_line (bool end_sequence)
 #ifdef NVIDIA_CUDA_GDB
   if (end_sequence)
     m_context_stack.clear ();
-  else
+  else if (current_file () != nullptr)
     {
       extended_inline_info info;
       info.m_filename = current_file ()->name;
       info.m_linenumber = m_line;
       m_context_stack.push_back (info);
     }
+  else
+    complaint ("Recording line for file %u line %u which is not in the file table in %s",
+	       m_file, m_line, m_cu->per_objfile->objfile->original_name);
+
   unsigned int context_line = 0;
   const char *context_filename = NULL;
   const char *inline_function_name = NULL;
-  if (m_context && (m_context <= m_context_stack.size()))
+  if (m_context)
     {
-      inline_function_name = ((const char *)m_line_header->debug_str_base) + m_function_name;
-      context_line = m_context_stack[m_context - 1].m_linenumber;
-      context_filename = m_context_stack[m_context - 1].m_filename;
+      if (m_context <= m_context_stack.size ())
+	{
+	  inline_function_name = ((const char *)m_line_header->debug_str_base) + m_function_name;
+	  context_line = m_context_stack[m_context - 1].m_linenumber;
+	  context_filename = m_context_stack[m_context - 1].m_filename;
+	}
+      else
+	complaint ("m_file %u m_line %u m_context %lu out of range (%u) in %s",
+		   m_file, m_line, m_context, (uint32_t)m_context_stack.size (),
+		   m_cu->per_objfile->objfile->original_name);
     }
 #endif
 
@@ -24815,15 +24826,29 @@ cuda_decode_line_table (struct objfile *objfile)
   cu_header->addr_size = gdbarch_ptr_bit (cuda_get_gdbarch ()) / TARGET_CHAR_BIT;
   sect_offset line_offset = (sect_offset)0; /* assumption that lh starts at offset 0 */
   CORE_ADDR high_pc = cuda_add_minsyms (cu, objfile, objfile->original_name);
+  bool complained = false;
   do
     {
       /* We lack a proper file and directory entry for lineinfo. Pass in nullptr for the compdir. */
       line_header_up lh = dwarf_decode_line_header ((sect_offset) line_offset, cu, nullptr);
       if (lh == NULL)
 	break;
-      cu->line_header = lh.release ();
-      line_offset = cu->line_header->next_sect_off;
-      dwarf_decode_lines (cu->line_header, cu, 0, 1);
+
+      line_offset = lh->next_sect_off;
+      if (lh->file_names_size () == 0)
+	{
+	  // Only complain at most once per objfile
+	  if (!complained)
+	    {
+	      complaint (_("Empty .debug_line file table in file %s"), objfile->original_name);
+	      complained = true;
+	    }
+	}
+      else
+	{
+	  cu->line_header = lh.release ();
+	  dwarf_decode_lines (cu->line_header, cu, 0, 1);
+	}
     } while (to_underlying(line_offset) < get_dwarf2_per_objfile (objfile)->per_bfd->line.size);
   cu->get_builder ()->end_compunit_symtab (high_pc, SECT_OFF_TEXT (objfile));
 }

@@ -35,12 +35,6 @@
 #include <unordered_map>
 #include <vector>
 
-#define CUDA_STATE_MAX_PREDICATES		8
-#define CUDA_STATE_MAX_UNIFORM_PREDICATES	8
-
-#define CUDA_STATE_MAX_REGISTERS		256
-#define CUDA_STATE_MAX_UNIFORM_REGISTERS	64
-
 /* So we can have links to our parent objects */
 class cuda_lane;
 class cuda_warp;
@@ -88,15 +82,9 @@ public:
   void set_timestamp (cuda_clock_t now)
   { m_timestamp = now; }
 
-  void set_pc (uint64_t pc, bool cached)
-  {
-    m_pc = pc;
-    m_pc_p = cached;
-  }
-
-  uint64_t get_virtual_pc ();
-  void set_virtual_pc (uint64_t pc)
-  { m_virtual_pc_p = true; m_virtual_pc = pc; }
+  uint64_t get_pc ();
+  void set_pc (uint64_t pc)
+  { m_pc_p = true; m_pc = pc; }
 
   const CuDim3& get_thread_idx ();
   void set_thread_idx (const CuDim3& dim)
@@ -110,9 +98,8 @@ public:
   { set_exception (CUDBG_EXCEPTION_NONE); }
 
   // Attributes that are less commonly used, or that are
-  // expensive to calculate (like the virtual return address vector)
-  uint64_t	get_pc ();
-  uint64_t	get_virtual_return_address (int32_t level);
+  // expensive to calculate (like the return address vector)
+  uint64_t	get_return_address (int32_t level);
 
   uint32_t	get_register (uint32_t regno);
   uint32_t	get_cc_register ();
@@ -142,8 +129,8 @@ private:
   // Time the warp was last updated
   cuda_clock_t	   m_timestamp = 0;
 
-  uint64_t	   m_virtual_pc = 0;
-  bool             m_virtual_pc_p = false;
+  uint64_t	   m_pc = 0;
+  bool             m_pc_p = false;
 
   CuDim3	   m_thread_idx = { 0, 0, 0 };
   bool             m_thread_idx_p = false;
@@ -153,9 +140,6 @@ private:
 
   // These fields are less used and typically more expensive to compute
   // so are only read on demand
-  uint64_t	   m_pc = 0;
-  bool		   m_pc_p = false;
-
   uint32_t	   m_call_depth = 0;
   bool		   m_call_depth_p = false;
 
@@ -165,11 +149,11 @@ private:
   uint32_t	   m_cc_register;
   bool		   m_cc_register_p;
 
-  // virtual return addresses on a per-frame basis, indexed by level
-  std::unordered_map<int32_t, uint64_t> m_virtual_return_address;
+  // return addresses on a per-frame basis, indexed by level
+  std::unordered_map<int32_t, uint64_t> m_return_address;
 
   // Predicates
-  uint32_t	   m_predicates[CUDA_STATE_MAX_PREDICATES];
+  uint32_t	   m_predicates[CUDA_REG_MAX_PREDICATES];
   // m_predicates_p is a bitmask of which individual predicates are valid
   // (m_predicates_p == (num_predicates - 1)) indicates that all are valid
   uint32_t	   m_predicates_p;
@@ -247,9 +231,6 @@ public:
   uint64_t get_active_pc ()
   { return lane (get_lowest_active_lane ())->get_pc (); }
 
-  uint64_t get_active_virtual_pc ()
-  { return lane (get_lowest_active_lane ())->get_virtual_pc (); }
-
   uint32_t get_uregister (uint32_t regno);
   void	   set_uregister (uint32_t regno, uint32_t value);
 
@@ -297,7 +278,7 @@ private:
   CuDim3	m_cluster_idx = { 0, 0, 0 };
 
   // Uniform register caches
-  uint32_t	m_upredicates[CUDA_STATE_MAX_UNIFORM_PREDICATES];
+  uint32_t	m_upredicates[CUDA_UREG_MAX_PREDICATES];
   uint32_t	m_upredicates_p;
 
   cuda_bitset	        m_uregisters_p;
@@ -482,11 +463,8 @@ public:
   void suspend ();
   void resume ();
 
-  void set_device_spec (uint32_t num_sms,
-			uint32_t num_warps,
-			uint32_t num_lanes,
-			uint32_t num_registers,
-			uint32_t num_uregisters,
+  void set_device_spec (uint32_t num_sms, uint32_t num_warps,
+			uint32_t num_lanes, uint32_t num_registers,
 			const char *dev_type, const char *sm_type);
 
   void cleanup_contexts ();
@@ -617,9 +595,8 @@ public:
 			       uint32_t num_warps,
 			       uint32_t num_lanes,
 			       uint32_t num_registers,
-			       uint32_t num_uregisters,
 			       const char *dev_type, const char *sm_type)
-  { device (dev_id)->set_device_spec (num_sms, num_warps, num_lanes, num_registers, num_uregisters, dev_type, sm_type); }
+  { device (dev_id)->set_device_spec (num_sms, num_warps, num_lanes, num_registers, dev_type, sm_type); }
 
   // System helper functions
 
@@ -723,6 +700,9 @@ public:
   static cuda_clock_t sm_timestamp (uint32_t dev_id, uint32_t sm_id)
   { return sm (dev_id, sm_id)->timestamp (); }
 
+  static void sm_update_state(uint32_t dev_id, uint32_t sm_id)
+  { sm (dev_id, sm_id)->update_state (); }
+
   static bool sm_valid (uint32_t dev_id, uint32_t sm_id)
   { return sm (dev_id, sm_id)->valid (); }
 
@@ -788,10 +768,7 @@ public:
   { return device (dev_id)->sm (sm_id)->warp (wp_id)->get_lowest_active_lane (); }
 
   static uint64_t warp_get_active_pc (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id)
-  { return device (dev_id)->sm (sm_id)->warp (wp_id)->get_active_pc (); }
-
-  static uint64_t warp_get_active_virtual_pc (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id)
-  { return warp (dev_id, sm_id, wp_id)->get_active_virtual_pc (); }
+  { return warp (dev_id, sm_id, wp_id)->get_active_pc (); }
 
   static uint64_t warp_get_error_pc (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id)
   { return warp (dev_id, sm_id, wp_id)->get_error_pc (); }
@@ -833,9 +810,6 @@ public:
   static uint64_t lane_get_pc (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id)
   { return lane (dev_id, sm_id, wp_id, ln_id)->get_pc (); }
 
-  static uint64_t lane_get_virtual_pc (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id)
-  { return lane (dev_id, sm_id, wp_id, ln_id)->get_virtual_pc (); }
-
   static CuDim3	lane_get_thread_idx (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id)
   { return lane (dev_id, sm_id, wp_id, ln_id)->get_thread_idx (); }
 
@@ -869,9 +843,9 @@ public:
   static int32_t lane_get_syscall_call_depth (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id)
   { return lane (dev_id, sm_id, wp_id, ln_id)->get_syscall_call_depth (); }
 
-  static uint64_t lane_get_virtual_return_address (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
-						   uint32_t ln_id, int32_t level)
-  { return lane (dev_id, sm_id, wp_id, ln_id)->get_virtual_return_address (level); }
+  static uint64_t lane_get_return_address (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
+					   uint32_t ln_id, int32_t level)
+  { return lane (dev_id, sm_id, wp_id, ln_id)->get_return_address (level); }
 
 private:
   static cuda_state m_instance;

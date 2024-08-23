@@ -311,6 +311,9 @@ SUBDIR_CUDA_SRCS = \
 @ENABLE_CUDA_TRUE@SUBDIR_CUDA_MI_SRCS = cuda/mi-cuda.c
 @ENABLE_CUDA_FALSE@SUBDIR_CUDA_MI_SRCS =
 
+@ENABLE_CUDA_TRUE@SUBDIR_CUDA_PYTHON_SRCS = python/py-cuda.c
+@ENABLE_CUDA_FALSE@SUBDIR_CUDA_PYTHON_SRCS =
+
 # f-module.c is a cuda-gdb extension to support Fortran modules
 #@ENABLE_CUDA_TRUE@SUBDIR_CUDA_COMMON_SFILES = f-module.c
 @ENABLE_CUDA_TRUE@SUBDIR_CUDA_COMMON_SFILES =
@@ -503,7 +506,8 @@ SUBDIR_PYTHON_SRCS = \
 	python/py-value.c \
 	python/py-varobj.c \
 	python/py-xmethods.c \
-	python/python.c
+	python/python.c \
+	$(SUBDIR_CUDA_PYTHON_SRCS)
 
 SUBDIR_PYTHON_OBS = $(patsubst %.c,%.o,$(SUBDIR_PYTHON_SRCS))
 

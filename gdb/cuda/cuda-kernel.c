@@ -525,35 +525,37 @@ kernels_start_kernel (uint32_t dev_id, uint64_t grid_id,
                       CUDBGKernelOrigin origin, bool has_cluster_dim,
                       CuDim3 cluster_dim)
 {
-  context_t context;
-  modules_t modules;
-  module_t module;
-  kernel_t kernel;
+  auto context = cuda_state::device_find_context_by_id (dev_id, context_id);
+  if (!context)
+    {
+      warning ("Could not find CUDA context for context_id 0x%llx",
+	       (unsigned long long)context_id);
+      return;
+    }
 
-  context = cuda_state::device_find_context_by_id (dev_id, context_id);
-  modules = context_get_modules (context);
-  module = modules_find_module_by_id (modules, module_id);
-
+  auto modules = context_get_modules (context);
+  auto module = modules_find_module_by_id (modules, module_id);
   if (!module)
-    warning (
-        "Could not find CUDA module for context_id 0x%llx module_id 0x%llx",
-        (unsigned long long)context_id, (unsigned long long)module_id);
-  gdb_assert (module);
+    {
+      warning ("Could not find CUDA module for context_id 0x%llx module_id 0x%llx",
+	       (unsigned long long)context_id, (unsigned long long)module_id);
+      return;
+    }
 
   if (context)
     set_current_context (context);
 
   gdb::unique_xmalloc_ptr<char> kernel_name
-      = cuda_find_function_name_from_pc (virt_code_base, true);
+    = cuda_find_function_name_from_pc (virt_code_base, true);
   if (kernel_name.get () == nullptr)
     // NOTE: Not having an entry function is a normal situation, this means
     // an internal kernel contained in a public module was launched.
     kernel_name = make_unique_xstrdup ("<internal>");
 
-  kernel
-      = kernel_new (dev_id, grid_id, virt_code_base, std::move (kernel_name),
-                    module, grid_dim, block_dim, type, parent_grid_id, origin,
-                    has_cluster_dim, cluster_dim);
+  auto kernel
+    = kernel_new (dev_id, grid_id, virt_code_base, std::move (kernel_name),
+		  module, grid_dim, block_dim, type, parent_grid_id, origin,
+		  has_cluster_dim, cluster_dim);
 
   kernel->next = kernels;
   kernels = kernel;

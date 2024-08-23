@@ -42,11 +42,11 @@ module_new (context_t context, uint64_t module_id, void *elf_image, uint64_t elf
   module_t module;
 
   module = (module_t) xmalloc (sizeof *module);
-  module->context    = context;
-  module->module_id  = module_id;
-  module->elf_image  = cuda_elf_image_new (elf_image, elf_image_size, module);
-  module->disassembler = new cuda_disassembler ();
-  module->next       = NULL;
+  module->context      = context;
+  module->module_id    = module_id;
+  module->elf_image    = cuda_elf_image_new (elf_image, elf_image_size, module);
+  module->disassembler = nullptr;
+  module->next         = nullptr;
 
   return module;
 }
@@ -61,9 +61,19 @@ module_delete (module_t module)
 
   cuda_elf_image_delete (module->elf_image);
 
-  delete module->disassembler;
+  if (module->disassembler)
+    delete module->disassembler;
 
   xfree (module);
+}
+
+cuda_disassembler*
+module_disassembler (module_t module)
+{
+  if (!module->disassembler)
+    module->disassembler = new cuda_disassembler;
+
+  return module->disassembler;
 }
 
 void
@@ -218,4 +228,20 @@ modules_find_module_by_address (modules_t modules, CORE_ADDR addr)
   }
 
   return NULL;
+}
+
+void
+modules_flush_disasm_caches (modules_t modules)
+{
+  gdb_assert (modules);
+
+  for (auto module = modules->head; module; module = module->next)
+    {
+      auto disassembler = module->disassembler;
+      if (disassembler)
+	{
+	  disassembler->flush_elf_cache ();
+	  disassembler->flush_device_cache ();
+	}
+    }
 }

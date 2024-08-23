@@ -64,7 +64,8 @@ typedef enum : uint32_t
   select_sm_at_excpt = 0x1 << 3,
   select_sngl = 0x1 << 4,
   select_trap = 0x1 << 5,
-  select_current_clock = 0x1 << 6
+  select_current_clock = 0x1 << 6,
+  select_active = 0x1 << 7
 } cuda_coord_set_mask_t;
 
 template <cuda_coord_compare_type compare_type> class cuda_coord_compare
@@ -366,6 +367,8 @@ public:
     constexpr bool atTrap = mask & static_cast<decltype (mask)> (select_trap);
     constexpr bool atClock
 	= mask & static_cast<decltype (mask)> (select_current_clock);
+    constexpr bool active
+	= mask & static_cast<decltype (mask)> (select_active);
 
     // We need the aspace when reading lane pc for checking breakpoints
     struct address_space *aspace = nullptr;
@@ -511,6 +514,10 @@ public:
 		    if (valid && !cuda_state::lane_valid (dev, sm, wp, ln))
 		      continue;
 
+		    // Skip if this lane is not active
+		    if (active && !cuda_state::lane_active (dev, sm, wp, ln))
+		      continue;
+
 		    // If looking for current clock, ignore out of date lanes
 		    if (atClock
 			&& cuda_state::lane_timestamp_valid (dev, sm, wp, ln)
@@ -531,8 +538,8 @@ public:
 			    || !cuda_state::lane_valid (dev, sm, wp, ln)
 			    || !cuda_state::lane_active (dev, sm, wp, ln)
 			    || !breakpoint_here_p (
-				aspace, cuda_state::lane_get_virtual_pc (
-					    dev, sm, wp, ln)))
+				aspace,
+				cuda_state::lane_get_pc (dev, sm, wp, ln)))
 			  continue;
 		      }
 

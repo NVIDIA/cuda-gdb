@@ -41,6 +41,9 @@ uint64_t    module_get_id         (module_t module);
 context_t   module_get_context    (module_t module);
 elf_image_t module_get_elf_image  (module_t module);
 void        module_set_elf_image  (module_t module, elf_image_t elf_image);
+module_t    module_get_next_module (module_t module);
+
+cuda_disassembler* module_disassembler (module_t module);
 
 modules_t  modules_new    (void);
 void       modules_delete (modules_t modules);
@@ -50,6 +53,7 @@ void       modules_print  (modules_t modules);
 
 module_t   modules_find_module_by_id      (modules_t modules, uint64_t module_id);
 module_t   modules_find_module_by_address (modules_t modules, CORE_ADDR addr);
+void       modules_flush_disasm_caches    (modules_t modules);
 
 #endif
 

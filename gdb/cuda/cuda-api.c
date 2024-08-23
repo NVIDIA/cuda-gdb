@@ -638,7 +638,15 @@ cuda_debugapi::read_predicates (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t
   if (res != CUDBG_SUCCESS)
     CUDA_API_ERROR_DEV_SM_WARP_LANE (res, dev, sm, wp, ln, "failed to read predicates");
 
-  CUDA_API_TRACE_DEV_SM_WARP_LANE (dev, sm, wp, ln, "predicates 0x%08x", *predicates);
+  if (cuda_options_trace_domain_enabled (CUDA_TRACE_API))
+    {
+      uint32_t preds = 0;
+      for (uint32_t i = 0; i < predicates_size; i++)
+	if (predicates[i])
+	  preds |= 1 << i;
+      CUDA_API_TRACE_DEV_SM_WARP_LANE (dev, sm, wp, ln, "predicates 0x%08x",
+				       preds);
+    }
 }
 
 void
@@ -655,12 +663,19 @@ cuda_debugapi::read_upredicates (uint32_t dev, uint32_t sm, uint32_t wp,
   if (res == CUDBG_ERROR_INVALID_DEVICE || res == CUDBG_ERROR_MISSING_DATA)
     {
       CUDA_API_TRACE_DEV_SM_WARP (dev, sm, wp, "invalid device or missing data");
-      memset (predicates, 0, predicates_size);
+      memset (predicates, 0, predicates_size * sizeof (*predicates));
     }
   else if (res != CUDBG_SUCCESS)
     CUDA_API_ERROR_DEV_SM_WARP (res, dev, sm, wp, "Failed to read uniform predicates");
 
-  CUDA_API_TRACE_DEV_SM_WARP (dev, sm, wp, "upredicates 0x%08x", *predicates);
+  if (cuda_options_trace_domain_enabled (CUDA_TRACE_API))
+    {
+      uint32_t preds = 0;
+      for (uint32_t i = 0; i < predicates_size; i++)
+	if (predicates[i])
+	  preds |= 1 << i;
+      CUDA_API_TRACE_DEV_SM_WARP (dev, sm, wp, "predicates 0x%08x", preds);
+    }
 }
 
 void
@@ -909,13 +924,21 @@ cuda_debugapi::write_predicates (uint32_t dev, uint32_t sm, uint32_t wp, uint32_
   if (!api_state_initialized ())
     return;
 
+  if (cuda_options_trace_domain_enabled (CUDA_TRACE_API))
+    {
+      uint32_t preds = 0;
+      for (uint32_t i = 0; i < predicates_size; i++)
+        if (predicates[i])
+	  preds |= 1 << i;
+      CUDA_API_TRACE_DEV_SM_WARP_LANE (dev, sm, wp, ln, "predicates 0x%08x",
+				       preds);
+    }
+
   CUDBGResult res = m_instance.m_cudbgAPI->writePredicates (dev, sm, wp, ln, predicates_size, predicates);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
     CUDA_API_ERROR_DEV_SM_WARP_LANE (res, dev, sm, wp, ln, "failed to write predicates");
-
-  CUDA_API_TRACE_DEV_SM_WARP_LANE (dev, sm, wp, ln, "predicates 0x%08x", *predicates);
 }
 
 void
@@ -924,13 +947,20 @@ cuda_debugapi::write_upredicates (uint32_t dev, uint32_t sm, uint32_t wp, uint32
   if (!api_state_initialized ())
     return;
 
+  if (cuda_options_trace_domain_enabled (CUDA_TRACE_API))
+    {
+      uint32_t preds = 0;
+      for (uint32_t i = 0; i < predicates_size; i++)
+        if (predicates[i])
+	  preds |= 1 << i;
+      CUDA_API_TRACE_DEV_SM_WARP (dev, sm, wp, "predicates 0x%08x", preds);
+    }
+
   CUDBGResult res = m_instance.m_cudbgAPI->writeUniformPredicates (dev, sm, wp, predicates_size, predicates);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
     CUDA_API_ERROR_DEV_SM_WARP (res, dev, sm, wp, "failed to write uniform predicates");
-
-  CUDA_API_TRACE_DEV_SM_WARP (dev, sm, wp, "upredicates 0x%08x", *predicates);
 }
 
 void
@@ -1960,6 +1990,40 @@ cuda_debugapi::get_device_info (uint32_t dev, CUDBGDeviceInfoQueryType_t type,
     CUDA_API_TRACE_DEV (dev, "requested size %u returned size %u", length, *data_length);
 
   return res == CUDBG_SUCCESS;
+}
+
+// Returns false on error
+bool cuda_debugapi::execute_internal_command (const char *command,
+        char *resultBuffer, uint32_t sizeInBytes)
+{
+  gdb_assert (command);
+  gdb_assert (resultBuffer);
+
+  if (!api_state_initialized())
+    return false;
+
+  if (api_version ().m_revision < 146)
+    return false;
+
+  CUDBGResult res = m_instance.m_cudbgAPI->executeInternalCommand (command, resultBuffer, sizeInBytes);
+  cuda_api_print_api_call_result (__FUNCTION__, res);
+
+  switch (res)
+  {
+    case CUDBG_SUCCESS:
+      CUDA_API_TRACE("requested size %u\nresponse body: %s", sizeInBytes, resultBuffer);
+      break;
+    case CUDBG_ERROR_NOT_SUPPORTED:
+      return false;
+    case CUDBG_ERROR_BUFFER_TOO_SMALL:
+      return false;
+    case CUDBG_ERROR_INVALID_ARGS:
+      return false;
+    default:
+      return false;
+  }
+
+  return true;
 }
 
 void

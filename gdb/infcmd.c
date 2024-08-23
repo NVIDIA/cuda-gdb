@@ -330,7 +330,13 @@ post_create_inferior (int from_tty)
      breakpoint_re_set is never called.  Call it now so that software
      watchpoints get a chance to be promoted to hardware watchpoints
      if the now pushed target supports hardware watchpoints.  */
+#ifdef NVIDIA_CUDA_GDB
+  /* Skip setting breakpoints when debugging a corefile */
+  if (target_has_execution ())
+    breakpoint_re_set ();
+#else
   breakpoint_re_set ();
+#endif
 
   gdb::observers::inferior_created.notify (current_inferior ());
 }

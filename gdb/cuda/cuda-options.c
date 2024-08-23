@@ -1331,6 +1331,44 @@ cuda_options_initialize_single_stepping_optimization (void)
 
 }
 
+/*
+ * set cuda step_divergent_lanes
+ */
+static bool cuda_step_divergent_lanes = true;
+
+static void
+cuda_show_step_divergent_lanes (struct ui_file *file, int from_tty,
+				struct cmd_list_element *c, const char *value)
+{
+  gdb_printf (file,
+	      _ ("CUDA stepping of divergent lanes while instruction single "
+		 "stepping is %s.\n"),
+	      value);
+}
+
+bool
+cuda_options_step_divergent_lanes_enabled (void)
+{
+  return cuda_step_divergent_lanes;
+}
+
+static void
+cuda_options_initialize_step_divergent_lanes (void)
+{
+  add_setshow_boolean_cmd (
+      "step_divergent_lanes", class_cuda, &cuda_step_divergent_lanes,
+      _ ("Turn on/off CUDA stepping of divergent lanes while instruction "
+	 "single stepping"),
+      _ ("Show if CUDA stepping of divergent lanes while instruction "
+	 "single stepping is enabled."),
+      _ ("When on(default), cuda-gdb will repeatedly step the warp in "
+	 "focus until the CUDA thread that is focused on is active. "
+	 "When off, the warp in focus will only be stepped once and "
+	 "the focused cuda thread will be changed to the nearest active lane "
+	 "in the warp."),
+      NULL, cuda_show_step_divergent_lanes, &setcudalist, &showcudalist);
+}
+
 static const char cuda_stop_signal_sigurg[]	= "SIGURG";
 static const char cuda_stop_signal_sigtrap[]	= "SIGTRAP";
 static const char *cuda_stop_signal_enum[] = {
@@ -1436,6 +1474,7 @@ cuda_options_initialize (void)
   cuda_options_initialize_stats ();
   cuda_options_initialize_value_extrapolation ();
   cuda_options_initialize_single_stepping_optimization ();
+  cuda_options_initialize_step_divergent_lanes ();
   cuda_options_initialize_stop_signal ();
   cuda_options_initialize_device_resume_on_cpu_dynamic_function_call ();
   // Support removed - print notification
