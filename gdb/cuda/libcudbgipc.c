@@ -25,14 +25,6 @@
 #include "cuda/cuda-tdep.h"
 #include "gdbsupport/ptid.h"
 #include "inferior.h"
-#if __QNXTARGET__
-# include "remote-nto.h"
-# define PUTPKT_BINARY qnx_putpkt_binary
-# define GETPKT qnx_getpkt_sane
-#else
-# define PUTPKT_BINARY putpkt_binary
-# define GETPKT getpkt_sane
-#endif
 #endif
 
 #include <signal.h>
@@ -52,6 +44,8 @@
 #include "cuda/libcudbgipc.h"
 #include <cudadebugger.h>
 
+#include <sstream>
+
 /*Forward declarations */
 static ATTRIBUTE_PRINTF(1, 2) void cudbgipc_trace(const char *fmt, ...);
 
@@ -63,8 +57,6 @@ CUDBGIPC_t commCB;
 static bool cudbgPreInitComplete = false;
 pthread_t callbackEventThreadHandle;
 pthread_t cudagdbMainThreadHandle;
-struct timespec cudbgipc_profile_start;
-
 
 static void *
 cudbgCallbackHandler(void *arg)
@@ -290,125 +282,165 @@ cudbgipcInitializeCommCB(void)
  */
 #include "cuda-packet-manager.h"
 #include "remote.h"
+#include <array>
 
-static char *outBuffer = NULL;
-static char *inBuffer = NULL;
-static size_t inBufferSize = 0;
-static size_t outBufferSize = 0;
-static size_t outBufferUsed = 0;
-
-static CUDBGResult
-cudbgipcInitializeRemote (void)
+/* Set of callbacks used for send_remote_packet */
+struct cudbgipc_remote_callbacks : public send_remote_packet_callbacks
 {
-  outBuffer = (char *) xmalloc (outBufferSize = 4096);
+public:
+  /* Initialize the output buffer with the start of cuda packet string */
+  cudbgipc_remote_callbacks () 
+  : m_res (CUDBG_SUCCESS), m_processing_multi_packet (false)
+  { reset_out_buffer (); }
 
-  inBuffer = (char *) xmalloc (inBufferSize = 65535);
+  ~cudbgipc_remote_callbacks () = default;
 
-   outBufferUsed = snprintf (outBuffer, outBufferSize, "vCUDA;");
-   return CUDBG_SUCCESS;
-}
+  /* Append the string to the output buffer */
+  void
+  append_request (gdb::char_vector &buf)
+  {
+    gdb_assert (has_space (buf.size ()));
+    m_out_buffer.insert (m_out_buffer.end (), buf.begin (), buf.end ());
+  }
 
-static CUDBGResult
-cudbgipcAppendRemote(const void *d, size_t size)
-{
-    int out_len, bytes_processed;
+  CUDBGResult
+  send_request (void)
+  {
+    /* Null terminate outBuffer */
+    m_out_buffer.push_back ('\0');
+    gdb::array_view<const char> view (m_out_buffer.data (), m_out_buffer.size ());
+    send_remote_packet (view, this);
+    return m_res;
+  }
 
-    /* Guard against integer overflow */
-    /* FIXME: gdbserver should handle sizes larger than INT_MAX bytes */
-    if (size > INT_MAX || outBufferUsed > outBufferUsed + size)
-      return CUDBG_ERROR_COMMUNICATION_FAILURE;
+  void
+  sending (gdb::array_view<const char> &buf) override
+  {
+    cudbgipc_trace ("Sending remote packet request: %s", buf.data ());
+  }
 
-    if (outBufferUsed + size > outBufferSize)
+  void
+  received (gdb::array_view<const char> &buf) override
+  {
+    cudbgipc_trace ("Received response: %s", buf.data ());
+
+    /* Reset the buffer if we are not processing multi-packet repsonse */
+    if (!m_processing_multi_packet)
+      m_in_buffer.clear ();
+
+    /* Check for the multi packet request */
+    m_processing_multi_packet = (memcmp (buf.data (), "MP;", strlen ("MP;")) == 0);
+
+    /* Check for integer literal */
+    if (buf[0] == 'E')
       {
-	char *buf = (char *)realloc (outBuffer, outBufferUsed + size);
-
-        if (!buf)
-	  return CUDBG_ERROR_UNKNOWN;
-        outBuffer = buf;
-        outBufferSize = outBufferUsed + size;
+	cudbgipc_trace ("Received error response!");
+	m_res = (CUDBGResult)atoi (buf.data () + 1);
       }
+    else if (m_processing_multi_packet || memcmp (buf.data (), "OK;", strlen ("OK;")) == 0)
+      {
+	/* Resize the in buffer */
+	auto in_buffer_size = m_in_buffer.size ();
+	m_in_buffer.resize (in_buffer_size + buf.size ());
+	/* Unescape the recv buffer into in buffer */
+	int recv_bytes = remote_unescape_input (
+	    (const gdb_byte *)buf.data () + 3, buf.size () - 3,
+	    (gdb_byte *)m_in_buffer.data () + in_buffer_size,
+	    m_in_buffer.size () - in_buffer_size);
+	/* Resize the in buffer downwards */
+	m_in_buffer.resize (in_buffer_size + recv_bytes);
+	/* If a multi-packet reply received, send a request for more data */
+	if (m_processing_multi_packet)
+	  {
+	    /* Build the request string */
+	    std::ostringstream more_data_stream;
+	    more_data_stream << "vCUDARetr;" << m_in_buffer.size ();
+	    std::string more_data = more_data_stream.str ();
+	    /* We don't want to copy the null terminator here */
+	    m_out_buffer.clear ();
+	    m_out_buffer.insert (m_out_buffer.begin (), more_data.begin (), more_data.end ());
+	    /* Send it */
+	    send_request ();
+	  }
+      }
+    else
+      {
+	/* Unknown packet! */
+	cudbgipc_trace ("Received invalid response!");
+      }
+    /* Reset the out buffer */
+    reset_out_buffer ();
+  }
 
-    /* Guard against integer overflow */
-    /* FIXME: gdbserver should handle sizes larger than INT_MAX bytes */
-    if (outBufferSize - outBufferUsed > INT_MAX)
-      return CUDBG_ERROR_COMMUNICATION_FAILURE;
+  /* TODO: Rethink this getter */
+  void *
+  get_result_buffer (void)
+  {
+    return (void *)m_in_buffer.data ();
+  }
 
-    out_len = remote_escape_output ((const gdb_byte *) d, size, 1,
-				    (gdb_byte *) outBuffer+outBufferUsed,
-				    &bytes_processed, 
-				    outBufferSize-outBufferUsed);
-    gdb_assert (bytes_processed == size);
+  size_t
+  get_result_size (void)
+  {
+    return m_in_buffer.size ();
+  }
 
-    outBufferUsed += out_len;
-    return CUDBG_SUCCESS;
+private:
+  void
+  reset_out_buffer (void)
+  {
+    m_out_buffer.clear ();
+    std::string req = "vCUDA;";
+    m_out_buffer.insert (m_out_buffer.begin (), req.begin (), req.end ());
+  }
+
+  /* Check if there is size remaining for the request */
+  /* Guard against integer overflow */
+  /* FIXME: gdbserver should handle sizes larger than INT_MAX bytes */
+  bool
+  has_space (size_t size)
+  {
+    return m_out_buffer.size () + size <= INT_MAX;
+  }
+
+  gdb::char_vector m_out_buffer;
+  gdb::char_vector m_in_buffer;
+  CUDBGResult m_res;
+  bool m_processing_multi_packet = false;
+};
+static cudbgipc_remote_callbacks remote_callbacks;
+
+static CUDBGResult
+cudbgipcAppendRemote (const void *d, size_t size)
+{
+  int out_len, bytes_processed;
+
+  /* Escape the input data */
+  gdb::char_vector escaped_data (size * 2 + 1);
+  out_len = remote_escape_output ((const gdb_byte *)d, size, 1,
+				  (gdb_byte *)escaped_data.data (),
+				  &bytes_processed, escaped_data.size ());
+  gdb_assert (bytes_processed == size);
+  escaped_data.resize (out_len);
+
+  /* Append the request */
+  remote_callbacks.append_request (escaped_data);
+
+  return CUDBG_SUCCESS;
 }
 
 static CUDBGResult
-cudbgipcRequestRemote(void **d, size_t *size)
+cudbgipcRequestRemote (void **d, size_t *size)
 {
-    static gdb::char_vector rcvbuf(get_remote_packet_size ());
-    size_t totalRecvSize = 0;
-    int recvBytes;
+  auto res = remote_callbacks.send_request ();
+  if (res == CUDBG_SUCCESS)
+    {
+      *d = remote_callbacks.get_result_buffer ();
+      if (size)
+	*size = remote_callbacks.get_result_size ();
+    }
 
-
-    PUTPKT_BINARY (outBuffer, outBufferUsed);
-
-    do {
-        recvBytes = GETPKT (&rcvbuf, 0);
-
-        /* Handle errors */
-        if (recvBytes < 3)
-            return CUDBG_ERROR_COMMUNICATION_FAILURE;
-        if (memcmp (rcvbuf.data (), "OK;", strlen("OK;")) != 0 &&
-            memcmp (rcvbuf.data (), "MP;", strlen("MP;")) != 0)
-	  {
-            gdb_assert (rcvbuf.data ()[0] == 'E' &&
-                  rcvbuf.data ()[1]>='0' && rcvbuf.data ()[1]<='9' &&
-                  rcvbuf.data ()[2]>='0' && rcvbuf.data ()[2]<='9');
-
-            outBufferUsed = snprintf (outBuffer, outBufferSize, "vCUDA;");
-            return (CUDBGResult) atoi(rcvbuf.data ()+1);
-	  }
-
-	/* Guard against integer overflow */
-	/* FIXME: gdbserver should handle sizes larger than INT_MAX bytes */
-	if (totalRecvSize > totalRecvSize + recvBytes)
-	  return CUDBG_ERROR_COMMUNICATION_FAILURE;
-
-        /* Adjust input buffer size, if necessary */
-        if (inBufferSize < totalRecvSize + recvBytes)
-	  {
-	    size_t new_inBufferSize = inBufferSize + 2*recvBytes;
-	    /* Guard against integer overflow */
-	    if (inBufferSize > new_inBufferSize)
-	      return CUDBG_ERROR_COMMUNICATION_FAILURE;
-	    inBuffer = (char *) xrealloc (inBuffer, new_inBufferSize);
-	    inBufferSize = new_inBufferSize;
-	  }
-
-	/* Guard against integer overflow */
-	/* FIXME: gdbserver should handle sizes larger than INT_MAX bytes */
-	if (inBufferSize - totalRecvSize > INT_MAX)
-	  return CUDBG_ERROR_COMMUNICATION_FAILURE;
-
-        recvBytes = remote_unescape_input ((const gdb_byte *) (rcvbuf.data () + strlen("OK;")),
-					   recvBytes - strlen ("OK;"),
-                                           (gdb_byte *) (inBuffer + totalRecvSize),
-					   (int) (inBufferSize - totalRecvSize));
-        totalRecvSize += recvBytes;
-        /* If a multi-packet reply received, send a request for more data */
-        if (memcmp (rcvbuf.data (), "MP;", strlen ("MP;")) == 0) {
-            outBufferUsed = snprintf (outBuffer, outBufferSize, "vCUDARetr;%lu", (unsigned long)totalRecvSize);
-            PUTPKT_BINARY (outBuffer, outBufferUsed);
-        }
-    } while ( memcmp (rcvbuf.data (), "OK;", strlen ("OK;")) != 0);
-
-    outBufferUsed = snprintf (outBuffer, outBufferSize, "vCUDA;");
-    *d = inBuffer;
-    if (size)
-        *size = totalRecvSize;
-
-    return CUDBG_SUCCESS;
+  return res;
 }
 #endif
 
@@ -581,7 +613,7 @@ CUDBGResult
 cudbgipcAppend(const void *d, size_t size)
 {
 #ifndef GDBSERVER
-    if (cuda_remote)
+    if (is_remote_target (current_inferior ()->process_target ()))
         return cudbgipcAppendRemote (d, size);
 #endif
     return cudbgipcAppendLocal (d, size);
@@ -593,7 +625,7 @@ cudbgipcRequest(void **d, size_t *size)
     CUDBGResult res;
 
 #ifndef GDBSERVER
-    if (cuda_remote)
+    if (is_remote_target (current_inferior ()->process_target ()))
         return cudbgipcRequestRemote (d, size);
 #endif
     res = cudbgipcPush(&commOut);
@@ -654,11 +686,6 @@ cudbgipcInitialize(void)
     CUDBGResult res;
     int ret;
 
-#ifndef GDBSERVER
-    if (cuda_remote)
-        return cudbgipcInitializeRemote ();
-#endif
-
     if (cudbgPreInitComplete)
         return CUDBG_SUCCESS;
 
@@ -684,7 +711,7 @@ cudbgipcFinalize(void)
     CUDBGResult res;
 
 #ifndef GDBSERVER
-    if (cuda_remote)
+    if (is_remote_target (current_inferior ()->process_target ()))
         return CUDBG_SUCCESS;
 #endif
 
@@ -717,35 +744,6 @@ cudbgipcFinalize(void)
     cudbgDebugClientCallback = NULL;
 
     return CUDBG_SUCCESS;
-}
-
-static CUDBGIPCStat_t api_call_stat[CUDBGIPC_API_STAT_MAX];
-
-void cudbgipcStatsCollect (uint32_t id,const char *name, struct timespec *start, struct timespec *end)
-{
-    double lapsed;
-
-    gdb_assert (id < CUDBGIPC_API_STAT_MAX);
-
-    lapsed = (end->tv_sec-start->tv_sec)*1e6+(end->tv_nsec-start->tv_nsec)*1e-3;
-    if (!api_call_stat[id].name) {
-        api_call_stat[id].name = name;
-        api_call_stat[id].min_time = 1e9;
-    }
-
-    api_call_stat[id].times_called++;
-    api_call_stat[id].total_time += lapsed;
-
-    if (api_call_stat[id].min_time > lapsed) api_call_stat[id].min_time = lapsed;
-    if (api_call_stat[id].max_time < lapsed) api_call_stat[id].max_time = lapsed;
-}
-
-const CUDBGIPCStat_t *cudbgipcGetProfileStat(uint32_t id)
-{
-    if (id >= CUDBGIPC_API_STAT_MAX)
-        return NULL;
-
-    return api_call_stat[id].name ? api_call_stat+id : NULL;
 }
 
 ATTRIBUTE_PRINTF(1, 2) void cudbgipc_trace(const char *fmt, ...)

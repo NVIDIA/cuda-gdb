@@ -20,9 +20,7 @@
 #define _CUDA_PACKET_MANAGER_H 1
 
 #include "cudadebugger.h"
-#ifdef __QNXTARGET__
 #include "target.h"
-#endif /* __QNXTARGET */
 
 typedef enum {
     /* api */
@@ -108,60 +106,52 @@ typedef enum {
     GET_DEVICE_INFO_SIZES,
     GET_DEVICE_INFO,
     SINGLE_STEP_WARP,
+    UPDATE_CLUSTER_DIM_IN_SM,
 } cuda_packet_type_t;
 
-class remote_target;
-
-extern int hex2bin (const char *hex, gdb_byte *bin, int count);
-extern int bin2hex (const gdb_byte *bin, char *hex, int count);
-
 /* Device Properties */
-void cuda_remote_query_device_spec (remote_target *ops,
-				    uint32_t dev_id, uint32_t *num_sms, uint32_t *num_warps, uint32_t *num_lanes,
-				    uint32_t *num_registers,
-				    char **dev_type, char **sm_type);
+void cuda_remote_query_device_spec (uint32_t dev_id, uint32_t *num_sms,
+				    uint32_t *num_warps, uint32_t *num_lanes,
+				    uint32_t *num_registers, char **dev_type,
+				    char **sm_type);
 
 /* Notifications */
-bool cuda_remote_notification_pending (remote_target *ops);
-bool cuda_remote_notification_received (remote_target *ops);
-bool cuda_remote_notification_aliased_event (remote_target *ops);
-#ifdef __QNXTARGET__
-void cuda_remote_notification_analyze (remote_target *ops, ptid_t ptid, struct target_waitstatus *ws);
-#else /* __QNXTARGET__ */
-void cuda_remote_notification_analyze (remote_target *ops, ptid_t ptid);
-#endif /* __QNXTARDET__ */
-void cuda_remote_notification_mark_consumed (remote_target *ops);
-void cuda_remote_notification_consume_pending (remote_target *ops);
+bool cuda_remote_notification_pending ();
+bool cuda_remote_notification_received ();
+bool cuda_remote_notification_aliased_event ();
+void cuda_remote_notification_analyze (ptid_t ptid, struct target_waitstatus *ws);
+void cuda_remote_notification_mark_consumed ();
+void cuda_remote_notification_consume_pending ();
 
 /* Events */
 bool cuda_remote_query_sync_events (void);
 bool cuda_remote_query_async_events (void);
 
 /* Others */
-void cuda_remote_update_grid_id_in_sm (remote_target *ops, uint32_t dev, uint32_t sm);
-void cuda_remote_update_cluster_idx_in_sm (remote_target *ops, uint32_t dev, uint32_t sm);
-void cuda_remote_update_block_idx_in_sm (remote_target *ops, uint32_t dev, uint32_t sm);
-void cuda_remote_update_thread_idx_in_warp (remote_target *ops, uint32_t dev, uint32_t sm, uint32_t wp);
+void cuda_remote_update_grid_id_in_sm (uint32_t dev, uint32_t sm);
+void cuda_remote_update_cluster_idx_in_sm (uint32_t dev, uint32_t sm);
+void cuda_remote_update_cluster_dim_in_sm (uint32_t dev, uint32_t sm);
+void cuda_remote_update_block_idx_in_sm (uint32_t dev, uint32_t sm);
+void cuda_remote_update_thread_idx_in_warp (uint32_t dev, uint32_t sm, uint32_t wp);
 #ifdef __QNXTARGET__
-void cuda_remote_set_symbols (remote_target *ops, bool set_extra_symbols, bool *symbols_are_set);
+void cuda_remote_set_symbols (bool set_extra_symbols, bool *symbols_are_set);
 #endif /* __QNXTARGET__ */
-void cuda_remote_initialize (remote_target *remote,
-			     CUDBGResult *get_debugger_api_res, CUDBGResult *set_callback_api_res, 
-                             CUDBGResult *initialize_api_res, bool *cuda_initialized, 
-                             bool *cuda_debugging_enabled, bool *driver_is_compatiable,
-			     uint32_t *major, uint32_t *minor, uint32_t *revision);
-CUDBGResult cuda_remote_api_finalize (remote_target *remote);
-#ifdef __QNXTARGET__
-bool cuda_remote_check_pending_sigint (remote_target *ops, ptid_t ptid);
-#else /* __QNXTARGET__ */
-bool cuda_remote_check_pending_sigint (remote_target *ops);
-#endif /* __QNXTARGET__ */
+void cuda_remote_initialize (CUDBGResult *get_debugger_api_res,
+			     CUDBGResult *set_callback_api_res,
+			     CUDBGResult *initialize_api_res,
+			     bool *cuda_initialized,
+			     bool *cuda_debugging_enabled,
+			     bool *driver_is_compatiable, uint32_t *major,
+			     uint32_t *minor, uint32_t *revision);
+CUDBGResult cuda_remote_api_finalize ();
 
-void cuda_remote_set_option (remote_target *ops);
-void cuda_remote_query_trace_message (remote_target *ops);
+bool cuda_remote_check_pending_sigint (ptid_t ptid);
+
+void cuda_remote_set_option ();
+void cuda_remote_query_trace_message ();
 
 #ifdef __QNXTARGET__
-void cuda_qnx_version_handshake (remote_target *ops);
+void cuda_qnx_version_handshake ();
 #endif /* __QNXTARGET__ */
 
 #endif

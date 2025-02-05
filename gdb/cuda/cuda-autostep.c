@@ -201,20 +201,21 @@ count_instructions (uint64_t pc, uint64_t end_pc)
 {
   kernel_t kernel = cuda_current_focus::get ().logical ().kernel ();
   int count = 0;
-  uint32_t inst_size = 0;
-  module_t module = kernel_get_module (kernel);
+
+  auto module = kernel_get_module (kernel);
   gdb_assert (module);
 
-  auto disassembler = module_disassembler (module);
+  auto disassembler = module->disassembler ();
   gdb_assert (disassembler);
 
+  const uint32_t inst_size = disassembler->insn_size ();
+  
   cuda_adjust_device_code_address (pc, &pc);
   for (; pc < end_pc; pc += inst_size)
     {
-      std::string inst;
-      auto found = disassembler->disassemble (pc, inst, inst_size);
+      auto inst = disassembler->disassemble_instruction (pc);
       /* Stop counting if pc is outside of the routine boundary */
-      if (!found)
+      if (!inst)
         return count;
       ++count;
     }

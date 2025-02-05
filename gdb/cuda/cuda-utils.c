@@ -56,6 +56,7 @@
 #define RECORD_DEVICE(i) ((i) + 1)
 #define DEVICE_RECORD(i) ((i)-1)
 
+/* Default to false - this mechanism is legacy. */
 bool cuda_use_lockfile = false;
 
 static const char cuda_gdb_lock_file[] = "cuda-gdb.lock";
@@ -351,7 +352,7 @@ cuda_gdb_lock_file_create (void)
   mode_t old_umask;
   int my_pid = (int)getpid ();
 
-  /* Default == true, can be overriden via a command-line option */
+  /* Default == false, can be overriden via a command-line option */
   if (!cuda_use_lockfile)
     return;
 
@@ -472,8 +473,6 @@ cuda_gdb_tmpdir_setup (void)
 const char *
 cuda_gdb_tmpdir_getdir (void)
 {
-  if (!cuda_gdb_tmp_dir)
-    cuda_gdb_tmpdir_setup ();
   return cuda_gdb_tmp_dir;
 }
 
@@ -872,30 +871,6 @@ cuda_gdb_chown_to_pid_uid (int pid, const char *path)
   return chown (path, uid, -1) == 0;
 }
 
-void
-cuda_utils_initialize (void)
-{
-  static bool utils_initialized = false;
-
-  /* Check if cuda utils were already initialized*/
-  if (utils_initialized)
-    return;
-
-  /* Create the base temporary directory */
-  cuda_gdb_tmpdir_create_basedir ();
-
-  /* Create a lockfile to prevent multiple instances of cuda-gdb from
-   * interfering with each other */
-  cuda_gdb_lock_file_create ();
-
-  /* Populate the temporary directory with a unique subdirectory for this
-   * instance. */
-  if (!cuda_gdb_tmp_dir)
-    cuda_gdb_tmpdir_setup ();
-
-  utils_initialized = true;
-}
-
 static bool cuda_host_address_resident_on_gpu = false;
 
 void
@@ -936,4 +911,20 @@ void
 cuda_set_device_launch_used (bool value)
 {
   cuda_app_uses_device_launch = value;
+}
+
+void _initialize_cuda_utils ();
+void
+_initialize_cuda_utils ()
+{
+  /* Create the base temporary directory */
+  cuda_gdb_tmpdir_create_basedir ();
+
+  /* Create a lockfile to prevent multiple instances of cuda-gdb from
+   * interfering with each other */
+  cuda_gdb_lock_file_create ();
+
+  /* Populate the temporary directory with a unique subdirectory for this
+   * instance. */
+  cuda_gdb_tmpdir_setup ();
 }

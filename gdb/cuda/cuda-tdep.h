@@ -36,17 +36,17 @@ extern bool cuda_producer_is_open64;
 
 #define EV_CURRENT 1
 #define ELFOSABI_CUDA 0x33
-#define CUDA_ELFOSABIV_16BIT 0 /* 16-bit ctaid.x size */
-#define CUDA_ELFOSABIV_32BIT 1 /* 32-bit ctaid.x size */
-#define CUDA_ELFOSABIV_RELOC 2 /* ELFOSABIV_32BIT + All relocators in DWARF*/
-#define CUDA_ELFOSABIV_ABI 3   /* ELFOSABIV_RELOC + Calling Convention */
-#define CUDA_ELFOSABIV_SYSCALL                                                \
-  4 /* ELFOSABIV_ABI + Improved syscall relocation */
-#define CUDA_ELFOSABIV_SEPCOMP                                                \
-  5 /* ELFOSABIV_SYSCALL + new caller-callee save conventions */
-#define CUDA_ELFOSABIV_ABI3 6 /* ELFOSABIV_SEPCOMP + fixes */
-#define CUDA_ELFOSABIV_ABI4 7 /* ELFOSABIV_ABI3 + runtime JIT link */
-#define CUDA_ELFOSABIV_LATEST CUDA_ELFOSABIV_ABI4
+#define CUDA_ELFOSABIV_16BIT   0 /* 16-bit ctaid.x size */
+#define CUDA_ELFOSABIV_32BIT   1 /* 32-bit ctaid.x size */
+#define CUDA_ELFOSABIV_RELOC   2 /* ELFOSABIV_32BIT + All relocators in DWARF*/
+#define CUDA_ELFOSABIV_ABI     3   /* ELFOSABIV_RELOC + Calling Convention */
+#define CUDA_ELFOSABIV_SYSCALL 4 /* ELFOSABIV_ABI + Improved syscall relocation */
+#define CUDA_ELFOSABIV_SEPCOMP 5 /* ELFOSABIV_SYSCALL + new caller-callee save conventions */
+#define CUDA_ELFOSABIV_ABI3    6 /* ELFOSABIV_SEPCOMP + fixes */
+#define CUDA_ELFOSABIV_ABI4    7 /* ELFOSABIV_ABI3 + runtime JIT link */
+#define CUDA_ELFOSABIV_STD_ELF 8 /* Standard ELF revision */
+#define CUDA_ELFOSABIV_LATEST  CUDA_ELFOSABIV_STD_ELF
+
 #define CUDA_ELF_TEXT_PREFIX                                                  \
   ".text." /* CUDA ELF text section format: ".text.KERNEL" */
 
@@ -293,7 +293,6 @@ struct cuda_signal_info_st
 /* Prototypes to avoid implicit declarations (hack-hack) */
 
 extern bool cuda_initialized;
-extern bool cuda_remote;
 
 struct partial_symtab;
 void switch_to_cuda_thread (const cuda_coords &coords);
@@ -320,6 +319,9 @@ bool cuda_breakpoint_hit_p (cuda_coords &coords);
 
 uint64_t cuda_get_last_driver_api_error_code (void);
 void cuda_get_last_driver_api_error_func_name (char **name);
+bool cuda_get_last_driver_api_error_source_name (std::string &source);
+bool cuda_get_last_driver_api_error_name (std::string &name);
+bool cuda_get_last_driver_api_error_string (std::string &string);
 uint64_t cuda_get_last_driver_internal_error_code (void);
 
 /* Debugging */
@@ -361,6 +363,7 @@ bool cuda_sstep_kernel_has_terminated (void);
 
 /*Registers */
 uint64_t cuda_check_dwarf2_reg_ptx_virtual_register (uint64_t dwarf2_reg);
+uint64_t cuda_check_dwarf2_reg_ascii_encoded_register (struct gdbarch *gdbarch, uint64_t dwarf2_reg);
 int cuda_reg_to_regnum_extrapolated (struct gdbarch *gdbarch, int reg);
 
 int cuda_reg_to_regnum (struct gdbarch *gdbarch, int reg);
@@ -410,8 +413,8 @@ void cuda_write_memory (CORE_ADDR address, const gdb_byte *buf,
                         struct type *type);
 
 /*Breakpoints */
-void cuda_resolve_breakpoints (int bp_number_from, elf_image_t elf_image);
-void cuda_unresolve_breakpoints (elf_image_t elf_image);
+void cuda_resolve_breakpoints (int bp_number_from, cuda_module* module);
+void cuda_unresolve_breakpoints (cuda_module* module);
 void cuda_reset_invalid_breakpoint_location_section (struct objfile *objfile);
 int cuda_breakpoint_address_match (struct gdbarch *gdbarch,
                                    const address_space *aspace1,
@@ -439,9 +442,7 @@ const char *cuda_gdb_session_get_dir (void);
 uint32_t cuda_gdb_session_get_id (void);
 
 /* Attach support */
-void cuda_nat_attach (void);
-void cuda_do_detach (struct inferior *inf, bool remote);
-void cuda_remote_attach (void);
+void cuda_do_detach (struct inferior *inf);
 
 /* Support for detecting host shadow functions */
 void cuda_find_objfile_host_shadow_functions (struct objfile *objfile);

@@ -140,6 +140,7 @@ template <typename T>
 const std::string
 cuda_coord_to_string (const T &coord)
 {
+  /* Do not expose CUDA_IGNORE - this denotes coords that should never be exposed to the user */
   gdb_assert (coord != CUDA_IGNORE);
   if (coord == CUDA_INVALID)
     return std::string{ "invalid" };
@@ -240,6 +241,30 @@ cuda_coords::to_string () const
 
   /* Return the pretty string */
   return ret;
+}
+
+void
+cuda_coords::emit_mi_output () const
+{
+  struct ui_out *uiout = current_uiout;
+  const auto &p = m_physical;
+  const auto &l = m_logical;
+
+  ui_out_emit_type<ui_out_type_tuple> cuda_focus (uiout, "CudaFocus");
+
+  uiout->field_fmt ("device", "%s", cuda_coord_to_string (p.dev ()).c_str ());
+  uiout->field_fmt ("sm", "%s", cuda_coord_to_string (p.sm ()).c_str ());
+  uiout->field_fmt ("warp", "%s", cuda_coord_to_string (p.wp ()).c_str ());
+  uiout->field_fmt ("lane", "%s", cuda_coord_to_string (p.ln ()).c_str ());
+  uiout->field_fmt ("kernel", "%s", cuda_coord_to_string (l.kernelId ()).c_str ());
+  uiout->field_fmt ("grid", "%s", cuda_coord_to_string (l.gridId ()).c_str ());
+
+  if (!cuda_coord_is_ignored (l.clusterIdx ()))
+    uiout->field_fmt ("clusterIdx", "%s",
+		      cuda_coord_to_string (l.clusterIdx ()).c_str ());
+
+  uiout->field_fmt ("blockIdx", "%s", cuda_coord_to_string (l.blockIdx ()).c_str ());
+  uiout->field_fmt ("threadIdx", "%s", cuda_coord_to_string (l.threadIdx ()).c_str ());
 }
 
 void
@@ -444,27 +469,7 @@ cuda_current_focus::printFocus (bool switching)
 
   if (uiout->is_mi_like_p ())
     {
-      const auto &cur = m_current_focus.m_coords;
-      ui_out_emit_type<ui_out_type_tuple> cuda_focus (uiout, "CudaFocus");
-
-      uiout->field_signed ("device", cur.physical ().dev ());
-      uiout->field_signed ("sm", cur.physical ().sm ());
-      uiout->field_signed ("warp", cur.physical ().wp ());
-      uiout->field_signed ("lane", cur.physical ().ln ());
-      uiout->field_signed ("kernel", cur.logical ().kernelId ());
-      uiout->field_signed ("grid", cur.logical ().gridId ());
-
-      if (!cuda_coord_is_ignored (cur.logical ().clusterIdx ()))
-        uiout->field_fmt (
-            "clusterIdx", "(%u,%u,%u)", cur.logical ().clusterIdx ().x,
-            cur.logical ().clusterIdx ().y, cur.logical ().clusterIdx ().z);
-
-      uiout->field_fmt ("blockIdx", "(%u,%u,%u)", cur.logical ().blockIdx ().x,
-                        cur.logical ().blockIdx ().y,
-                        cur.logical ().blockIdx ().z);
-      uiout->field_fmt (
-          "threadIdx", "(%u,%u,%u)", cur.logical ().threadIdx ().x,
-          cur.logical ().threadIdx ().y, cur.logical ().threadIdx ().z);
+      m_current_focus.m_coords.emit_mi_output ();
     }
   else
     {

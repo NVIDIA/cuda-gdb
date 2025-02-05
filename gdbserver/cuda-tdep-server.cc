@@ -408,9 +408,6 @@ cuda_get_debugger_api (void)
 static void
 cuda_initialize (void)
 {
-  CORE_ADDR useExtDebuggerAddr = 0;
-  uint32_t useExtDebugger = 0;
-
   if (cuda_initialized)
     return;
 
@@ -419,7 +416,11 @@ cuda_initialize (void)
   if (api_initialize_res == CUDBG_SUCCESS ||
       api_initialize_res == CUDBG_ERROR_SOME_DEVICES_WATCHDOGGED)
     {
+      /* Sucessfully initialized */
       cuda_initialized = true;
+      /* Check to see if we are using UD */
+      CORE_ADDR useExtDebuggerAddr = 0;
+      uint32_t useExtDebugger = 0;
       useExtDebuggerAddr = cuda_get_symbol_address_from_cache (_STRING_(CUDBG_USE_EXTERNAL_DEBUGGER));
       if (useExtDebuggerAddr) {
         target_read_memory (useExtDebuggerAddr, (gdb_byte *)&useExtDebugger, sizeof(useExtDebugger));

@@ -463,9 +463,15 @@ start_event_loop ()
 	     the asyncio fd read event isn't cleared. Each following
 	     time through the loop we repeat this sequence.
 	  */
-
-	  if (target_has_execution ())
-	    target_async (0);
+          try
+	    {
+	      if (target_has_execution ())
+	        target_async (0);
+	    }
+	  catch (const gdb_exception &)
+	    {
+	      /* Ignore any exceptions.  */
+	    }
 #endif
 	}
 

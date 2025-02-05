@@ -762,17 +762,6 @@ input_interrupt (int unused)
 	  fprintf (stderr, "client connection closed\n");
 	  return;
 	}
-#ifdef NVIDIA_CUDA_GDB
-      else if (cc == 1 && c == SERIAL_REMOTE_STOP_CMD)
-      {
-#ifdef __QNX__
-        the_target->request_interrupt ();
-#else
-	the_target->unexpected_stop ();
-#endif
-        return;
-      }
-#endif
       else if (cc != 1 || c != '\003')
 	{
 	  fprintf (stderr, "input_interrupt, count = %d c = %d ", cc, c);

@@ -62,10 +62,10 @@ const char *message_types[] =
   "DStMsg_tidnames",    /* 26  0x1A */
   "DStMsg_procfsinfo",    /* 27  0x1B */
   "DStMsg_procfsstatus",    /* 28  0x1C */
+  "DStMsg_targenv",    /* 29  0x1D */
   /* CUDA request */
-  "DStMsg_cuda",    /* 29 0x1D */
+  "DStMsg_cuda",    /* 30 0x1E */
   /* Room for new codes here.  */
-  "unused",
   "unused",
   "DSrMsg_err",   /* 32  0x20 */
   "DSrMsg_ok",      /* 33  0x21 */

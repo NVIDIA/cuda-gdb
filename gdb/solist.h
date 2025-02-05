@@ -86,7 +86,7 @@ struct so_list
      that supports outputting multiple segments once the related code
      supports them.  */
   CORE_ADDR addr_low, addr_high;
-#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+#ifdef __QNXTARGET__
     /* Build id in raw format, contains verbatim contents of
        .note.gnu.build-id note data.  This is actual
        BUILD_ID which comes either from the remote target via qXfer
@@ -177,11 +177,6 @@ struct target_so_ops
      NULL, in which case no specific preprocessing is necessary
      for this target.  */
   void (*handle_event) (void);
-#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
-    /* Return 0 if SO does not match target SO it is supposed to
-       represent.  Return 1 otherwise.  */
-    int (*validate) (const struct so_list *so);
-#endif
 };
 
 using so_list_range = next_range<so_list>;

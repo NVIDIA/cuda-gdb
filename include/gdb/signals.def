@@ -224,9 +224,23 @@ SET (GDB_SIGNAL_CUDA_INVALID_MANAGED_MEMORY_ACCESS,  167, "CUDA_EXCEPTION_15", "
 SET (GDB_SIGNAL_CUDA_LANE_NONMIGRATABLE_ATOMSYS,     168, "CUDA_EXCEPTION_16", "Non-migratable System-scoped Atomic Access")
 SET (GDB_SIGNAL_CUDA_CLUSTER_BLOCK_NOT_PRESENT,      169, "CUDA_EXCEPTION_17", "Cluster target block not present")
 SET (GDB_SIGNAL_CUDA_CLUSTER_OUT_OF_RANGE_ADDRESS,   170, "CUDA_EXCEPTION_18", "Cluster out of range address")
-/* QNX */
-SET (GDB_SIGNAL_SELECT, 171, "SIGSELECT", "Data available")
+SET (GDB_SIGNAL_CUDA_WARP_STACK_CANARY,              171, "CUDA_EXCEPTION_19", "Warp Stack Canary")
 /* END CUDA */
+
+/* signal used for select() in QNX NTO
+   All signals from GDB_SIGNAL_SELECT to GDB_SIGNAL_LAST will be ignored
+   and treated as OS internal by default */
+SET (GDB_SIGNAL_SELECT,      172, "SIGSELECT", "Data available")
+SET (GDB_SIGNAL_PHOTON,      173, "SIGPHOTON", "Legacy Photon")
+SET (GDB_SIGNAL_PROCNTO_59,  174, "PROCNTO59", "NTO reserved")
+SET (GDB_SIGNAL_PROCNTO_60,  175, "PROCNTO60", "NTO reserved")
+SET (GDB_SIGNAL_PROCNTO_61,  176, "PROCNTO61", "NTO reserved")
+SET (GDB_SIGNAL_PROCNTO_62,  177, "PROCNTO62", "NTO reserved")
+SET (GDB_SIGNAL_PROCNTO_63,  178, "PROCNTO63", "NTO reserved")
+SET (GDB_SIGNAL_PROCNTO_64,  179, "PROCNTO64", "NTO reserved")
+SET (GDB_SIGNAL_DOOM,        180, "SIGDOOM", "Lack of resources")
+/* END QNX NTO */
+
 /* If you are adding a new signal, add it just above this comment.  */
 
 /* Last and unused enum value, for sizing arrays, etc.  */
@@ -234,5 +248,5 @@ SET (GDB_SIGNAL_SELECT, 171, "SIGSELECT", "Data available")
 SET (GDB_SIGNAL_LAST, 152, NULL, "GDB_SIGNAL_LAST")
 ***/
 /* CUDA */
-SET (GDB_SIGNAL_LAST, 172, NULL, "GDB_SIGNAL_LAST")
+SET (GDB_SIGNAL_LAST, 181, NULL, "GDB_SIGNAL_LAST")
 /* END CUDA */

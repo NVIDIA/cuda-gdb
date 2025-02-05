@@ -150,6 +150,34 @@ cuda_exception::print_exception_name () const
   current_uiout->text ("\n");
 }
 
+/* Cluster exceptions are imprecise and lack an errorpc. We don't have
+attributable line information to the offending instruction. As a result, we
+print limited information about the exception.
+*/
+void
+cuda_exception::print_cluster_exception_origin () const
+{
+  CuDim3 targetBlockIdx;
+
+  const auto &c = m_coord.physical ();
+
+  if (c.wp () == CUDA_WILDCARD)
+    return;
+
+  if (!cuda_state::warp_has_cluster_exception_target_block_idx (
+	  c.dev (), c.sm (), c.wp ()))
+    return;
+
+  targetBlockIdx = cuda_state::warp_get_cluster_exception_target_block_idx (
+      c.dev (), c.sm (), c.wp ());
+  current_uiout->text (
+      "The imprecise exception was triggered by a thread in cluster");
+  current_uiout->text (" for access to shared memory for target blockIdx");
+  current_uiout->field_fmt ("blockIdx", "(%u,%u,%u)", targetBlockIdx.x,
+			    targetBlockIdx.y, targetBlockIdx.z);
+  current_uiout->text ("\n");
+}
+
 void
 cuda_exception::printMessage () const
 {
@@ -177,17 +205,16 @@ cuda_exception::printMessage () const
     case GDB_SIGNAL_CUDA_WARP_INVALID_PC:
     case GDB_SIGNAL_CUDA_WARP_HARDWARE_STACK_OVERFLOW:
     case GDB_SIGNAL_CUDA_WARP_ILLEGAL_ADDRESS:
-#if (CUDBG_API_VERSION_REVISION >= 131)
-    case GDB_SIGNAL_CUDA_CLUSTER_OUT_OF_RANGE_ADDRESS:
-    case GDB_SIGNAL_CUDA_CLUSTER_BLOCK_NOT_PRESENT:
-#endif
+    case GDB_SIGNAL_CUDA_LANE_SYSCALL_ERROR:
+    case GDB_SIGNAL_CUDA_LANE_USER_STACK_OVERFLOW:
+    case GDB_SIGNAL_CUDA_WARP_STACK_CANARY:
       print_exception_name ();
       print_exception_origin ();
       break;
-    case GDB_SIGNAL_CUDA_LANE_SYSCALL_ERROR:
-    case GDB_SIGNAL_CUDA_LANE_USER_STACK_OVERFLOW:
+    case GDB_SIGNAL_CUDA_CLUSTER_OUT_OF_RANGE_ADDRESS:
+    case GDB_SIGNAL_CUDA_CLUSTER_BLOCK_NOT_PRESENT:
       print_exception_name ();
-      print_exception_origin ();
+      print_cluster_exception_origin ();
       break;
     case GDB_SIGNAL_CUDA_UNKNOWN_EXCEPTION:
     default:
@@ -380,6 +407,11 @@ cuda_exception::cuda_exception ()
       m_recoverable = false;
       break;
 #endif
+    case CUDBG_EXCEPTION_WARP_STACK_CANARY:
+      m_gdb_sig = GDB_SIGNAL_CUDA_WARP_STACK_CANARY;
+      m_valid = true;
+      m_recoverable = false;
+      break;
     case CUDBG_EXCEPTION_NONE:
       break;
     case CUDBG_EXCEPTION_UNKNOWN:
@@ -445,6 +477,8 @@ cuda_exception::type_to_name (CUDBGException_t type)
       return gdb_signal_to_string (
 	  GDB_SIGNAL_CUDA_CLUSTER_OUT_OF_RANGE_ADDRESS);
 #endif
+    case CUDBG_EXCEPTION_WARP_STACK_CANARY:
+      return gdb_signal_to_string (GDB_SIGNAL_CUDA_WARP_STACK_CANARY);
     default:
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_UNKNOWN_EXCEPTION);
     }

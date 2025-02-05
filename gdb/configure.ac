@@ -1714,6 +1714,12 @@ if test "${gdb_native}" = yes; then
    fi
    LDFLAGS="$old_LDFLAGS"
 fi
+# CUDA - always force the dynamic_list path for cuda-gdb
+# otherwise we will expose every symbol, including libraries
+# we will statically link against.
+if test x"$enable_cuda" = xyes; then
+  dynamic_list=true
+fi
 if $dynamic_list; then
   found="-Wl,--dynamic-list"
   RDYNAMIC='-Wl,--dynamic-list=$(srcdir)/proc-service.list'

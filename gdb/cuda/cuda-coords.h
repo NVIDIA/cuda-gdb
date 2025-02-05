@@ -543,6 +543,8 @@ public:
 
   /* Convert the coord to a std::string representation */
   const std::string to_string () const;
+  /* Output mi_out_p like record for the coord to current_ui_out. */
+  void emit_mi_output () const;
 
   bool
   isFullyDefined () const

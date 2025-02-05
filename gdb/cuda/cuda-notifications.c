@@ -129,14 +129,6 @@ cuda_notification_trace (const char *fmt, ...)
 }
 
 void
-cuda_notification_initialize (void)
-{
-  memset (&cuda_notification_info, 0, sizeof cuda_notification_info);
-  pthread_mutex_init (&cuda_notification_info.mutex, NULL);
-  cuda_notification_info.initialized = true;
-}
-
-void
 cuda_notification_reset (void)
 {
   gdb_assert (cuda_notification_info.initialized);
@@ -454,8 +446,8 @@ cuda_notification_aliased_event (void)
   bool aliased_event;
 
 #ifndef GDBSERVER
-  if (cuda_remote)
-    cuda_remote_notification_aliased_event (cuda_get_current_remote_target ());
+  if (is_remote_target (current_inferior ()->process_target ()))
+    cuda_remote_notification_aliased_event ();
 #endif
 
   cuda_notification_acquire_lock ();
@@ -483,8 +475,8 @@ cuda_notification_pending (void)
   bool pending;
 
 #ifndef GDBSERVER
-  if (cuda_remote)
-    return cuda_remote_notification_pending (cuda_get_current_remote_target ());
+  if (is_remote_target (current_inferior ()->process_target ()))
+    return cuda_remote_notification_pending ();
 #endif
 
   cuda_notification_acquire_lock ();
@@ -502,8 +494,8 @@ cuda_notification_received (void)
   bool received;
 
 #ifndef GDBSERVER
-  if (cuda_remote)
-    return cuda_remote_notification_received (cuda_get_current_remote_target ());
+  if (is_remote_target (current_inferior ()->process_target ()))
+    return cuda_remote_notification_received ();
 #endif
 
   cuda_notification_acquire_lock ();
@@ -519,13 +511,9 @@ void
 cuda_notification_analyze (ptid_t ptid, struct target_waitstatus *ws, int trap_expected)
 {
 #ifndef GDBSERVER
-  if (cuda_remote)
+  if (is_remote_target (current_inferior ()->process_target ()))
     {
-#ifdef __QNXTARGET__
-      cuda_remote_notification_analyze (cuda_get_current_remote_target (), ptid, ws);
-#else /* __QNXTARGET__ */
-      cuda_remote_notification_analyze (cuda_get_current_remote_target (), ptid);
-#endif /* __QNXTARGET__ */
+      cuda_remote_notification_analyze (ptid, ws);
       return;
     }
 #endif
@@ -556,9 +544,9 @@ void
 cuda_notification_mark_consumed (void)
 {
 #ifndef GDBSERVER
-  if (cuda_remote)
+  if (is_remote_target (current_inferior ()->process_target ()))
     {
-      cuda_remote_notification_mark_consumed (cuda_get_current_remote_target ());
+      cuda_remote_notification_mark_consumed ();
       return;
     }
 #endif
@@ -580,12 +568,22 @@ void
 cuda_notification_consume_pending (void)
 {
 #ifndef GDBSERVER
-  if (cuda_remote)
+  if (is_remote_target (current_inferior ()->process_target ()))
     {
-      cuda_remote_notification_consume_pending (cuda_get_current_remote_target ());
+      cuda_remote_notification_consume_pending ();
       return;
     }
 #endif
 
   cuda_notification_info.pending_send = false;
 }
+
+void _initialize_cuda_notification ();
+void
+_initialize_cuda_notification ()
+{
+  memset (&cuda_notification_info, 0, sizeof cuda_notification_info);
+  pthread_mutex_init (&cuda_notification_info.mutex, NULL);
+  cuda_notification_info.initialized = true;
+}
+

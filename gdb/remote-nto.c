@@ -1,12 +1,12 @@
 /*
- * $QNXtpLicenseC:  
- * Copyright 2005,2007, QNX Software Systems. All Rights Reserved.
+ * $QNXtpLicenseC:
+ * Copyright 2005-2021 QNX Software Systems. All Rights Reserved.
  *
- * This source code may contain confidential information of QNX Software 
- * Systems (QSS) and its licensors.  Any use, reproduction, modification, 
- * disclosure, distribution or transfer of this software, or any software 
- * that includes or is based upon any of this code, is prohibited unless 
- * expressly authorized by QSS by written agreement.  For more information 
+ * This source code may contain confidential information of QNX Software
+ * Systems (QSS) and its licensors.  Any use, reproduction, modification,
+ * disclosure, distribution or transfer of this software, or any software
+ * that includes or is based upon any of this code, is prohibited unless
+ * expressly authorized by QSS by written agreement.  For more information
  * (including whether this source code file has been published) please
  * email licensing@qnx.com. $
 */
@@ -47,11 +47,8 @@
 #include "exceptions.h"
 #include <fcntl.h>
 #include <signal.h>
-#include <termios.h>
-/* CUDA: unblocking gdb 10.1 upgrade */
-#include <queue>
 
-#include "remote-nto.h"
+#include <string.h>
 #include "terminal.h"
 #include "inferior.h"
 #include "target.h"
@@ -65,14 +62,19 @@
 #include "gdbcore.h"
 #include "serial.h"
 #include "readline/readline.h"
-#include "cuda/cuda-packet-manager.h"
-#include "cuda/remote-cuda.h"
-#include "source.h"
-
 #include "infrun.h"
-
+#include "remote.h"
 #include "elf-bfd.h"
 #include "elf/common.h"
+
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-linux-nat-template.h"
+#include "remote-nto.h"
+#endif
+
+#ifdef NVIDIA_BUGFIX
+#include <queue>
+#endif
 
 #include "environ.h"
 
@@ -81,20 +83,15 @@
 #include "nto-share/dsmsgs.h"
 #include "nto-tdep.h"
 
-#ifdef __QNXNTO__
-#if 0
-#include <sys/elf_notes.h>
-#warning FIXME
-#if __PTR_BITS__ == 32
-#define Elf32_Phdr Elf32_External_Phdr
-#elif __PTR_BITS__ == 64
-#define Elf64_Phdr Elf64_External_Phdr
+#ifndef __MINGW32__
+#include <termios.h>
 #else
-#error __PTR_BITS__ not setup correctly
+#define SIGKILL 9
 #endif
-#define __ELF_H_INCLUDED /* Needed for our link.h to avoid including elf.h.  */
-#include <sys/link.h>
-#endif
+
+#include "source.h"
+
+#ifdef __QNXNTO__
 
 #include <sys/debug.h>
 typedef debug_thread_t nto_procfs_status;
@@ -106,15 +103,10 @@ typedef siginfo_t nto_siginfo_t;
 
 #include "solib.h"
 
-
 #ifdef __CYGWIN__
 #include <sys/cygwin.h>
 #endif
 
-#ifdef __MINGW32__
-#define	ENOTCONN	57		/* Socket is not connected */
-#endif
-#
 #ifndef EOK
 #define EOK 0
 #endif
@@ -123,9 +115,9 @@ typedef siginfo_t nto_siginfo_t;
 #define O_BINARY 0
 #endif
 
-#define QNX_READ_MODE	0x0
-#define QNX_WRITE_MODE	0x301
-#define QNX_WRITE_PERMS	0x1ff
+#define QNX_READ_MODE  0x0
+#define QNX_WRITE_MODE  0x301
+#define QNX_WRITE_PERMS  0x1ff
 
 /* The following define does a cast to const gdb_byte * type.  */
 
@@ -134,219 +126,53 @@ typedef siginfo_t nto_siginfo_t;
 #define EXTRACT_UNSIGNED_INTEGER(ptr, len, byte_order) \
   extract_unsigned_integer ((const gdb_byte *)(ptr), len, byte_order)
 
+
+typedef union
+{
+  unsigned char buf[DS_DATA_MAX_SIZE];
+  DSMsg_union_t pkt;
+  TSMsg_text_t text;
+} DScomm_t;
+
+
 #ifdef __MINGW32__
 /* Name collision with a symbol declared in Winsock2.h.  */
 #define recv recvb
 #endif
-
-static int putpkt (const DScomm_t *tran, unsigned);
-
-static int readchar (int timeout);
-
-static int getpkt (DScomm_t *recv, int forever);
-
-static int getpkt_with_retry (DScomm_t *recv, int forever, int max_tries);
-
-static unsigned nto_send_recv (const DScomm_t *tran, DScomm_t *recv, unsigned, int);
-
-static enum target_xfer_status nto_write_bytes (
-    CORE_ADDR memaddr, const gdb_byte *myaddr, int len, ULONGEST *xfered_len);
-
-static enum target_xfer_status nto_read_bytes (
-    CORE_ADDR memaddr, gdb_byte *myaddr, int len, ULONGEST *xfered_len);
-
-static ptid_t nto_parse_notify (const DScomm_t *recv, remote_target *,
-				struct target_waitstatus *status);
-
-void nto_outgoing_text (char *buf, int nbytes);
-
-static int nto_incoming_text (TSMsg_text_t *text, int len);
-
-static void nto_send_init (DScomm_t *tran, unsigned cmd, unsigned subcmd, unsigned chan);
-
-static int nto_send_env (const char *env);
-
-static int nto_send_arg (const char *arg);
-
-static int nto_fd_raw (int fd);
-
-static void nto_interrupt (int signo);
-
-static void nto_interrupt_twice (int signo);
-
-static void interrupt_query (void);
-
-static void upload_command (const char *args, int from_tty);
-
-static void download_command (const char *args, int from_tty);
-
-static void nto_add_commands (void);
-
-static void nto_remove_commands (void);
-
-static int nto_fileopen (char *fname, int mode, int perms);
-
-static void nto_fileclose (int);
-
-static int nto_fileread (char *buf, int size);
-
-static int nto_filewrite (char *buf, int size);
-
-static void nto_pidlist (const char *args, int from_tty);
-
-static struct dsmapinfo *nto_mapinfo (unsigned addr, int first, int elfonly);
-
-static void nto_meminfo (const char *args, int from_tty);
-
-template <class parent>
-class qnx_remote_target : public parent
-{
-public:
-  qnx_remote_target () = default;
-  ~qnx_remote_target () override = default;
-
-  /* Open a remote connection.  */
-  static void open (const char *, int);
-
-  virtual void close () override;
-
-  virtual void load (const char *arg0, int arg1) override;
-
-  virtual void attach (const char *arg0, int arg1) override;
-
-  virtual void post_attach (int arg0) override;
-
-  virtual void detach (inferior *arg0, int arg1) override;
-
-  virtual void resume (ptid_t arg0,
-		       int TARGET_DEBUG_PRINTER () arg1,
-		       enum gdb_signal arg2) override;
-
-  virtual ptid_t wait (ptid_t arg0, struct target_waitstatus *arg1,
-		       target_wait_flags target_options) override;
-
-  virtual void fetch_registers (struct regcache *arg0, int arg1) override;
-
-  virtual void store_registers (struct regcache *arg0, int arg1) override;
-
-  virtual void prepare_to_store (struct regcache *arg0) override;
-
-  virtual enum target_xfer_status xfer_partial (enum target_object object,
-						const char *annex,
-						gdb_byte *readbuf,
-						const gdb_byte *writebuf,
-						ULONGEST offset, ULONGEST len,
-						ULONGEST *xfered_len) override;
-
-  virtual void files_info () override;
-
-  virtual int can_use_hw_breakpoint (enum bptype arg0, int arg1, int arg2) override;
-
-  virtual int insert_breakpoint (struct gdbarch *arg0,
-				 struct bp_target_info *arg1) override;
-  
-  virtual int remove_breakpoint (struct gdbarch *arg0,
-				 struct bp_target_info *arg1,
-				 enum remove_bp_reason arg2) override;
-
-  virtual int insert_hw_breakpoint (struct gdbarch *arg0,
-				    struct bp_target_info *arg1) override;
-
-  virtual int remove_hw_breakpoint (struct gdbarch *arg0,
-				    struct bp_target_info *arg1) override;
-
-  virtual int remove_watchpoint (CORE_ADDR arg0, int arg1,
-				 enum target_hw_bp_type arg2, struct expression *arg3) override;
-
-  virtual int insert_watchpoint (CORE_ADDR arg0, int arg1,
-				 enum target_hw_bp_type arg2, struct expression *arg3) override;
-
-  virtual bool stopped_by_watchpoint () override;
-
-  virtual void kill () override;
-
-  virtual bool can_create_inferior () override;
-
-  virtual void create_inferior (const char *arg0, const std::string &arg1,
-				char **arg2, int arg3) override;
-
-  virtual void mourn_inferior () override;
-
-  virtual void pass_signals (gdb::array_view<const unsigned char>) override
-  { /* QPassSignals used by remote_target::pass_signals is not supported on QNX */ }
-
-  virtual void program_signals (gdb::array_view<const unsigned char>) override
-  { /* QProgramSignals used by remote_target::program_signals is not supported on QNX */ }
-
-  virtual void update_thread_list () override;
-
-  virtual bool can_run () override;
-
-  virtual bool thread_alive (ptid_t ptid) override;
-
-  virtual void stop (ptid_t) override
-  { /* in GDB 7.12, nto_ops.to_stop was set to 0 */ }
-
-  virtual bool has_all_memory () override;
-
-  virtual bool has_memory () override;
-
-  virtual bool has_stack () override;
-
-  virtual bool has_registers () override;
-
-  virtual bool has_execution (inferior *) override;
-
-  virtual std::string pid_to_str (ptid_t) override;
-
-  virtual const char *thread_name (struct thread_info *ti) override;
-
-#ifndef NVIDIA_CUDA_GDB
-  virtual const char *extra_thread_info (thread_info *arg0) override;
+#ifdef NVIDIA_CUDA_GDB
+/* This variable was internal to nto_send_init. We need it in the outer scope
+   to be able to set it to the value we need, since we have two hosts connecting
+   to the pdebug target - cuda-gdb and cuda-gdbserver and `mid` must be kept
+   in sync between them. */
+static unsigned char mid;
 #endif
 
-  virtual int insert_fork_catchpoint (int arg0) override;
-
-  virtual int remove_fork_catchpoint (int arg0) override;
-  
-  virtual int insert_vfork_catchpoint (int arg0) override;
-  
-  virtual int remove_vfork_catchpoint (int arg0) override;
-
-  virtual void follow_fork (inferior *child_inf, ptid_t child_ptid,
-			    target_waitkind fork_kind, bool follow_child,
-			    bool detach_fork) override;
-
-  virtual int insert_exec_catchpoint (int arg0) override;
-
-  virtual int remove_exec_catchpoint (int arg0) override;
-
-  virtual bool supports_multi_process () override;
-
-  virtual int verify_memory (const gdb_byte *data,
-			     CORE_ADDR memaddr, ULONGEST size) override;
-
-  virtual bool is_async_p (void) override;
-
-  virtual bool can_async_p (void) override;
-
-  virtual int get_trace_status (struct trace_status *ts) override;
-
-  virtual bool supports_non_stop (void) override;
-
-  virtual const struct target_desc *read_description () override;
-
-  virtual void remote_check_symbols () override;
-
-  int hw_watchpoint (CORE_ADDR addr, int len, enum target_hw_bp_type type);
-
-  int remove_breakpoint (CORE_ADDR addr, gdb_byte *contents_cache);
-
-  int do_insert_breakpoint (struct gdbarch *arg0,
-			    struct bp_target_info *arg1);
-
+static bool nto_force_hwbp = false;
+/* names of the expected Kernel notifications for readable trace output */
+static const char* const _DSMSGS[12] {
+  "DSMSG_NOTIFY_PIDLOAD",    /* 0 */
+  "DSMSG_NOTIFY_TIDLOAD",    /* 1 */
+  "DSMSG_NOTIFY_DLLLOAD",    /* 2 */
+  "DSMSG_NOTIFY_PIDUNLOAD",  /* 3 */
+  "DSMSG_NOTIFY_TIDUNLOAD",  /* 4 */
+  "DSMSG_NOTIFY_DLLUNLOAD",  /* 5 */
+  "DSMSG_NOTIFY_BRK",        /* 6 */
+  "DSMSG_NOTIFY_STEP",       /* 7 */
+  "DSMSG_NOTIFY_SIGEV",      /* 8 */
+  "DSMSG_NOTIFY_STOPPED",    /* 9 */
+  "DSMSG_NOTIFY_FORK",       /* 10 */
+  "DSMSG_NOTIFY_EXEC"        /* 11 */
 };
 
+static const target_info pdebug_target_info = {
+  "qnx",
+  N_("Remote serial target in pdebug-specific protocol"),
+  N_("Debug a remote machine using the legacy QNX Debugging Protocol.\n\
+  Specify the device it is connected to (e.g. /dev/ser1, <rmt_host>:<port>)\n\
+  or `pty' to launch `pdebug' for debugging.")
+};
+
+#ifdef NVIDIA_CUDA_GDB
 struct nto_remote_inferior_data
 {
   nto_remote_inferior_data() : remote_exe(), remote_cwd(), auxv() {}
@@ -366,9 +192,163 @@ struct nto_remote_inferior_data
   /* Cached auxiliary vector */
   gdb_byte *auxv;
 };
+#else
+struct nto_remote_inferior_data
+{
+  /* File to be executed on remote.  */
+  char *remote_exe;
 
-static struct nto_remote_inferior_data *nto_remote_inferior_data (
-    struct inferior *inf);
+  /* Current working directory on remote.  */
+  char *remote_cwd;
+
+  /* Cached auxiliary vector */
+  gdb_byte *auxv;
+};
+#endif
+
+/*
+ * todo it may make sense to put the session data in here too..
+ */
+
+class pdebug_target : public process_stratum_target
+{
+public:
+
+  pdebug_target () = default;
+  ~pdebug_target () override;
+
+  const target_info &info () const override
+  { return pdebug_target_info; }
+
+  /* Open a remote connection.  */
+  static void pdebug_open (const char *, int);
+  void close () override;
+
+  bool can_attach () override {
+    return true;
+  }
+  void attach ( const char*, int ) override;
+  void post_attach( int ) override;
+  void detach (inferior *, int) override;
+  void disconnect (const char *, int) override;
+  void resume (ptid_t, int TARGET_DEBUG_PRINTER (target_debug_print_step), enum gdb_signal) override;
+  ptid_t wait (ptid_t, struct target_waitstatus *, target_wait_flags) override;
+  void fetch_registers (struct regcache *, int) override;
+  void store_registers (struct regcache *, int) override;
+  void prepare_to_store (struct regcache *) override;
+  void files_info () override;
+  int insert_breakpoint (struct gdbarch *, struct bp_target_info *) override;
+  int remove_breakpoint (struct gdbarch *, struct bp_target_info *, enum remove_bp_reason) override;
+  int can_use_hw_breakpoint (enum bptype, int, int) override;
+  int insert_hw_breakpoint (struct gdbarch *, struct bp_target_info *) override;
+  int remove_hw_breakpoint (struct gdbarch *, struct bp_target_info *) override;
+  int remove_watchpoint (CORE_ADDR, int, enum target_hw_bp_type, struct expression *) override;
+  int insert_watchpoint (CORE_ADDR, int, enum target_hw_bp_type, struct expression *) override;
+  bool stopped_by_watchpoint () override {
+    return nto_stopped_by_watchpoint();
+  }
+#if 0
+  void terminal_init () override;
+  void terminal_inferior () override;
+  void terminal_ours_for_output () override;
+  void terminal_info (const char *, int) override;
+#endif
+  void kill () override;
+  void load (const char *args, int from_tty ) override {
+    return generic_load (args, from_tty);
+  }
+  bool can_create_inferior () override {
+    return true;
+  }
+  int insert_fork_catchpoint (int) override;
+  int remove_fork_catchpoint (int) override;
+  int insert_vfork_catchpoint (int) override;
+  int remove_vfork_catchpoint (int) override;
+  void follow_fork (inferior *, ptid_t, target_waitkind, bool, bool) override;
+  int insert_exec_catchpoint (int) override;
+  int remove_exec_catchpoint (int) override;
+  void create_inferior (const char *, const std::string &, char **, int) override;
+  void mourn_inferior () override;
+  bool can_run () override;
+  bool thread_alive (ptid_t ptid) override;
+  void update_thread_list () override;
+  std::string pid_to_str (ptid_t ptid) override {
+    return nto_pid_to_str (ptid);
+  }
+  const char *extra_thread_info (thread_info *ti ) override {
+    return nto_extra_thread_info( ti );
+  }
+  bool has_all_memory () override;
+  bool has_memory () override;
+  bool has_stack () override;
+  bool has_registers () override;
+  bool can_async_p () override {
+    /* Not yet. */
+    return false;
+  };
+  bool supports_non_stop () override {
+    /* Not yet. */
+    return false;
+  }
+  const struct target_desc *read_description () override;
+  bool supports_multi_process () override {
+    return true;
+  }
+  int verify_memory (const gdb_byte *data, CORE_ADDR memaddr, ULONGEST size) override;
+  enum target_xfer_status xfer_partial (enum target_object object,
+                const char *annex,
+                gdb_byte *readbuf,
+                const gdb_byte *writebuf,
+                ULONGEST offset, ULONGEST len,
+                ULONGEST *xfered_len) override;
+
+public: /* pdebug specific methods */
+
+
+  int       nto_insert_breakpoint (CORE_ADDR, gdb_byte *);
+  int       nto_remove_breakpoint (CORE_ADDR addr, gdb_byte *contents_cache);
+  ptid_t    nto_parse_notify (const DScomm_t *recv, struct target_waitstatus *status);
+  int	    nto_send_env (const char *env);
+  int       nto_send_arg (const char *arg);
+  int       nto_set_thread (ptid_t);
+  int       nto_thread_alive (ptid_t);
+  int       nto_set_thread_alive (ptid_t);
+  int       nto_read_procfsinfo (nto_procfs_info*);
+  int       nto_read_procfsstatus (nto_procfs_status*);
+  void      nto_detach_pid (int pid);
+
+};
+
+/* static functions that must work without a pdebug_target instance */
+static int       nto_close_1 (void);
+static void      nto_send_init (DScomm_t *, unsigned, unsigned, unsigned);
+static unsigned  nto_send_recv (const DScomm_t *, DScomm_t *, unsigned, int);
+static int       nto_start_remote (void);
+/* todo turn nto_remote_inferior_data into a proper class */
+static struct nto_remote_inferior_data
+                *nto_get_remote_inferior_data (struct inferior *inf);
+static int       nto_attach_only (const int pid, DScomm_t *const recv);
+static int       nto_detach_only (const int pid);
+
+/* command extensions */
+static void      nto_add_commands (void);
+static int       nto_fileopen (char *fname, int mode, int perms);
+static void      nto_fileclose (int);
+static int       nto_fileread (char *buf, int size);
+static int       nto_filewrite (char *buf, int size);
+
+/* CTRL-C handling */
+static void      nto_interrupt (int signo);
+static void      nto_interrupt_query (void);
+static void      nto_interrupt_twice (int);
+static void      nto_interrupt_retry (int);
+
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA: This is needed for newer gdb versions */
+static const registry<inferior>::key<struct nto_remote_inferior_data> nto_remote_inferior_data_key;
+#else
+static const struct inferior_data *nto_remote_inferior_data_reg;
+#endif
 
 #ifdef __MINGW32__
 static void
@@ -393,10 +373,18 @@ struct pdebug_session
   bool inherit_env = true;
 
   /* File to be executed on remote.  Assigned to new inferiors.  */
+#ifdef NVIDIA_CUDA_GDB
   std::string remote_exe {};
+#else
+  char *remote_exe;
+#endif
 
   /* Current working directory on remote.  Assigned to new inferiors.  */
+#ifdef NVIDIA_CUDA_GDB
   std::string remote_cwd {};
+#else
+  char *remote_cwd;
+#endif
 
   /* Descriptor for I/O to remote machine.  Initialize it to NULL so that
      nto_open knows that we don't have a file open when the program
@@ -423,11 +411,29 @@ struct pdebug_session
    * buffers allocated on the stack or heap.  */
   DScomm_t recv;
 
-  /* CUDA: unblocking gdb 10.1 upgrade */
+#ifdef NVIDIA_BUGFIX
   std::queue<DScomm_t> pending;
+#endif
 };
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Moved initializers into struct definition */
 struct pdebug_session only_session;
+#else
+struct pdebug_session only_session = {
+  10,
+  false,
+  NULL,
+  NULL,
+  NULL,
+  -1,
+  0,
+  SET_CHANNEL_DEBUG,
+  SET_CHANNEL_DEBUG,
+  0, /* target_proto_major */
+  0, /* target_proto_minor */
+};
+#endif
 
 /* Remote session (connection) to a QNX target. */
 struct pdebug_session *current_session = &only_session;
@@ -435,19 +441,31 @@ struct pdebug_session *current_session = &only_session;
 /* Flag for whether upload command sets the current session's remote_exe.  */
 static bool upload_sets_exec = true;
 
+/* control variables that are now local and no longer global */
+static int watchdog = 0;
+static void
+show_watchdog (struct ui_file *file, int from_tty,
+	       struct cmd_list_element *c, const char *value)
+{
+  gdb_printf (file, _("Watchdog timer is %s.\n"), value);
+}
+
+/* Shadow detach_fork from infrun.c */
+static bool nto_detach_fork = false;
+
 /* These define the version of the protocol implemented here.  */
-#define HOST_QNX_PROTOVER_MAJOR	0
-#define HOST_QNX_PROTOVER_MINOR	7
+#define HOST_QNX_PROTOVER_MAJOR  0
+#define HOST_QNX_PROTOVER_MINOR  7
 
 /* HOST_QNX_PROTOVER 0.8 - 64 bit capable structures.  */
 
 /* Stuff for dealing with the packets which are part of this protocol.  */
 
-#define MAX_TRAN_TRIES 3
-#define MAX_RECV_TRIES 3
+#define MAX_TRAN_TRIES 2
+#define MAX_RECV_TRIES 2
 
-#define FRAME_CHAR	0x7e
-#define ESC_CHAR	0x7d
+#define FRAME_CHAR  0x7e
+#define ESC_CHAR  0x7d
 
 static unsigned char nak_packet[] =
   { FRAME_CHAR, SET_CHANNEL_NAK, 0, FRAME_CHAR };
@@ -477,10 +495,9 @@ static unsigned char ch_text_packet[] =
 
 #if defined(__QNXNTO__) || defined (__SOLARIS__)
 #define errnoconvert(x) x
-#elif defined(__linux__) || defined (__CYGWIN__) || defined (__MINGW32__)
+#elif defined(__linux__) || defined (__CYGWIN__) || defined (__MINGW32__) || defined(__APPLE__)
 
 struct errnomap_t { int nto; int other; };
-
 
 static int
 errnoconvert(int x)
@@ -496,6 +513,11 @@ errnoconvert(int x)
       /* The closest mappings from mingw's errno.h.  */
       {NTO_ENAMETOOLONG, ENAMETOOLONG}, {NTO_ELIBACC, ESRCH},
       {NTO_ELIBEXEC, ENOEXEC}, {NTO_EILSEQ, EILSEQ}, {NTO_ENOSYS, ENOSYS}
+    #elif defined(__APPLE__)
+      {NTO_ENAMETOOLONG, ENAMETOOLONG}, {NTO_ELIBACC, ESRCH},
+      {NTO_ELIBBAD, ESRCH}, {NTO_ELIBSCN, ENOEXEC}, {NTO_ELIBMAX, EPERM},
+      {NTO_ELIBEXEC, ENOEXEC}, {NTO_EILSEQ, EILSEQ}, {NTO_ENOSYS, ENOSYS}
+
     #endif
   };
   int i;
@@ -510,107 +532,100 @@ errnoconvert(int x)
 #error errno mapping not setup for this host
 #endif /* __QNXNTO__ */
 
-/* This variable was internal to nto_send_init. We need it in the outer scope
-   to be able to set it to the value we need, since we have two hosts connecting
-   to the pdebug target - cuda-gdb and cuda-gdbserver and `mid` must be kept
-   in sync between them. */
-static unsigned char mid;
-
-static int
-supports64bit(void)
+/* Get a pointer to the current remote target.  If not connected to a
+   remote target, return NULL.  */
+static pdebug_target *
+get_current_target ()
 {
-  return (current_session->target_proto_major > 0
-	  || current_session->target_proto_minor >= 7);
+  target_ops *proc_target = current_inferior ()->process_target ();
+  return dynamic_cast<pdebug_target *> (proc_target);
 }
 
-/* Compatibility functions for the CUDA remote I/O */
-int
-qnx_getpkt (remote_target *ops, gdb::char_vector* buf, int forever)
+#ifdef NVIDIA_CUDA_GDB
+/* Return true if TARGET is a qnx target, otherwise,
+   return false.  */
+bool 
+is_qnx_target (process_stratum_target *target)
 {
-  int length;
-  DScomm_t recv;
+  return dynamic_cast<pdebug_target *> (target) != NULL;
+}
+#endif
 
-  buf->at (0) = '\0';
+static void remote_unpush_target (pdebug_target *target);
 
-  while (true)
+/*
+ * close the current connection (if any)
+ * clean up all inferiors
+ * and print an error message
+ */
+static void pdebug_error(const char* msg, ...)
+{
+  if(current_session->desc) {
+      serial_close (current_session->desc);
+      /* do not free current_session->desc, this is done in serial_close! */
+      current_session->desc=NULL;
+  }
+  remote_unpush_target (get_current_target());
+
+  va_list ap;
+  va_start (ap, msg);
+  verror (msg, ap);
+  va_end (ap);
+}
+
+/* add a new thread and fill in the qnx thread information */
+static thread_info*
+nto_add_thread (process_stratum_target *targ, int pid, int tid)
+{
+  DScomm_t ttran, trecv;
+  struct tidinfo *ptidinfo;
+  struct nto_thread_info *priv = new struct nto_thread_info ();
+  ptid_t ptid = ptid_t (pid, tid, 0);
+  struct thread_info *ti = nto_find_thread(ptid);
+  if (ti != NULL)
     {
-      /* cuda-gdbserver cannot deal with retries */
-      length = getpkt_with_retry (&recv, forever, 1);
-      if (length <= 0)
-	{
-	  break;
-	}
-      if (current_session->channelrd == SET_CHANNEL_TEXT)
-	{
-	  nto_incoming_text (&recv.text, length);
-	}
-
-      if (recv.pkt.hdr.cmd == DSrMsg_err)
-	{
-	  return -1;
-	}
-      else if (recv.pkt.hdr.cmd == DSrMsg_okcuda)
-	{
-	  /* We need to keep mid in sync. cuda-gdbserver always returns
-	     the latest unused mid in okcuda packets. */
-	  mid = recv.pkt.hdr.mid;
-
-	  length -= sizeof (struct DShdr);
-	  if (length + 1 > buf->size ())
-	    {
-	      error ("Buffer is too small");
-	    }
-	  memcpy (buf->data (), recv.pkt.cuda.data, length);
-	  buf->at (length) = '\0';
-	  return length;
-	}
-      else if (recv.pkt.hdr.cmd == DSrMsg_okdata)
-	{
-	  if (recv.pkt.hdr.mid == mid - 1)
-	    {
-	      error ("Received a pdebug packet, but expected a CUDA packet");
-	    }
-	  else
-	    {
-	      internal_warning ("A pdebug packet came out of order (in_mid = %u, current_mid = %u)", (unsigned)recv.pkt.hdr.mid, (unsigned)mid);
-	      /* Wait for the next packet with correct mid. */
-	      continue;
-	    }
-	}
-      else if (recv.pkt.hdr.cmd == DStMsg_disconnect)
-	{
-	  return -1;
-	}
-      else
-	{
-	  error ("Received invalid CUDA response packet");
-	}
+      warning("Thread %s already exists!", nto_pid_to_str(ptid).c_str());
+      return ti;
     }
+
+  /* also update full thread info */
+  nto_send_init (&ttran, DStMsg_select, DSMSG_SELECT_QUERY, SET_CHANNEL_DEBUG);
+  ttran.pkt.select.pid = pid;
+  ttran.pkt.select.pid = EXTRACT_SIGNED_INTEGER (&ttran.pkt.select.pid,
+						       sizeof(int32_t),
+						       nto_byte_order);
+  ttran.pkt.select.tid = tid;
+  ttran.pkt.select.tid = EXTRACT_SIGNED_INTEGER (&ttran.pkt.select.tid,
+						       sizeof(int32_t),
+						       nto_byte_order);
+  nto_send_recv (&ttran, &trecv, sizeof (ttran.pkt.select), 0);
+  ptidinfo = (struct tidinfo *) trecv.pkt.okdata.data;
+  if ((trecv.pkt.hdr.cmd == DSrMsg_okdata) && (ptidinfo->tid == tid))
+    {
+      priv->fill(ptidinfo);
+    }
+  else
+    {
+      warning("Could not get threadinfo for pid:%d tid:%d!", pid, tid);
+    }
+  return add_thread_with_info (targ, ptid_t (pid, tid, 0), priv);
 }
 
-/* Compatibility functions for the CUDA remote I/O */
-int
-qnx_getpkt_sane (gdb::char_vector* buf, int forever)
+/* Call FUNC wrapped in a TRY/CATCH that swallows all GDB
+   exceptions. */
+static int
+catch_errors (int (*func) ())
 {
-  return qnx_getpkt (cuda_get_current_remote_target (), buf, forever);
-}
+  try
+    {
+      return func( );
+    }
+  catch (const gdb_exception_error &ex)
+    {
+      exception_print (gdb_stderr, ex);
+    }
 
-int
-qnx_putpkt (remote_target *ops, const char *buf)
-{
-  return qnx_putpkt_binary (buf, strlen (buf));
-}
-
-int
-qnx_putpkt_binary (const char *buf, int cnt)
-{
-  DScomm_t tran;
-
-  nto_send_init (&tran, DStMsg_cuda, 0, SET_CHANNEL_DEBUG);
-  memcpy (tran.pkt.cuda.data, buf, cnt);
-  putpkt (&tran, offsetof (DStMsg_cuda_t, data) + cnt);
-
-  return 0;
+  return 1;
 }
 
 /* Send a packet to the remote machine.  Also sets channelwr and informs
@@ -623,9 +638,6 @@ putpkt (const DScomm_t *const tran, const unsigned len)
   unsigned char buf2[DS_DATA_MAX_SIZE * 2];
   unsigned char *p;
 
-  if (!current_session->desc)
-    perror_with_name ("Remote connection closed.");
-
   /* Copy the packet into buffer BUF2, encapsulating it
      and giving it a checksum.  */
 
@@ -633,8 +645,8 @@ putpkt (const DScomm_t *const tran, const unsigned len)
   *p++ = FRAME_CHAR;
 
   nto_trace (1) ("putpkt() - cmd %d, subcmd %d, mid %d\n",
-			 tran->pkt.hdr.cmd, tran->pkt.hdr.subcmd,
-			 tran->pkt.hdr.mid);
+       tran->pkt.hdr.cmd, tran->pkt.hdr.subcmd,
+       tran->pkt.hdr.mid);
 
   if (remote_debug)
     printf_unfiltered ("Sending packet (len %d): ", len);
@@ -644,19 +656,19 @@ putpkt (const DScomm_t *const tran, const unsigned len)
       unsigned char c = tran->buf[i];
 
       if (remote_debug)
-	printf_unfiltered ("%2.2x", c);
+        printf_unfiltered ("%2.2x", c);
       csum += c;
 
       switch (c)
-	{
-	case FRAME_CHAR:
-	case ESC_CHAR:
-	  if (remote_debug)
-	    printf_unfiltered ("[escape]");
-	  *p++ = ESC_CHAR;
-	  c ^= 0x20;
-	  break;
-	}
+        {
+        case FRAME_CHAR:
+        case ESC_CHAR:
+          if (remote_debug)
+            printf_unfiltered ("[escape]");
+          *p++ = ESC_CHAR;
+          c ^= 0x20;
+          break;
+        }
       *p++ = c;
     }
 
@@ -684,14 +696,14 @@ putpkt (const DScomm_t *const tran, const unsigned len)
   if (current_session->channelwr != tran->pkt.hdr.channel)
     {
       switch (tran->pkt.hdr.channel)
-	{
-	case SET_CHANNEL_TEXT:
-	  SEND_CH_TEXT;
-	  break;
-	case SET_CHANNEL_DEBUG:
-	  SEND_CH_DEBUG;
-	  break;
-	}
+        {
+        case SET_CHANNEL_TEXT:
+          SEND_CH_TEXT;
+          break;
+        case SET_CHANNEL_DEBUG:
+          SEND_CH_DEBUG;
+          break;
+        }
       current_session->channelwr = tran->pkt.hdr.channel;
     }
 
@@ -719,16 +731,16 @@ sig_io (int signal)
       int read_count = read (STDIN_FILENO, buff, 1);
 
       if (read_count < 0)
-	{
-	  gdb_printf (gdb_stderr, _("Error reading stdin: %d(%s)\n"),
-			      errno, safe_strerror (errno));
-	  return;
-	}
+  {
+    gdb_printf (gdb_stderr, _("Error reading stdin: %d(%s)\n"),
+            errno, safe_strerror (errno));
+    return;
+  }
       if (read_count == 0)
-	{
-	  gdb_printf (gdb_stderr, _("EOF\n"));
-	  return;
-	}
+  {
+    gdb_printf (gdb_stderr, _("EOF\n"));
+    return;
+  }
       gdb_printf (gdb_stderr, _("'%c'"), buff[0]);
     }
 }
@@ -747,18 +759,18 @@ readchar (int timeout)
   sa.sa_handler = sig_io;
 
   if (sigaction(SIGIO, &sa, NULL) < 0) {
-	  fprintf(stderr,"[ERROR]: sigaction error\n");
-	  exit(1);
+    fprintf(stderr,"[ERROR]: sigaction error\n");
+    exit(1);
   }
 
   if (fcntl(0, F_SETOWN, getpid()) < 0) {
-	  fprintf(stderr,"[ERROR]: fcntl F_SETOWN error\n");
-	  exit(1);
+    fprintf(stderr,"[ERROR]: fcntl F_SETOWN error\n");
+    exit(1);
   }
 
   if (fcntl(0, F_SETFL, O_NONBLOCK|O_ASYNC) < 0) {
-	  fprintf(stderr,"[ERROR]: fcntl error for O_NONBLOCK|O_ASYNC\n");
-	  exit(1);
+    fprintf(stderr,"[ERROR]: fcntl error for O_NONBLOCK|O_ASYNC\n");
+    exit(1);
   }
 #endif
   ch = serial_readchar (current_session->desc, timeout);
@@ -766,14 +778,16 @@ readchar (int timeout)
   switch (ch)
     {
     case SERIAL_EOF:
-      error ("Remote connection closed");
+      pdebug_error ("Remote connection closed");
+      break;
     case SERIAL_ERROR:
-      perror_with_name ("Remote communication error");
+      pdebug_error ("Remote communication error (%i: %s)", errno, strerror(errno));
+      break;
     case SERIAL_TIMEOUT:
       return ch;
-    default:
-      return ch & 0xff;
     }
+
+  return ch & 0xff;
 }
 
 /* Come here after finding the start of the frame.  Collect the rest into BUF,
@@ -798,29 +812,30 @@ read_frame (unsigned char *const buf, const size_t bufsz)
       c = readchar (current_session->timeout);
 
       switch (c)
-	{
-	case SERIAL_TIMEOUT:
-	  gdb_puts ("Timeout in mid-packet, retrying\n");
-	  return -1;
-	case ESC_CHAR:
-	  modifier = 0x20;
-	  continue;
-	case FRAME_CHAR:
-	  if (bp == buf)
-	    continue;		/* Ignore multiple start frames.  */
-	  if (csum != 0xff)	/* Checksum error.  */
-	    return -1;
-	  return bp - buf - 1;
-	default:
-	  c ^= modifier;
-	  if (remote_debug)
-	    gdb_printf ("%2.2x", c);
-	  csum += c;
-	  *bp++ = c;
-	  break;
-	}
+  {
+  case SERIAL_TIMEOUT:
+    gdb_puts ("Timeout in mid-packet, retrying\n");
+    return -1;
+  case ESC_CHAR:
+    modifier = 0x20;
+    continue;
+  case FRAME_CHAR:
+    if (bp == buf)
+      continue;    /* Ignore multiple start frames.  */
+    if (csum != 0xff)  /* Checksum error.  */
+      return -1;
+    return bp - buf - 1;
+  default:
+    c ^= modifier;
+    if (remote_debug)
+      gdb_printf ("%2.2x", c);
+    csum += c;
+    *bp++ = c;
+    break;
+  }
       modifier = 0;
     }
+  return 1;
 }
 
 /* Read a packet from the remote machine, with error checking,
@@ -830,19 +845,10 @@ read_frame (unsigned char *const buf, const size_t bufsz)
 static int
 getpkt (DScomm_t *const recv, const int forever)
 {
-  return getpkt_with_retry (recv, forever, MAX_RECV_TRIES);
-}
-
-static int
-getpkt_with_retry (DScomm_t *const recv, const int forever, const int max_tries)
-{
   int c;
   int tries;
   int timeout;
   unsigned len;
-
-  if (!current_session->desc)
-    perror_with_name ("Remote connection closed.");
 
   if (remote_debug)
     printf_unfiltered ("getpkt(%d)\n", forever);
@@ -856,94 +862,88 @@ getpkt_with_retry (DScomm_t *const recv, const int forever, const int max_tries)
       timeout = current_session->timeout;
     }
 
-  for (tries = 0; tries < max_tries; tries++)
+  for (tries = 0; tries < MAX_RECV_TRIES; tries++)
     {
       /* This can loop forever if the remote side sends us characters
-	 continuously, but if it pauses, we'll get a zero from readchar
-	 because of timeout.  Then we'll count that as a retry.
+         continuously, but if it pauses, we'll get a zero from readchar
+         because of timeout.  Then we'll count that as a retry.
 
-	 Note that we will only wait forever prior to the start of a packet.
-	 After that, we expect characters to arrive at a brisk pace.  They
-	 should show up within nto_timeout intervals.  */
+         Note that we will only wait forever prior to the start of a packet.
+         After that, we expect characters to arrive at a brisk pace.  They
+         should show up within nto_timeout intervals.  */
       do
-	{
-	  c = readchar (timeout);
+  {
+    c = readchar (timeout);
 
-	  if (c == SERIAL_TIMEOUT)
-	    {
-	      /* Watchdog went off.  Kill the target.  */
-	      if (forever && watchdog > 0)
-		{
-		  target_mourn_inferior (inferior_ptid);
-		  error ("Watchdog has expired.  Target detached.");
-		}
-	      gdb_puts ("Timed out.\n");
-	      return -1;
-	    }
-	}
+    if (c == SERIAL_TIMEOUT)
+      {
+        /* Watchdog went off.  Kill the target.  */
+        if (forever && watchdog > 0)
+    {
+      pdebug_error ("Watchdog has expired.  Target detached.");
+    }
+        gdb_puts ("Timed out.\n");
+        return -1;
+      }
+  }
       while (c != FRAME_CHAR);
 
       /* We've found the start of a packet, now collect the data.  */
       len = read_frame (recv->buf, sizeof recv->buf);
 
       if (remote_debug)
-	gdb_printf ("\n");
+  gdb_printf ("\n");
 
       if (len >= sizeof (struct DShdr))
-	{
-	  if (recv->pkt.hdr.channel)	/* If hdr.channel is not 0, then hdr.channel is supported.  */
-	    current_session->channelrd = recv->pkt.hdr.channel;
+  {
+    if (recv->pkt.hdr.channel)  /* If hdr.channel is not 0, then hdr.channel is supported.  */
+      current_session->channelrd = recv->pkt.hdr.channel;
 
-	  if (remote_debug)
-	    {
-	      printf_unfiltered ("getpkt() - len %d, channelrd %d,", len,
-				 current_session->channelrd);
-	      switch (current_session->channelrd)
-		{
-		case SET_CHANNEL_DEBUG:
-		  printf_unfiltered (" cmd = %d, subcmd = %d, mid = %d\n",
-				     recv->pkt.hdr.cmd, recv->pkt.hdr.subcmd,
-				     recv->pkt.hdr.mid);
-		  break;
-		case SET_CHANNEL_TEXT:
-		  printf_unfiltered (" text message\n");
-		  break;
-		case SET_CHANNEL_RESET:
-		  printf_unfiltered (" set_channel_reset\n");
-		  break;
-		default:
-		  printf_unfiltered (" unknown channel!\n");
-		  break;
-		}
-	    }
-	  return len;
-	}
+    if (remote_debug)
+      {
+        printf_unfiltered ("getpkt() - len %d, channelrd %d,", len,
+         current_session->channelrd);
+        switch (current_session->channelrd)
+    {
+    case SET_CHANNEL_DEBUG:
+      printf_unfiltered (" cmd = %d, subcmd = %d, mid = %d\n",
+             recv->pkt.hdr.cmd, recv->pkt.hdr.subcmd,
+             recv->pkt.hdr.mid);
+      break;
+    case SET_CHANNEL_TEXT:
+      printf_unfiltered (" text message\n");
+      break;
+    case SET_CHANNEL_RESET:
+      printf_unfiltered (" set_channel_reset\n");
+      break;
+    default:
+      printf_unfiltered (" unknown channel!\n");
+      break;
+    }
+      }
+    return len;
+  }
       if (len >= 1)
-	{
-	  /* Packet too small to be part of the debug protocol,
-	     must be a transport level command.  */
-	  if (recv->buf[0] == SET_CHANNEL_NAK)
-	    {
-	      /* Our last transmission didn't make it - send it again.  */
-	      current_session->channelrd = SET_CHANNEL_NAK;
-	      return -1;
-	    }
-	  if (recv->buf[0] <= SET_CHANNEL_TEXT)
-	    current_session->channelrd = recv->buf[0];
+  {
+    /* Packet too small to be part of the debug protocol,
+       must be a transport level command.  */
+    if (recv->buf[0] == SET_CHANNEL_NAK)
+      {
+        /* Our last transmission didn't make it - send it again.  */
+        current_session->channelrd = SET_CHANNEL_NAK;
+        return -1;
+      }
+    if (recv->buf[0] <= SET_CHANNEL_TEXT)
+      current_session->channelrd = recv->buf[0];
 
-	  if (remote_debug)
-	    {
-	      printf_unfiltered ("set channelrd to %d\n",
-				 current_session->channelrd);
-	    }
-	  --tries;		/* Doesn't count as a retry.  */
-	  continue;
-	}
-      /* Empty packet, likely a reply to an unsupported packet */
-      if (!len)
-	{
-	  return 0;
-	}
+    if (remote_debug)
+      {
+        printf_unfiltered ("set channelrd to %d\n",
+         current_session->channelrd);
+      }
+    --tries;    /* Doesn't count as a retry.  */
+    continue;
+  }
       SEND_NAK;
     }
 
@@ -955,24 +955,33 @@ getpkt_with_retry (DScomm_t *const recv, const int forever, const int max_tries)
 static void
 nto_send_init (DScomm_t *const tran, unsigned cmd, const unsigned subcmd, const unsigned chan)
 {
+#ifndef NVIDIA_CUDA_GDB
+  /* CUDA: see explanation above. We need to keep this in sync for cuda/cuda-gdbserver. */
+  static unsigned char mid;
+#endif
+
   gdb_assert (tran != NULL);
 
   nto_trace (2) ("    nto_send_init(cmd %d, subcmd %d)\n", cmd,
-			 subcmd);
+       subcmd);
 
-  if (gdbarch_byte_order (target_gdbarch ()) == BFD_ENDIAN_BIG)
+  if (nto_byte_order == BFD_ENDIAN_BIG)
     cmd |= DSHDR_MSG_BIG_ENDIAN;
 
   memset (tran, 0, sizeof (DScomm_t));
 
-  tran->pkt.hdr.cmd = cmd;	/* TShdr.cmd.  */
-  tran->pkt.hdr.subcmd = subcmd;	/* TShdr.console.  */
-  tran->pkt.hdr.mid = ((chan == SET_CHANNEL_DEBUG) ? mid++ : 0);	/* TShdr.spare1.  */
-  tran->pkt.hdr.channel = chan;	/* TShdr.channel.  */
+  tran->pkt.hdr.cmd = cmd;  /* TShdr.cmd.  */
+  tran->pkt.hdr.subcmd = subcmd;  /* TShdr.console.  */
+  tran->pkt.hdr.mid = ((chan == SET_CHANNEL_DEBUG) ? mid++ : 0);  /* TShdr.spare1.  */
+  tran->pkt.hdr.channel = chan;  /* TShdr.channel.  */
 }
 
 
-/* Send text to remote debug daemon - Pdebug.  */
+#if 0
+/* Send text to remote debug daemon - Pdebug.
+ *
+ * TODO: currently unused, see CLT-1252
+ */
 
 void
 nto_outgoing_text (char *buf, int nbytes)
@@ -992,7 +1001,7 @@ nto_outgoing_text (char *buf, int nbytes)
 
   putpkt (&tran, nbytes + offsetof (TSMsg_text_t, text));
 }
-
+#endif
 
 /* Display some text that came back across the text channel.  */
 
@@ -1022,12 +1031,12 @@ nto_incoming_text (TSMsg_text_t *const text, const int len)
 
 
 /* Send env. string. Send multipart if env string too long and
-   our protocol version allows multipart env string. 
+   our protocol version allows multipart env string.
 
    Returns > 0 if successful, 0 on error.  */
 
-static int
-nto_send_env (const char *env)
+int
+pdebug_target::nto_send_env (const char *env)
 {
   int len; /* Length including zero terminating char.  */
   int totlen = 0;
@@ -1038,30 +1047,30 @@ nto_send_env (const char *env)
   if (current_session->target_proto_major > 0
       || current_session->target_proto_minor >= 2)
     {
-	while (len > DS_DATA_MAX_SIZE)
-	  {
-	    nto_send_init (&tran, DStMsg_env, DSMSG_ENV_SETENV_MORE,
-			   SET_CHANNEL_DEBUG);
-	    memcpy (tran.pkt.env.data, env + totlen,
-		    DS_DATA_MAX_SIZE);
-	    if (!nto_send_recv (&tran, &recv, offsetof (DStMsg_env_t, data) +
-			   DS_DATA_MAX_SIZE, 1))
-	      {
-		/* An error occured.  */
-		return 0;
-	      }
-	    len -= DS_DATA_MAX_SIZE;
-	    totlen += DS_DATA_MAX_SIZE;
-	  }
+  while (len > DS_DATA_MAX_SIZE)
+    {
+      nto_send_init (&tran, DStMsg_env, DSMSG_ENV_SETENV_MORE,
+         SET_CHANNEL_DEBUG);
+      memcpy (tran.pkt.env.data, env + totlen,
+        DS_DATA_MAX_SIZE);
+      if (!nto_send_recv (&tran, &recv, offsetof (DStMsg_env_t, data) +
+         DS_DATA_MAX_SIZE, 1))
+        {
+    /* An error occured.  */
+    return 0;
+        }
+      len -= DS_DATA_MAX_SIZE;
+      totlen += DS_DATA_MAX_SIZE;
+    }
     }
   else if (len > DS_DATA_MAX_SIZE)
     {
       /* Not supported by this protocol version.  */
       printf_unfiltered
-	("** Skipping env var \"%.40s .....\" <cont>\n", env);
+  ("** Skipping env var \"%.40s .....\" <cont>\n", env);
       printf_unfiltered
-	("** Protovers under 0.2 do not handle env vars longer than %d\n", 
-	  DS_DATA_MAX_SIZE - 1);
+  ("** Protovers under 0.2 do not handle env vars longer than %d\n",
+    DS_DATA_MAX_SIZE - 1);
       return 0;
     }
   nto_send_init (&tran, DStMsg_env, DSMSG_ENV_SETENV, SET_CHANNEL_DEBUG);
@@ -1074,8 +1083,8 @@ nto_send_env (const char *env)
    does not support multipart strings limiting the length
    of single argument to DS_DATA_MAX_SIZE.  */
 
-static int
-nto_send_arg (const char *arg)
+int
+pdebug_target::nto_send_arg (const char *arg)
 {
   int len;
   DScomm_t tran, recv;
@@ -1100,12 +1109,11 @@ static unsigned
 nto_send_recv (const DScomm_t *const tran, DScomm_t *const recv,
 	       const unsigned len, const int report_errors)
 {
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   int rlen;
-  /* CUDA: unblocking gdb 10.1 upgrade */
-  int stashed = 0;
   unsigned tries;
-  unsigned recv_tries;
+#ifdef NVIDIA_BUGFIX
+  bool stashed = false;
+#endif
 
   if (current_session->desc == NULL)
     {
@@ -1120,42 +1128,25 @@ nto_send_recv (const DScomm_t *const tran, DScomm_t *const recv,
 	  unsigned char err = DSrMsg_err;
 
 	  printf_unfiltered ("Remote exhausted %d retries.\n", tries);
-	  if (gdbarch_byte_order (target_gdbarch ()) == BFD_ENDIAN_BIG)
+	  if (nto_byte_order == BFD_ENDIAN_BIG)
 	    err |= DSHDR_MSG_BIG_ENDIAN;
 	  recv->pkt.hdr.cmd = err;
 	  recv->pkt.err.err = EIO;
 	  recv->pkt.err.err = EXTRACT_SIGNED_INTEGER (&recv->pkt.err.err,
-						      4, byte_order);
+						      4, nto_byte_order);
 	  rlen = sizeof (recv->pkt.err);
+	  /* connection is considered dead */
+	  current_session->desc = NULL;
 	  break;
 	}
-
-      /* CUDA: unblocking gdb 10.1 upgrade */
-      /* Last cycled stashed a packet, and decremented tries, we don't need
-       * another putpkt */
+#ifdef NVIDIA_BUGFIX
       if (!stashed)
-	putpkt (tran, len);
+        putpkt (tran, len);
       else
-	stashed = 0;
-
-      recv_tries = 0;
-
-recv_again:
-      if (recv_tries++ >= MAX_RECV_TRIES)
-	{
-	  unsigned char err = DSrMsg_err;
-
-	  printf_unfiltered ("Remote exhausted %d retries.\n", recv_tries);
-	  if (gdbarch_byte_order (target_gdbarch ()) == BFD_ENDIAN_BIG)
-	    err |= DSHDR_MSG_BIG_ENDIAN;
-	  recv->pkt.hdr.cmd = err;
-	  recv->pkt.err.err = EIO;
-	  recv->pkt.err.err = EXTRACT_SIGNED_INTEGER (&recv->pkt.err.err,
-						      4, byte_order);
-	  rlen = sizeof (recv->pkt.err);
-	  break;
-	}
-
+        stashed = false;
+#else
+      putpkt (tran, len);
+#endif
       for (;;)
 	{
 	  rlen = getpkt (recv, 0);
@@ -1164,42 +1155,50 @@ recv_again:
 	    break;
 	  nto_incoming_text (&recv->text, rlen);
 	}
-      if (rlen == -1)		/* Getpkt returns -1 if MsgNAK received.  */
+      if (rlen == -1)    /* Getpkt returns -1 if MsgNAK received.  */
 	{
 	  printf_unfiltered ("MsgNak received - resending\n");
 	  continue;
 	}
       if ((rlen >= 0) && (recv->pkt.hdr.mid == tran->pkt.hdr.mid))
 	break;
-
-      /* CUDA: unblocking gdb 10.1 upgrade */
+#ifdef NVIDIA_CUDA_GDB
+      if ((rlen >= 0) && (recv->pkt.hdr.cmd == DSrMsg_okcuda))
+	{
+	  /* We need to keep mid in sync. cuda-gdbserver always returns
+	     the latest unused mid in okcuda packets. */
+	  mid = recv->pkt.hdr.mid;
+	  const_cast<DScomm_t *>(tran)->pkt.hdr.mid = mid;
+	  break;
+	}
+#endif
+#ifdef NVIDIA_BUGFIX
       if (recv->pkt.hdr.cmd == DShMsg_notify)
-      {
-	/* We received a notification, let's stash it for now. */
-	current_session->pending.push(*recv);
-	stashed = 1;
+        {
+	  nto_trace (1) ("Received notify message\n");
+	  current_session->pending.push (*recv);
+	  stashed = true;
+	  /* Let's not consider this an attempt. */
+	  tries--;
+	  continue;
+	}
+#endif
 
-	/* Let's not consider this an attempt. */
-	tries--;
-      }
-      else
-      {
-	internal_warning ("A packet {cmd=%d} came out of order tran_mid=%d, recv_mid=%d", recv->pkt.hdr.cmd, tran->pkt.hdr.mid, recv->pkt.hdr.mid);
-	goto recv_again;
-      }
+      nto_trace (1) ("mid mismatch!\n");
+
     }
   /* Getpkt() sets channelrd to indicate where the message came from.
      now we switch on the channel (/type of message) and then deal
      with it.  */
   switch (current_session->channelrd)
-    {
+  {
     case SET_CHANNEL_DEBUG:
       if (((recv->pkt.hdr.cmd & DSHDR_MSG_BIG_ENDIAN) != 0))
 	{
 	  char buff[sizeof(tran->buf)];
 
 	  sprintf (buff, "set endian big");
-	  if (gdbarch_byte_order (target_gdbarch ()) != BFD_ENDIAN_BIG)
+	  if (nto_byte_order != BFD_ENDIAN_BIG)
 	    execute_command (buff, 0);
 	}
       else
@@ -1207,18 +1206,21 @@ recv_again:
 	  char buff[sizeof(tran->buf)];
 
 	  sprintf (buff, "set endian little");
-	  if (gdbarch_byte_order (target_gdbarch ()) != BFD_ENDIAN_LITTLE)
+	  if (nto_byte_order != BFD_ENDIAN_LITTLE)
 	    execute_command (buff, 0);
 	}
       recv->pkt.hdr.cmd &= ~DSHDR_MSG_BIG_ENDIAN;
       if (recv->pkt.hdr.cmd == DSrMsg_err)
 	{
+	  /* the actual errno */
 	  errno = errnoconvert (EXTRACT_SIGNED_INTEGER (&recv->pkt.err.err, 4,
-							byte_order));
+							nto_byte_order));
 	  if (report_errors)
 	    {
-	      switch (recv->pkt.hdr.subcmd)
-		{
+	      /* any error reported by pdebug */
+	      switch (EXTRACT_SIGNED_INTEGER(&recv->pkt.hdr.subcmd,
+					     sizeof(uint8_t), nto_byte_order))
+	      {
 		case PDEBUG_ENOERR:
 		  break;
 		case PDEBUG_ENOPTY:
@@ -1244,7 +1246,7 @@ recv_again:
 		  break;
 		case PDEBUG_EQMEMMODEL:
 		  perror_with_name
-		    ("Remote (invalid memory model [not flat] )");
+		  ("Remote (invalid memory model [not flat] )");
 		  break;
 		case PDEBUG_EQPROXY:
 		  perror_with_name ("Remote (proxy error)");
@@ -1253,188 +1255,234 @@ recv_again:
 		  perror_with_name ("Remote (__nto_debug_* error)");
 		  break;
 		default:
-		  perror_with_name ("Remote");
-		}
+		  if( errno != EOK )
+		    {
+		      perror_with_name ("Remote");
+		    }
+	      }
 	    }
 	}
       break;
     case SET_CHANNEL_TEXT:
     case SET_CHANNEL_RESET:
       break;
-    }
+  }
   return rlen;
 }
 
-static int
-set_thread (const int th)
+int
+pdebug_target::nto_set_thread (ptid_t ptid)
 {
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   DScomm_t tran, recv;
+  long int th = ptid.lwp();
+  if( th == 0 )
+      th=1;
 
-  nto_trace (0) ("set_thread(th %d pid %d, prev tid %ld)\n", th,
-		 inferior_ptid.pid (), inferior_ptid.tid ());
+  nto_trace (0) ("nto_set_thread(%s)\n", nto_pid_to_str (ptid).c_str());
+
+  if (find_inferior_ptid (this, ptid) == NULL)
+    {
+      nto_trace (0) ( "  no inferior for %s yet!\n", nto_pid_to_str (ptid).c_str());
+      return 0;
+    }
 
   nto_send_init (&tran, DStMsg_select, DSMSG_SELECT_SET, SET_CHANNEL_DEBUG);
-  tran.pkt.select.pid = inferior_ptid.pid ();
+  tran.pkt.select.pid = ptid.pid();
   tran.pkt.select.pid = EXTRACT_SIGNED_INTEGER ((gdb_byte*)&tran.pkt.select.pid, 4,
-						byte_order);
-  tran.pkt.select.tid = EXTRACT_SIGNED_INTEGER (&th, 4, byte_order);
+            nto_byte_order);
+  tran.pkt.select.tid = EXTRACT_SIGNED_INTEGER (&th, 4, nto_byte_order);
   nto_send_recv (&tran, &recv, sizeof (tran.pkt.select), 1);
 
   if (recv.pkt.hdr.cmd == DSrMsg_err)
     {
-      nto_trace (0) ("Thread %d does not exist\n", th);
+      nto_trace (0) ("  thread %li does not exist (%i - %s)\n", th, recv.pkt.err.err, strerror(recv.pkt.err.err));
       return 0;
     }
+
+  switch_to_thread(this, ptid);
 
   return 1;
 }
 
-
-/* Return nonzero if the thread TH is still alive on the remote system.  
-   RECV will contain returned_tid. NOTE: Make sure this stays like that
-   since we will use this side effect in other functions to determine
-   first thread alive (for example, after attach).  */
-template <class parent>
-bool
-qnx_remote_target<parent>::thread_alive (ptid_t th)
+/*
+ * Checks if the given thread is alive,  RECV will contain returned_tid.
+ * NOTE: Make sure this stays like that since we will use this side effect in
+ * other functions to determine first thread alive (for example, after attach).
+ * Returns
+ *  tid - thread id
+ *        this is either the requested thread or a higher number of the next
+ *        active thread
+ *  -1  - the process has no more active threads
+ */
+int
+pdebug_target::nto_thread_alive (ptid_t th)
 {
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
-  int alive = 0;
   DScomm_t tran, recv;
+  int returned_tid;
 
-  nto_trace (0) ("nto_thread_alive -- pid %d, tid %ld \n",
-		 th.pid (), th.tid ());
+  nto_trace(1) ("nto_thread_alive(%s)\n", nto_pid_to_str (th).c_str());
+
+  /* this can happen in IDE sessions when the IDE requests data before the
+   * process has fully spawned so it must not be an error. */
+  if (th.pid() == 0)
+    {
+      nto_trace(0)("  No pid to find a thread for!");
+      return 0;
+    }
 
   nto_send_init (&tran, DStMsg_select, DSMSG_SELECT_QUERY, SET_CHANNEL_DEBUG);
   tran.pkt.select.pid = th.pid ();
-  tran.pkt.select.pid = EXTRACT_SIGNED_INTEGER (&tran.pkt.select.pid, 4,
-						byte_order);
-  tran.pkt.select.tid = th.tid ();
-  tran.pkt.select.tid = EXTRACT_SIGNED_INTEGER (&tran.pkt.select.tid, 4,
-						byte_order);
-  nto_send_recv (&tran, &recv, sizeof (tran.pkt.select), 0);
+  tran.pkt.select.pid = EXTRACT_SIGNED_INTEGER(&tran.pkt.select.pid,
+					       sizeof(int32_t), nto_byte_order);
+  tran.pkt.select.tid = th.lwp ();
+  tran.pkt.select.tid = EXTRACT_SIGNED_INTEGER(&tran.pkt.select.tid,
+					       sizeof(int32_t), nto_byte_order);
+  nto_send_recv (&tran, &recv, sizeof(tran.pkt.select), 0);
+
   if (recv.pkt.hdr.cmd == DSrMsg_okdata)
     {
-      /* Data is tidinfo. 
-	Note: tid returned might not be the same as requested.
-	If it is not, then requested thread is dead.  */
-      uintptr_t ptidinfoaddr = (uintptr_t) &recv.pkt.okdata.data;
-      struct tidinfo *ptidinfo = (struct tidinfo *) ptidinfoaddr;
-      int returned_tid = EXTRACT_SIGNED_INTEGER (&ptidinfo->tid, 2,
-						 byte_order);
-      alive = (th.tid () == returned_tid) && ptidinfo->state;
+      /* Data is tidinfo.
+       Note: tid returned might not be the same as requested.
+       If it is not, then requested thread is dead.  */
+      const struct tidinfo * const ptidinfo =
+	  (struct tidinfo *) recv.pkt.okdata.data;
+      returned_tid = EXTRACT_SIGNED_INTEGER(&ptidinfo->tid, sizeof(int16_t),
+					    nto_byte_order);
     }
   else if (recv.pkt.hdr.cmd == DSrMsg_okstatus)
     {
       /* This is the old behaviour. It doesn't really tell us
-      what is the status of the thread, but rather answers question:
-      "Does the thread exist?". Note that a thread might have already
-      exited but has not been joined yet; we will show it here as 
-      alive an well. Not completely correct.  */
-      int returned_tid = EXTRACT_SIGNED_INTEGER (&recv.pkt.okstatus.status, 4,
-						 byte_order);
-      alive = (th.tid () == returned_tid);
+       what is the status of the thread, but rather answers question:
+       "Does the thread exist?". Note that a thread might have already
+       exited but has not been joined yet; we will show it here as
+       alive and well. Not completely correct.  */
+      returned_tid = EXTRACT_SIGNED_INTEGER(&recv.pkt.okstatus.status,
+					    sizeof(int32_t), nto_byte_order);
+    }
+  else
+    {
+      /* no more threads available */
+      nto_trace (0) ("  No threads available (%i - %s)\n", recv.pkt.err.err, strerror(recv.pkt.err.err));
+      returned_tid = -1;
     }
 
-  nto_trace (0) ("Thread %lu is alive = %d\n", th.tid (), alive);
-  /* In case of a failure, return 0. This will happen when requested
-    thread is dead and there is no alive thread with the larger tid.  */
+  return returned_tid;
+}
+
+/* Return nonzero if the thread th is still alive on the remote system. */
+bool
+pdebug_target::thread_alive (ptid_t th)
+{
+  int alive;
+  alive = (nto_thread_alive (th) == th.lwp());
+  nto_trace(0) ("pdebug_thread_alive(%s) is %s\n", nto_pid_to_str (th).c_str(),
+		alive ? "alive" : "dead");
   return alive;
 }
 
-static ptid_t
-nto_get_thread_alive (remote_target *ops, ptid_t th)
+/*
+ * sets a non-dead thread for the given process/thread.
+ * By default the given thread is checked if it is alive. If not, the process
+ * is scanned for an active thread.
+ * If the given thread is 0, then the currently active thread is checked. This
+ * is done to avoid switching from the current thread and sending following
+ * messages to the wrong thread. returns the tid of the active
+ * thread or 0 if the process has no active threads.
+ */
+int
+pdebug_target::nto_set_thread_alive (ptid_t th)
 {
-  DScomm_t tran, recv;
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
-  int returned_tid;
+  int alive;
 
-  nto_send_init (&tran, DStMsg_select, DSMSG_SELECT_QUERY, SET_CHANNEL_DEBUG);
-  tran.pkt.select.pid = th.pid ();
-  tran.pkt.select.pid = EXTRACT_SIGNED_INTEGER (&tran.pkt.select.pid, 4,
-						byte_order);
-  tran.pkt.select.tid = th.tid ();
-  tran.pkt.select.tid = EXTRACT_SIGNED_INTEGER (&tran.pkt.select.tid, 4,
-						byte_order);
-  nto_send_recv (&tran, &recv, sizeof (tran.pkt.select), 0);
+  /* check thread id, if this is 0 then a message to the process is about to
+   * be sent so the thread is changed to the current thread id so the context
+   * does not change for the following messages. */
+  if (th.lwp () == 0)
+      th = ptid_t (th.pid (), inferior_ptid.lwp ()?inferior_ptid.lwp ():1, 0);
 
-  if (recv.pkt.hdr.cmd == DSrMsg_okdata)
+  nto_trace(0) ("nto_set_thread_alive(%s)\n", nto_pid_to_str (th).c_str());
+  alive = nto_thread_alive (th);
+
+  if (alive != th.lwp())
     {
-      /* Data is tidinfo. 
-	Note: tid returned might not be the same as requested.
-	If it is not, then requested thread is dead.  */
-      const struct tidinfo *const ptidinfo = (struct tidinfo *) recv.pkt.okdata.data;
-      returned_tid = EXTRACT_SIGNED_INTEGER (&ptidinfo->tid, 2,
-					     byte_order);
-
-      if (!ptidinfo->state)
+      /* was the original check already for the whole process? */
+      if (th.lwp() != 1)
 	{
-	  return nto_get_thread_alive (ops, ptid_t (th.pid (), 0,
-						    returned_tid+1));
+	  /* try with thread1 */
+	  th = ptid_t (th.pid (), 1, 0);
+	  alive = nto_thread_alive (th);
 	}
     }
-  else if (recv.pkt.hdr.cmd == DSrMsg_okstatus)
+
+  if (alive > 0)
     {
-      /* This is the old behaviour. It doesn't really tell us
-      what is the status of the thread, but rather answers question:
-      "Does the thread exist?". Note that a thread might have already
-      exited but has not been joined yet; we will show it here as 
-      alive and well. Not completely correct.  */
-      returned_tid = EXTRACT_SIGNED_INTEGER (&recv.pkt.okstatus.status,
-					     4, byte_order);
+      nto_set_thread (ptid_t (th.pid (), alive, 0));
     }
   else
-    return minus_one_ptid;
+    {
+      nto_trace (0) ("  no thread alive for %s\n", nto_pid_to_str (th).c_str());
+      alive = 0;
+    }
 
-  return ptid_t (th.pid (), th.lwp (), returned_tid);
+  return alive;
 }
 
 /* Clean up connection to a remote debugger.  */
-template <class parent>
-void
-qnx_remote_target<parent>::close (void)
+static int
+nto_close_1 ( )
 {
-  nto_trace (0) ("nto_close\n");
+  DScomm_t tran, recv;
 
+  nto_send_init (&tran, DStMsg_disconnect, 0, SET_CHANNEL_DEBUG);
+  nto_send_recv (&tran, &recv, sizeof (tran.pkt.disconnect), 0);
+  serial_close (current_session->desc);
+
+  return 0;
+}
+
+void
+pdebug_target::close ( )
+{
+  nto_trace (0) ("pdebug_close\n");
+
+  /* close the connection if it's still alive */
   if (current_session->desc)
     {
-      try
-	{
-	  DScomm_t tran, recv;
-
-	  nto_send_init (&tran, DStMsg_disconnect, 0, SET_CHANNEL_DEBUG);
-	  nto_send_recv (&tran, &recv, sizeof (tran.pkt.disconnect), 0);
-	  serial_close (current_session->desc);
-
-	  /* CUDA - set cuda_remote flag to be false */
-	  set_cuda_remote_flag (false);
-	}
-      catch (const gdb_exception_error &ex)
-	{
-	  exception_fprintf (gdb_stderr, ex, "Error in nto_close\n");
-	}
-	
+      catch_errors ( nto_close_1 );
       current_session->desc = NULL;
-      nto_remove_commands ();
     }
+
+  /* Make sure we leave stdin registered in the event loop.  */
+  terminal_ours ();
+
+  /* We don't have a connection to the remote stub anymore.  Get rid
+     of all the inferiors and their threads we were controlling.
+     Reset inferior_ptid to null_ptid first, as otherwise has_stack_frame
+     will be unable to find the thread corresponding to (pid, 0, 0).  */
+  inferior_ptid = null_ptid;
+
+  /* todo align with current TLS layout */
+  trace_reset_local_state ();
+
+  remote_unpush_target ( this );
+  delete this;
 }
+
 
 /* Reads procfs_info structure for the given process.
 
    Returns 1 on success, 0 otherwise.  */
 
-static int
-nto_read_procfsinfo (nto_procfs_info *pinfo)
+int
+pdebug_target::nto_read_procfsinfo (nto_procfs_info *pinfo)
 {
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   DScomm_t tran, recv;
 
   gdb_assert (pinfo != NULL && !! "pinfo must not be NULL\n");
   nto_send_init (&tran, DStMsg_procfsinfo, 0, SET_CHANNEL_DEBUG);
-  tran.pkt.procfsinfo.pid = inferior_ptid.pid ();
+  tran.pkt.procfsinfo.pid = inferior_ptid.pid();
   tran.pkt.procfsinfo.pid = EXTRACT_SIGNED_INTEGER (&tran.pkt.procfsinfo.pid,
-						    4, byte_order);
+                4, nto_byte_order);
   nto_send_recv (&tran, &recv, sizeof (tran.pkt.procfsinfo), 0);
   if (recv.pkt.hdr.cmd == DSrMsg_okdata)
     {
@@ -1453,17 +1501,16 @@ nto_read_procfsinfo (nto_procfs_info *pinfo)
 
    Returns 1 on success, 0 otherwise.  */
 
-static int
-nto_read_procfsstatus (nto_procfs_status *pstatus)
+int
+pdebug_target::nto_read_procfsstatus (nto_procfs_status *pstatus)
 {
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   DScomm_t tran, recv;
 
   gdb_assert (pstatus != NULL && !! "pstatus must not be NULL\n");
   nto_send_init (&tran, DStMsg_procfsstatus, 0, SET_CHANNEL_DEBUG);
-  tran.pkt.procfsstatus.pid = inferior_ptid.pid ();
+  tran.pkt.procfsstatus.pid = inferior_ptid.pid();
   tran.pkt.procfsstatus.pid = EXTRACT_SIGNED_INTEGER (&tran.pkt.procfsstatus.pid,
-						    4, byte_order);
+                4, nto_byte_order);
   nto_send_recv (&tran, &recv, sizeof (tran.pkt.procfsstatus), 0);
   if (recv.pkt.hdr.cmd == DSrMsg_okdata)
     {
@@ -1477,23 +1524,89 @@ nto_read_procfsstatus (nto_procfs_status *pstatus)
   return 0;
 }
 
-/* This is a 'hack' to reset internal state maintained by gdb. It is 
+
+/* This is a 'hack' to reset internal state maintained by gdb. It is
    unclear why it doesn't do it automatically, but the same hack can be
    seen in linux, so I guess it is o.k. to use it here too.  */
 extern void nullify_last_target_wait_ptid (void);
 
+/*
+ * fetch the current environment names on the target
+ * While I would prefer to fetch the environment as a whole from the target, this would
+ * be very prone of data overflows, DS_DATA_MAX_SIZE is 1k and that could already be not
+ * enough for a convoluted LD_LIBRARY_PATH, so we prepare to fetch them one by one.
+ */
 static int
-nto_start_remote (remote_target *ops)
+fetch_envvars ()
 {
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
+  int len;
+  int rlen;
+  int vars=0;
+  DScomm_t tran, recv, vtran, vrecv;
+  char *varname=NULL;
+
+  /* drop current host environment */
+  current_inferior()->environment.clear();
+
+  nto_send_init (&tran, DStMsg_targenv, DSMSG_TARGENV_GETNAMES, SET_CHANNEL_DEBUG);
+  rlen = nto_send_recv (&tran, &recv, sizeof (tran.pkt.env), 0);
+
+  if (recv.pkt.hdr.cmd == DSrMsg_err)
+    {
+      warning("Could not read target environments!");
+      return 0;
+    }
+
+  if( recv.pkt.env.data[0] == 0 )
+    {
+      nto_trace(0)("Target returned no environments\n");
+      return 0;
+    }
+
+  varname=recv.pkt.env.data;
+  for(len=0; len <= rlen; len++)
+    {
+      if(varname[len]==0)
+	{
+	  vars++;
+	  if(varname[len+1]==0)
+	    break;
+	}
+    }
+
+  nto_trace(0)("Target returned %i environments\n", vars);
+
+  for( len = 0; len < vars; len++ )
+    {
+      nto_send_init (&vtran, DStMsg_targenv, DSMSG_TARGENV_GETVALUE, SET_CHANNEL_DEBUG);
+      strcpy(vtran.pkt.env.data, varname);
+      rlen = nto_send_recv (&vtran, &vrecv, sizeof (vtran.pkt.env), 0);
+
+      if (vrecv.pkt.hdr.cmd == DSrMsg_err)
+	{
+	  warning("Could not read environment %s from target!", varname);
+	}
+      else
+	{
+	  current_inferior()->environment.set (varname, vrecv.pkt.env.data);
+	}
+      varname=varname+strlen(varname)+1;
+    }
+
+  return vars;
+}
+
+static int
+nto_start_remote ( )
+{
   int orig_target_endian;
   DScomm_t tran, recv;
 
-  nto_trace (0) ("nto_start_remote\n");
+  nto_trace (0) ("nto_start_remote\n" );
 
   for (;;)
     {
-      orig_target_endian = (gdbarch_byte_order (target_gdbarch ()) == BFD_ENDIAN_BIG);
+      orig_target_endian = (nto_byte_order == BFD_ENDIAN_BIG);
 
       /* Reset remote pdebug.  */
       SEND_CH_RESET;
@@ -1506,21 +1619,20 @@ nto_start_remote (remote_target *ops)
       nto_send_recv (&tran, &recv, sizeof (tran.pkt.connect), 0);
 
       if (recv.pkt.hdr.cmd != DSrMsg_err)
-	break;
-      if (orig_target_endian == (gdbarch_byte_order (target_gdbarch ()) == BFD_ENDIAN_BIG))
-	break;
+  break;
+      if (orig_target_endian == (nto_byte_order == BFD_ENDIAN_BIG))
+  break;
       /* Send packet again, with opposite endianness.  */
     }
   if (recv.pkt.hdr.cmd == DSrMsg_err)
     {
-      error ("Connection failed: %ld.",
-	     (long) EXTRACT_SIGNED_INTEGER (&recv.pkt.err.err, 4, byte_order));
+       pdebug_error ("Connection failed: %ld.",
+       (long) EXTRACT_SIGNED_INTEGER (&recv.pkt.err.err, 4, nto_byte_order));
     }
   /* NYI: need to size transmit/receive buffers to allowed size in connect response.  */
 
   printf_unfiltered ("Remote target is %s-endian\n",
-		     (gdbarch_byte_order (target_gdbarch ()) ==
-		      BFD_ENDIAN_BIG) ? "big" : "little");
+         (nto_byte_order == BFD_ENDIAN_BIG) ? "big" : "little");
 
   /* Try to query pdebug for their version of the protocol.  */
   nto_send_init (&tran, DStMsg_protover, 0, SET_CHANNEL_DEBUG);
@@ -1528,8 +1640,8 @@ nto_start_remote (remote_target *ops)
   tran.pkt.protover.minor = HOST_QNX_PROTOVER_MINOR;
   nto_send_recv (&tran, &recv, sizeof (tran.pkt.protover), 0);
   if ((recv.pkt.hdr.cmd == DSrMsg_err)
-      && (EXTRACT_SIGNED_INTEGER (&recv.pkt.err.err, 4, byte_order)
-	  == EINVAL))	/* Old pdebug protocol version 0.0.  */
+      && (EXTRACT_SIGNED_INTEGER (&recv.pkt.err.err, 4, nto_byte_order)
+    == EINVAL))  /* Old pdebug protocol version 0.0.  */
     {
       current_session->target_proto_major = 0;
       current_session->target_proto_minor = 0;
@@ -1537,27 +1649,29 @@ nto_start_remote (remote_target *ops)
   else if (recv.pkt.hdr.cmd == DSrMsg_okstatus)
     {
       current_session->target_proto_major =
-	EXTRACT_SIGNED_INTEGER (&recv.pkt.okstatus.status, 4, byte_order);
+  EXTRACT_SIGNED_INTEGER (&recv.pkt.okstatus.status, 4, nto_byte_order);
       current_session->target_proto_minor =
-	EXTRACT_SIGNED_INTEGER (&recv.pkt.okstatus.status, 4, byte_order);
+  EXTRACT_SIGNED_INTEGER (&recv.pkt.okstatus.status, 4, nto_byte_order);
       current_session->target_proto_major =
-	(current_session->target_proto_major >> 8) & DSMSG_PROTOVER_MAJOR;
+  (current_session->target_proto_major >> 8) & DSMSG_PROTOVER_MAJOR;
       current_session->target_proto_minor =
-	current_session->target_proto_minor & DSMSG_PROTOVER_MINOR;
+  current_session->target_proto_minor & DSMSG_PROTOVER_MINOR;
     }
   else
     {
-      error ("Connection failed (Protocol Version Query): %ld.",
-	     (long) EXTRACT_SIGNED_INTEGER (&recv.pkt.err.err, 4, byte_order));
+      pdebug_error ("Connection failed (Protocol Version Query): %ld.",
+       (long) EXTRACT_SIGNED_INTEGER (&recv.pkt.err.err, 4, nto_byte_order));
     }
 
   nto_trace (0) ("Pdebug protover %d.%d, GDB protover %d.%d\n",
-			 current_session->target_proto_major,
-			 current_session->target_proto_minor,
-			 HOST_QNX_PROTOVER_MAJOR, HOST_QNX_PROTOVER_MINOR);
+       current_session->target_proto_major,
+       current_session->target_proto_minor,
+       HOST_QNX_PROTOVER_MAJOR, HOST_QNX_PROTOVER_MINOR);
 
+#ifdef NVIDIA_CUDA_GDB
   /* Fail if remote is pdebug or a different CUDA version in cuda-gdbserver */
-  cuda_qnx_version_handshake (ops);
+  cuda_qnx_version_handshake ();
+#endif
 
   /* If we had an inferior running previously, gdb will have some internal
      states which we need to clear to start fresh.  */
@@ -1565,11 +1679,46 @@ nto_start_remote (remote_target *ops)
   nullify_last_target_wait_ptid ();
   inferior_ptid = null_ptid;
 
+  if( current_session->target_proto_minor > 7 )
+    if( fetch_envvars() == 0)
+      {
+	warning("Could not read target environment! Enabling nto-inherit-env.");
+	current_session->inherit_env=1;
+      }
+
   return 1;
 }
 
+/* Remove any of the remote.c targets from target stack.  Upper targets depend
+   on it so remove them first.  */
+
 static void
-nto_semi_init (remote_target *ops)
+remote_unpush_target ( pdebug_target *target )
+{
+  /* We have to unpush the target from all inferiors, even those that
+     aren't running.  */
+  scoped_restore_current_inferior restore_current_inferior;
+
+  for (inferior *inf : all_inferiors (target))
+    {
+      switch_to_inferior_no_thread (inf);
+      inf->pop_all_targets_at_and_above (process_stratum);
+      generic_mourn_inferior ();
+    }
+
+  /* Don't rely on target_close doing this when the target is popped
+     from the last remote inferior above, because something may be
+     holding a reference to the target higher up on the stack, meaning
+     target_close won't be called yet.  We lost the connection to the
+     target, so clear these now, otherwise we may later throw
+     TARGET_CLOSE_ERROR while trying to tell the remote target to
+     close the file.  */
+//  fileio_handles_invalidate_target (target);
+}
+
+
+static void
+nto_semi_init (void)
 {
   DScomm_t tran, recv;
 
@@ -1578,15 +1727,10 @@ nto_semi_init (remote_target *ops)
 
   inferior_ptid = null_ptid;
 
-  try
+  if (!catch_errors (nto_start_remote) )
     {
-      nto_start_remote (ops);
-    }
-  catch (const gdb_exception_error &ex)
-    {
-      exception_print (gdb_stderr, ex);
       reinit_frame_cache ();
-      remote_unpush_target (ops);
+      remote_unpush_target (get_current_target());
       nto_trace (2) ("nto_semi_init() - pop_target\n");
     }
 }
@@ -1602,19 +1746,29 @@ nto_open_break (int signo)
 
 /* Open a connection to a remote debugger.
    NAME is the filename used for communication.  */
-template <class parent>
 void
-qnx_remote_target<parent>::open (const char *name, int from_tty)
+pdebug_target::pdebug_open (const char *name, int from_tty)
 {
   int tries = 0;
   void (*ofunc) (int);
 
-  nto_trace (0) ("nto_open(name '%s', from_tty %d)\n", name, from_tty);
+  nto_trace (0) ("pdebug_open(name '%s', from_tty %d)\n", name,
+       from_tty);
 
   nto_open_interrupted = 0;
   if (name == 0)
     error
       ("To open a remote debug connection, you need to specify what serial\ndevice is attached to the remote system (e.g. /dev/ttya).");
+
+  /* If we're connected to a running target, target_preopen will kill it.
+     Ask this question first, before target_preopen has a chance to kill
+     anything.  */
+  if ( ( current_session->desc != NULL ) && !have_inferiors ())
+    {
+      if (from_tty
+    && !query (_("Already connected to a remote target.  Disconnect? ")))
+  error (_("Still connected."));
+    }
 
   target_preopen (from_tty);
 
@@ -1622,7 +1776,7 @@ qnx_remote_target<parent>::open (const char *name, int from_tty)
 
   while (tries < MAX_TRAN_TRIES && !nto_open_interrupted)
   {
-    current_session->desc = remote_serial_open (name);
+    current_session->desc = serial_open (name);
 
     if (nto_open_interrupted)
       break;
@@ -1632,11 +1786,11 @@ qnx_remote_target<parent>::open (const char *name, int from_tty)
        needs some time to start listening to the port. */
     if (!current_session->desc)
       {
-	tries++;
-	sleep (1);
+        tries++;
+        sleep (1);
       }
     else
-	break;
+        break;
   }
 
   signal(SIGINT, ofunc);
@@ -1654,10 +1808,10 @@ qnx_remote_target<parent>::open (const char *name, int from_tty)
   if (baud_rate != -1)
     {
       if (serial_setbaudrate (current_session->desc, baud_rate))
-	{
-	  serial_close (current_session->desc);
-	  perror_with_name (name);
-	}
+  {
+    serial_close (current_session->desc);
+    perror_with_name (name);
+  }
     }
 
   serial_raw (current_session->desc);
@@ -1672,36 +1826,86 @@ qnx_remote_target<parent>::open (const char *name, int from_tty)
       gdb_puts (name);
       gdb_puts ("\n");
     }
-  /* CUDA - set cuda_remote flag to be true */
-  set_cuda_remote_flag (true);
 
-  remote_target *remote = cuda_new_remote_target ();
+#ifdef NVIDIA_CUDA_GDB
+  pdebug_target *target = dynamic_cast<pdebug_target *>(new cuda_nat_linux<pdebug_target> {});
+#else
+  pdebug_target *target=new pdebug_target();
+#endif
+  current_inferior ()->push_target (target);  /* Switch to using remote target now.  */
 
-  struct remote_state *rs = remote->get_remote_state ();
-  rs->remote_desc = current_session->desc;
-
-  current_inferior ()->push_target (remote);	/* Switch to using remote target now.  */
   nto_add_commands ();
-  nto_trace (3) ("nto_open() - push_target\n");
+  nto_trace (3) ("pdebug_open() - push_target\n");
 
   inferior_ptid = null_ptid;
 
   /* Start the remote connection; if error (0), discard this target.
      In particular, if the user quits, be sure to discard it
      (we'd be in an inconsistent state otherwise).  */
-  try
+  if (!catch_errors ( nto_start_remote ))
     {
-      nto_start_remote (remote);
+      remote_unpush_target (target);
+
+      nto_trace (0) ("pdebug_open() - pop_target\n");
     }
-  catch (const gdb_exception_error &ex)
+  else
     {
-      remote_unpush_target (remote);
+      /*
+       * GDB expects fork handling to be triggered by a special breakpoint.
+       * NTO sends a special message on fork, this means the system and
+       * especially parent and child process states are not what GDB expects.
+       * When detaching from the non-followed process, this makes no
+       * difference but when GDB is asked to attach to both processes the
+       * flow differs from the expectations and the inferiors get out of sync
+       * leading into an unrecoverable mess.
+       *
+       * So we make sure that detach-on-fork is disabled and shadow the
+       * original control variable so that future changes only change the local
+       * variable while the GDB setting stays immutable.
+       * This way 'show detach-on-fork' will always return 'on' and GDB will
+       * act upon it.
+       *
+       * This MUST be removed once detach-on-fork handling works properly.
+       */
+/* CUDA: Disabled for now. */
+#if 0
+      if (nto_detach_fork == 0)
+	{
+	  struct cmd_list_element *prev_cmd = setlist;
+	  struct cmd_list_element *cmd=NULL;
 
-      nto_trace (0) ("nto_open() - pop_target\n");
+	  // get the setter for detach-on-fork. Yes this will fail if
+	  // detach-on-fork is the first entry in the setter list but in
+	  // infrun.c a lot of setshows are defined before detach-on-fork
+	  while (prev_cmd->next != NULL)
+	    {
+	      if (strcmp (prev_cmd->next->name, "detach-on-fork") == 0)
+		{
+		  cmd=prev_cmd->next;
+		  break;
+		}
+	      prev_cmd=prev_cmd->next;
+	    }
+
+	  if (cmd != NULL)
+	    {
+	      if (cmd->var.get () == false)
+		{
+		  warning("Disabling detach-on-fork is not supported for remote targets, re-enabling it!");
+		  cmd->var.set (true);
+		}
+	      // replace the GDB control flag with our own in the setter only
+	      cmd->var=&nto_detach_fork;
+	      nto_detach_fork=1;
+	      gdb_printf (gdb_stdlog, "Disabled 'set detach-on-fork' for remote targets\n");
+	    }
+	  else
+	    {
+	      error("Could not find 'set detach-on-fork' command!");
+	    }
+	}
+#endif
     }
-
-  /* CUDA - Initialize the remote target */
-  cuda_remote_attach ();
 }
 
 /* Perform remote attach.
@@ -1711,13 +1915,13 @@ qnx_remote_target<parent>::open (const char *name, int from_tty)
 static int
 nto_attach_only (const int pid, DScomm_t *const recv)
 {
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   DScomm_t tran;
+  nto_trace (0) ("nto_attach_only(%i)\n", pid);
 
   nto_send_init (&tran, DStMsg_attach, 0, SET_CHANNEL_DEBUG);
   tran.pkt.attach.pid = pid;
   tran.pkt.attach.pid = EXTRACT_SIGNED_INTEGER (&tran.pkt.attach.pid, 4,
-						byte_order);
+            nto_byte_order);
   nto_send_recv (&tran, recv, sizeof (tran.pkt.attach), 0);
 
   if (recv->pkt.hdr.cmd != DSrMsg_okdata)
@@ -1728,6 +1932,26 @@ nto_attach_only (const int pid, DScomm_t *const recv)
   return 1;
 }
 
+/**
+ * detach debug channel from pid
+ *
+ * this just frees the process on the target and does not affect
+ * GDB's handling/knowledge of the process. Mainly used to clean up
+ * after a fork()
+ */
+static int
+nto_detach_only (const int pid) {
+  DScomm_t tran, recv;
+  nto_trace (0) ("nto_detach_only(%i)\n", pid);
+
+  nto_send_init (&tran, DStMsg_detach, 0, SET_CHANNEL_DEBUG);
+  tran.pkt.detach.pid = pid;
+  tran.pkt.detach.pid = EXTRACT_SIGNED_INTEGER (&tran.pkt.detach.pid, 4, nto_byte_order);
+  nto_send_recv (&tran, &recv, sizeof (tran.pkt.detach), 1);
+
+  return (recv.pkt.hdr.cmd == DSrMsg_okdata);
+}
+
 /* Attaches to a process on the target side.  Arguments are as passed
    to the `attach' command by the user.  This routine can be called
    when the target is not on the target-stack, if the target_can_run
@@ -1735,109 +1959,94 @@ nto_attach_only (const int pid, DScomm_t *const recv)
    Upon exit, the target should be ready for normal operations, and
    should be ready to deliver the status of the process immediately
    (without waiting) to an upcoming target_wait call.  */
-template <class parent>
 void
-qnx_remote_target<parent>::attach (const char *args, int from_tty)
+pdebug_target::attach (const char *args, int from_tty)
 {
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   ptid_t ptid;
   struct inferior *inf;
   struct nto_inferior_data *inf_data;
   DScomm_t tran, *recv = &current_session->recv;
 
+  /* if someone wants to attach, throw away any old session first -
+   * even if attaching fails lateron
+   */
   if (inferior_ptid != null_ptid)
-    nto_semi_init (this);
+    nto_semi_init ();
 
-  nto_trace (0) ("nto_attach(args '%s', from_tty %d)\n",
-			 args ? args : "(null)", from_tty);
+  nto_trace (0) ("pdebug_attach(args '%s', from_tty %d)\n",
+       args ? args : "(null)", from_tty);
 
   if (!args)
     error_no_arg ("process-id to attach");
 
-  ptid = ptid_t (atoi (args));
+  ptid = ptid_t (atoi (args),1,0);
 
-  if (current_program_space->symfile_object_file != NULL)
-   exec_file_attach (current_program_space->symfile_object_file->original_name, from_tty);
+  objfile *symfile_objfile = current_program_space->symfile_object_file;
 
-  if (from_tty)
-    {
-      printf_unfiltered ("Attaching to %s\n", target_pid_to_str (ptid).c_str ());
-      gdb_flush (gdb_stdout);
-    }
+  if (symfile_objfile != NULL) {
+    exec_file_attach (symfile_objfile->original_name, from_tty);
+  }
+  else {
+    const int pid = ptid.pid();
+    struct dspidlist *pidlist = (struct dspidlist *)recv->pkt.okdata.data;
 
-  if (!nto_attach_only (ptid.pid (), recv))
+    /* Look for the binary executable name */
+    nto_send_init (&tran, DStMsg_pidlist, DSMSG_PIDLIST_SPECIFIC, SET_CHANNEL_DEBUG);
+    tran.pkt.pidlist.pid = EXTRACT_UNSIGNED_INTEGER (&pid, 4, nto_byte_order);
+    tran.pkt.pidlist.tid = 0;
+    nto_send_recv (&tran, recv, sizeof (tran.pkt.pidlist), 0);
+    if (only_session.recv.pkt.hdr.cmd == DSrMsg_okdata) {
+      exec_file_attach (pidlist->name, from_tty);
+  }
+  }
+
+  if (from_tty) {
+    printf_unfiltered ("Attaching to %s\n", nto_pid_to_str (ptid).c_str());
+    gdb_flush (gdb_stdout);
+  }
+
+  if (!nto_attach_only (ptid.pid(), recv))
     return;
 
+  gdb_flush (gdb_stdout);
+
   /* Hack this in here, since we will bypass the notify.  */
-  if (supports64bit())
-    {
-      current_session->cputype =
-	EXTRACT_SIGNED_INTEGER (&recv->pkt.notify._64.un.pidload.cputype, 2,
-				byte_order);
-      current_session->cpuid =
-	EXTRACT_SIGNED_INTEGER (&recv->pkt.notify._64.un.pidload.cpuid, 4,
-				byte_order);
-    }
-  else
-    {
-      current_session->cputype =
-	EXTRACT_SIGNED_INTEGER (&recv->pkt.notify._32.un.pidload.cputype, 2,
-				byte_order);
-      current_session->cpuid =
-	EXTRACT_SIGNED_INTEGER (&recv->pkt.notify._32.un.pidload.cpuid, 4,
-				byte_order);
-    }
-#ifdef QNX_SET_PROCESSOR_TYPE
-  QNX_SET_PROCESSOR_TYPE (current_session->cpuid);	/* For mips.  */
-#endif
-  /* Get thread info as well.  */
-  //ptid = nto_get_thread_alive (ptid);
-  inferior_ptid = ptid_t (EXTRACT_SIGNED_INTEGER (&recv->pkt.notify._32.pid, 4,
-						  byte_order),
-			  0,
-			  EXTRACT_SIGNED_INTEGER (&recv->pkt.notify._32.tid, 4,
-						  byte_order));
+  current_session->cputype =
+  EXTRACT_SIGNED_INTEGER (&recv->pkt.notify.un.pidload.cputype, 2,
+    nto_byte_order);
+  current_session->cpuid =
+  EXTRACT_SIGNED_INTEGER (&recv->pkt.notify.un.pidload.cpuid, 4,
+    nto_byte_order);
+
   inf = current_inferior ();
-  inf->attach_flag = 1;
+  inf->attach_flag = true;
+  inf->removable = false;
 
   /* Remove LD_LIBRARY_PATH. In the future, we should fetch
    * it from the target and setup correctly prepended with
    * QNX_TARGET/<CPU> */
-  inf->environment.set ("LD_LIBRARY_PATH", "");
+  inf->environment.set("LD_LIBRARY_PATH", "");
 
-  inferior_appeared (inf, ptid.pid ());
-
-  if (current_program_space->symfile_object_file == NULL)
-    {
-      const int pid = ptid.pid ();
-      struct dspidlist *pidlist = (struct dspidlist *)recv->pkt.okdata.data;
-
-      /* Look for the binary executable name */
-      nto_send_init (&tran, DStMsg_pidlist, DSMSG_PIDLIST_SPECIFIC,
-		     SET_CHANNEL_DEBUG);
-      tran.pkt.pidlist.pid = EXTRACT_UNSIGNED_INTEGER (&pid, 4, byte_order);
-      tran.pkt.pidlist.tid = 0;
-      nto_send_recv (&tran, recv, sizeof (tran.pkt.pidlist), 0);
-      if (only_session.recv.pkt.hdr.cmd == DSrMsg_okdata)
-	{
-	  exec_file_attach (pidlist->name, from_tty);
-	}
-    }
-
-  /* Initalize thread list.  */
-  update_thread_list ();
+  inferior_ptid  = ptid;
+  inferior_appeared (inf, inferior_ptid.pid());
+  /* add and switch to the current thread */
+  thread_info *tp = add_thread (this, inferior_ptid);
+  switch_to_thread_no_regs (tp);
+  /* update all thread information */
+  update_thread_list();
 
  /* NYI: add symbol information for process.  */
   /* Turn the PIDLOAD into a STOPPED notification so that when gdb
-     calls nto_wait, we won't cycle around.  */
+     calls nto_wait, we won't cycle around.
+     recv refers to a global structure here! */
   recv->pkt.hdr.cmd = DShMsg_notify;
   recv->pkt.hdr.subcmd = DSMSG_NOTIFY_STOPPED;
-  recv->pkt.notify._32.pid = ptid.pid ();
-  recv->pkt.notify._32.tid = ptid.tid ();
-  recv->pkt.notify._32.pid = EXTRACT_SIGNED_INTEGER (&recv->pkt.notify._32.pid, 4,
-						     byte_order);
-  recv->pkt.notify._32.tid = EXTRACT_SIGNED_INTEGER (&recv->pkt.notify._32.tid, 4,
-						     byte_order);
+  recv->pkt.notify.pid = ptid.pid();
+  recv->pkt.notify.tid = ptid.lwp();
+  recv->pkt.notify.pid = EXTRACT_SIGNED_INTEGER (&recv->pkt.notify.pid, 4,
+                 nto_byte_order);
+  recv->pkt.notify.tid = EXTRACT_SIGNED_INTEGER (&recv->pkt.notify.tid, 4,
+                 nto_byte_order);
 
   inf_data = nto_inferior_data (inf);
   inf_data->has_execution = 1;
@@ -1846,117 +2055,84 @@ qnx_remote_target<parent>::attach (const char *args, int from_tty)
   inf_data->has_memory = 1;
 }
 
-template <class parent>
 void
-qnx_remote_target<parent>::post_attach (int pid)
+pdebug_target::post_attach (int pid)
 {
   nto_trace (0) ("%s pid:%d\n", __func__, pid);
-#ifdef SOLIB_CREATE_INFERIOR_HOOK
-  if (current_program_space->exec_bfd ())
-    SOLIB_CREATE_INFERIOR_HOOK (pid);
-#endif
+  if (current_program_space->exec_bfd () != NULL)
+    solib_create_inferior_hook(0);
 }
 
 /* This takes a program previously attached to and detaches it.  After
    this is done, GDB can be used to debug some other program.  We
    better not have left any breakpoints in the target program or it'll
    die when it hits one.  */
-template <class parent>
 void
-qnx_remote_target<parent>::detach (inferior *inf, int from_tty)
+pdebug_target::detach (inferior *inf, int from_tty)
 {
-  DScomm_t tran, recv;
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
-  struct nto_inferior_data *inf_data;
-
   gdb_assert (inf != NULL);
 
-  nto_trace (0) ("nto_detach()\n");
+  nto_trace (0) ("pdebug_detach(%d from_tty %d)\n", inf->pid, from_tty);
 
   if (from_tty)
     {
       const char *exec_file = get_exec_file (0);
-      if (exec_file == 0)
-	exec_file = "";
-
-      printf_unfiltered ("Detaching from program: %s %d\n", exec_file,
-			 inferior_ptid.pid ());
+      printf_unfiltered ("Detaching from program: %s %d\n", exec_file==NULL?"":exec_file,
+       inf->pid);
       gdb_flush (gdb_stdout);
     }
-#if 0 /* XXX - where does args come from now? */
-  if (args)
-    {
-      int sig = nto_gdb_signal_to_target (target_gdbarch (),
-					  (enum gdb_signal)atoi (args));
 
-      nto_send_init (&tran, DStMsg_kill, 0, SET_CHANNEL_DEBUG);
-      tran.pkt.kill.signo = EXTRACT_SIGNED_INTEGER (&sig, 4, byte_order);
-      nto_send_recv (&tran, &recv, sizeof (tran.pkt.kill), 1);
-    }
-#endif
-
-  nto_send_init (&tran, DStMsg_detach, 0, SET_CHANNEL_DEBUG);
-  tran.pkt.detach.pid = inferior_ptid.pid ();
-  tran.pkt.detach.pid = EXTRACT_SIGNED_INTEGER (&tran.pkt.detach.pid, 4, byte_order);
-  nto_send_recv (&tran, &recv, sizeof (tran.pkt.detach), 1);
-  target_mourn_inferior (inferior_ptid);
+  nto_detach_only(inf->pid);
+  detach_inferior(inf);
+  mourn_inferior ();
   inferior_ptid = null_ptid;
-
-  inf_data = nto_inferior_data (inf);
-  inf_data->has_execution = 0;
-  inf_data->has_stack = 0;
-  inf_data->has_registers = 0;
-  inf_data->has_memory = 0;
 }
 
+/* implementation of disconnect so mi-target-disconnect may work */
+void
+pdebug_target::disconnect ( const char *args, int from_tty)
+{
+  if (args) {
+    error (_("Argument given to \"disconnect\" while remote debugging."));
+  }
+
+  /* clean up current inferior */
+  mourn_inferior ();
+
+  /* Make sure we unpush even the extended remote targets.  Calling
+     nto_mourn_inferior won't unpush, and remote_mourn won't
+     unpush if there is more than one inferior left. unpush calls close()
+     on the target, so the connection will be cleaned up */
+  remote_unpush_target (this);
+
+  if (from_tty) {
+    gdb_puts ("Ending remote debugging.\n");
+  }
+}
 
 /* Tell the remote machine to resume.  */
-template <class parent>
 void
-qnx_remote_target<parent>::resume (ptid_t ptid, int step, enum gdb_signal sig)
+pdebug_target::resume (ptid_t ptid, int step,
+      enum gdb_signal sig)
 {
   DScomm_t tran, *const recv = &current_session->recv;
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   int signo;
-  const int runone = ptid.tid () > 0;
+  const int runone = ptid.lwp() > 0;
   unsigned sizeof_pkt;
+  ptid_t restore = inferior_ptid;
 
-  nto_trace (0) ("nto_resume(pid %d, tid %ld, step %d, sig %d)\n",
-		 ptid.pid (), ptid.tid (),
-		 step, nto_gdb_signal_to_target (target_gdbarch (), sig));
+  nto_trace (0) ("pdebug_resume(pid %d, tid %ld, step %d, sig %d)\n",
+     ptid.pid(), ptid.lwp(),
+     step, nto_gdb_signal_to_target (target_gdbarch (), sig));
 
   if (inferior_ptid == null_ptid)
     return;
 
-  gdb_assert (inferior_ptid.pid () == current_inferior ()->pid);
+  gdb_assert (inferior_ptid.pid() == current_inferior ()->pid);
 
-  /* Select requested thread.  If minus_one_ptid is given, or selecting
-     requested thread fails, select tid 1.  If tid 1 does not exist,
-     first next available will be selected.  */
-  if (ptid != minus_one_ptid)
+  if (!nto_set_thread_alive (ptid))
     {
-      ptid_t ptid_alive = nto_get_thread_alive (this,
-						ptid_t (ptid.pid (), 0, inferior_ptid.tid ()));
-
-      /* If returned thread is minus_one_ptid, then requested thread is
-	 dead and there are no alive threads with tid > ptid_get_tid (ptid).
-	 Try with first alive with tid >= 1.  */
-      if (ptid_alive == minus_one_ptid)
-	{
-	  nto_trace (0) ("Thread %ld does not exist. Trying with tid >= 1\n",
-			 ptid.tid ());
-	  ptid_alive = nto_get_thread_alive (this, ptid_t (ptid.pid (), 0, 1));
-	  nto_trace (1) ("First next tid found is: %ld\n", 
-			 ptid_alive.tid ());
-	}
-      if (ptid_alive != minus_one_ptid)
-	{
-	  if (!set_thread (ptid_alive.tid ()))
-	    {
-	      nto_trace (0) ("Failed to set thread: %ld\n", 
-			     ptid_alive.tid ());
-	    }
-	}
+      error("Process %d has no active threads!", ptid.pid() );
     }
 
   /* The HandleSig stuff is part of the new protover 0.1, but has not
@@ -1969,64 +2145,47 @@ qnx_remote_target<parent>::resume (ptid_t ptid, int step, enum gdb_signal sig)
   tran.pkt.handlesig.sig_to_pass
     = nto_gdb_signal_to_target (target_gdbarch (), sig);
   tran.pkt.handlesig.sig_to_pass =
-    EXTRACT_SIGNED_INTEGER (&tran.pkt.handlesig.sig_to_pass, 4, byte_order);
+    EXTRACT_SIGNED_INTEGER (&tran.pkt.handlesig.sig_to_pass, 4, nto_byte_order);
   for (signo = 0; signo < QNXNTO_NSIG; signo++)
     {
       if (signal_stop_state (nto_gdb_signal_from_target (
-			     target_gdbarch (), signo)) == 0
-	  && signal_print_state (nto_gdb_signal_from_target (
-				 target_gdbarch (), signo)) == 0
-	  && signal_pass_state (nto_gdb_signal_from_target (
-				target_gdbarch (), signo)) == 1)
-	{
-	  tran.pkt.handlesig.signals[signo] = 0;
-	}
+           target_gdbarch (), signo)) == 0
+    && signal_print_state (nto_gdb_signal_from_target (
+         target_gdbarch (), signo)) == 0
+    && signal_pass_state (nto_gdb_signal_from_target (
+        target_gdbarch (), signo)) == 1)
+  {
+    tran.pkt.handlesig.signals[signo] = 0;
+  }
       else
-	{
-	  tran.pkt.handlesig.signals[signo] = 1;
-	}
+  {
+    tran.pkt.handlesig.signals[signo] = 1;
+  }
     }
   nto_send_recv (&tran, recv, sizeof (tran.pkt.handlesig), 0);
   if (recv->pkt.hdr.cmd == DSrMsg_err)
     if (sig != GDB_SIGNAL_0)
       {
-	nto_send_init (&tran, DStMsg_kill, 0, SET_CHANNEL_DEBUG);
-	tran.pkt.kill.signo = nto_gdb_signal_to_target (target_gdbarch (), sig);
-	tran.pkt.kill.signo =
-	  EXTRACT_SIGNED_INTEGER (&tran.pkt.kill.signo, 4, byte_order);
-	nto_send_recv (&tran, recv, sizeof (tran.pkt.kill), 1);
+  nto_send_init (&tran, DStMsg_kill, 0, SET_CHANNEL_DEBUG);
+  tran.pkt.kill.signo = nto_gdb_signal_to_target (target_gdbarch (), sig);
+  tran.pkt.kill.signo =
+    EXTRACT_SIGNED_INTEGER (&tran.pkt.kill.signo, 4, nto_byte_order);
+  nto_send_recv (&tran, recv, sizeof (tran.pkt.kill), 1);
       }
 
-#if 0
-  // aarch has single step but also does hardwar stepping.
-  if (gdbarch_software_single_step_p (target_gdbarch ()))
-    {
-      /* Do not interfere with gdb logic. */
-      nto_send_init (&tran, DStMsg_run, DSMSG_RUN,
-		     SET_CHANNEL_DEBUG);
-    }
-  else
-#endif
-    {
-      nto_send_init (&tran, DStMsg_run, (step || runone) ? DSMSG_RUN_COUNT
-							 : DSMSG_RUN,
-		     SET_CHANNEL_DEBUG);
-    }
-  if (supports64bit())
-    {
-      tran.pkt.run.step.count = 1;
-      tran.pkt.run.step.count =
-	EXTRACT_UNSIGNED_INTEGER (&tran.pkt.run.step.count, 4, byte_order);
+  nto_send_init (&tran, DStMsg_run, (step || runone) ? DSMSG_RUN_COUNT
+           : DSMSG_RUN, SET_CHANNEL_DEBUG);
+  tran.pkt.run.step.count = 1;
+  tran.pkt.run.step.count =
+  EXTRACT_UNSIGNED_INTEGER (&tran.pkt.run.step.count, 4, nto_byte_order);
       sizeof_pkt = sizeof (tran.pkt.run);
-    }
-  else
-    {
-      tran.pkt.run32.step.count = 1;
-      tran.pkt.run32.step.count =
-	EXTRACT_UNSIGNED_INTEGER (&tran.pkt.run32.step.count, 4, byte_order);
-      sizeof_pkt = sizeof (tran.pkt.run32);
-    }
   nto_send_recv (&tran, recv, sizeof_pkt, 1);
+
+  /* switch back to original inferior if needed */
+  if (restore != inferior_ptid)
+    {
+      switch_to_thread (this, restore);
+    }
 }
 
 static void (*ofunc) (int);
@@ -2037,9 +2196,9 @@ static void (*ofunc_alrm) (int);
 /* Yucky but necessary globals used to track state in nto_wait() as a
    result of things done in nto_interrupt(), nto_interrupt_twice(),
    and nto_interrupt_retry().  */
-static sig_atomic_t SignalCount = 0;	/* Used to track ctl-c retransmits.  */
-static sig_atomic_t InterruptedTwice = 0;	/* Set in nto_interrupt_twice().  */
-static sig_atomic_t WaitingForStopResponse = 0;	/* Set in nto_interrupt(), cleared in nto_wait().  */
+static sig_atomic_t SignalCount = 0;  /* Used to track ctl-c retransmits.  */
+static sig_atomic_t InterruptedTwice = 0;  /* Set in nto_interrupt_twice().  */
+static sig_atomic_t WaitingForStopResponse = 0;  /* Set in nto_interrupt(), cleared in nto_wait().  */
 
 #define QNX_TIMER_TIMEOUT 5
 #define QNX_CTL_C_RETRIES 3
@@ -2048,10 +2207,10 @@ static void
 nto_interrupt_retry (int signo)
 {
   SignalCount++;
-  if (SignalCount >= QNX_CTL_C_RETRIES)	/* Retry QNX_CTL_C_RETRIES times after original transmission.  */
+  if (SignalCount >= QNX_CTL_C_RETRIES)  /* Retry QNX_CTL_C_RETRIES times after original transmission.  */
     {
       printf_unfiltered
-	("CTL-C transmit - 3 retries exhausted.  Ending debug session.\n");
+  ("CTL-C transmit - 3 retries exhausted.  Ending debug session.\n");
       WaitingForStopResponse = 0;
       SignalCount = 0;
       target_mourn_inferior (inferior_ptid);
@@ -2067,14 +2226,14 @@ nto_interrupt_retry (int signo)
 
 /* Ask the user what to do when an interrupt is received.  */
 static void
-interrupt_query (void)
+nto_interrupt_query (void)
 {
   alarm (0);
   signal (SIGINT, ofunc);
 #ifndef __MINGW32__
   signal (SIGALRM, ofunc_alrm);
 #endif
-  current_inferior ()->top_target ()->terminal_ours ();
+  target_terminal::ours ();
   InterruptedTwice = 0;
 
   if (query
@@ -2085,7 +2244,7 @@ interrupt_query (void)
       //deprecated_throw_reason (RETURN_QUIT);
       quit ();
     }
-  current_inferior ()->top_target ()->terminal_inferior ();
+  target_terminal::inferior ();
 #ifndef __MINGW32__
   signal (SIGALRM, nto_interrupt_retry);
 #endif
@@ -2095,8 +2254,8 @@ interrupt_query (void)
 
 
 /* The user typed ^C twice.  */
-static void
-nto_interrupt_twice (int signo)
+static
+void nto_interrupt_twice (int signo)
 {
   InterruptedTwice = 1;
 }
@@ -2136,15 +2295,17 @@ nto_interrupt (int signo)
 /* Wait until the remote machine stops, then return,
    storing status in STATUS just as `wait' would.
    Returns "pid".  */
-template <class parent>
+/* TODO: check options.. */
 ptid_t
-qnx_remote_target<parent>::wait (ptid_t ptid, struct target_waitstatus *status, target_wait_flags target_options)
+pdebug_target::wait (ptid_t ptid, struct target_waitstatus *status, target_wait_flags options)
 {
   DScomm_t *const recv = &current_session->recv;
-  ptid_t returned_ptid = null_ptid;
+  ptid_t returned_ptid = ptid_t(current_inferior ()->pid, 1);
 
-  nto_trace (0) ("nto_wait pid %d, tid %ld\n",
-		 ptid.pid (), ptid.tid ());
+  nto_trace (0) ("pdebug_wait pid %d, inferior pid %d tid %ld\n",
+     ptid.pid(), inferior_ptid.pid(), ptid.lwp());
+
+  status->set_stopped (GDB_SIGNAL_0);
 
   nto_inferior_data (NULL)->stopped_flags = 0;
 
@@ -2162,106 +2323,94 @@ qnx_remote_target<parent>::wait (ptid_t ptid, struct target_waitstatus *status, 
       ofunc_alrm = (void (*)(int)) signal (SIGALRM, nto_interrupt_retry);
 #endif
       for (;;)
-	{
-	  /* CUDA: unblocking gdb 10.1 upgrade */
-	  if (current_session->pending.empty())
-	  {
-	    len = getpkt (recv, 1);
-	    if (len < 0)		/* Error - probably received MSG_NAK.  */
-	    {
-	      if (WaitingForStopResponse)
-	      {
-		/* We do not want to get SIGALRM while calling it's handler
-		   the timer is reset in the handler.  */
-		alarm (0);
+  {
+#ifdef NVIDIA_BUGFIX
+    if (current_session->pending.empty ())
+      {
+#endif
+    len = getpkt (recv, 1);
+    if (len < 0)    /* Error - probably received MSG_NAK.  */
+      {
+        if (WaitingForStopResponse)
+    {
+      /* We do not want to get SIGALRM while calling it's handler
+         the timer is reset in the handler.  */
+      alarm (0);
 #ifndef __MINGW32__
-		nto_interrupt_retry (SIGALRM);
+      nto_interrupt_retry (SIGALRM);
 #else
-		nto_interrupt_retry (0);
+      nto_interrupt_retry (0);
 #endif
-		continue;
-	      }
-	      else
-	      {
-		/* Turn off the alarm, and reset the signals, and return.  */
-		alarm (0);
-		signal (SIGINT, ofunc);
+      continue;
+    }
+        else
+    {
+      /* Turn off the alarm, and reset the signals, and return.  */
+      alarm (0);
+      signal (SIGINT, ofunc);
 #ifndef __MINGW32__
-		signal (SIGALRM, ofunc_alrm);
+      signal (SIGALRM, ofunc_alrm);
 #endif
-		return null_ptid;
-	      }
-	    }
-	  }
-	  else
-	  {
-	    *recv = current_session->pending.front();
-	    current_session->pending.pop();
-	    current_session->channelrd = recv->pkt.hdr.channel;
-	  }
+      warning(" wait got an alarm!");
+      return null_ptid;
+    }
+      }
+#ifdef NVIDIA_BUGFIX
+      }
+    else
+      {
+	*recv = current_session->pending.front ();
+	current_session->channelrd = recv->pkt.hdr.channel;
+	current_session->pending.pop ();
+      }
+#endif
+    if (current_session->channelrd == SET_CHANNEL_TEXT)
+      nto_incoming_text (&recv->text, len);
+    else      /* DEBUG CHANNEL.  */
+      {
+        recv->pkt.hdr.cmd &= ~DSHDR_MSG_BIG_ENDIAN;
+        /* If we have sent the DStMsg_stop due to a ^C, we expect
+           to get the response, so check and clear the flag
+           also turn off the alarm - no need to retry,
+           we did not lose the packet.  */
+        if ((WaitingForStopResponse) && (recv->pkt.hdr.cmd == DSrMsg_ok))
+    {
+      WaitingForStopResponse = 0;
+      status->set_stopped (GDB_SIGNAL_INT);
+      alarm (0);
+      if (!waiting_for_notify)
+        break;
+    }
+        /* Else we get the Notify we are waiting for.  */
+        else if (recv->pkt.hdr.cmd == DShMsg_notify)
+    {
+      DScomm_t tran;
 
-	  if (current_session->channelrd == SET_CHANNEL_TEXT)
-	    nto_incoming_text (&recv->text, len);
-	  else			/* DEBUG CHANNEL.  */
-	    {
-	      recv->pkt.hdr.cmd &= ~DSHDR_MSG_BIG_ENDIAN;
-	      /* If we have sent the DStMsg_stop due to a ^C, we expect
-	         to get the response, so check and clear the flag
-	         also turn off the alarm - no need to retry,
-	         we did not lose the packet.  */
-	      if ((WaitingForStopResponse) && (recv->pkt.hdr.cmd == DSrMsg_ok))
-		{
-		  WaitingForStopResponse = 0;
-		  status->set_signalled (GDB_SIGNAL_INT);
-		  alarm (0);
-		  if (!waiting_for_notify)
-		    break;
-		}
-	      /* Else we get the Notify we are waiting for.  */
-	      else if (recv->pkt.hdr.cmd == DShMsg_notify)
-		{
-		  DScomm_t tran;
+      waiting_for_notify = 0;
+      /* Send an OK packet to acknowledge the notify.  */
+      nto_send_init (&tran, DSrMsg_ok, recv->pkt.hdr.mid,
+         SET_CHANNEL_DEBUG);
+      tran.pkt.hdr.mid = recv->pkt.hdr.mid;
+      putpkt (&tran, sizeof (tran.pkt.ok));
 
-		  waiting_for_notify = 0;
-		  /* Send an OK packet to acknowledge the notify.  */
-		  nto_send_init (&tran, DSrMsg_ok, recv->pkt.hdr.mid,
-				 SET_CHANNEL_DEBUG);
-		  tran.pkt.hdr.mid = recv->pkt.hdr.mid;
-		  putpkt (&tran, sizeof (tran.pkt.ok));
-		  /* Handle old pdebug protocol behavior, where out of order msgs get dropped
-		     version 0.0 does this, so we must resend after a notify.  */
-		  if ((current_session->target_proto_major == 0)
-		      && (current_session->target_proto_minor == 0))
-		    {
-		      if (WaitingForStopResponse)
-			{
-			  alarm (0);
+      returned_ptid = nto_parse_notify (recv, status);
 
-			  /* Change the command to something other than notify
-			     so we don't loop in here again - leave the rest of
-			     the packet alone for nto_parse_notify() below!!!  */
-			  recv->pkt.hdr.cmd = DSrMsg_ok;
-			  nto_interrupt (SIGINT);
-			}
-		    }
-		  returned_ptid = nto_parse_notify (recv, this, status);
-
-		  if (!WaitingForStopResponse)
-		    break;
-		}
-	    }
-	}
+      if (!WaitingForStopResponse)
+        break;
+    }
+      }
+  }
       gdb_flush (gdb_stdtarg);
       gdb_flush (gdb_stdout);
       alarm (0);
 
-      /* Hitting Ctl-C sends a stop request, a second ctl-c means quit, 
-	 so query here, after handling the results of the first ctl-c
-	 We know we were interrupted twice because the yucky global flag
-	 'InterruptedTwice' is set in the handler, and cleared in
-	 interrupt_query().  */
+      /* Hitting Ctl-C sends a stop request, a second ctl-c means quit,
+         so query here, after handling the results of the first ctl-c
+         We know we were interrupted twice because the yucky global flag
+         'InterruptedTwice' is set in the handler, and cleared in
+         nto_interrupt_query().  */
       if (InterruptedTwice)
-	interrupt_query ();
+	nto_interrupt_query ();
 
       signal (SIGINT, ofunc);
 #ifndef __MINGW32__
@@ -2269,15 +2418,14 @@ qnx_remote_target<parent>::wait (ptid_t ptid, struct target_waitstatus *status, 
 #endif
     }
 
-  recv->pkt.hdr.cmd = DSrMsg_ok;	/* To make us wait the next time.  */
+  recv->pkt.hdr.cmd = DSrMsg_ok;  /* To make us wait the next time.  */
+  nto_trace(0)("pdebug_wait: returning %s\n", nto_pid_to_str(returned_ptid).c_str());
   return returned_ptid;
 }
 
-static ptid_t
-nto_parse_notify (const DScomm_t *const recv, remote_target *ops,
-		  struct target_waitstatus *status)
+ptid_t
+pdebug_target::nto_parse_notify (const DScomm_t * const recv, struct target_waitstatus *status)
 {
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   int pid, tid;
   CORE_ADDR stopped_pc = 0;
   struct inferior *inf;
@@ -2285,247 +2433,223 @@ nto_parse_notify (const DScomm_t *const recv, remote_target *ops,
 
   inf = current_inferior ();
 
-  gdb_assert (inf != NULL);
+  gdb_assert(inf != NULL);
 
   inf_data = nto_inferior_data (inf);
 
-  gdb_assert (inf_data != NULL);
+  gdb_assert(inf_data != NULL);
 
-  nto_trace (0) ("nto_parse_notify(status) - subcmd %d\n",
-			 recv->pkt.hdr.subcmd);
+  nto_trace(0) (
+      "nto_parse_notify(status) - %s\n",
+      recv->pkt.hdr.subcmd <= DSMSG_NOTIFY_EXEC ?
+	  _DSMSGS[recv->pkt.hdr.subcmd] : "DSMSG_UNKNOWN");
 
-  pid = EXTRACT_SIGNED_INTEGER (&recv->pkt.notify._32.pid, 4, byte_order);
-  tid = EXTRACT_SIGNED_INTEGER (&recv->pkt.notify._32.tid, 4, byte_order);
-  if (tid == 0)
-    tid = 1;
+  pid = EXTRACT_SIGNED_INTEGER(&recv->pkt.notify.pid, 4, nto_byte_order);
+  tid = EXTRACT_SIGNED_INTEGER(&recv->pkt.notify.tid, 4, nto_byte_order);
 
   switch (recv->pkt.hdr.subcmd)
     {
+    /* process death */
     case DSMSG_NOTIFY_PIDUNLOAD:
-      /* Added a new struct pidunload_v3 to the notify.un.  This includes a
-	 faulted flag so we can tell if the status value is a signo or an
-	 exit value.  See dsmsgs.h, protoverminor bumped to 3. GP Oct 31 2002.	*/
-      if (current_session->target_proto_major > 0
-	  || current_session->target_proto_minor >= 3)
-	{
-	  const int32_t *const pstatus = (supports64bit()) ? &recv->pkt.notify._64.un.pidunload_v3.status
-				       : &recv->pkt.notify._32.un.pidunload_v3.status;
+      {
+      const int32_t * const pstatus = &recv->pkt.notify.un.pidunload_v3.status;
+      const int faulted = recv->pkt.notify.un.pidunload_v3.faulted;
 
-	  const int faulted = (supports64bit()) ? recv->pkt.notify._64.un.pidunload_v3.faulted
-						: recv->pkt.notify._32.un.pidunload_v3.faulted;
-	  if (faulted)
-	    {
-	      auto value =
-		nto_gdb_signal_from_target
-		  (target_gdbarch (), EXTRACT_SIGNED_INTEGER
-				    (pstatus, 4, byte_order));
-	      if (value)
-		status->set_signalled (value);	/* Abnormal death.  */
-	      else
-		status->set_exited (value);	/* Normal death.  */
-	    }
+      if (faulted)
+	{
+	  auto sig = nto_gdb_signal_from_target (
+	      target_gdbarch (),
+	      EXTRACT_SIGNED_INTEGER(pstatus, 4, nto_byte_order));
+	  if (sig)
+	    status->set_signalled (sig); /* Abnormal death.  */
 	  else
-	    {
-	      auto value =
-		EXTRACT_SIGNED_INTEGER (pstatus, 4, byte_order);
-	      status->set_exited (value);	/* Normal death, possibly with exit value.  */
-	    }
+	    status->set_exited (sig); /* Normal death.  */
 	}
       else
 	{
-	  /* Only supported on 32-bit pdebugs, old ones. */
-	  auto value=
-	    nto_gdb_signal_from_target (target_gdbarch (),
-					EXTRACT_SIGNED_INTEGER
-					  (&recv->pkt.notify._32.un.pidunload.status,
-					   4, byte_order));
-	  if (value)
-	    status->set_signalled (value);	/* Abnormal death.  */
-	  else
-	    status->set_exited (value);		/* Normal death.  */
-	  /* Current inferior is gone, switch to something else */
+	  /* Normal death, possibly with exit value.  */
+	  status->set_exited (EXTRACT_SIGNED_INTEGER(pstatus, 4,
+						     nto_byte_order));
 	}
+      }
       inf_data->has_execution = 0;
       inf_data->has_stack = 0;
       inf_data->has_registers = 0;
       inf_data->has_memory = 0;
       break;
+
+    /* stepped on a breakpoint */
     case DSMSG_NOTIFY_BRK:
-      if (supports64bit())
-	{
-	  inf_data->stopped_flags =
-	    EXTRACT_UNSIGNED_INTEGER (&recv->pkt.notify._64.un.brk.flags, 4,
-				      byte_order);
-	  stopped_pc = EXTRACT_UNSIGNED_INTEGER (&recv->pkt.notify._64.un.brk.ip,
-						 8, byte_order);
-	}
-      else
-	{
-	  inf_data->stopped_flags =
-	    EXTRACT_UNSIGNED_INTEGER (&recv->pkt.notify._32.un.brk.flags, 4,
-				      byte_order);
-	  stopped_pc = EXTRACT_UNSIGNED_INTEGER (&recv->pkt.notify._32.un.brk.ip,
-						 4, byte_order);
-	}
+      inf_data->stopped_flags = EXTRACT_UNSIGNED_INTEGER(
+	      &recv->pkt.notify.un.brk.flags, 4, nto_byte_order);
+      stopped_pc = EXTRACT_UNSIGNED_INTEGER(&recv->pkt.notify.un.brk.ip,
+						8, nto_byte_order);
       inf_data->stopped_pc = stopped_pc;
-      /* NOTE: We do not have New thread notification. This will cause
-	 gdb to think that breakpoint stop is really a new thread event if
-	 it happens to be in a thread unknown prior to this stop.
-	 We add new threads here to be transparent to the rest 
-	 of the gdb.  */
-      if (current_session->target_proto_major == 0 &&
-	  current_session->target_proto_minor < 4)
-	{
-	  update_thread_list ();
-	}
-      /* Fallthrough.  */
-    case DSMSG_NOTIFY_STEP:
-      /* NYI: could update the CPU's IP register here.  */
       status->set_stopped (GDB_SIGNAL_TRAP);
       break;
-    case DSMSG_NOTIFY_SIGEV:
-      if (supports64bit())
-	{
-	  auto sig =
-	    nto_gdb_signal_from_target (target_gdbarch (),
-					EXTRACT_SIGNED_INTEGER
-					  (&recv->pkt.notify._64.un.sigev.signo,
-					   4, byte_order));
-	  status->set_stopped (sig);
-	}
-      else
-	{
-	  auto sig =
-	    nto_gdb_signal_from_target (target_gdbarch (),
-					EXTRACT_SIGNED_INTEGER
-					  (&recv->pkt.notify._32.un.sigev.signo,
-					   4, byte_order));
-	  status->set_stopped (sig);
-	}
+
+    /* took a step */
+    case DSMSG_NOTIFY_STEP:
+      stopped_pc = EXTRACT_UNSIGNED_INTEGER(
+	      &recv->pkt.notify.un.step.ip, sizeof(uint64_t), nto_byte_order);
+      inf_data->stopped_pc = stopped_pc;
+      status->set_stopped (GDB_SIGNAL_TRAP);
       break;
-    case DSMSG_NOTIFY_PIDLOAD:
-      if (supports64bit())
-	{
-	  current_session->cputype =
-	    EXTRACT_SIGNED_INTEGER (&recv->pkt.notify._64.un.pidload.cputype, 2,
-				    byte_order);
-	  current_session->cpuid =
-	    EXTRACT_SIGNED_INTEGER (&recv->pkt.notify._64.un.pidload.cpuid, 4,
-				    byte_order);
-	}
-      else
-	{
-	  current_session->cputype =
-	    EXTRACT_SIGNED_INTEGER (&recv->pkt.notify._32.un.pidload.cputype, 2,
-				    byte_order);
-	  current_session->cpuid =
-	    EXTRACT_SIGNED_INTEGER (&recv->pkt.notify._32.un.pidload.cpuid, 4,
-				    byte_order);
-	}
-#ifdef QNX_SET_PROCESSOR_TYPE
-      QNX_SET_PROCESSOR_TYPE (current_session->cpuid);	/* For mips.  */
+
+    /* received a signal */
+    case DSMSG_NOTIFY_SIGEV:
+#ifdef NVIDIA_CUDA_GDB
+  {
+    auto sig = nto_gdb_signal_from_target (
+	      target_gdbarch (),
+	      EXTRACT_SIGNED_INTEGER(&recv->pkt.notify.un.sigev.signo, 4,
+				     nto_byte_order));
+    /* CUDA - We need to check if we have received an urgent message (aka sync event).
+       This happens when we receive a SIGEMT or SIGILL. We switch between the two to
+       prevent QNX from killing the app due to the same signal being received twice in
+       a row.
+       FIXME: Currently we will get signaled before init has finished. We are unable
+       to detect that our event notification was received with cuda_notification_received ().
+       As a result, we always assume SIGEMT or SIGILL are notifications. This is not
+       desirable. */
+    if (sig == GDB_SIGNAL_EMT || sig == GDB_SIGNAL_ILL)
+      status->set_stopped (sig);
+    else
+      status->set_signalled (sig);
+  }
+#else
+      status->set_signalled (nto_gdb_signal_from_target (
+	      target_gdbarch (),
+	      EXTRACT_SIGNED_INTEGER(&recv->pkt.notify.un.sigev.signo, 4,
+				     nto_byte_order)));
 #endif
+      break;
+
+    /* a new process was created */
+    case DSMSG_NOTIFY_PIDLOAD:
+      current_session->cputype = EXTRACT_SIGNED_INTEGER(
+	      &recv->pkt.notify.un.pidload.cputype, sizeof(uint16_t), nto_byte_order);
+      current_session->cpuid = EXTRACT_SIGNED_INTEGER(
+	      &recv->pkt.notify.un.pidload.cpuid, sizeof(uint32_t), nto_byte_order);
+
       inf_data->has_execution = 1;
       inf_data->has_stack = 1;
       inf_data->has_registers = 1;
       inf_data->has_memory = 1;
       status->set_loaded ();
+
       break;
+
+    /* a new thread was created */
     case DSMSG_NOTIFY_TIDLOAD:
       {
-	struct nto_thread_info *priv;
-
 	if (nto_stop_on_thread_events)
 	  status->set_stopped (GDB_SIGNAL_0);
 	else
 	  status->set_spurious ();
-	if (supports64bit())
-	  {
-	    tid = EXTRACT_UNSIGNED_INTEGER (&recv->pkt.notify._64.un.thread_event.tid,
-					    4, byte_order);
-	  }
-	else
-	  {
-	    tid = EXTRACT_UNSIGNED_INTEGER (&recv->pkt.notify._32.un.thread_event.tid,
-					    4, byte_order);
-	  }
-	nto_trace (0) ("New thread event: tid %d\n", tid);
+	tid = EXTRACT_UNSIGNED_INTEGER(
+		&recv->pkt.notify.un.thread_event.tid, sizeof(int32_t),
+		nto_byte_order);
 
-	priv = new nto_thread_info;
-	priv->tid = tid;
-//    priv->starting_ip = stopped_pc;
-	add_thread_with_info (ops, ptid_t (pid, 0, tid), priv);
+	nto_trace(0) ("New thread event: tid %d\n", tid);
+
+	nto_add_thread(this, pid, tid);
+
 	if (status->kind () == TARGET_WAITKIND_SPURIOUS)
-	  tid = inferior_ptid.tid ();
+	  tid = inferior_ptid.lwp ();
       }
       break;
+
+    /* thread death */
     case DSMSG_NOTIFY_TIDUNLOAD:
       {
-	ptid_t cur = ptid_t (pid, 0, tid);
-	const int32_t *const ptid = (supports64bit()) ? &recv->pkt.notify._64.un.thread_event.tid
-						: &recv->pkt.notify._32.un.thread_event.tid;
-	const int tid_exited = EXTRACT_SIGNED_INTEGER (ptid, 4, byte_order);
+	ptid_t cur = ptid_t (pid, tid, 0);
+	const int32_t * const ptid = &recv->pkt.notify.un.thread_event.tid;
+	const int tid_exited = EXTRACT_SIGNED_INTEGER(ptid, 4, nto_byte_order);
 
-	nto_trace (0) ("Thread destroyed: tid: %d active: %d\n", tid_exited,
-		       tid);
+	nto_trace(0) ("Thread destroyed: tid: %d active: %d\n", tid_exited,
+		      tid);
 
 	if (nto_stop_on_thread_events)
 	  status->set_stopped (GDB_SIGNAL_0);
 	else
 	  status->set_spurious ();
 	/* Must determine an alive thread for this to work. */
-	switch_to_thread (ops, cur);
+	if (inferior_ptid != cur)
+	  {
+	    switch_to_thread (this, cur);
+	  }
       }
       break;
-#ifdef _DEBUG_WHAT_VFORK
+
+    /* process forked */
     case DSMSG_NOTIFY_FORK:
       {
-	int32_t child_pid = (supports64bit ()) ? recv->pkt.notify._64.un.fork_event.pid
-					      : recv->pkt.notify._32.un.fork_event.pid;
-	uint32_t vfork = (supports64bit ()) ? recv->pkt.notify._64.un.fork_event.vfork
-					    : recv->pkt.notify._32.un.fork_event.vfork;
+        int32_t child_pid = recv->pkt.notify.un.fork_event.pid;
+        nto_trace(0)("fork - parent: %d child: %d\n", pid, child_pid);
+        inf_data->child_pid = EXTRACT_SIGNED_INTEGER(&child_pid, 4, nto_byte_order);
+	status->set_forked (ptid_t(child_pid, 1, 0));
 
-	nto_trace (0) ("DSMSG_NOTIFY_FORK %d\n", pid);
-	inf_data->child_pid
-	  = EXTRACT_SIGNED_INTEGER (&child_pid, 4, byte_order);
-		nto_trace (0) ("inf data child pid: %d\n", inf_data->child_pid);
-	auto child_ptid = ptid_t (inf_data->child_pid, 0, 1);
-	inf_data->vfork
-	  = EXTRACT_SIGNED_INTEGER (&vfork, 4, byte_order) & _DEBUG_WHAT_VFORK;
-	if (inf_data->vfork)
-	  status->set_vforked (child_ptid);
-	else
-	  status->set_forked (child_ptid);
-	nto_trace (0) ("child_pid=%d\n", status->child_ptid ().pid ());
+        /* immediately attach to the child so it doesn't run away between handling the
+         * fork notification and follow_fork() on slow targets this is not needed as
+         * GDB is fast enough to attach in time on it's own.
+         * Do not yet create an inferior as that will happen automatically */
+        DScomm_t attrecv;
+        nto_attach_only (child_pid, &attrecv);
       }
-      break;
+    break;
+
+    /* process called exec() */
     case DSMSG_NOTIFY_EXEC:
-      {
-	/* Notification format: pidload. */
-	nto_trace (0) ("DSMSG_NOTIFY_EXEC %d, %s\n", pid,
-		       supports64bit()?recv->pkt.notify._64.un.pidload.name:
-				       recv->pkt.notify._32.un.pidload.name);
-	auto pathname = make_unique_xstrdup (
-				supports64bit()?recv->pkt.notify._64.un.pidload.name:
-				recv->pkt.notify._32.un.pidload.name);
-	status->set_execd (std::move (pathname));
-      }
+      /* Notification format: pidload. */
+      nto_trace(0)("DSMSG_NOTIFY_EXEC %d, %s\n", pid, recv->pkt.notify.un.pidload.name);
+      status->set_execd (make_unique_xstrdup ( recv->pkt.notify.un.pidload.name ));
       break;
-#endif
+
+    /* DLL changes - no explicit action, just continue */
     case DSMSG_NOTIFY_DLLLOAD:
     case DSMSG_NOTIFY_DLLUNLOAD:
       status->set_spurious ();
       break;
+
+    /* process stopped */
     case DSMSG_NOTIFY_STOPPED:
       status->set_stopped (GDB_SIGNAL_0);
       break;
+
     default:
       warning ("Unexpected notify type %d", recv->pkt.hdr.subcmd);
       break;
     }
-  nto_trace (0) ("nto_parse_notify: pid=%d, tid=%d ip=0x%s\n",
-		 pid, tid, paddress (target_gdbarch (), stopped_pc));
-  return ptid_t (pid, 0, tid);
+
+  nto_trace(0) ("  current inferior: %d pid: %d\n", current_inferior ()->pid, pid);
+
+  /* set the current context to the inferior that received the signal */
+
+  static inferior *newinf = find_inferior_pid(this, pid);
+  if (newinf == NULL)
+    {
+      nto_trace(0) (" create new inferior for pid %d\n", pid);
+      newinf = nto_add_inferior(this, pid);
+    }
+
+  /* No thread is set explicitly, go back to the original thread */
+  if (tid == 0)
+    {
+      tid=inferior_ptid.lwp ();
+      /* No previous thread, fetch an existing thread */
+      if (tid == 0)
+	tid = nto_thread_alive(ptid_t(pid, 1, 0));
+    }
+
+  /* the process must have an existing thread, if not we're in trouble */
+  if (tid == -1)
+    error("Process %d has no threads!", pid);
+
+  nto_trace(0) ("  nto_parse_notify end: pid=%d, tid=%d  ip=%s\n", pid,
+		tid, paddress (target_gdbarch (), stopped_pc));
+
+  return ptid_t(pid, tid);
 }
 
 static unsigned nto_get_cpuflags (void)
@@ -2543,12 +2667,11 @@ static unsigned nto_get_cpuflags (void)
       nto_send_recv (&tran, &recv, sizeof (tran.pkt.cpuinfo), 1);
 
       if (recv.pkt.hdr.cmd != DSrMsg_err)
-	{
-	  struct dscpuinfo foo;
-	  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
-	  memcpy (&foo, recv.pkt.okdata.data, sizeof (struct dscpuinfo));
-	  cpuflags = EXTRACT_SIGNED_INTEGER (&foo.cpuflags, 4, byte_order);
-	}
+  {
+    struct dscpuinfo foo;
+    memcpy (&foo, recv.pkt.okdata.data, sizeof (struct dscpuinfo));
+    cpuflags = EXTRACT_SIGNED_INTEGER (&foo.cpuflags, 4, nto_byte_order);
+  }
     }
   return cpuflags;
 }
@@ -2558,7 +2681,6 @@ static unsigned nto_get_cpuflags (void)
 static int
 fetch_regs (struct regcache *regcache, int regset, int supply)
 {
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   int len;
   int rlen;
   DScomm_t tran, recv;
@@ -2570,7 +2692,7 @@ fetch_regs (struct regcache *regcache, int regset, int supply)
   /* Ugly hack to keep i386-nto-tdep.c cleaner. */
   if (gdbarch_bfd_arch_info (target_gdbarch ()) != NULL
       && strcmp (gdbarch_bfd_arch_info (target_gdbarch ())->arch_name, "i386")
-	 == 0
+   == 0
       && regset == NTO_REG_FLOAT && len > 512
       && current_session->target_proto_major == 0
       && current_session->target_proto_minor < 5)
@@ -2583,9 +2705,9 @@ fetch_regs (struct regcache *regcache, int regset, int supply)
     }
 
   nto_send_init (&tran, DStMsg_regrd, regset, SET_CHANNEL_DEBUG);
-  tran.pkt.regrd.offset = 0;	/* Always get whole set.  */
+  tran.pkt.regrd.offset = 0;  /* Always get whole set.  */
   tran.pkt.regrd.size = EXTRACT_SIGNED_INTEGER (&len, 2,
-						byte_order);
+            nto_byte_order);
 
   rlen = nto_send_recv (&tran, &recv, sizeof (tran.pkt.regrd), 0);
 
@@ -2599,79 +2721,60 @@ fetch_regs (struct regcache *regcache, int regset, int supply)
 
 /* Read register REGNO, or all registers if REGNO == -1, from the contents
    of REGISTERS.  */
-template <class parent>
 void
-qnx_remote_target<parent>::fetch_registers (struct regcache *regcache, int regno)
+pdebug_target::fetch_registers (struct regcache *regcache, int regno)
 {
   int regset;
-  /* CUDA: unblocking gdb 10.1 upgrade */
-  bool switch_back_to_null = false;
+  ptid_t ptid=regcache->ptid ();
 
-  nto_trace (0) ("nto_fetch_registers(regcache %p ,regno %d)\n",
-		 regcache, regno);
+  nto_trace (0) ("pdebug_fetch_registers(regcache %p ,regno %d) for %s\n",
+     regcache, regno, nto_pid_to_str(ptid).c_str());
 
-  if (inferior_ptid == null_ptid)
+  if (ptid == null_ptid)
     {
-      /* CUDA: unblocking gdb 10.1 upgrade */
-      nto_trace (0) ("ptid is null_ptid, forcing the temporary inferior switch\n");
-      inferior_ptid = regcache->ptid();
-      switch_back_to_null = true;
-    }
-
-  /* CUDA: unblocking gdb 10.1 upgrade */
-  if (!set_thread (inferior_ptid.tid ()))
-    {
-      if (switch_back_to_null)
-	{
-	  inferior_ptid = null_ptid;
-	}
+      nto_trace (0) ("  ptid is null_ptid, can not fetch registers\n");
       return;
     }
 
+  if (!nto_set_thread (ptid))
+    return;
+
   if (regno == -1)
-    {				/* Get all regsets.  */
+    {        /* Get all regsets.  */
       for (regset = NTO_REG_GENERAL; regset < NTO_REG_END; regset++)
-	{
-	  fetch_regs (regcache, regset, 1);
-	}
+  {
+    fetch_regs (regcache, regset, 1);
+  }
     }
   else
     {
       regset = nto_regset_id (regno);
       fetch_regs (regcache, regset, 1);
     }
-
-  /* CUDA: unblocking gdb 10.1 upgrade */
-  if (switch_back_to_null)
-  {
-    inferior_ptid = null_ptid;
-  }
 }
 
 /* Prepare to store registers.  Don't have to do anything.  */
-template <class parent>
 void
-qnx_remote_target<parent>::prepare_to_store (struct regcache *regcache)
+pdebug_target::prepare_to_store (struct regcache *regcache)
 {
-   nto_trace (0) ("nto_prepare_to_store()\n");
+   nto_trace (0) ("pdebug_prepare_to_store()\n");
 }
 
 
 /* Store register REGNO, or all registers if REGNO == -1, from the contents
    of REGISTERS.  */
-template <class parent>
 void
-qnx_remote_target<parent>::store_registers (struct regcache *regcache, int regno)
+pdebug_target::store_registers (struct regcache *regcache, int regno)
 {
   int len, regset, regno_regset;
   DScomm_t tran, recv;
+  ptid_t ptid=regcache->ptid ();
 
-  nto_trace (0) ("nto_store_registers(regno %d)\n", regno);
+  nto_trace (0) ("pdebug_store_registers(regno %d)\n", regno);
 
-  if (inferior_ptid == null_ptid)
-    return;
+  gdb_assert (ptid != null_ptid);
 
-  if (!set_thread (inferior_ptid.tid ()))
+  if (!nto_set_thread (ptid))
     return;
 
   regno_regset = nto_regset_id (regno);
@@ -2679,16 +2782,16 @@ qnx_remote_target<parent>::store_registers (struct regcache *regcache, int regno
   for (regset = NTO_REG_GENERAL; regset < NTO_REG_END; regset++)
     {
       if (regno_regset != NTO_REG_END && regno_regset != regset)
-	continue;
+  continue;
 
       len = nto_register_area (regset, nto_get_cpuflags ());
       if (len < 1)
-	continue;
+  continue;
 
       nto_send_init (&tran, DStMsg_regwr, regset, SET_CHANNEL_DEBUG);
       tran.pkt.regwr.offset = 0;
       if (nto_regset_fill (regcache, regset, tran.pkt.regwr.data, len) == -1)
-	continue;
+  continue;
 
       nto_send_recv (&tran, &recv, offsetof (DStMsg_regwr_t, data) + len, 1);
     }
@@ -2714,20 +2817,19 @@ qnx_remote_target<parent>::store_registers (struct regcache *regcache, int regno
    Returns number of bytes transferred, or 0 for error.  */
 static enum target_xfer_status
 nto_write_bytes (CORE_ADDR memaddr, const gdb_byte *myaddr, int len,
-		 ULONGEST *const xfered_len)
+     ULONGEST *const xfered_len)
 {
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   long long addr;
   DScomm_t tran, recv;
 
   nto_trace (0) ("nto_write_bytes(to %s, from %p, len %d)\n",
-		 paddress (target_gdbarch (), memaddr), myaddr, len);
+     paddress (target_gdbarch (), memaddr), myaddr, len);
 
   /* NYI: need to handle requests bigger than largest allowed packet.  */
   nto_send_init (&tran, DStMsg_memwr, 0, SET_CHANNEL_DEBUG);
   addr = memaddr;
   tran.pkt.memwr.addr = EXTRACT_UNSIGNED_INTEGER (&addr, 8,
-						  byte_order);
+              nto_byte_order);
   memcpy (tran.pkt.memwr.data, myaddr, len);
   nto_send_recv (&tran, &recv, offsetof (DStMsg_memwr_t, data) + len, 0);
 
@@ -2738,7 +2840,7 @@ nto_write_bytes (CORE_ADDR memaddr, const gdb_byte *myaddr, int len,
       break;
     case DSrMsg_okstatus:
       *xfered_len = EXTRACT_SIGNED_INTEGER (&recv.pkt.okstatus.status, 4,
-					    byte_order);
+              nto_byte_order);
       break;
     default:
       return TARGET_XFER_E_IO;
@@ -2759,16 +2861,15 @@ nto_write_bytes (CORE_ADDR memaddr, const gdb_byte *myaddr, int len,
    Returns number of bytes transferred, or 0 for error.  */
 static enum target_xfer_status
 nto_read_bytes (CORE_ADDR memaddr, gdb_byte *myaddr, int len,
-		ULONGEST *const xfered_len)
+    ULONGEST *const xfered_len)
 {
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   int rcv_len, tot_len, ask_len;
   long long addr;
 
   if (remote_debug)
     {
       printf_unfiltered ("nto_read_bytes(from %s, to %p, len %d)\n",
-			 paddress (target_gdbarch (), memaddr), myaddr, len);
+       paddress (target_gdbarch (), memaddr), myaddr, len);
     }
 
   tot_len = rcv_len = ask_len = 0;
@@ -2780,22 +2881,22 @@ nto_read_bytes (CORE_ADDR memaddr, gdb_byte *myaddr, int len,
       nto_send_init (&tran, DStMsg_memrd, 0, SET_CHANNEL_DEBUG);
       addr = memaddr + tot_len;
       tran.pkt.memrd.addr = EXTRACT_UNSIGNED_INTEGER (&addr, 8,
-						      byte_order);
+                  nto_byte_order);
       ask_len =
-	((len - tot_len) >
-	 DS_DATA_MAX_SIZE) ? DS_DATA_MAX_SIZE : (len - tot_len);
+  ((len - tot_len) >
+   DS_DATA_MAX_SIZE) ? DS_DATA_MAX_SIZE : (len - tot_len);
       tran.pkt.memrd.size = EXTRACT_SIGNED_INTEGER (&ask_len, 2,
-						    byte_order);
+                nto_byte_order);
       rcv_len = nto_send_recv (&tran, &recv, sizeof (tran.pkt.memrd), 0) - sizeof (recv.pkt.hdr);
       if (rcv_len <= 0)
-	break;
+  break;
       if (recv.pkt.hdr.cmd == DSrMsg_okdata)
-	{
-	  memcpy (myaddr + tot_len, recv.pkt.okdata.data, rcv_len);
-	  tot_len += rcv_len;
-	}
+  {
+    memcpy (myaddr + tot_len, recv.pkt.okdata.data, rcv_len);
+    tot_len += rcv_len;
+  }
       else
-	break;
+  break;
     }
   while (tot_len != len);
 
@@ -2804,56 +2905,12 @@ nto_read_bytes (CORE_ADDR memaddr, gdb_byte *myaddr, int len,
   return (tot_len? TARGET_XFER_OK : TARGET_XFER_EOF);
 }
 
-/* Read AUXV from note.  */
-static void
-nto_core_read_auxv_from_note (bfd *abfd, asection *sect, void *pauxv_buf)
-{
-  struct auxv_buf *auxv_buf = (struct auxv_buf *)pauxv_buf;
-  const char *sectname;
-  unsigned int sectsize;
-  const char qnx_core_info[] = ".qnx_core_info/";
-  const unsigned int qnx_sectnamelen = 14;/* strlen (qnx_core_status).  */
-  const char warning_msg[] = "Unable to read %s section from core.\n";
-  nto_procfs_info info;
-  int len;
-  CORE_ADDR initial_stack;
-  enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
-
-  sectname = bfd_section_name (sect);
-  sectsize = bfd_section_size (sect);
-  if (sectsize > sizeof (info))
-    sectsize = sizeof (info);
-
-  if (strncmp (sectname, qnx_core_info, qnx_sectnamelen) != 0)
-    return;
-
-  if (bfd_seek (abfd, sect->filepos, SEEK_SET) != 0)
-    {
-      warning (warning_msg, sectname);
-      return;
-    }
-  len = bfd_bread ((gdb_byte *)&info, sectsize, abfd);
-  if (len != sectsize)
-    {
-      warning (warning_msg, sectname);
-      return;
-    }
-  initial_stack = extract_unsigned_integer
-    ((gdb_byte *)&info.initial_stack, sizeof (info.initial_stack), byte_order);
-
-  auxv_buf->len_read = nto_read_auxv_from_initial_stack
-    (initial_stack, auxv_buf->readbuf, auxv_buf->len, IS_64BIT()? 16 : 8);
-
-}
-
-template <class parent>
 enum target_xfer_status
-qnx_remote_target<parent>::xfer_partial (enum target_object object,
-					 const char *annex, gdb_byte *readbuf,
-					 const gdb_byte *writebuf, const ULONGEST offset,
-					 const ULONGEST len, ULONGEST *const xfered_len)
+pdebug_target::xfer_partial (enum target_object object,
+      const char *annex, gdb_byte *readbuf,
+      const gdb_byte *writebuf, const ULONGEST offset,
+      const ULONGEST len, ULONGEST *const xfered_len)
 {
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   const unsigned arch_len
     = gdbarch_bfd_arch_info (target_gdbarch ())->bits_per_word;
 
@@ -2865,147 +2922,73 @@ qnx_remote_target<parent>::xfer_partial (enum target_object object,
   if (object == TARGET_OBJECT_MEMORY)
     {
       if (readbuf != NULL)
-	return nto_read_bytes (offset, readbuf, len, xfered_len);
+  return nto_read_bytes (offset, readbuf, len, xfered_len);
       else if (writebuf != NULL)
-	return nto_write_bytes (offset, writebuf, len, xfered_len);
+  return nto_write_bytes (offset, writebuf, len, xfered_len);
     }
   else if (object == TARGET_OBJECT_AUXV
-	   && readbuf)
+     && readbuf)
     {
       /* For 32-bit architecture, size of auxv_t is 8 bytes.  */
       const unsigned int sizeof_auxv_t = (arch_len == 32)? 8 : 16;
       const unsigned int sizeof_tempbuf = 20 * sizeof_auxv_t;
-      ULONGEST tempread = 0;
+      int tempread = 0;
       gdb_byte *tempbuf = (gdb_byte *)alloca (sizeof_tempbuf);
       nto_procfs_info procfs_info;
 
       if (!tempbuf)
-	return TARGET_XFER_E_IO;
+        return TARGET_XFER_E_IO;
 
       /* We first try to read auxv using initial stack.  The problem is, older
-	 pdebug-s don't support reading procfs_info.  */
+         pdebug-s don't support reading procfs_info.  */
 
       if (nto_read_procfsinfo (&procfs_info))
-	{
-	  struct inferior *const inf = current_inferior ();
-	  struct nto_remote_inferior_data *inf_rdata;
+  {
+    struct inferior *const inf = current_inferior ();
+    struct nto_remote_inferior_data *inf_rdata;
 
-	  inf_rdata = nto_remote_inferior_data (inf);
+    inf_rdata = nto_get_remote_inferior_data (inf);
 
-	  if (inf_rdata->auxv == NULL)
-	    {
-	      const CORE_ADDR initial_stack
-		= EXTRACT_SIGNED_INTEGER (&procfs_info.initial_stack,
-					  arch_len / 8, byte_order);
+    if (inf_rdata->auxv == NULL)
+      {
+        const CORE_ADDR initial_stack
+    = EXTRACT_SIGNED_INTEGER (&procfs_info.initial_stack,
+            arch_len / 8, nto_byte_order);
 
-	      inf_rdata->auxv = (gdb_byte *)xcalloc (1, sizeof_tempbuf);
-	      tempread = nto_read_auxv_from_initial_stack (initial_stack,
-							   inf_rdata->auxv,
-							   sizeof_tempbuf,
-							   sizeof_auxv_t);
-	    }
-	  else
-	    {
-	      tempread = sizeof_tempbuf;
-	    }
-	  tempbuf = inf_rdata->auxv;
-	}
-      else if (current_program_space->exec_bfd ()
-	       && current_program_space->exec_bfd ()->tdata.elf_obj_data != NULL
-	       && current_program_space->exec_bfd ()->tdata.elf_obj_data->phdr != NULL)
-	{
-	  /* Fallback for older pdebug-s. They do not support
-	     procfsinfo transfer, so we have to read auxv from
-	     executable file.  */
-	  uint64_t phdr = 0;
-	  unsigned int phnum = 0;
-	  gdb_byte *buff = readbuf;
-
-	  /* Simply copy what we have in exec_bfd to the readbuf.  */
-	  while (current_program_space->exec_bfd ()->tdata.elf_obj_data->phdr[phnum].p_type != PT_NULL)
-	    {
-	      if (current_program_space->exec_bfd ()->tdata.elf_obj_data->phdr[phnum].p_type == PT_PHDR)
-		phdr = current_program_space->exec_bfd ()->tdata.elf_obj_data->phdr[phnum].p_vaddr;
-	      phnum++;
-	    }
-
-	  /* Create artificial auxv, with AT_PHDR, AT_PHENT and AT_PHNUM
-	     elements.  */
-	  *(int*)buff = AT_PHNUM;
-	  *(int*)buff = extract_signed_integer (buff, sizeof (int),
-						byte_order);
-	  buff += arch_len / 8; /* Includes 4 byte padding for auxv64_t */
-	  if (arch_len == 32)
-	    *(unsigned *)buff = EXTRACT_SIGNED_INTEGER (&phnum,
-							sizeof (phnum),
-							byte_order);
-	  else
-	    *(uint64_t *)buff = EXTRACT_SIGNED_INTEGER (&phnum,
-							sizeof (phnum),
-							byte_order);
-
-	  buff += arch_len / 8;
-	  *(int*)buff = AT_PHENT;
-	  *(int*)buff = extract_signed_integer (buff, sizeof (int),
-						byte_order);
-	  buff += arch_len / 8;
-	  if (arch_len == 32)
-	    {
-	      *(int*)buff = 0x20; /* sizeof(Elf32_Phdr) */
-	      *(int*)buff = extract_signed_integer (buff, sizeof (int),
-						    byte_order);
-	    }
-	  else
-	    {
-	      *(uint64_t*)buff = 56; /* sizeof(Elf64_Phdr) */
-	      *(uint64_t*)buff = extract_signed_integer (buff,
-							 sizeof (uint64_t),
-							 byte_order);
-	    }
-	  buff += arch_len / 8;
-
-	  *(int*)buff = AT_PHDR;
-	  *(int*)buff = extract_signed_integer (buff, sizeof (int),
-						byte_order);
-	  buff += arch_len / 8;
-	  if (arch_len == 32)
-	    {
-	      *(int*)buff = phdr;
-	      *(int*)buff = extract_signed_integer (buff, sizeof (int),
-						byte_order);
-	    }
-	  else
-	    {
-	      *(uint64_t*)buff = phdr;
-	      *(uint64_t*)buff = extract_signed_integer (buff,
-							 sizeof (uint64_t),
-							 byte_order);
-	    }
-	  buff += arch_len / 8;
-	  tempread = (int)(buff - readbuf);
-	}
-      tempread = std::min (tempread, len) - offset;
+        inf_rdata->auxv = (gdb_byte *)xcalloc (1, sizeof_tempbuf);
+        tempread = nto_read_auxv_from_initial_stack (initial_stack,
+                 inf_rdata->auxv,
+                 sizeof_tempbuf,
+                 sizeof_auxv_t);
+      }
+    else
+      {
+        tempread = sizeof_tempbuf;
+      }
+    tempbuf = inf_rdata->auxv;
+  }
+      tempread = (tempread<len?tempread:len) - offset;
       memcpy (readbuf, tempbuf + offset, tempread);
       *xfered_len = tempread;
       return tempread? TARGET_XFER_OK : TARGET_XFER_EOF;
     }  /* TARGET_OBJECT_AUXV */
   else if (object == TARGET_OBJECT_SIGNAL_INFO
-	   && readbuf)
+     && readbuf)
     {
       nto_procfs_status status;
       nto_siginfo_t siginfo;
       LONGEST mylen = len;
 
       if ((offset + mylen) > sizeof (nto_siginfo_t))
-	{
-	  if (offset < sizeof (nto_siginfo_t))
-	    mylen = sizeof (nto_siginfo_t) - offset;
-	  else
-	    return TARGET_XFER_EOF;
-	}
+  {
+    if (offset < sizeof (nto_siginfo_t))
+      mylen = sizeof (nto_siginfo_t) - offset;
+    else
+      return TARGET_XFER_EOF;
+  }
 
       if (!nto_read_procfsstatus (&status))
-	return TARGET_XFER_E_IO;
+  return TARGET_XFER_E_IO;
 
       // does byte order translation
       nto_get_siginfo_from_procfs_status (&status, &siginfo);
@@ -3013,75 +2996,68 @@ qnx_remote_target<parent>::xfer_partial (enum target_object object,
       *xfered_len = len;
       return len? TARGET_XFER_OK : TARGET_XFER_EOF;
     }
-  if (parent::beneath ())
-    return parent::beneath ()->xfer_partial (object, annex, readbuf,
-					     writebuf, offset, len, xfered_len);
-  return TARGET_XFER_E_IO;
+  return this->beneath()->xfer_partial (object, annex, readbuf,
+            writebuf, offset, len, xfered_len);
 }
 
-template <class parent>
 void
-qnx_remote_target<parent>::files_info ()
+pdebug_target::files_info ( )
 {
-  nto_trace (0) ("nto_files_info()\n");
+  nto_trace (0) ("pdebug_files_info( )\n" );
 
-  gdb_puts ("Debugging a target over a serial line.\n");
+  gdb_puts ("Debugging a target via pdebug.\n");
 }
 
-template <class parent>
-void
-qnx_remote_target<parent>::kill (void)
-{
-  struct target_waitstatus wstatus;
-  ptid_t ptid;
-  process_stratum_target *wait_target;
 
-  nto_trace (0) ("nto_kill()\n");
+static int
+nto_kill_1 ( )
+{
+  DScomm_t tran, recv;
+
+  nto_trace (0) ("nto_kill_1\n");
+
+  if (inferior_ptid != null_ptid)
+    {
+      nto_send_init (&tran, DStMsg_kill, DSMSG_KILL_PID, SET_CHANNEL_DEBUG);
+      tran.pkt.kill.signo = SIGKILL;
+      tran.pkt.kill.signo = EXTRACT_SIGNED_INTEGER (&tran.pkt.kill.signo,
+                4, nto_byte_order);
+      nto_send_recv (&tran, &recv, sizeof (tran.pkt.kill), 0);
+
+      nto_detach_only (inferior_ptid.pid());
+    }
+
+  return 0;
+}
+
+void
+pdebug_target::kill ( )
+{
+  // struct target_waitstatus wstatus;
+  // ptid_t ptid;
+
+  nto_trace (0) ("pdebug_kill()\n");
 
   remove_breakpoints ();
-  get_last_target_status (&wait_target, &ptid, &wstatus);
+  // get_last_target_status (&this, &ptid, &wstatus);
 
   /* Use catch_errors so the user can quit from gdb even when we aren't on
      speaking terms with the remote system.  */
-  try
-    {
-      DScomm_t tran, recv;
-      const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
+  catch_errors( nto_kill_1 );
 
-      if (inferior_ptid != null_ptid)
-	{
-	  nto_send_init (&tran, DStMsg_kill, DSMSG_KILL_PID, SET_CHANNEL_DEBUG);
-	  tran.pkt.kill.signo = 9;	/* SIGKILL  */
-	  tran.pkt.kill.signo = EXTRACT_SIGNED_INTEGER (&tran.pkt.kill.signo,
-							4, byte_order);
-	  nto_send_recv (&tran, &recv, sizeof (tran.pkt.kill), 0);
-#if 0
-	  nto_send_init (&tran, DStMsg_detach, 0, SET_CHANNEL_DEBUG);
-	  tran.pkt.detach.pid = inferior_ptid.pid ();
-	  tran.pkt.detach.pid = EXTRACT_SIGNED_INTEGER (&tran.pkt.detach.pid,
-							4, byte_order);
-	  nto_send_recv (&tran, &recv, sizeof (tran.pkt.detach), 1);
-#endif
-	}
-    }
-  catch (const gdb_exception_error &e)
-    {
-    }
-
-  target_mourn_inferior (inferior_ptid);
+  mourn_inferior ( );
 
   return;
 }
 
-template <class parent>
 void
-qnx_remote_target<parent>::mourn_inferior (void)
+pdebug_target::mourn_inferior ( )
 {
-  DScomm_t tran, recv;
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   struct inferior *inf = current_inferior ();
   struct nto_inferior_data *inf_data;
   struct nto_remote_inferior_data *inf_rdata;
+
+  nto_trace (0) ("pdebug_mourn_inferior()\n");
 
   gdb_assert (inf != NULL);
 
@@ -3089,18 +3065,12 @@ qnx_remote_target<parent>::mourn_inferior (void)
 
   gdb_assert (inf_data != NULL);
 
-  inf_rdata = nto_remote_inferior_data (inf);
-
-  nto_trace (0) ("nto_mourn_inferior()\n");
+  inf_rdata = nto_get_remote_inferior_data (inf);
 
   xfree (inf_rdata->auxv);
   inf_rdata->auxv = NULL;
 
-  nto_send_init (&tran, DStMsg_detach, 0, SET_CHANNEL_DEBUG);
-  tran.pkt.detach.pid = inferior_ptid.pid ();
-  tran.pkt.detach.pid = EXTRACT_SIGNED_INTEGER (&tran.pkt.detach.pid,
-						4, byte_order);
-  nto_send_recv (&tran, &recv, sizeof (tran.pkt.detach), 1);
+  nto_detach_only (inferior_ptid.pid());
 
   generic_mourn_inferior ();
   inf_data->has_execution = 0;
@@ -3128,22 +3098,15 @@ nto_fd_raw (int fd)
 #endif
 }
 
-template <class parent>
-bool
-qnx_remote_target<parent>::can_create_inferior (void)
-{
-  return true;
-}
-
-template <class parent>
 void
-qnx_remote_target<parent>::create_inferior (const char *exec_file, const std::string &args,
-					    char **env, int from_tty)
+pdebug_target::create_inferior (const char *exec_file, const std::string &args, char **env, int from_tty)
 {
   DScomm_t tran, recv;
   unsigned argc;
   unsigned envc;
-  char **start_argv, **argv, **pargv,  *p;
+  char **start_argv, **argv;
+  char **pargv;
+  char *p;
   int fd;
   struct target_waitstatus status;
   const char *in, *out, *err;
@@ -3158,7 +3121,7 @@ qnx_remote_target<parent>::create_inferior (const char *exec_file, const std::st
 
   gdb_assert (inf_data != NULL);
 
-  inf_rdata = nto_remote_inferior_data (inf);
+  inf_rdata = nto_get_remote_inferior_data (inf);
 
   gdb_assert (inf_rdata != NULL);
 
@@ -3166,6 +3129,7 @@ qnx_remote_target<parent>::create_inferior (const char *exec_file, const std::st
 
   remove_breakpoints ();
 
+#ifdef NVIDIA_CUDA_GDB
   if (inf_rdata->remote_exe.length () == 0)
     {
       inf_rdata->remote_exe = current_session->remote_exe;
@@ -3181,15 +3145,32 @@ qnx_remote_target<parent>::create_inferior (const char *exec_file, const std::st
       exec_file = inf_rdata->remote_exe.c_str ();
       gdb_printf (gdb_stdout, "Remote: %s\n", exec_file);
     }
+#else
+  if (inf_rdata->remote_exe == NULL && current_session->remote_exe != NULL)
+    {
+      inf_rdata->remote_exe = xstrdup (current_session->remote_exe);
+    }
 
+  if (inf_rdata->remote_cwd == NULL && current_session->remote_cwd != NULL)
+    {
+      inf_rdata->remote_cwd = xstrdup (current_session->remote_cwd);
+    }
+
+  if (inf_rdata->remote_exe && inf_rdata->remote_exe[0] != '\0')
+    {
+      exec_file = inf_rdata->remote_exe;
+      gdb_printf (gdb_stdout, "Remote: %s\n", exec_file);
+    }
+#endif
   if (current_session->desc == NULL)
-    qnx_remote_target<parent>::open ("pty", 0);
+    pdebug_open ("pty", 0);
 
   if (inferior_ptid != null_ptid)
-    nto_semi_init (this);
+    nto_semi_init ();
 
-  nto_trace (0) ("nto_create_inferior(exec_file '%s', environ)\n",
-		 exec_file ? exec_file : "(null)");
+  nto_trace (0) ("pdebug_create_inferior(exec_file '%s', args '%s', environ)\n",
+       exec_file ? exec_file : "(null)",
+       args.empty() ? "\"\"":args.c_str() );
 
   nto_send_init (&tran, DStMsg_env, DSMSG_ENV_CLEARENV, SET_CHANNEL_DEBUG);
   nto_send_recv (&tran, &recv, sizeof (DStMsg_env_t), 1);
@@ -3197,49 +3178,59 @@ qnx_remote_target<parent>::create_inferior (const char *exec_file, const std::st
   if (!current_session->inherit_env)
     {
       for (envc = 0; *env; env++, envc++)
-	errors += !nto_send_env (*env);
+        errors += !nto_send_env (*env);
       if (errors)
-	warning ("Error(s) occured while sending environment variables.\n");
+        warning ("Error(s) occured while sending environment variables.\n");
     }
 
+#ifdef NVIDIA_CUDA_GDB
   if (inf_rdata->remote_cwd.length ())
     {
       nto_send_init (&tran, DStMsg_cwd, DSMSG_CWD_SET, SET_CHANNEL_DEBUG);
       strcpy ((char *)tran.pkt.cwd.path, inf_rdata->remote_cwd.c_str ());
       nto_send_recv (&tran, &recv, offsetof (DStMsg_cwd_t, path)
-		+ strlen ((const char *)tran.pkt.cwd.path) + 1, 1);
+    + strlen ((const char *)tran.pkt.cwd.path) + 1, 1);
     }
+#else
+  if (inf_rdata->remote_cwd != NULL)
+    {
+      nto_send_init (&tran, DStMsg_cwd, DSMSG_CWD_SET, SET_CHANNEL_DEBUG);
+      strcpy ((char *)tran.pkt.cwd.path, inf_rdata->remote_cwd);
+      nto_send_recv (&tran, &recv, offsetof (DStMsg_cwd_t, path)
+    + strlen ((const char *)tran.pkt.cwd.path) + 1, 1);
+    }
+#endif
 
   nto_send_init (&tran, DStMsg_env, DSMSG_ENV_CLEARARGV, SET_CHANNEL_DEBUG);
   nto_send_recv (&tran, &recv, sizeof (DStMsg_env_t), 1);
 
-  pargv = buildargv (args.c_str ());
+  pargv = buildargv (args.c_str());
   if (pargv == NULL)
     malloc_failure (0);
   start_argv = nto_parse_redirection (pargv, &in, &out, &err);
 
   if (in[0])
     {
-      if ((fd = ::open (in, O_RDONLY)) == -1)
-	perror (in);
+      if ((fd = open (in, O_RDONLY)) == -1)
+  perror (in);
       else
-	nto_fd_raw (fd);
+  nto_fd_raw (fd);
     }
 
   if (out[0])
     {
-      if ((fd = ::open (out, O_WRONLY)) == -1)
-	perror (out);
+      if ((fd = open (out, O_WRONLY)) == -1)
+  perror (out);
       else
-	nto_fd_raw (fd);
+  nto_fd_raw (fd);
     }
 
   if (err[0])
     {
-      if ((fd = ::open (err, O_WRONLY)) == -1)
-	perror (err);
+      if ((fd = open (err, O_WRONLY)) == -1)
+  perror (err);
       else
-	nto_fd_raw (fd);
+  nto_fd_raw (fd);
     }
 
   in = "@0";
@@ -3251,13 +3242,13 @@ qnx_remote_target<parent>::create_inferior (const char *exec_file, const std::st
       errors = !nto_send_arg (exec_file);
       /* Send it twice - first as cmd, second as argv[0]. */
       if (!errors)
-	errors = !nto_send_arg (exec_file);
+  errors = !nto_send_arg (exec_file);
 
       if (errors)
-	{
-	  error ("Failed to send executable file name.\n");
-	  goto freeargs;
-	}
+  {
+    error ("Failed to send executable file name.\n");
+    goto freeargs;
+  }
     }
   else if (*start_argv == NULL)
     {
@@ -3268,19 +3259,20 @@ qnx_remote_target<parent>::create_inferior (const char *exec_file, const std::st
   else
     {
       /* Send arguments (starting from index 1, argv[0] has already been
-	 sent above. */
-      if (current_program_space->symfile_object_file != NULL)
-	exec_file_attach (current_program_space->symfile_object_file->original_name, 0);
+         sent above. */
+	  objfile *symfile_objfile = current_program_space->symfile_object_file;
+      if (symfile_objfile != NULL)
+  exec_file_attach (symfile_objfile->original_name, 0);
 
       exec_file = *start_argv;
 
       errors = !nto_send_arg (*start_argv);
 
       if (errors)
-	{
-	  error ("Failed to send argument.\n");
-	  goto freeargs;
-	}
+  {
+    error ("Failed to send argument.\n");
+    goto freeargs;
+  }
     }
 
   errors = 0;
@@ -3295,7 +3287,7 @@ qnx_remote_target<parent>::create_inferior (const char *exec_file, const std::st
     }
 
 freeargs:
-  freeargv ((char **)pargv);
+  freeargv (pargv);
   free (start_argv);
   if (errors)
     return;
@@ -3303,7 +3295,7 @@ freeargs:
   /* NYI: msg too big for buffer.  */
   if (current_session->inherit_env)
     nto_send_init (&tran, DStMsg_load, DSMSG_LOAD_DEBUG | DSMSG_LOAD_INHERIT_ENV,
-		   SET_CHANNEL_DEBUG);
+       SET_CHANNEL_DEBUG);
   else
     nto_send_init (&tran, DStMsg_load, DSMSG_LOAD_DEBUG, SET_CHANNEL_DEBUG);
 
@@ -3314,157 +3306,129 @@ freeargs:
 
   strcpy (p, exec_file);
   p += strlen (p);
-  *p++ = '\0';			/* load_file */
+  *p++ = '\0';      /* load_file */
 
   strcpy (p, in);
   p += strlen (p);
-  *p++ = '\0';			/* stdin */
+  *p++ = '\0';      /* stdin */
 
   strcpy (p, out);
   p += strlen (p);
-  *p++ = '\0';			/* stdout */
+  *p++ = '\0';      /* stdout */
 
   strcpy (p, err);
   p += strlen (p);
-  *p++ = '\0';			/* stderr */
+  *p++ = '\0';      /* stderr */
 
   nto_send_recv (&tran, &recv, offsetof (DStMsg_load_t, cmdline) + p - tran.pkt.load.cmdline + 1,
-	    1);
+      1);
+
+  if (recv.pkt.hdr.cmd != DSrMsg_okdata)
+    error ("Could not run executable on target!");
+
   /* Comes back as an DSrMsg_okdata, but it's really a DShMsg_notify. */
-  if (recv.pkt.hdr.cmd == DSrMsg_okdata)
-    {
-      struct inferior *inf;
-
-      inferior_ptid  = nto_parse_notify (&recv, this, &status);
-      inf = current_inferior ();
-      inferior_appeared (inf, inferior_ptid.pid ());
-      thread_info *thr = add_thread_silent (this, inferior_ptid);
-      switch_to_thread (thr);
-      inf->attach_flag = 1;
-    }
-
-  /* NYI: add the symbol info somewhere?  */
-#ifdef SOLIB_CREATE_INFERIOR_HOOK
-  if (current_program_space->exec_bfd ())
-    SOLIB_CREATE_INFERIOR_HOOK (pid);
-#endif
+  inferior_ptid  = nto_parse_notify (&recv, &status);
+  gdb_assert (status.kind () == TARGET_WAITKIND_LOADED);
+  inferior_appeared (inf, inferior_ptid.pid());
+  thread_info *tp = nto_add_thread (this, inferior_ptid.pid (), 1);
+  switch_to_thread_no_regs (tp);
+  inf->attach_flag = true;
+  inf->removable = true;
 }
 
-template <class parent>
 int
-qnx_remote_target<parent>::do_insert_breakpoint (struct gdbarch *gdbarch, struct bp_target_info *bp_tgt)
+pdebug_target::nto_insert_breakpoint (CORE_ADDR addr, gdb_byte *contents_cache)
 {
-  CORE_ADDR addr = bp_tgt->placed_address;
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   DScomm_t tran, recv;
   size_t sizeof_pkt;
 
-  nto_trace (0) ("nto_insert_breakpoint(addr %s) pid:%d\n", 
-		 paddress (target_gdbarch (), addr),
-		 inferior_ptid.pid ());
+  nto_trace (0) ("nto_insert_breakpoint(addr %s, contents_cache %p) pid:%d\n",
+                 paddress (target_gdbarch (), addr), contents_cache, inferior_ptid.pid());
 
   nto_send_init (&tran, DStMsg_brk, DSMSG_BRK_EXEC, SET_CHANNEL_DEBUG);
 
-  if (supports64bit())
-    {
-      tran.pkt.brk.size = nto_breakpoint_size (addr);
-      tran.pkt.brk.addr = EXTRACT_UNSIGNED_INTEGER (&addr, 8, byte_order);
-      sizeof_pkt = sizeof (tran.pkt.brk);
-    }
-  else
-    {
-      tran.pkt.brk32.size = nto_breakpoint_size (addr);
-      tran.pkt.brk32.addr = EXTRACT_UNSIGNED_INTEGER (&addr, 4,
-						      byte_order);
-      sizeof_pkt = sizeof (tran.pkt.brk32);
-    }
+  tran.pkt.brk.size = nto_breakpoint_size (addr);
+  tran.pkt.brk.addr = EXTRACT_UNSIGNED_INTEGER (&addr, 8, nto_byte_order);
+  sizeof_pkt = sizeof (tran.pkt.brk);
+
   nto_send_recv (&tran, &recv, sizeof_pkt, 0);
   if (recv.pkt.hdr.cmd == DSrMsg_err)
     {
-      nto_trace (0) ("FAIL\n");
+      nto_trace (0) ("  could not set breakpoint\n");
     }
   return recv.pkt.hdr.cmd == DSrMsg_err;
 }
 
 /* To be called from breakpoint.c through
   current_target.to_insert_breakpoint.  */
-
-template <class parent>
 int
-qnx_remote_target<parent>::insert_breakpoint (struct gdbarch *gdbarch,
-					      struct bp_target_info *bp_tg_inf)
+pdebug_target::insert_breakpoint (struct gdbarch *gdbarch,
+        struct bp_target_info *bp_tg_inf)
 {
+  if( nto_force_hwbp )
+    {
+      // change breakpoint nature
+      bp_tg_inf->kind=bp_loc_hardware_breakpoint;
+      if (!insert_hw_breakpoint(gdbarch, bp_tg_inf))
+	return 0;
+
+      if (!query (_("Could not force HW breakpoint. Disable nto-force-hwbp?")))
+	return 1;
+
+      // revert breakpoint nature and reset force flag
+      bp_tg_inf->kind=bp_loc_software_breakpoint;
+      nto_force_hwbp = 0;
+    }
+
   if (bp_tg_inf == 0)
     {
       internal_error(_("Target info invalid."));
     }
 
-  /* Must select appropriate inferior.  Due to our pdebug protocol,
-     the following looks convoluted.  But in reality all we are doing is
-     making sure pdebug selects an existing thread in the inferior_ptid.
-     We need to switch pdebug internal current prp pointer.   */
-  if (!set_thread (nto_get_thread_alive (NULL, ptid_t (inferior_ptid.pid ())).tid ()))
+  /* Must select appropriate inferior. */
+  if (!nto_set_thread_alive (inferior_ptid))
     {
-      nto_trace (0) ("Could not set (pid,tid):(%d,%ld)\n",
-		     inferior_ptid.pid (), inferior_ptid.tid ());
-      return 0;
+      return 1;
     }
 
   bp_tg_inf->placed_address = bp_tg_inf->reqstd_address;
 
-  return do_insert_breakpoint (gdbarch, bp_tg_inf);
+  return nto_insert_breakpoint ( bp_tg_inf->placed_address,
+                bp_tg_inf->shadow_contents);
 }
 
 
-template <class parent>
 int
-qnx_remote_target<parent>::remove_breakpoint (CORE_ADDR addr, gdb_byte *contents_cache)
+pdebug_target::nto_remove_breakpoint (CORE_ADDR addr, gdb_byte *contents_cache)
 {
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   DScomm_t tran, recv;
 
-  nto_trace (0)	("nto_remove_breakpoint(addr %s, contents_cache %p) (pid %d)\n",
-		 paddress (target_gdbarch (), addr), contents_cache,
-		 inferior_ptid.pid ());
+  nto_trace (0)  ("nto_remove_breakpoint(addr %s, contents_cache %p) (pid %d)\n",
+                 paddress (target_gdbarch (), addr), contents_cache, inferior_ptid.pid());
 
-  /* Must select appropriate inferior.  Due to our pdebug protocol,
-     the following looks convoluted.  But in reality all we are doing is
-     making sure pdebug selects an existing thread in the inferior_ptid.
-     We need to swithc pdebug internal current prp pointer.   */
-  if (!set_thread (nto_get_thread_alive (NULL, ptid_t (inferior_ptid.pid ())).tid ()))
+  /* Must select appropriate inferior. */
+  if (!nto_set_thread_alive (inferior_ptid))
     {
-      nto_trace (0) ("Could not set (pid,tid):(%d,%ld)\n",
-		     inferior_ptid.pid (), inferior_ptid.tid ());
-      return 0;
+      return 1;
     }
 
-  /* This got changed to send DSMSG_BRK_EXEC with a size of -1
-     nto_send_init(DStMsg_brk, DSMSG_BRK_REMOVE, SET_CHANNEL_DEBUG).  */
   nto_send_init (&tran, DStMsg_brk, DSMSG_BRK_EXEC, SET_CHANNEL_DEBUG);
-  if (supports64bit())
-    {
-      tran.pkt.brk.addr = EXTRACT_UNSIGNED_INTEGER (&addr, 8, byte_order);
-      tran.pkt.brk.size = -1;
-    }
-  else
-    {
-      tran.pkt.brk32.addr = EXTRACT_UNSIGNED_INTEGER (&addr, 4,
-						      byte_order);
-      tran.pkt.brk32.size = -1;
-    }
+  tran.pkt.brk.addr = EXTRACT_UNSIGNED_INTEGER (&addr,
+      sizeof(tran.pkt.brk.addr), nto_byte_order);
+  tran.pkt.brk.size = -1;
   nto_send_recv (&tran, &recv, sizeof (tran.pkt.brk), 0);
+
   if (recv.pkt.hdr.cmd == DSrMsg_err)
     {
-      nto_trace (0) ("FAIL\n");
+      nto_trace(1)("  errno=%d (%s)\n", recv.pkt.err.err, strerror(recv.pkt.err.err));
     }
   return recv.pkt.hdr.cmd == DSrMsg_err;
 }
 
-template <class parent>
 int
-qnx_remote_target<parent>::remove_breakpoint (struct gdbarch *gdbarch,
-					      struct bp_target_info *bp_tg_inf,
-					      enum remove_bp_reason reason)
+pdebug_target::remove_breakpoint (struct gdbarch *gdbarch,
+        struct bp_target_info *bp_tg_inf,
+        enum remove_bp_reason reason)
 {
   nto_trace (0) ("%s ( bp_tg_inf=%p )\n", __func__, bp_tg_inf);
 
@@ -3473,14 +3437,13 @@ qnx_remote_target<parent>::remove_breakpoint (struct gdbarch *gdbarch,
       internal_error (_("Target info invalid."));
     }
 
-  return remove_breakpoint (bp_tg_inf->placed_address,
-			    bp_tg_inf->shadow_contents);
+  return nto_remove_breakpoint ( bp_tg_inf->placed_address,
+        bp_tg_inf->shadow_contents);
 }
 
-template <class parent>
 int
-qnx_remote_target<parent>::remove_hw_breakpoint (struct gdbarch *gdbarch,
-						 struct bp_target_info *bp_tg_inf)
+pdebug_target::remove_hw_breakpoint (struct gdbarch *gdbarch,
+        struct bp_target_info *bp_tg_inf)
 {
   nto_trace (0) ("%s ( bp_tg_inf=%p )\n", __func__, bp_tg_inf);
 
@@ -3489,28 +3452,29 @@ qnx_remote_target<parent>::remove_hw_breakpoint (struct gdbarch *gdbarch,
       internal_error (_("Target info invalid."));
     }
 
-  return remove_breakpoint (bp_tg_inf->placed_address,
-			    bp_tg_inf->shadow_contents);
+  return nto_remove_breakpoint (bp_tg_inf->placed_address,
+        bp_tg_inf->shadow_contents);
 }
 
 #if defined(__CYGWIN__) || defined(__MINGW32__)
-static void
-slashify (char *buf)
+char
+*slashify (const char *buf)
 {
   int i = 0;
-  while (buf[i])
-    {
-      /* Not sure why we would want to leave an escaped '\', but seems
-	 safer.	 */
-      if (buf[i] == '\\')
-	{
-	  if (buf[i + 1] == '\\')
-	    i++;
-	  else
-	    buf[i] = '/';
-	}
-      i++;
+  static char *retv;
+  retv=(char*)malloc(strlen(buf)+1);
+
+  while (buf[i]) {
+    if (buf[i] == '\\') {
+      retv[i]='/';
     }
+    else {
+      retv[i]=buf[i];
+    }
+    i++;
+  }
+  retv[i]=0;
+  return retv;
 }
 #endif
 
@@ -3525,12 +3489,16 @@ upload_command (const char *args, int fromtty)
   char buf[DS_DATA_MAX_SIZE];
   char *from, *to;
   char **argv;
+  gdb::unique_xmalloc_ptr<char> filename_opened;
+
+  // see source.c, openp and exec.c, file_command for more details.
+  //
   struct inferior *inf = current_inferior ();
   struct nto_remote_inferior_data *inf_rdata;
 
   gdb_assert (inf != NULL);
 
-  inf_rdata = nto_remote_inferior_data (inf);
+  inf_rdata = nto_get_remote_inferior_data (inf);
 
   if (args == 0)
     {
@@ -3539,11 +3507,15 @@ upload_command (const char *args, int fromtty)
     }
 
 #if defined(__CYGWIN__) || defined(__MINGW32__)
-  /* We need to convert back slashes to forward slashes for DOS
+  /* todo do we really?
+   * We need to convert back slashes to forward slashes for DOS
      style paths, else buildargv will remove them.  */
-  slashify (args);
-#endif
+  char *wargs=slashify (args);
+  argv = buildargv( wargs );
+  free(wargs);
+#else
   argv = buildargv (args);
+#endif
 
   if (argv == NULL)
     malloc_failure (0);
@@ -3561,24 +3533,21 @@ upload_command (const char *args, int fromtty)
 
   from = tilde_expand (*argv);
 
-  /* full file name. Things like $cwd will be expanded.
-     see source.c, openp and exec.c, file_command for more details. */
-  gdb::unique_xmalloc_ptr<char> filename_opened;
-  
   if ((fd = openp (NULL, OPF_TRY_CWD_FIRST, from,
-		   O_RDONLY | O_BINARY, &filename_opened)) < 0)
+                   O_RDONLY | O_BINARY, &filename_opened)) < 0)
     {
       printf_unfiltered ("Unable to open '%s': %s\n", from, strerror (errno));
       return;
     }
 
-  nto_trace(0) ("Opened %s for reading\n", filename_opened.get ());
+  nto_trace(0) ("Opened %s for reading\n", filename_opened.get());
 
   if (nto_fileopen (to, QNX_WRITE_MODE, QNX_WRITE_PERMS) == -1)
     {
       printf_unfiltered ("Remote was unable to open '%s': %s\n", to,
-			 strerror (errno));
+       strerror (errno));
       close (fd);
+      filename_opened.release();
       xfree (from);
       return;
     }
@@ -3586,11 +3555,11 @@ upload_command (const char *args, int fromtty)
   while ((len = read (fd, buf, sizeof buf)) > 0)
     {
       if (nto_filewrite (buf, len) == -1)
-	{
-	  printf_unfiltered ("Remote was unable to complete write: %s\n",
-			     strerror (errno));
-	  goto exit;
-	}
+  {
+    printf_unfiltered ("Remote was unable to complete write: %s\n",
+           strerror (errno));
+    goto exit;
+  }
     }
   if (len == -1)
     {
@@ -3601,13 +3570,21 @@ upload_command (const char *args, int fromtty)
   /* Everything worked so set remote exec file.  */
   if (upload_sets_exec)
     {
+#ifdef NVIDIA_CUDA_GDB
       inf_rdata->remote_exe = std::string {to};
       if (only_session.remote_exe.length () == 0)
 	only_session.remote_exe = std::string {to};
+#else
+      xfree (inf_rdata->remote_exe);
+      inf_rdata->remote_exe = xstrdup (to);
+      if (only_session.remote_exe == NULL)
+        only_session.remote_exe = xstrdup (to);
+#endif
     }
 
 exit:
   nto_fileclose (fd);
+  filename_opened.release();
   xfree (from);
   close (fd);
 }
@@ -3631,10 +3608,13 @@ download_command (const char *args, int fromtty)
     }
 
 #if defined(__CYGWIN__) || defined(__MINGW32__)
-  slashify (args);
+  char *wargs=slashify (args);
+  argv = buildargv( wargs );
+  free(wargs);
+#else
+  argv = buildargv (args);
 #endif
 
-  argv = buildargv (args);
   if (argv == NULL)
     malloc_failure (0);
 
@@ -3651,7 +3631,8 @@ download_command (const char *args, int fromtty)
   to = argv[1] ? argv[1] : from;
 #endif
 
-  if ((fd = open (to, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0666)) == -1)
+  if ((fd = open (to, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY,
+        S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH )) == -1)
     {
       printf_unfiltered ("Unable to open '%s': %s\n", to, strerror (errno));
       goto cleanup;
@@ -3660,7 +3641,7 @@ download_command (const char *args, int fromtty)
   if (nto_fileopen (from, QNX_READ_MODE, 0) == -1)
     {
       printf_unfiltered ("Remote was unable to open '%s': %s\n", from,
-			 strerror (errno));
+       strerror (errno));
       close (fd);
       goto cleanup;
     }
@@ -3668,11 +3649,11 @@ download_command (const char *args, int fromtty)
   while ((len = nto_fileread (buf, sizeof buf)) > 0)
     {
       if (write (fd, buf, len) == -1)
-	{
-	  printf_unfiltered ("Local write failed: %s\n", strerror (errno));
-	  close (fd);
-	  goto cleanup;
-	}
+  {
+    printf_unfiltered ("Local write failed: %s\n", strerror (errno));
+    close (fd);
+    goto cleanup;
+  }
     }
 
   if (len == -1)
@@ -3681,7 +3662,7 @@ download_command (const char *args, int fromtty)
   close (fd);
 
 cleanup:
-  freeargv ((char **)argv);
+  freeargv (argv);
 }
 
 static void
@@ -3691,19 +3672,10 @@ nto_add_commands (void)
 
   c =
     add_com ("upload", class_obscure, upload_command,
-	     "Send a file to the target (upload {local} [{remote}])");
+       "Send a file to the target (upload {local} [{remote}])");
   set_cmd_completer (c, filename_completer);
   add_com ("download", class_obscure, download_command,
-	   "Get a file from the target (download {remote} [{local}])");
-}
-
-static void
-nto_remove_commands (void)
-{
-  //extern struct cmd_list_element *cmdlist;
-
-//  delete_cmd ("upload", &cmdlist);
-// FIXME  delete_cmd ("download", &cmdlist);
+     "Get a file from the target (download {remote} [{local}])");
 }
 
 static int nto_remote_fd = -1;
@@ -3711,13 +3683,12 @@ static int nto_remote_fd = -1;
 static int
 nto_fileopen (char *fname, int mode, int perms)
 {
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   DScomm_t tran, recv;
 
   if (nto_remote_fd != -1)
     {
       printf_unfiltered
-	("Remote file currently open, it must be closed before you can open another.\n");
+  ("Remote file currently open, it must be closed before you can open another.\n");
       errno = EAGAIN;
       return -1;
     }
@@ -3725,15 +3696,15 @@ nto_fileopen (char *fname, int mode, int perms)
   nto_send_init (&tran, DStMsg_fileopen, 0, SET_CHANNEL_DEBUG);
   strcpy (tran.pkt.fileopen.pathname, fname);
   tran.pkt.fileopen.mode = EXTRACT_SIGNED_INTEGER (&mode, 4,
-						   byte_order);
+               nto_byte_order);
   tran.pkt.fileopen.perms = EXTRACT_SIGNED_INTEGER (&perms, 4,
-						    byte_order);
+                nto_byte_order);
   nto_send_recv (&tran, &recv, sizeof tran.pkt.fileopen, 0);
 
   if (recv.pkt.hdr.cmd == DSrMsg_err)
     {
       errno = errnoconvert (EXTRACT_SIGNED_INTEGER (&recv.pkt.err.err,
-						    4, byte_order));
+                4, nto_byte_order));
       return -1;
     }
   return nto_remote_fd = 0;
@@ -3749,16 +3720,8 @@ nto_fileclose (int fd)
     return;
 
   nto_send_init (&tran, DStMsg_fileclose, 0, SET_CHANNEL_DEBUG);
-  if (supports64bit())
-    {
-      tran.pkt.fileclose.mtime = 0;
-      sizeof_pkt = sizeof (tran.pkt.fileclose);
-    }
-  else
-    {
-      tran.pkt.fileclose32.mtime = 0;
-      sizeof_pkt = sizeof (tran.pkt.fileclose32);
-    }
+  tran.pkt.fileclose.mtime = 0;
+  sizeof_pkt = sizeof (tran.pkt.fileclose);
   nto_send_recv (&tran, &recv, sizeof_pkt, 1);
   nto_remote_fd = -1;
 }
@@ -3766,13 +3729,12 @@ nto_fileclose (int fd)
 static int
 nto_fileread (char *buf, int size)
 {
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   int len;
   DScomm_t tran, recv;
 
   nto_send_init (&tran, DStMsg_filerd, 0, SET_CHANNEL_DEBUG);
   tran.pkt.filerd.size = EXTRACT_SIGNED_INTEGER (&size, 2,
-						 byte_order);
+             nto_byte_order);
   len = nto_send_recv (&tran, &recv, sizeof tran.pkt.filerd, 0);
 
   if (recv.pkt.hdr.cmd == DSrMsg_err)
@@ -3795,396 +3757,186 @@ nto_filewrite (char *buf, int size)
   for (siz = size; siz > 0; siz -= len, buf += len)
     {
       len =
-	siz < sizeof tran.pkt.filewr.data ? siz : sizeof tran.pkt.filewr.data;
+  siz < sizeof tran.pkt.filewr.data ? siz : sizeof tran.pkt.filewr.data;
       nto_send_init (&tran, DStMsg_filewr, 0, SET_CHANNEL_DEBUG);
       memcpy (tran.pkt.filewr.data, buf, len);
       nto_send_recv (&tran, &recv, sizeof (tran.pkt.filewr.hdr) + len, 0);
 
       if (recv.pkt.hdr.cmd == DSrMsg_err)
-	{
-	  errno = errnoconvert (recv.pkt.err.err);
-	  return size - siz;
-	}
+  {
+    errno = errnoconvert (recv.pkt.err.err);
+    return size - siz;
+  }
     }
   return size;
 }
 
-template <class parent>
 bool
-qnx_remote_target<parent>::can_run (void)
+pdebug_target::can_run ( )
 {
   nto_trace (0) ("%s ()\n", __func__);
-  return 0;
+  return false;
 }
 
-template <class parent>
 int
-qnx_remote_target<parent>::can_use_hw_breakpoint (enum bptype type, int cnt, int othertype)
+pdebug_target::can_use_hw_breakpoint (enum bptype type, int cnt,
+         int othertype)
 {
+  /* generally NTO does support HW breakpoints */
   return 1;
 }
 
-template <class parent>
 bool
-qnx_remote_target<parent>::has_registers (void)
+pdebug_target::has_registers ( )
 {
-  struct inferior *inf;
-
-  inf = find_inferior_pid (this, inferior_ptid.pid ());
+  struct inferior *inf = current_inferior();
   if (!inf) return 0;
 
   return nto_inferior_data (inf)->has_registers;
 }
 
-template <class parent>
-const char *
-qnx_remote_target<parent>::thread_name (struct thread_info *ti)
-{
-  if (ti && ti->priv) {
-    const std::string& name = static_cast<nto_thread_info *> (ti->priv.get())->name;
-    return name.empty() ? NULL : name.c_str();
-  }
-  return NULL;
-}
-
-#ifndef NVIDIA_CUDA_GDB
-/* CUDA FIXME: Getting the remote thread state is
- * broken/not implemented with cuda-gdb qnx.
- * It looks like this may happen in nto-procfs.c
- * but we don't use that interface for remote debugging.
- * We use pdebug.
- */
-static const char *nto_thread_state_str[] =
-{
-  "DEAD",		/* 0  0x00 */
-  "RUNNING",	/* 1  0x01 */
-  "READY",	/* 2  0x02 */
-  "STOPPED",	/* 3  0x03 */
-  "SEND",		/* 4  0x04 */
-  "RECEIVE",	/* 5  0x05 */
-  "REPLY",	/* 6  0x06 */
-  "STACK",	/* 7  0x07 */
-  "WAITTHREAD",	/* 8  0x08 */
-  "WAITPAGE",	/* 9  0x09 */
-  "SIGSUSPEND",	/* 10 0x0a */
-  "SIGWAITINFO",	/* 11 0x0b */
-  "NANOSLEEP",	/* 12 0x0c */
-  "MUTEX",	/* 13 0x0d */
-  "CONDVAR",	/* 14 0x0e */
-  "JOIN",		/* 15 0x0f */
-  "INTR",		/* 16 0x10 */
-  "SEM",		/* 17 0x11 */
-  "WAITCTX",	/* 18 0x12 */
-  "NET_SEND",	/* 19 0x13 */
-  "NET_REPLY"	/* 20 0x14 */
-};
-
-template <class parent>
-const char *
-qnx_remote_target<parent>::extra_thread_info (struct thread_info *ti)
-{
-  if (ti != NULL && ti->priv != NULL)
-    {
-      nto_thread_info *priv = get_nto_thread_info (ti);
-
-      if (priv->state < ARRAY_SIZE (nto_thread_state_str))
-	return nto_thread_state_str [priv->state];
-    }
-  return "";
-}
-#endif
-
-template <class parent>
-std::string
-qnx_remote_target<parent>::pid_to_str (ptid_t ptid)
-{
-  int pid, tid;
-  struct thread_info *ti;
-  std::string thread_id;
-
-  pid = ptid.pid ();
-  tid = ptid.tid ();
-
-  ti = find_thread_ptid (this, ptid);
-  nto_thread_info *info = ti ? (struct nto_thread_info *)ti->priv.get() : NULL;
-
-  if (ti && info && info->name.length ())
-    {
-      thread_id = string_printf(" tid %d name \"%s\"", tid, info->name.c_str ());
-    }
-  else if (tid > 0)
-    thread_id = string_printf(" tid %d", tid);
-
-  return string_printf("pid %d%s", pid, thread_id.c_str ());
-}
-
-template <class parent>
 bool
-qnx_remote_target<parent>::has_execution (inferior *inf)
+pdebug_target::has_memory ( )
 {
-  return nto_inferior_data (inf)->has_execution;
-}
-
-template <class parent>
-bool
-qnx_remote_target<parent>::has_memory (void)
-{
-  struct inferior *inf;
-
-  inf = find_inferior_pid (this, inferior_ptid.pid ());
+  struct inferior *inf = current_inferior();
   if (!inf) return 0;
 
   return nto_inferior_data (inf)->has_memory;
 }
 
-template <class parent>
 bool
-qnx_remote_target<parent>::has_stack (void)
+pdebug_target::has_stack ( )
 {
-  struct inferior *inf;
-
-  inf = find_inferior_pid (this, inferior_ptid.pid ());
+  struct inferior *inf = current_inferior();
   if (!inf) return 0;
 
   return nto_inferior_data (inf)->has_stack;
 }
 
-template <class parent>
 bool
-qnx_remote_target<parent>::has_all_memory (void)
+pdebug_target::has_all_memory ( )
 {
-  struct inferior *inf;
-
-  inf = find_inferior_pid (this, inferior_ptid.pid ());
+  struct inferior *inf = current_inferior();
   if (!inf) return 0;
 
   return nto_inferior_data (inf)->has_memory;
 }
 
-template <class parent>
 int
-qnx_remote_target<parent>::insert_fork_catchpoint (int pid)
+pdebug_target::insert_fork_catchpoint (int pid)
 {
   nto_trace (0) ("%s", __func__);
   return 0;
 }
 
-template <class parent>
 int
-qnx_remote_target<parent>::remove_fork_catchpoint (int pid)
+pdebug_target::remove_fork_catchpoint (int pid)
 {
   nto_trace (0) ("%s", __func__);
   return 0;
 }
 
-template <class parent>
 int
-qnx_remote_target<parent>::insert_vfork_catchpoint (int pid)
+pdebug_target::insert_vfork_catchpoint (int pid)
 {
   nto_trace (0) ("%s", __func__);
   return 0;
 }
 
-template <class parent>
 int
-qnx_remote_target<parent>::remove_vfork_catchpoint (int pid)
+pdebug_target::remove_vfork_catchpoint (int pid)
 {
   nto_trace (0) ("%s", __func__);
   return 0;
 }
 
-template <class parent>
 int
-qnx_remote_target<parent>::insert_exec_catchpoint (int pid)
+pdebug_target::insert_exec_catchpoint (int pid)
 {
   nto_trace (0) ("%s", __func__);
   return 0;
 }
 
-template <class parent>
 int
-qnx_remote_target<parent>::remove_exec_catchpoint (int pid)
+pdebug_target::remove_exec_catchpoint (int pid)
 {
   nto_trace (0) ("%s", __func__);
   return 0;
 }
 
-/* GDB makes assumption that after VFORK/FORK we are attached to both.
-   This is not the case on QNX but to make gdb behave, we do attach
-   to both anyway, regardless of the scenario. */
-template <class parent>
+/*
+ * Target hook for follow_fork.
+ *
+ * On entry the current inferior is the followed one
+ *
+ * this does some special handling after a fork happened, depending on
+ * the fork control switches fork-follow-mode and detach-on-fork:
+ *
+ * no special support for vfork() as this has been deprecated and is currently
+ * just a wrapped fork() call. See <process.h>
+ *
+ * note: disabling detach_fork is currently not supported even though the stub
+ *       code is here!
+ */
 void
-qnx_remote_target<parent>::follow_fork (inferior *child_inf, ptid_t child_ptid,
-					target_waitkind fork_kind, bool follow_child,
-					bool detach_fork)
+pdebug_target::follow_fork (inferior *child_inf, ptid_t child_ptid,
+			    target_waitkind fork_kind, bool follow_child,
+			    bool detach_fork)
 {
-  struct inferior *const parent_inf = current_inferior ();
-  int parent_pid;
+  nto_trace (0) ("follow_fork(%ld, %s, %s)\n", child_ptid.lwp (),
+      follow_child?"child":"parent", detach_fork?"detach":"stay attached");
 
-  nto_trace (1) ("%s follow_child: %d\n", __func__, follow_child);
+  nto_trace(0) ("  current inferior: %i\n", current_inferior()->pid);
+  nto_trace(0) ("  current thread: %s\n", nto_pid_to_str(inferior_thread()->ptid).c_str());
 
-  gdb_assert (parent_inf != NULL);
-  gdb_assert (parent_inf->pid == inferior_ptid.pid ());
-
-  parent_pid = parent_inf->pid;
-
-  nto_trace (0) ("Child pid: %d %s\n", child_ptid.pid (), target_waitkind_str (fork_kind));
+  pid_t     child_pid=-1;
 
   if (follow_child)
     {
-      /* Attach to the child process, then detach from the parent. */
-      struct nto_inferior_data *inf_data;
-      struct nto_remote_inferior_data *c_inf_rdata, *p_inf_rdata;
-      DScomm_t recv;
+      child_inf = child_inf;
+      child_pid = child_inf->pid;
+    }
+  else
+    {
+      child_pid = child_ptid.pid ();
+      child_inf  = find_inferior_pid(this, child_pid);
+    }
 
-      /* To appease testsuite and be inline with linux. */
-      if (info_verbose || nto_internal_debugging)
-	{
-	  gdb_printf (gdb_stdlog,
-			    _("Attaching after process %d "
-			      "%s to child process %d.\n"),
-			      parent_pid, target_waitkind_str (fork_kind),
-			      child_ptid.pid ());
-	}
-
-      if (!nto_attach_only (child_ptid.pid (), &recv))
-	error (_("Could not attach to %d\n"), child_ptid.pid ());
-
-      child_inf->attach_flag = parent_inf->attach_flag;
-      copy_terminal_info (child_inf, parent_inf);
-      child_inf->gdbarch = parent_inf->gdbarch;
-      copy_inferior_target_desc_info (child_inf, parent_inf);
-      child_inf->set_args (parent_inf->args ());
-
-      /* Always clone pspace so that inferiors don't get their
-       * associated file names messed up. */
-      child_inf->aspace = new address_space ();
-      child_inf->pspace = new program_space (child_inf->aspace);
-      child_inf->removable = 1;
-      child_inf->symfile_flags = SYMFILE_NO_READ;
-      /* Following the child. */
-      set_current_program_space (child_inf->pspace);
-      clone_program_space (child_inf->pspace, parent_inf->pspace);
-
-      if (fork_kind == TARGET_WAITKIND_VFORKED)
-	{
-	  child_inf->vfork_parent = parent_inf;
-	  child_inf->pending_detach = 0;
-	  parent_inf->vfork_child = child_inf;
-	  parent_inf->pending_detach = detach_fork;
-	  parent_inf->thread_waiting_for_vfork_done = inferior_thread ();
-	  /* Wait for child event EXEC or PIDUNLOAD */
-	  parent_inf->pspace->breakpoints_not_allowed = 1;
-
-	  inferior_ptid = child_ptid;
-	  add_thread (this, inferior_ptid);
-	}
-      else
-	{
-	  if (detach_fork)
-	    {
-	      target_detach (NULL, 0);
-	      inferior_ptid = child_ptid;
-	      add_thread (this, inferior_ptid);
-	    }
-	  else
-	    {
-	      inferior_ptid = child_ptid;
-	      add_thread (this, inferior_ptid);
-
-	      child_inf->aspace = new address_space ();
-	      child_inf->pspace = new program_space (child_inf->aspace);
-	      child_inf->removable = 1;
-	      child_inf->symfile_flags = SYMFILE_NO_READ;
-	      set_current_program_space (child_inf->pspace);
-	      clone_program_space (child_inf->pspace, parent_inf->pspace);
-	      solib_create_inferior_hook (0);
-	    }
-	}
-
-      inf_data = nto_inferior_data (child_inf);
+  if (child_inf != NULL)
+    {
+      struct nto_inferior_data *inf_data = nto_inferior_data (child_inf);
+      child_inf->attach_flag = false;
+      child_inf->removable = true;
       inf_data->has_execution = 1;
       inf_data->has_stack = 1;
       inf_data->has_registers = 1;
       inf_data->has_memory = 1;
-
-      p_inf_rdata = nto_remote_inferior_data (parent_inf);
-      c_inf_rdata = nto_remote_inferior_data (child_inf);
-
-      if (p_inf_rdata->remote_exe.length () == 0)
-	c_inf_rdata->remote_exe = p_inf_rdata->remote_exe;
-      if (p_inf_rdata->remote_cwd.length ())
-	c_inf_rdata->remote_cwd = p_inf_rdata->remote_cwd;
+      nto_add_thread(this, child_pid, 1);
     }
-  else /* !follow_child */
+
+  if (detach_fork && !follow_child)
     {
-      struct nto_inferior_data *inf_data;
-
-      if (!detach_fork)
+      /* Detach the fork child if it was attached */
+      if (child_inf != NULL)
+        {
+	  nto_trace(0) ("  detaching from child inferior\n");
+          detach(child_inf,0);
+        }
+      else
 	{
-	  const ptid_t old_inferior_ptid = inferior_ptid;
-	  struct program_space *const old_program_space
-	    = current_program_space;
-	  DScomm_t recv;
-
-	  nto_trace (0)("%s: parent, attach child\n", __func__);
-	  if (fork_kind == TARGET_WAITKIND_VFORKED)
-	      error (_("Can not attach to vforked child and not follow it\n"));
-
-	  if (!nto_attach_only (child_ptid.pid (), &recv))
-	      error (_("Could not attach to %d\n"), child_ptid.pid ());
-
-	  child_inf->attach_flag = parent_inf->attach_flag;
-	  copy_terminal_info (child_inf, parent_inf);
-
-	  inferior_ptid = nto_get_thread_alive (this, child_ptid);
-	  add_thread (this, inferior_ptid);
-
-	  child_inf->aspace = new address_space ();
-	  child_inf->pspace = new program_space (child_inf->aspace);
-	  child_inf->removable = 1;
-	  set_current_program_space (child_inf->pspace);
-	  clone_program_space (child_inf->pspace, parent_inf->pspace);
-
-	  solib_create_inferior_hook (0);
-
-	  inf_data = nto_inferior_data (child_inf);
-	  inf_data->has_execution = 1;
-	  inf_data->has_stack = 1;
-	  inf_data->has_registers = 1;
-	  inf_data->has_memory = 1;
-
-	  /* Restore */
-	  set_current_program_space (old_program_space);
-	  inferior_ptid = old_inferior_ptid;
-	  set_thread (inferior_ptid.tid ());
-	} else {
-	  /* To appease testsuite and be inline with linux. */
-	  if (info_verbose || nto_internal_debugging)
-	    {
-	      current_inferior ()->top_target ()->terminal_ours ();
-	      gdb_printf (gdb_stdlog,
-				"Detaching after %s from "
-				"child process %d.\n",
-				target_waitkind_str (fork_kind),
-				child_ptid.pid ());
-	    }
+	  nto_trace(0) ("  just sending detach msg to child\n");
+	  nto_detach_only (child_pid);
 	}
     }
+
+  update_thread_list();
 }
 
-template <class parent>
-bool
-qnx_remote_target<parent>::supports_multi_process (void)
-{
-  return 1;
-}
-
-template <class parent>
 int
-qnx_remote_target<parent>::verify_memory (const gdb_byte *data, CORE_ADDR memaddr, ULONGEST size)
+pdebug_target::verify_memory (const gdb_byte *data,
+       CORE_ADDR memaddr, ULONGEST size)
 {
-  // TODO: This should be more optimal, similar to remote.c 
+  // TODO: This should be more optimal, similar to remote.c
   // implementation and pass address, size and crc32 to pdebug
   // so it can perform crc32 there and save network traffic
   gdb_byte *const buf = (gdb_byte *)xmalloc (size);
@@ -4203,55 +3955,8 @@ qnx_remote_target<parent>::verify_memory (const gdb_byte *data, CORE_ADDR memadd
   return match;
 }
 
-template <class parent>
-void
-qnx_remote_target<parent>::load (const char *args, int from_tty)
-{
-  generic_load (args, from_tty);
-}
-
-template <class parent>
-bool
-qnx_remote_target<parent>::is_async_p (void)
-{
-  /* Not yet. */
-  return false;
-}
-
-template <class parent>
-bool
-qnx_remote_target<parent>::can_async_p (void)
-{
-  /* Not yet. */
-  return 0;
-}
-
-template <class parent>
-int
-qnx_remote_target<parent>::get_trace_status (struct trace_status *ts)
-{
-   /* in 7.12 it dispatched to tdefault_get_trace_status */
-  return -1;
-}
-
-template <class parent>
-void
-qnx_remote_target<parent>::remote_check_symbols (void)
-{
-  /* qSymbol used by remote_target::remote_check_symbols is not supported on QNX */
-}
-
-template <class parent>
-bool
-qnx_remote_target<parent>::supports_non_stop (void)
-{
-  /* Not yet. */
-  return 0;
-}
-
-template <class parent>
 const struct target_desc *
-qnx_remote_target<parent>::read_description (void)
+pdebug_target::read_description ( )
 {
   if (ntoops_read_description)
     return ntoops_read_description (nto_get_cpuflags ());
@@ -4259,91 +3964,115 @@ qnx_remote_target<parent>::read_description (void)
     return NULL;
 }
 
-static const target_info qnx_remote_target_info = {
-  "qnx",
-  N_("Remote serial target using the QNX Debugging Protocol"),
-  N_("Debug a remote machine using the QNX Debugging Protocol.\n"
-     "Specify the device it is connected to (e.g. /dev/ser1, <rmt_host>:<port>)\n"
-     "or `pty' to launch `pdebug' for debugging."),
-};
+#if 0
+/* Terminal handling.  */
+void
+pdebug_target::terminal_init ( )
+{
+}
+
+void
+pdebug_target::terminal_inferior ( )
+{
+}
+
+void
+pdebug_target::terminal_ours_for_output ( )
+{
+}
+
+void
+pdebug_target::terminal_ours ( )
+{
+}
+
+struct void
+nto_terminal_save_ours ( )
+{
+}
+
+void
+pdebug_target::terminal_info (const char *arg, int c)
+{
+}
+
+#endif
 
 static void
-update_threadnames (remote_target *ops)
+update_threadnames (void)
 {
   DScomm_t tran, recv;
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   struct dstidnames *tidnames = (struct dstidnames *) recv.pkt.okdata.data;
   int cur_pid;
   unsigned int numleft;
 
   nto_trace (0) ("%s ()\n", __func__);
 
-  cur_pid = inferior_ptid.pid ();
-  if(!cur_pid)
-    {
-      gdb_printf(gdb_stderr, "No inferior.\n");
+  cur_pid = inferior_ptid.pid();
+  if(!cur_pid) {
+    gdb_printf(gdb_stderr, "No inferior.\n");
+    return;
+  }
+
+  do {
+    unsigned int i, numtids;
+    char *name;
+
+    nto_send_init (&tran, DStMsg_tidnames, 0, SET_CHANNEL_DEBUG);
+    nto_send_recv (&tran, &recv, sizeof(tran.pkt.tidnames), 0);
+    if (recv.pkt.hdr.cmd == DSrMsg_err) {
+      errno = errnoconvert (EXTRACT_SIGNED_INTEGER (&recv.pkt.err.err, sizeof(recv.pkt.err.err), nto_byte_order));
+      if (errno != EINVAL)  {
+        warning ("Could not retrieve tidnames (%d - %s)\n", errno, strerror(errno) );
+    }
       return;
     }
 
-  do
-    {
-      unsigned int i, numtids;
-      char *buf;
+    numtids = EXTRACT_UNSIGNED_INTEGER (&tidnames->numtids, sizeof(tidnames->numtids), nto_byte_order);
+    numleft = EXTRACT_UNSIGNED_INTEGER (&tidnames->numleft, sizeof(tidnames->numleft), nto_byte_order);
 
-      nto_send_init (&tran, DStMsg_tidnames, 0, SET_CHANNEL_DEBUG);
-      nto_send_recv (&tran, &recv, sizeof(tran.pkt.tidnames), 0);
-      if (recv.pkt.hdr.cmd == DSrMsg_err)
+    /* the namelist is a mess of the format:
+     * <nul*>tid<nul>tidname<nul>tid<nul>tidname<nul>... */
+    name=(char *)tidnames->data;
+    /* skip to the first tid */
+    while ((*name<'0') || (*name>'9'))
+	name++;
+    /* extract and set names */
+    for(i = 0 ; i < numtids ; i++) {
+      struct thread_info *ti;
+      ptid_t ptid;
+      int tid;
+      int namelen;
+      char *end;
+
+      tid = strtol(name, &end, 10);
+      if (tid == 0)
+	warning("Received a name for thread 0!");
+
+      name = end + 1; /* Skip the null terminator to the actual name */
+      namelen = strlen(name);
+
+      nto_trace (0) ("Thread %d name: %s\n", tid, name);
+      ptid = ptid_t (cur_pid, tid, 0);
+      ti = nto_find_thread (ptid);
+      if(ti)
 	{
-	  errno = errnoconvert (EXTRACT_SIGNED_INTEGER
-				  (&recv.pkt.err.err, 4,
-				   byte_order));
-	  if (errno != EINVAL) /* Not old pdebug, but something else.  */
-	    {
-	      warning ("Warning: could not retrieve tidnames (errno=%d)\n",
-		       errno);
-	    }
-	  return;
+	  if(ti->name () == NULL)
+	    ti->set_name (make_unique_xstrdup(name));
 	}
-
-      numtids = EXTRACT_UNSIGNED_INTEGER (&tidnames->numtids, 4,
-					  byte_order);
-      numleft = EXTRACT_UNSIGNED_INTEGER (&tidnames->numleft, 4,
-					  byte_order);
-      buf = (char *)tidnames + sizeof(*tidnames);
-      for(i = 0 ; i < numtids ; i++)
+      else
 	{
-	  struct thread_info *ti;
-	  struct nto_thread_info *priv;
-	  ptid_t ptid;
-	  int tid;
-	  int namelen;
-	  char *tmp;
-
-	  tid = strtol(buf, &tmp, 10);
-	  buf = tmp + 1; /* Skip the null terminator.  */
-	  namelen = strlen(buf);
-
-	  nto_trace (0) ("Thread %d name: %s\n", tid, buf);
-
-	  ptid = ptid_t (cur_pid, 0, tid);
-	  ti = find_thread_ptid (ops, ptid);
-	  if (ti)
-	    {
-	      priv = get_nto_thread_info (ti);
-	      if (priv)
-		priv->name = buf;
-	    }
-	  buf += namelen + 1;
+	  warning("Thread %d (%s) does not exist!", tid, name);
 	}
-    } while(numleft > 0);
+      name += namelen + 1;
+    }
+  } while(numleft > 0);
 }
 
-template <class parent>
 void
-qnx_remote_target<parent>::update_thread_list (void)
+pdebug_target::update_thread_list ( )
 {
   DScomm_t tran, recv;
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   int cur_pid, start_tid = 1, total_tids = 0, num_tids;
   struct dspidlist *pidlist = (struct dspidlist *) recv.pkt.okdata.data;
   struct tidinfo *tip;
@@ -4351,7 +4080,7 @@ qnx_remote_target<parent>::update_thread_list (void)
 
   nto_trace (0) ("%s ()\n", __func__);
 
-  cur_pid = inferior_ptid.pid ();
+  cur_pid = inferior_ptid.pid();
   if(!cur_pid){
     gdb_printf(gdb_stderr, "No inferior.\n");
     return;
@@ -4359,67 +4088,98 @@ qnx_remote_target<parent>::update_thread_list (void)
   subcmd = DSMSG_PIDLIST_SPECIFIC;
 
   do {
+    /* fetch threads for cur_pid starting with thread start_tid */
     nto_send_init (&tran, DStMsg_pidlist, subcmd, SET_CHANNEL_DEBUG );
-    tran.pkt.pidlist.pid = EXTRACT_UNSIGNED_INTEGER (&cur_pid, 4,
-						     byte_order);
-    tran.pkt.pidlist.tid = EXTRACT_UNSIGNED_INTEGER (&start_tid, 4,
-						     byte_order);
+    tran.pkt.pidlist.pid = EXTRACT_UNSIGNED_INTEGER (&cur_pid, 4, nto_byte_order);
+    tran.pkt.pidlist.tid = EXTRACT_UNSIGNED_INTEGER (&start_tid, 4, nto_byte_order);
     nto_send_recv (&tran, &recv, sizeof(tran.pkt.pidlist), 0);
-    if (recv.pkt.hdr.cmd == DSrMsg_err)
-    {
-      errno = errnoconvert (EXTRACT_SIGNED_INTEGER
-			      (&recv.pkt.err.err, 4, byte_order));
+
+    /* transmit/msg error */
+    if (recv.pkt.hdr.cmd == DSrMsg_err) {
+      errno = errnoconvert (EXTRACT_SIGNED_INTEGER (&recv.pkt.err.err, 4, nto_byte_order));
       return;
     }
-    if (recv.pkt.hdr.cmd != DSrMsg_okdata)
-    {
+
+    /* no transmit error but no valid data available */
+    if (recv.pkt.hdr.cmd != DSrMsg_okdata) {
       errno = EOK;
       nto_trace (1) ("msg not DSrMsg_okdata!\n");
       return;
     }
-    num_tids = EXTRACT_UNSIGNED_INTEGER (&pidlist->num_tids, 4,
-					 byte_order);
-    for (tip =
-	 (struct tidinfo *) &pidlist->name[(strlen(pidlist->name) + 1 + 3) & ~3];
-	 tip->tid != 0; tip++ )
+
+    /* get the number of active threads for pid */
+    num_tids = EXTRACT_UNSIGNED_INTEGER (&pidlist->num_tids, 4, nto_byte_order);
+
+    /* unfortunately pdebug does not use dspidlist->tids but just appends the
+     * tidinfos to the process header.. */
+    tip = (struct tidinfo *) &pidlist->name[(strlen(pidlist->name) + 1 + 3) & ~3];
+
+    /* iterate through the tidinfos */
+    for ( ;tip->tid != 0; tip++ )
     {
       struct thread_info *new_thread;
       ptid_t ptid;
-
       tip->tid =  EXTRACT_UNSIGNED_INTEGER (&tip->tid, 2,
-					    byte_order);
-      ptid = ptid_t(cur_pid, 0, tip->tid);
+              nto_byte_order);
+      ptid = ptid_t(cur_pid, tip->tid, 0);
 
-      if (tip->tid < 0)
-	{
-	  //warning ("TID < 0\n");
-	  continue;
-	}
+      if (tip->tid < 0) {
+        warning ("TID %d < 0\n", tip->tid );
+        continue;
+      }
 
-      new_thread = find_thread_ptid (this, ptid);
-      if (!new_thread && tip->state != 0)
-	new_thread = add_thread (this, ptid);
-      if (new_thread && !new_thread->priv)
-	{
-	  nto_thread_info *priv = new nto_thread_info;
+      /* check if we know this thread already */
+      new_thread = nto_find_thread (ptid);
 
-	  priv->tid = tip->tid;
-	  new_thread->priv = std::unique_ptr<private_thread_info> (priv);
-	}
+      /* it's a new, non-dead thread */
+      if(!new_thread && tip->state != 0) {
+        new_thread = add_thread (this, ptid);
+        new_thread->priv.reset(new nto_thread_info());
+      }
+
+      /* update thread info */
+      if ( new_thread ) {
+        /* create thread info if the thread was found and announced by GDB */
+        if( new_thread->priv.get() == NULL ) {
+          new_thread->priv.reset(new nto_thread_info());
+        }
+        ((struct nto_thread_info *)new_thread->priv.get())->fill(tip);
+      }
       total_tids++;
     }
+
     subcmd = DSMSG_PIDLIST_SPECIFIC_TID;
     start_tid = total_tids + 1;
   } while(total_tids < num_tids);
 
-  update_threadnames (this);
+  update_threadnames ();
 }
 
-void
+#ifdef __MINGW32__
+char *
+strcasestr(const char *const haystack, const char *const needle)
+{
+  char buff_h[1024];
+  char buff_n[1024];
+  const char *p;
+  int i;
+
+  p = haystack;
+  for (p = haystack, i = 0; *p && i < sizeof(buff_h)-1; ++p, ++i)
+    buff_h[i] = toupper(*p);
+  buff_h[i] = '\0';
+  for (p = needle, i = 0; *p && i < sizeof(buff_n)-1; ++p, ++i)
+    buff_n[i] = toupper(*p);
+  buff_n[i] = '\0';
+
+  return strstr(buff_h, buff_n);
+}
+#endif /* __MINGW32__ */
+
+static void
 nto_pidlist (const char *args, int from_tty)
 {
   DScomm_t tran, recv;
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   struct dspidlist *pidlist = (struct dspidlist *) recv.pkt.okdata.data;
   struct tidinfo *tip;
   char specific_tid_supported = 0;
@@ -4433,11 +4193,11 @@ nto_pidlist (const char *args, int from_tty)
 
   /* Send a DSMSG_PIDLIST_SPECIFIC_TID to see if it is supported.  */
   nto_send_init (&tran, DStMsg_pidlist, DSMSG_PIDLIST_SPECIFIC_TID,
-		 SET_CHANNEL_DEBUG);
+     SET_CHANNEL_DEBUG);
   tran.pkt.pidlist.pid = EXTRACT_SIGNED_INTEGER (&pid, 4,
-						 byte_order);
+             nto_byte_order);
   tran.pkt.pidlist.tid = EXTRACT_SIGNED_INTEGER (&start_tid, 4,
-						 byte_order);
+             nto_byte_order);
   nto_send_recv (&tran, &recv, sizeof (tran.pkt.pidlist), 0);
 
   if (recv.pkt.hdr.cmd == DSrMsg_err)
@@ -4449,47 +4209,47 @@ nto_pidlist (const char *args, int from_tty)
     {
       nto_send_init (&tran, DStMsg_pidlist, subcmd, SET_CHANNEL_DEBUG);
       tran.pkt.pidlist.pid = EXTRACT_SIGNED_INTEGER (&pid, 4,
-						     byte_order);
+                 nto_byte_order);
       tran.pkt.pidlist.tid = EXTRACT_SIGNED_INTEGER (&start_tid, 4,
-						     byte_order);
+                 nto_byte_order);
       nto_send_recv (&tran, &recv, sizeof (tran.pkt.pidlist), 0);
       if (recv.pkt.hdr.cmd == DSrMsg_err)
-	{
-	  errno = errnoconvert (EXTRACT_SIGNED_INTEGER
-				  (&recv.pkt.err.err, 4,
-				   byte_order));
-	  return;
-	}
+  {
+    errno = errnoconvert (EXTRACT_SIGNED_INTEGER
+          (&recv.pkt.err.err, 4,
+           nto_byte_order));
+    return;
+  }
       if (recv.pkt.hdr.cmd != DSrMsg_okdata)
-	{
-	  errno = EOK;
-	  return;
-	}
+  {
+    errno = EOK;
+    return;
+  }
 
       for (tip =
-	   (struct tidinfo *) &pidlist->name[(strlen (pidlist->name) + 1 + 3) & ~3];
-	   tip->tid != 0; tip++)
-	{
-	  if ((args != NULL && strcasestr(pidlist->name, args) != NULL)
-	      || args == NULL)
-	    gdb_printf ("%s - %ld/%ld\n", pidlist->name,
-			     (long) EXTRACT_SIGNED_INTEGER (&pidlist->pid,
-							    4, byte_order),
-			     (long) EXTRACT_SIGNED_INTEGER (&tip->tid, 2,
-							    byte_order));
-	  total_tid++;
-	}
-      pid = EXTRACT_SIGNED_INTEGER (&pidlist->pid, 4, byte_order);
+     (struct tidinfo *) &pidlist->name[(strlen (pidlist->name) + 1 + 3) & ~3];
+     tip->tid != 0; tip++)
+  {
+    if ((args != NULL && strcasestr(pidlist->name, args) != NULL)
+        || args == NULL)
+      gdb_printf ("%s - %ld/%ld\n", pidlist->name,
+           (long) EXTRACT_SIGNED_INTEGER (&pidlist->pid,
+                  4, nto_byte_order),
+           (long) EXTRACT_SIGNED_INTEGER (&tip->tid, 2,
+                  nto_byte_order));
+    total_tid++;
+  }
+      pid = EXTRACT_SIGNED_INTEGER (&pidlist->pid, 4, nto_byte_order);
       if (specific_tid_supported)
-	{
-	  if (total_tid < EXTRACT_SIGNED_INTEGER
-			    (&pidlist->num_tids, 4, byte_order))
-	    {
-	      subcmd = DSMSG_PIDLIST_SPECIFIC_TID;
-	      start_tid = total_tid + 1;
-	      continue;
-	    }
-	}
+  {
+    if (total_tid < EXTRACT_SIGNED_INTEGER
+          (&pidlist->num_tids, 4, nto_byte_order))
+      {
+        subcmd = DSMSG_PIDLIST_SPECIFIC_TID;
+        start_tid = total_tid + 1;
+        continue;
+      }
+  }
       start_tid = 1;
       total_tid = 0;
       subcmd = DSMSG_PIDLIST_NEXT;
@@ -4501,14 +4261,13 @@ static struct dsmapinfo *
 nto_mapinfo (unsigned addr, int first, int elfonly)
 {
   DScomm_t tran, recv;
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   struct dsmapinfo map;
   static struct dsmapinfo dmap;
   DStMsg_mapinfo_t *mapinfo = (DStMsg_mapinfo_t *) & tran.pkt;
   char subcmd;
 
   if (core_bfd != NULL)
-    {				/* Have to implement corefile mapinfo.  */
+    {        /* Have to implement corefile mapinfo.  */
       errno = EOK;
       return NULL;
     }
@@ -4519,12 +4278,12 @@ nto_mapinfo (unsigned addr, int first, int elfonly)
     subcmd |= DSMSG_MAPINFO_ELF;
 
   nto_send_init (&tran, DStMsg_mapinfo, subcmd, SET_CHANNEL_DEBUG);
-  mapinfo->addr = EXTRACT_UNSIGNED_INTEGER (&addr, 8/*FIXME*/, byte_order);
+  mapinfo->addr = EXTRACT_UNSIGNED_INTEGER (&addr, sizeof(mapinfo->addr), nto_byte_order);
   nto_send_recv (&tran, &recv, sizeof (*mapinfo), 0);
   if (recv.pkt.hdr.cmd == DSrMsg_err)
     {
       errno = errnoconvert (EXTRACT_SIGNED_INTEGER
-			      (&recv.pkt.err.err, 4, byte_order));
+            (&recv.pkt.err.err, 4, nto_byte_order));
       return NULL;
     }
   if (recv.pkt.hdr.cmd != DSrMsg_okdata)
@@ -4535,30 +4294,30 @@ nto_mapinfo (unsigned addr, int first, int elfonly)
 
   memset (&dmap, 0, sizeof (dmap));
   memcpy (&map, &recv.pkt.okdata.data[0], sizeof (map));
-  dmap.ino = EXTRACT_UNSIGNED_INTEGER (&map.ino, 8, byte_order);
-  dmap.dev = EXTRACT_SIGNED_INTEGER (&map.dev, 4, byte_order);
+  dmap.ino = EXTRACT_UNSIGNED_INTEGER (&map.ino, 8, nto_byte_order);
+  dmap.dev = EXTRACT_SIGNED_INTEGER (&map.dev, 4, nto_byte_order);
 
   dmap.text.addr = EXTRACT_UNSIGNED_INTEGER (&map.text.addr, 4,
-					     byte_order);
+               nto_byte_order);
   dmap.text.size = EXTRACT_SIGNED_INTEGER (&map.text.size, 4,
-					   byte_order);
+             nto_byte_order);
   dmap.text.flags = EXTRACT_SIGNED_INTEGER (&map.text.flags, 4,
-					    byte_order);
+              nto_byte_order);
   dmap.text.debug_vaddr =
     EXTRACT_UNSIGNED_INTEGER (&map.text.debug_vaddr, 4,
-			      byte_order);
+            nto_byte_order);
   dmap.text.offset = EXTRACT_UNSIGNED_INTEGER (&map.text.offset, 8,
-					       byte_order);
+                 nto_byte_order);
   dmap.data.addr = EXTRACT_UNSIGNED_INTEGER (&map.data.addr, 4,
-					     byte_order);
+               nto_byte_order);
   dmap.data.size = EXTRACT_SIGNED_INTEGER (&map.data.size, 4,
-					   byte_order);
+             nto_byte_order);
   dmap.data.flags = EXTRACT_SIGNED_INTEGER (&map.data.flags, 4,
-					    byte_order);
+              nto_byte_order);
   dmap.data.debug_vaddr =
-    EXTRACT_UNSIGNED_INTEGER (&map.data.debug_vaddr, 4, byte_order);
+    EXTRACT_UNSIGNED_INTEGER (&map.data.debug_vaddr, 4, nto_byte_order);
   dmap.data.offset = EXTRACT_UNSIGNED_INTEGER (&map.data.offset, 8,
-					       byte_order);
+                 nto_byte_order);
 
   strcpy (dmap.name, map.name);
 
@@ -4576,215 +4335,213 @@ nto_meminfo (const char *args, int from_tty)
       first = 0;
       gdb_printf ("%s\n", dmp->name);
       gdb_printf ("\ttext=%08x bytes @ 0x%08x\n", dmp->text.size,
-		       dmp->text.addr);
+           dmp->text.addr);
       gdb_printf ("\t\tflags=%08x\n", dmp->text.flags);
       gdb_printf ("\t\tdebug=%08x\n", dmp->text.debug_vaddr);
-      gdb_printf ("\t\toffset=%016llx\n", dmp->text.offset);
+      gdb_printf ("\t\toffset=%016" PRIx64 "\n", dmp->text.offset);
       if (dmp->data.size)
-	{
-	  gdb_printf ("\tdata=%08x bytes @ 0x%08x\n", dmp->data.size,
-			   dmp->data.addr);
-	  gdb_printf ("\t\tflags=%08x\n", dmp->data.flags);
-	  gdb_printf ("\t\tdebug=%08x\n", dmp->data.debug_vaddr);
-	  gdb_printf ("\t\toffset=%016llx\n", dmp->data.offset);
-	}
+  {
+    gdb_printf ("\tdata=%08x bytes @ 0x%08x\n", dmp->data.size,
+         dmp->data.addr);
+    gdb_printf ("\t\tflags=%08x\n", dmp->data.flags);
+    gdb_printf ("\t\tdebug=%08x\n", dmp->data.debug_vaddr);
+    gdb_printf ("\t\toffset=%016" PRIx64 "\n", dmp->data.offset);
+  }
       gdb_printf ("\tdev=0x%x\n", dmp->dev);
-      gdb_printf ("\tino=0x%llx\n", dmp->ino);
+      gdb_printf ("\tino=0x%" PRIx64 "\n", dmp->ino);
     }
 }
 
-template <class parent>
+/*
+ * for some reason this was not designed analogue to the
+ * nto_to_insert_breakpoint nto_insert_breakpoint pair
+ */
 int
-qnx_remote_target<parent>::insert_hw_breakpoint (struct gdbarch *gdbarch,
-						 struct bp_target_info *bp_tg_inf)
+pdebug_target::insert_hw_breakpoint (struct gdbarch *gdbarch,
+        struct bp_target_info *bp_tg_inf)
 {
   DScomm_t tran, recv;
-  const enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  size_t sizeof_pkt;
 
-  nto_trace (0) ("nto_insert_hw_breakpoint(addr %s, contents_cache %p)\n",
-		 paddress (gdbarch, bp_tg_inf->placed_address),
-		 bp_tg_inf->shadow_contents);
+  nto_trace (0) ("pdebug_insert_hw_breakpoint(addr %s) pid:%d\n",
+     paddress (gdbarch, bp_tg_inf->reqstd_address),
+     inferior_ptid.pid());
 
-  if (bp_tg_inf == NULL)
-    return -1;
+  /* if target info is unset, something really bad is going on! */
+  if ( bp_tg_inf == NULL ) {
+    internal_error(_("Target info invalid."));
+  }
+
+  /* Must select appropriate inferior. */
+  if (!nto_set_thread_alive (inferior_ptid))
+    {
+      return 1;
+    }
+
+  /* expect that all will succeed */
+  bp_tg_inf->placed_address = bp_tg_inf->reqstd_address;
 
   nto_send_init (&tran, DStMsg_brk, DSMSG_BRK_EXEC | DSMSG_BRK_HW,
-		 SET_CHANNEL_DEBUG);
-  if (supports64bit())
+     SET_CHANNEL_DEBUG);
+
+  tran.pkt.brk.size = 0;
+  tran.pkt.brk.addr = EXTRACT_SIGNED_INTEGER (&bp_tg_inf->placed_address,
+      sizeof(tran.pkt.brk.addr), nto_byte_order);
+  sizeof_pkt = sizeof (tran.pkt.brk);
+
+  nto_send_recv (&tran, &recv, sizeof_pkt, 1);
+  if (recv.pkt.hdr.cmd == DSrMsg_err)
     {
-      tran.pkt.brk.size = nto_breakpoint_size (bp_tg_inf->placed_address);
-      tran.pkt.brk.addr
-	= EXTRACT_SIGNED_INTEGER (&bp_tg_inf->placed_address, 4,
-				  byte_order);
+      bp_tg_inf->placed_address = 0;
+      nto_trace (0) ("Unable to set HW breakpoint\n");
     }
-  else
-    {
-      tran.pkt.brk32.size = nto_breakpoint_size (bp_tg_inf->placed_address);
-      tran.pkt.brk32.addr
-	= EXTRACT_SIGNED_INTEGER (&bp_tg_inf->placed_address, 4,
-				  byte_order);
-    }
-  nto_send_recv (&tran, &recv, sizeof (tran.pkt.brk), 0);
+
   return recv.pkt.hdr.cmd == DSrMsg_err;
 }
 
-template <class parent>
-int
-qnx_remote_target<parent>::hw_watchpoint (CORE_ADDR addr, int len, enum target_hw_bp_type type)
+static int
+nto_hw_watchpoint (CORE_ADDR addr, int len, enum target_hw_bp_type type)
 {
   DScomm_t tran, recv;
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
   unsigned subcmd;
 
   nto_trace (0) ("nto_hw_watchpoint(addr %s, len %x, type %x)\n",
-		 paddress (target_gdbarch (), addr), len, type);
+     paddress (target_gdbarch (), addr), len, type);
 
   switch (type)
     {
-    case 1:			/* Read.  */
+    case 1:      /* Read.  */
       subcmd = DSMSG_BRK_RD;
       break;
-    case 2:			/* Read/Write.  */
+    case 2:      /* Read/Write.  */
       subcmd = DSMSG_BRK_WR;
       break;
-    default:			/* Modify.  */
+    default:      /* Modify.  */
       subcmd = DSMSG_BRK_MODIFY;
     }
   subcmd |= DSMSG_BRK_HW;
 
   nto_send_init (&tran, DStMsg_brk, subcmd, SET_CHANNEL_DEBUG);
-  if (supports64bit())
-    {
-      tran.pkt.brk.addr = EXTRACT_UNSIGNED_INTEGER (&addr, 8,
-						    byte_order);
-      tran.pkt.brk.size = EXTRACT_SIGNED_INTEGER (&len, 4, byte_order);
-    }
-  else
-    {
-      tran.pkt.brk32.addr = EXTRACT_UNSIGNED_INTEGER (&addr, 4,
-						      byte_order);
-      tran.pkt.brk32.size = EXTRACT_SIGNED_INTEGER (&len, 4, byte_order);
-    }
+  tran.pkt.brk.addr = EXTRACT_UNSIGNED_INTEGER (&addr,
+      sizeof(tran.pkt.brk.addr), nto_byte_order);
+  tran.pkt.brk.size = EXTRACT_SIGNED_INTEGER (&len,
+      sizeof(tran.pkt.brk.size), nto_byte_order);
   nto_send_recv (&tran, &recv, sizeof (tran.pkt.brk), 0);
   return recv.pkt.hdr.cmd == DSrMsg_err ? -1 : 0;
 }
 
-template <class parent>
 int
-qnx_remote_target<parent>::remove_watchpoint (CORE_ADDR addr, int len,
-					      enum target_hw_bp_type type, struct expression *exp)
+pdebug_target::remove_watchpoint (CORE_ADDR addr, int len,
+        enum target_hw_bp_type type, struct expression *exp)
 {
-  return hw_watchpoint (addr, -1, type);
+  return nto_hw_watchpoint (addr, -1, type);
 }
 
-template <class parent>
 int
-qnx_remote_target<parent>::insert_watchpoint (CORE_ADDR addr, int len,
-					      enum target_hw_bp_type type, struct expression *exp)
+pdebug_target::insert_watchpoint (CORE_ADDR addr, int len,
+        enum target_hw_bp_type type, struct expression *exp)
 {
-  return hw_watchpoint (addr, len, type);
+  return nto_hw_watchpoint (addr, len, type);
 }
 
-template <class parent>
-bool
-qnx_remote_target<parent>::stopped_by_watchpoint (void)
+pdebug_target::~pdebug_target ()
 {
-  /* NOTE: nto_stopped_by_watchpoint will be called ONLY while we are
-     stopped due to a SIGTRAP.  This assumes gdb works in 'all-stop' mode;
-     future gdb versions will likely run in 'non-stop' mode in which case
-     we will have to store/examine statuses per thread in question.
-     Until then, this will work fine.  */
-
-  struct inferior *inf = current_inferior ();
-  struct nto_inferior_data *inf_data;
-
-  gdb_assert (inf != NULL);
-
-  inf_data = nto_inferior_data (inf);
-
-  return inf_data->stopped_flags
-	 & (_DEBUG_FLAG_TRACE_RD
-	    | _DEBUG_FLAG_TRACE_WR
-	    | _DEBUG_FLAG_TRACE_MODIFY);
-}
-
 #if 0
-static struct tidinfo *
-nto_thread_info (int pid, short tid)
+	struct remote_state *rs = get_remote_state ();
+
+  /* Check for NULL because we may get here with a partially
+     constructed target/connection.  */
+  if (rs->remote_desc == nullptr)
+    return;
+
+  serial_close (rs->remote_desc);
+
+  /* We are destroying the remote target, so we should discard
+     everything of this target.  */
+  discard_pending_stop_replies_in_queue ();
+
+  if (rs->remote_async_inferior_event_token)
+    delete_async_event_handler (&rs->remote_async_inferior_event_token);
+#else
+  if(current_session->desc) {
+      serial_close (current_session->desc);
+      /* do not free current_session->desc, this is done in serial_close! */
+      current_session->desc=NULL;
+  }
+  remote_unpush_target (get_current_target());
+#endif
+}
+
+#ifndef NVIDIA_CUDA_GDB
+static void
+nto_remote_inferior_data_cleanup (struct inferior *const inf, void *const dat)
 {
-  const enum bfd_endian byte_order = gdbarch_byte_order (target_gdbarch ());
-  struct dspidlist *pidlist = (void *) recv.pkt.okdata.data;
-  struct tidinfo *tip;
+  struct nto_remote_inferior_data *const inf_rdata
+    = (struct nto_remote_inferior_data *const) dat;
 
-  nto_send_init (&tran, DStMsg_pidlist, DSMSG_PIDLIST_SPECIFIC_TID,
-		 SET_CHANNEL_DEBUG);
-  tran.pkt.pidlist.tid = EXTRACT_SIGNED_INTEGER (&tid, 2,
-						 byte_order);
-  tran.pkt.pidlist.pid = EXTRACT_SIGNED_INTEGER (&pid, 4,
-						 byte_order);
-  nto_send_recv (&tran, &recv, sizeof (tran.pkt.pidlist), 0);
-
-  if (recv.pkt.hdr.cmd == DSrMsg_err)
+  if (dat)
     {
-      nto_send_init (&tran, DStMsg_pidlist, DSMSG_PIDLIST_SPECIFIC,
-		     SET_CHANNEL_DEBUG);
-      tran.pkt.pidlist.pid = EXTRACT_SIGNED_INTEGER (&pid, 4,
-						     byte_order);
-      nto_send_recv (&tran, &recv, sizeof (tran.pkt.pidlist), 0);
-      if (recv.pkt.hdr.cmd == DSrMsg_err)
-	{
-	  errno = errnoconvert (recv.pkt.err.err);
-	  return NULL;
-	}
+      xfree (inf_rdata->auxv);
+      inf_rdata->auxv = NULL;
+      xfree (inf_rdata->remote_exe);
+      inf_rdata->remote_exe = NULL;
+      xfree (inf_rdata->remote_cwd);
+      inf_rdata->remote_cwd = NULL;
     }
-
-  /* Tidinfo structures are 4-byte aligned and start after name.  */
-  for (tip = (void *) &pidlist->name[(strlen (pidlist->name) + 1 + 3) & ~3];
-       tip->tid != 0; tip++)
-    {
-      if (tid == EXTRACT_SIGNED_INTEGER (&tip->tid, 2, byte_order))
-	return tip;
-    }
-
-  return NULL;
+  xfree (dat);
 }
 #endif
 
-static const registry<inferior>::key<struct nto_remote_inferior_data> nto_remote_inferior_data_key;
-
 static struct nto_remote_inferior_data *
-nto_remote_inferior_data (struct inferior *const inf)
+nto_get_remote_inferior_data (struct inferior *const inf)
 {
+  struct nto_remote_inferior_data *inf_data;
+
   gdb_assert (inf != NULL);
 
-  struct nto_remote_inferior_data *inf_data = nto_remote_inferior_data_key.get (inf);
-
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Changed this to work with newer versions of gdb. */
+  inf_data = nto_remote_inferior_data_key.get (inf);
   if (inf_data == nullptr)
     {
       inf_data = nto_remote_inferior_data_key.emplace (inf);
     }
+#else
+  inf_data = (struct nto_remote_inferior_data *)inferior_data (inf,
+         nto_remote_inferior_data_reg);
+  if (inf_data == NULL)
+    {
+      inf_data = XCNEW (struct nto_remote_inferior_data);
+      set_inferior_data (inf, nto_remote_inferior_data_reg, inf_data);
+    }
+#endif
 
   return inf_data;
 }
 
 static void
 set_nto_exe (const char *args, int from_tty,
-	     struct cmd_list_element *c)
+       struct cmd_list_element *c)
 {
   struct inferior *const inf = current_inferior ();
   struct nto_remote_inferior_data *const inf_rdat
-    = nto_remote_inferior_data (inf);
+    = nto_get_remote_inferior_data (inf);
 
+#ifdef NVIDIA_CUDA_GDB
   inf_rdat->remote_exe = current_session->remote_exe;
+#else
+  xfree (inf_rdat->remote_exe);
+  inf_rdat->remote_exe = xstrdup (current_session->remote_exe);
+#endif
 }
 
 static void
 show_nto_exe (struct ui_file *file, int from_tty,
-	      struct cmd_list_element *c, const char *value)
+              struct cmd_list_element *c, const char *value)
 {
   struct inferior *const inf = current_inferior ();
   struct nto_remote_inferior_data *const inf_rdat
-    = nto_remote_inferior_data (inf);
+    = nto_get_remote_inferior_data (inf);
 
   deprecated_show_value_hack (file, from_tty, c, inf_rdat->remote_exe.c_str ());
 }
@@ -4794,68 +4551,150 @@ set_nto_cwd (const char *args, int from_tty, struct cmd_list_element *c)
 {
   struct inferior *const inf = current_inferior ();
   struct nto_remote_inferior_data *const inf_rdat
-    = nto_remote_inferior_data (inf);
+    = nto_get_remote_inferior_data (inf);
 
+#ifdef NVIDIA_CUDA_GDB
   inf_rdat->remote_cwd = current_session->remote_cwd;
+#else
+  xfree (inf_rdat->remote_cwd);
+  inf_rdat->remote_cwd = xstrdup (current_session->remote_cwd);
+#endif
 }
 
 static void
 show_nto_cwd (struct ui_file *file, int from_tty,
-	      struct cmd_list_element *c, const char *value)
+              struct cmd_list_element *c, const char *value)
 {
   struct inferior *const inf = current_inferior ();
   struct nto_remote_inferior_data *const inf_rdat
-    = nto_remote_inferior_data (inf);
+    = nto_get_remote_inferior_data (inf);
 
+#ifdef NVIDIA_CUDA_GDB
   deprecated_show_value_hack (file, from_tty, c, inf_rdat->remote_cwd.c_str ());
+#else
+  deprecated_show_value_hack (file, from_tty, c, inf_rdat->remote_cwd);
+#endif
 }
 
-void _initialize_nto ();
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA extensions for sending our custom CUDA packets to the server. */
 void
-_initialize_nto ()
+send_qnx_packet (gdb::array_view<const char> &buf,
+		 send_remote_packet_callbacks *callbacks)
 {
-  add_target (qnx_remote_target_info, qnx_remote_target<remote_target>::open);
+  if (buf.size () == 0 || buf.data ()[0] == '\0')
+    error (_("a remote packet must not be empty"));
 
-  add_setshow_zinteger_cmd ("nto-timeout", no_class, 
-			    &only_session.timeout, _("\
+  if (buf.size () > DS_DATA_MAX_SIZE)
+    {
+      std::string arg ((char *)buf.data (), buf.size ());
+      printf_unfiltered ("Packet too long: %.40s...\n", arg.c_str ());
+    }
+
+  if (get_current_target () == nullptr)
+    error (_("QNX packets can only be sent to a pdebug target"));
+
+  callbacks->sending (buf);
+
+  DScomm_t tran, recv;
+  nto_send_init (&tran, DStMsg_cuda, 0, SET_CHANNEL_DEBUG);
+  memcpy (tran.pkt.cuda.data, buf.data (), buf.size ());
+  int bytes = nto_send_recv (&tran, &recv,
+			     offsetof (DStMsg_cuda_t, data) + buf.size (), 1);
+
+  if (bytes < 0)
+    error (_("error while fetching packet from remote target"));
+  else if (recv.pkt.hdr.cmd == DSrMsg_err)
+    {
+      nto_trace (1) ("  errno=%d (%s)\n", recv.pkt.err.err,
+		     strerror (recv.pkt.err.err));
+      error (_("error packet received from remote target"));
+    }
+  else if (recv.pkt.hdr.cmd != DSrMsg_okcuda)
+    error (_("unexpected packet received from remote target"));
+
+  bytes -= sizeof (struct DShdr);
+  gdb::array_view<const char> view ((const char *)recv.pkt.cuda.data, bytes);
+  callbacks->received (view);
+}
+#endif
+
+void _initialize_remote_nto ();
+void
+_initialize_remote_nto ()
+{
+  /*
+   * remote_g_packet_data_handle = gdbarch_data_register_pre_init (remote_g_packet_data_init);
+   * remote_pspace_data = register_program_space_data_with_cleanup (NULL, remote_pspace_data_cleanup);
+   * gdb::observers::new_objfile.attach (remote_new_objfile);
+   */
+
+  add_target ( pdebug_target_info, pdebug_target::pdebug_open);
+
+#ifndef NVIDIA_CUDA_GDB
+  nto_remote_inferior_data_reg
+    = register_inferior_data_with_cleanup (NULL, nto_remote_inferior_data_cleanup);
+#endif
+
+  add_setshow_zinteger_cmd ("watchdog", class_maintenance, &watchdog, _("\
+Set watchdog timer."), _("\
+Show watchdog timer."), _("\
+When non-zero, this timeout is used instead of waiting forever for a target\n\
+to finish a low-level step or continue operation.  If the specified amount\n\
+of time passes without a response from the target, an error occurs."),
+			    NULL,
+			    show_watchdog,
+			    &setlist, &showlist);
+
+  add_setshow_zinteger_cmd ("nto-timeout", no_class,
+          &only_session.timeout, _("\
 Set timeout value for communication with the remote."), _("\
 Show timeout value for communication with the remote."), _("\
 The remote will timeout after nto-timeout seconds."),
-			    NULL, NULL, &setlist, &showlist);
+          NULL, NULL, &setlist, &showlist);
 
-  add_setshow_boolean_cmd ("nto-inherit-env", no_class, 
-			   &only_session.inherit_env, _("\
+  add_setshow_boolean_cmd ("nto-inherit-env", no_class,
+         &only_session.inherit_env, _("\
 Set if the inferior should inherit environment from pdebug or gdb."), _("\
 Show nto-inherit-env value."), _("\
 If nto-inherit-env is off, the process spawned on the remote \
 will have its environment set by gdb.  Otherwise, it will inherit its \
-environment from pdebug."), NULL, NULL, 
-			  &setlist, &showlist);
+environment from pdebug."), NULL, NULL,
+        &setlist, &showlist);
 
   add_setshow_string_cmd ("nto-cwd", class_support, &only_session.remote_cwd,
-			  _("\
+        _("\
 Set the working directory for the remote process."), _("\
 Show current working directory for the remote process."), _("\
 Working directory for the remote process. This directory must be \
-specified before remote process is run."), 
-			  &set_nto_cwd, &show_nto_cwd, &setlist, &showlist);
+specified before remote process is run."),
+        &set_nto_cwd, &show_nto_cwd, &setlist, &showlist);
 
-  add_setshow_string_cmd ("nto-executable", class_files, 
-			  &only_session.remote_exe, _("\
+  add_setshow_string_cmd ("nto-executable", class_files,
+        &only_session.remote_exe, _("\
 Set the binary to be executed on the remote QNX Neutrino target."), _("\
 Show currently set binary to be executed on the remote QNX Neutrino target."),
-			_("\
+      _("\
 Binary to be executed on the remote QNX Neutrino target when "\
-"'run' command is used."), 
-			  &set_nto_exe, &show_nto_exe, &setlist, &showlist);
+"'run' command is used."),
+        &set_nto_exe, &show_nto_exe, &setlist, &showlist);
+
+  add_setshow_boolean_cmd ("nto-force-hwbp",  class_breakpoint,
+			   &nto_force_hwbp, _("\
+Set if hardware breakpoints should be forced."), _("\
+Show nto-force-hwbp value."), _("\
+If nto-force-hwbp is on, all breakpoints being set will be forced \
+to become hardware breakpoints. Otherwise the default behaviour \
+is used (see: breakpoint auto-hw)."), NULL, NULL,
+	&setlist, &showlist);
 
   add_setshow_boolean_cmd ("upload-sets-exec", class_files,
-			   &upload_sets_exec, _("\
+         &upload_sets_exec, _("\
 Set the flag for upload to set nto-executable."), _("\
 Show nto-executable flag."), _("\
 If set, upload will set nto-executable. Otherwise, nto-executable \
 will not change."),
-			   NULL, NULL, &setlist, &showlist);
+         NULL, NULL, &setlist, &showlist);
 
   add_info ("pidlist", nto_pidlist, _("List processes on the target.  Optional argument will filter out process names not containing (case insensitive) argument string."));
   add_info ("meminfo", nto_meminfo, "memory information");

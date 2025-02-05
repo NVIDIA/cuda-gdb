@@ -59,6 +59,8 @@
 #include "event-top.h"
 #include "inf-child.h"
 #include "top.h"
+#include "remote.h"
+#include "remote-cuda.h"
 
 template <class BaseTarget> cuda_nat_linux<BaseTarget>::cuda_nat_linux ()
 {
@@ -80,33 +82,18 @@ template <class BaseTarget> cuda_nat_linux<BaseTarget>::cuda_nat_linux ()
   m_info.doc = xstrdup (N_ (doc));
 }
 
-/* Override the GNU/Linux inferior startup hook.  */
-template <class BaseTarget>
-void
-cuda_nat_linux<BaseTarget>::post_startup_inferior (ptid_t ptid)
-{
-  current_inferior ()->cuda_initialized = false;
-  BaseTarget::post_startup_inferior (ptid);
-}
-
-template <class BaseTarget>
-void
-cuda_nat_linux<BaseTarget>::open (const char *args, int from_tty)
-{
-  BaseTarget::open (args, from_tty);
-}
-
 /* The whole Linux siginfo structure is presented to the user, but, internally,
    only the si_signo matters. We do not save the siginfo object. Instead we
    save only the signo. Therefore any read/write to any other field of the
    siginfo object will have no effect or will return 0. */
 template <class BaseTarget>
 enum target_xfer_status
-cuda_nat_linux<BaseTarget>::xfer_siginfo (enum target_object object,
-					  const char *annex, gdb_byte *readbuf,
-					  const gdb_byte *writebuf,
-					  ULONGEST offset, LONGEST len,
-					  ULONGEST *xfered_len)
+cuda_nat_linux<BaseTarget>::cuda_xfer_siginfo (enum target_object object,
+					       const char *annex,
+					       gdb_byte *readbuf,
+					       const gdb_byte *writebuf,
+					       ULONGEST offset, LONGEST len,
+					       ULONGEST *xfered_len)
 {
   /* the size of siginfo is not consistent between ptrace and other parts of
      GDB. On 32-bit Linux machines, the layout might be 64 bits. It does not
@@ -242,8 +229,8 @@ cuda_nat_linux<BaseTarget>::xfer_partial (enum target_object object,
     /* When stopping on the device, build a simple siginfo object */
     case TARGET_OBJECT_SIGNAL_INFO:
 
-      return xfer_siginfo (object, annex, readbuf, writebuf, offset, len,
-			   xfered_len);
+      return cuda_xfer_siginfo (object, annex, readbuf, writebuf, offset, len,
+				xfered_len);
     }
 
   /* Fallback to host routines for other types of memory objects */
@@ -390,7 +377,23 @@ cuda_nat_linux<BaseTarget>::resume (ptid_t ptid, int sstep, int host_sstep,
       /* Note we need to use inferior_ptid here. The passed in ptid might have
        * RESUME_ALL set which we don't support. */
       if (cuda_sstep_execute (inferior_ptid))
-	return;
+        {
+#ifndef __QNXTARGET__
+	  /* On QNX this workaround does not seem to be required */
+	  /* The following is needed because, even though we are dealing with
+	     a remote target, device single-stepping doesn't call into
+	     remote_wait.  Thus, it doesn't set the appropriate state for the
+	     async handler.
+
+	     Therefore we fake the fact that there is a remote event waiting
+	     in the queue so the event handler can call the proper hooks that
+	     ultimately will call target_wait (and thus cuda_remote_wait) so
+	     we can report the device single-stepping event back.  */
+	  if (is_remote_target (this))
+	    cuda_remote_report_event ();
+#endif
+	  return;
+	}
 
       /* If single stepping failed, plant a temporary breakpoint
 	 at the previous frame and resume the device */
@@ -584,7 +587,12 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
 	   * check for a pending SIGINT here.
 	   * if quit_flag is set then C-c was pressed in gdb session
 	   * but signal was yet not forwarded to debugged process */
-	  if (cuda_check_pending_sigint (r.pid ()) || check_quit_flag ())
+	  bool pending_sigint;
+	  if (is_remote_target (this))
+	    pending_sigint = cuda_remote_check_pending_sigint (r);
+	  else
+	    pending_sigint = cuda_check_pending_sigint (r.pid ());
+	  if (pending_sigint || check_quit_flag ())
 	    {
 	      ws->set_stopped (GDB_SIGNAL_INT);
 	      cuda_set_signo (GDB_SIGNAL_INT);
@@ -689,11 +697,25 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
   switch_to_thread (this, r);
 
   /* Return if cuda has not been initialized yet */
-  auto res = cuda_initialize_target ();
-  if (!res)
+  try
     {
-      cuda_trace ("cuda_wait: cuda_initialize_target() failed, return pid %d",
-		  r.pid ());
+      bool res;
+      if (is_remote_target (this))
+	res = cuda_remote_initialize_target ();
+      else
+	res = cuda_initialize_target ();
+      if (!res)
+	{
+	  cuda_trace (
+	      "cuda_wait: cuda_initialize_target() failed, return pid %d",
+	      r.pid ());
+	  cuda_current_focus::invalidate ();
+	  return r;
+	}
+    }
+  catch (const gdb_exception_error &e)
+    {
+      cuda_trace ("cuda_wait: ignoring exception during initialize.");
       cuda_current_focus::invalidate ();
       return r;
     }
@@ -705,6 +727,9 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
   cuda_trace ("cuda_wait: suspend devices");
   for (dev = 0; dev < cuda_state::get_num_devices (); ++dev)
     cuda_state::device_suspend (dev);
+
+  if (is_remote_target (this))
+    cuda_remote_query_trace_message ();
 
   /* Check for asynchronous events.  These events do not require
      acknowledgement to the debug API, and may arrive at any time
@@ -796,6 +821,8 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
       cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_COMPLETE);
       inf->control.stop_soon = STOP_QUIETLY;
       tp->need_cuda_updated_focus = true;
+      ws->set_stopped (GDB_SIGNAL_0);
+      cuda_set_signo (GDB_SIGNAL_0);
     }
   else if (cuda_debugapi::get_attach_state ()
 	   == CUDA_ATTACH_STATE_DETACH_COMPLETE)
@@ -851,7 +878,8 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
   /* CUDA - managed memory */
   if ((ws->kind () == TARGET_WAITKIND_STOPPED
        || ws->kind () == TARGET_WAITKIND_SIGNALLED)
-      && (ws->sig () == GDB_SIGNAL_BUS || ws->sig () == GDB_SIGNAL_SEGV))
+      && (ws->sig () == GDB_SIGNAL_BUS || ws->sig () == GDB_SIGNAL_SEGV)
+      && tp)
     {
       uint64_t addr = 0;
       struct gdbarch *arch = get_current_arch ();
@@ -1034,7 +1062,7 @@ cuda_nat_linux<BaseTarget>::detach (inferior *inf, int from_tty)
   /* If the Debug API is not initialized,
    * treat the inferior as a host-only process */
   if (cuda_debugapi::api_state_initialized ())
-    cuda_do_detach (inf, false);
+    cuda_do_detach (inf);
 
   /* Do not try to detach from an already dead process */
   if (inferior_ptid.pid () == 0)

@@ -20,7 +20,6 @@
 
 #include "arch-utils.h"
 #include "block.h"
-#include "breakpoint.h"
 #include "command.h"
 #include "cuda-commands.h"
 #include "cuda-context.h"
@@ -66,23 +65,16 @@ private:
   /* cuda coordinates filter */
   cuda_coords m_coords;
 
-  /* cuda breakpoints filter.
-     Set to -1 to disable this filter.
-     Set to 0 to check all cuda breakpoints.
-     Set to a breakpoint number to check that breakpoint. */
-  int m_bp_number;
-  bool m_bp_number_p;
-
 public:
   /* Constructor/destructors */
-  cuda_filters () : m_coords{}, m_bp_number{ 0 }, m_bp_number_p{ false } {}
+  cuda_filters () : m_coords{} {}
   cuda_filters (const cuda_coords &c)
-      : m_coords{ c }, m_bp_number{ 0 }, m_bp_number_p{ false }
+      : m_coords{ c }
   {
   }
   cuda_filters (const cuda_coords &initial, cuda_parser_result_t *result,
                 bool rectify_wild = false)
-      : m_coords{ initial }, m_bp_number{ 0 }, m_bp_number_p{ false }
+      : m_coords{ initial }
   {
     gdb_assert (result);
     /* Iterate over each request */
@@ -149,18 +141,6 @@ public:
   coords () const
   {
     return m_coords;
-  }
-
-  bool
-  hasBreakpoint () const
-  {
-    return m_bp_number_p;
-  }
-
-  int
-  breakpoint () const
-  {
-    return m_bp_number;
   }
 
 private:
@@ -231,10 +211,6 @@ private:
           p.ln (),         l.kernelId (), l.gridId (),
           l.clusterIdx (), l.blockIdx (), request->value.cudim3
         };
-        break;
-      case FILTER_TYPE_BREAKPOINT:
-        m_bp_number_p = true;
-        m_bp_number = request->value.scalar;
         break;
       default:
         error (_ ("Unexpected request type."));
@@ -2096,12 +2072,6 @@ public:
     m_pc = cuda_state::lane_get_pc (p.dev (), p.sm (), p.wp (),
                                             p.ln ());
 
-    /* If we are filtering by bp - this thread may be invalid. */
-    if (m_filter.hasBreakpoint ()
-        && !cuda_eval_thread_at_breakpoint (m_pc, coords,
-                                            m_filter.breakpoint ()))
-      return true;
-
     /* Get the sal for this iteration. */
     auto sal_it = m_pc_to_sal.find (m_pc);
     /* Add this sal to the map if we haven't already done so */
@@ -2708,7 +2678,7 @@ info_cuda_launch_children_command (const char *arg)
   gdb_flush (gdb_stdout);
 }
 
-class cuda_context
+class cuda_context_obj
 {
 private:
   bool m_current;
@@ -2739,17 +2709,18 @@ public:
   }
 
   /* Non-static members */
-  explicit cuda_context (const cuda_coords &coords)
+  explicit cuda_context_obj (const cuda_coords &coords)
   {
-    error (_ ("cuda_context cannot be constructed via coords!"));
+    error (_ ("cuda_context_obj cannot be constructed via coords!"));
   }
-  explicit cuda_context (list_elt_t elt)
+
+  cuda_context_obj (cuda_context* context)
   {
-    gdb_assert (elt);
-    m_current = (elt->context == get_current_context ());
-    m_context = to_hex (elt->context->context_id);
-    m_device = elt->context->dev_id;
-    m_state = cuda_state::device_is_active_context (m_device, elt->context)
+    gdb_assert (context);
+    m_current = (context == cuda_state::current_context ());
+    m_context = to_hex (context->id ());
+    m_device = context->dev_id ();
+    m_state = cuda_state::is_context_active (context)
                   ? std::string{ "active" }
                   : std::string{ "inactive" };
   }
@@ -2777,16 +2748,16 @@ public:
   }
 
   /* Init other destructors/constructors */
-  ~cuda_context () = default;
-  cuda_context () = delete;
-  cuda_context (const cuda_context &) = default;
-  cuda_context (cuda_context &&) = default;
-  cuda_context &operator= (const cuda_context &) = default;
-  cuda_context &operator= (cuda_context &&) = default;
+  ~cuda_context_obj () = default;
+  cuda_context_obj () = delete;
+  cuda_context_obj (const cuda_context_obj &) = default;
+  cuda_context_obj (cuda_context_obj &&) = default;
+  cuda_context_obj &operator= (const cuda_context_obj &) = default;
+  cuda_context_obj &operator= (cuda_context_obj &&) = default;
 };
 
-/* Special handling for lists of cuda_context */
-class cuda_context_info final : public cuda_info<cuda_context>
+/* Special handling for lists of cuda_context_obj */
+class cuda_context_info final : public cuda_info<cuda_context_obj>
 {
 public:
   explicit cuda_context_info (const char *filter_string)
@@ -2804,11 +2775,10 @@ public:
       return true;
 
     /* Find all active contexts on this device */
-    auto ctxs = cuda_state::device_get_contexts (coords.physical ().dev ());
-    for (auto elt = ctxs->list; elt; elt = elt->next)
-      {
-        m_underlying.emplace_back (elt);
-      }
+    for (auto& iter : cuda_state::contexts ())
+      if (iter.second->dev_id () == coords.physical ().dev ())
+	m_underlying.emplace_back (cuda_context_obj (iter.second.get ()));
+
     /* We fully constructed the list for every context on this device at this
      * point. */
     return true;
@@ -3163,8 +3133,14 @@ cuda_command_switch (const char *switch_string)
   if (!res.valid ())
     error (_ ("Invalid coordinates requested. CUDA focus unchanged."));
   else if (cuda_current_focus::isDevice ()
-           && (cuda_current_focus::get () == res))
-    current_uiout->field_string (NULL, _ ("CUDA focus unchanged.\n"));
+	   && (cuda_current_focus::get () == res))
+    {
+      if (current_uiout->is_mi_like_p ())
+        cuda_current_focus::printFocus (false);
+      else
+	current_uiout->field_string ("CudaFocus",
+				     _ ("CUDA focus unchanged.\n"));
+    }
   else
     {
       cuda_current_focus::set (res);
@@ -3181,8 +3157,9 @@ cuda_command_query (const char *query_string)
   /* Bail out if focus not set on a CUDA device */
   if (!cuda_current_focus::isDevice ())
     {
-      current_uiout->field_string (
-          NULL, _ ("Focus is not set on any active CUDA kernel.\n"));
+      if (!current_uiout->is_mi_like_p ())
+	current_uiout->field_string (
+	    "CudaFocus", _ ("Focus is not set on any active CUDA kernel.\n"));
       return;
     }
 
@@ -3194,8 +3171,16 @@ cuda_command_query (const char *query_string)
 
   /* Print the found coordinates */
   auto string = filter.coords ().to_string ();
-  current_uiout->field_fmt (NULL, "%s\n", string.c_str ());
-  gdb_flush (gdb_stdout);
+  if (string.empty ())
+    error (_ ("No CUDA coordinates found."));
+  else
+    {
+      if (current_uiout->is_mi_like_p ())
+	filter.coords ().emit_mi_output ();
+      else
+        current_uiout->field_fmt ("CudaFocusQuery", "%s\n", string.c_str ());
+      gdb_flush (gdb_stdout);
+    }
 }
 
 static void
@@ -3339,8 +3324,9 @@ cuda_info_command_completer (struct cmd_list_element *ignore,
     }
 }
 
+void _initialize_cuda_commands ();
 void
-cuda_commands_initialize (void)
+_initialize_cuda_commands ()
 {
   struct cmd_list_element *cmd;
 

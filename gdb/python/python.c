@@ -105,6 +105,10 @@ PyObject *gdbpy_gdb_error;
 /* The `gdb.MemoryError' exception.  */
 PyObject *gdbpy_gdb_memory_error;
 
+#ifdef NVIDIA_CUDA_GDB
+PyObject *gdbpy_cuda_module;
+#endif
+
 static script_sourcer_func gdbpy_source_script;
 static objfile_script_sourcer_func gdbpy_source_objfile_script;
 static objfile_script_executor_func gdbpy_execute_objfile_script;
@@ -2173,6 +2177,13 @@ init_done:
 				 gdbpy_gdberror_exc) < 0)
     return false;
 
+#ifdef NVIDIA_CUDA_GDB
+  gdbpy_cuda_module = gdbpy_cuda_init ();
+  if (gdbpy_cuda_module == NULL
+      || gdb_pymodule_addobject (gdb_module, "cuda", gdbpy_cuda_module) < 0)
+    return false;
+#endif
+
   gdbpy_initialize_gdb_readline ();
 
   if (gdbpy_initialize_auto_load () < 0
@@ -2705,11 +2716,6 @@ Return the name of the currently selected language." },
   { "print_options", gdbpy_print_options, METH_NOARGS,
     "print_options () -> dict\n\
 Return the current print options." },
-
-#ifdef NVIDIA_CUDA_GDB
-  { "execute_internal_command", gdbpy_cuda_execute_internal_command, METH_VARARGS,
-    "execute internal command" },
-#endif
 
   {NULL, NULL, 0, NULL}
 };

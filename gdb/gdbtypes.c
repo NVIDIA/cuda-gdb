@@ -137,6 +137,10 @@ const struct floatformat *floatformats_bfloat16[BFD_ENDIAN_UNKNOWN] = {
   &floatformat_bfloat16_little
 };
 #ifdef NVIDIA_CUDA_GDB
+const struct floatformat *floatformats_nv_fp8_e8m0[BFD_ENDIAN_UNKNOWN] = {
+  &floatformat_nv_fp8_e8m0_big,
+  &floatformat_nv_fp8_e8m0_little
+};
 const struct floatformat *floatformats_nv_fp8_e5m2[BFD_ENDIAN_UNKNOWN] = {
   &floatformat_nv_fp8_e5m2_big,
   &floatformat_nv_fp8_e5m2_little
@@ -6339,6 +6343,9 @@ create_gdbtypes_data (struct gdbarch *gdbarch)
     = arch_integer_type (gdbarch, gdbarch_long_long_bit (gdbarch),
 			 1, "unsigned long long");
 #ifdef NVIDIA_CUDA_GDB
+  builtin_type->builtin_nv_fp8_e8m0
+    = arch_float_type (gdbarch, gdbarch_nv_fp8_e8m0_bit (gdbarch),
+		       "__nv_fp8_e8m0", gdbarch_nv_fp8_e8m0_format (gdbarch));
   builtin_type->builtin_nv_fp8_e5m2
     = arch_float_type (gdbarch, gdbarch_nv_fp8_e5m2_bit (gdbarch),
 		       "__nv_fp8_e5m2", gdbarch_nv_fp8_e5m2_format (gdbarch));

@@ -20730,6 +20730,7 @@ elf32_arm_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
 	  flags_compatible = false;
 	}
 
+#ifndef __QNXTARGET__
       if ((in_flags & EF_ARM_VFP_FLOAT) != (out_flags & EF_ARM_VFP_FLOAT))
 	{
 	  if (in_flags & EF_ARM_VFP_FLOAT)
@@ -20743,7 +20744,7 @@ elf32_arm_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
 
 	  flags_compatible = false;
 	}
-
+#endif
       if ((in_flags & EF_ARM_MAVERICK_FLOAT) != (out_flags & EF_ARM_MAVERICK_FLOAT))
 	{
 	  if (in_flags & EF_ARM_MAVERICK_FLOAT)
@@ -20759,6 +20760,7 @@ elf32_arm_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
 	}
 
 #ifdef EF_ARM_SOFT_FLOAT
+#ifndef __QNXTARGET__
       if ((in_flags & EF_ARM_SOFT_FLOAT) != (out_flags & EF_ARM_SOFT_FLOAT))
 	{
 	  /* We can allow interworking between code that is VFP format
@@ -20781,6 +20783,7 @@ elf32_arm_merge_private_bfd_data (bfd *ibfd, struct bfd_link_info *info)
 	      flags_compatible = false;
 	    }
 	}
+#endif
 #endif
 
       /* Interworking mismatch is only a warning.  */

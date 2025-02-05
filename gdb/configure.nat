@@ -93,6 +93,10 @@ case ${gdb_host} in
 	    sol-thread.o'
 	HAVE_NATIVE_GCORE_HOST=1
         ;;
+    nto*)
+	NATDEPFILES='nto-procfs.o'
+	NAT_FILE='config/nm-nto.h'
+	;;
 esac
 
 # This is where we actually filter by host and host CPU.
@@ -420,12 +424,18 @@ case ${gdb_host} in
 	esac
 	;;
     nto)
+	# Just filtering out unsupported architectures
 	case ${gdb_host_cpu} in
-	    i386)
-		# Host: Intel 386 running QNX.
-		NATDEPFILES='nto-procfs.o'
-		NAT_FILE='config/nm-nto.h'
+	    aarch64)
+		# Host: AARCH64 running QNX.
 		;;
+	    i386)
+		# Host: i386 running QNX.
+		;;
+	    *)
+		echo "nto ${gdb_host_cpu} not supported!"
+		exit -1
+ 		;;
 	esac
 	;;
     obsd)

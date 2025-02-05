@@ -30,10 +30,6 @@
 
 ------------------------------------------------------------------------------ */
 
-/* The initialize () routine must be called once before any other routine. */
-
-void cuda_notification_initialize (void);
-
 /* The reset () routine should be called once at the end of each app run. */
 
 void cuda_notification_reset (void);

@@ -79,6 +79,16 @@ extern void set_gdbarch_long_long_bit (struct gdbarch *gdbarch, int long_long_bi
    useful). */
 
 #ifdef NVIDIA_CUDA_GDB
+extern int gdbarch_nv_fp8_e8m0_bit (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp8_e8m0_bit (struct gdbarch *gdbarch, int nv_fp8_e8m0_bit);
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
+extern const struct floatformat ** gdbarch_nv_fp8_e8m0_format (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp8_e8m0_format (struct gdbarch *gdbarch, const struct floatformat ** nv_fp8_e8m0_format);
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
 extern int gdbarch_nv_fp8_e5m2_bit (struct gdbarch *gdbarch);
 extern void set_gdbarch_nv_fp8_e5m2_bit (struct gdbarch *gdbarch, int nv_fp8_e5m2_bit);
 #endif

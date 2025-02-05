@@ -60,6 +60,8 @@
 #include "inf-child.h"
 #include "inf-loop.h"
 #include "top.h"
+#include "remote.h"
+#include "remote-cuda.h"
 
 bool cuda_debugging_enabled = false;
 
@@ -78,7 +80,7 @@ cuda_clear_pending_sigint (pid_t pid)
 }
 #endif
 
-int
+bool
 cuda_check_pending_sigint (pid_t pid)
 {
 #if defined(__linux__) && defined(GDB_NM_FILE)
@@ -88,12 +90,12 @@ cuda_check_pending_sigint (pid_t pid)
   if (sigismember (&pending, SIGINT))
     {
       cuda_clear_pending_sigint (pid);
-      return 1;
+      return true;
     }
 #endif
 
   /* No pending SIGINT */
-  return 0;
+  return false;
 }
 
 void
@@ -195,49 +197,8 @@ cuda_adjust_host_pc (ptid_t r)
     cuda_notification_consume_pending ();
 }
 
-static bool
-cuda_get_cudbg_api (void)
-{
-  CUDBGAPI api = nullptr;
-
-  CUDBGResult res
-      = cudbgGetAPI (CUDBG_API_VERSION_MAJOR, CUDBG_API_VERSION_MINOR,
-		     CUDBG_API_VERSION_REVISION, &api);
-
-  if (res == CUDBG_SUCCESS)
-    cuda_debugapi::set_api (api);
-  else
-    cuda_debugapi::print_get_api_error (res);
-
-  return (res != CUDBG_SUCCESS);
-}
-
-void _initialize_cuda_nat ();
-void
-_initialize_cuda_nat ()
-{
-  /* Check the required CUDA debugger files are present */
-  if (cuda_get_cudbg_api ())
-    {
-      warning (
-	  "CUDA support disabled: could not obtain the CUDA debugger API\n");
-      cuda_debugging_enabled = false;
-      return;
-    }
-
-  /* Initialize the CUDA modules */
-  cuda_commands_initialize ();
-  cuda_options_initialize ();
-  cuda_notification_initialize ();
-
-  /* Initialize the cleanup routines */
-  make_final_cleanup (cuda_final_cleanup, NULL);
-
-  cuda_debugging_enabled = true;
-}
-
-void
-cuda_nat_attach (void)
+static void
+cuda_nat_attach (inferior *inf)
 {
   struct cmd_list_element *alias = NULL;
   struct cmd_list_element *prefix_cmd = NULL;
@@ -245,6 +206,7 @@ cuda_nat_attach (void)
   const char *cudbgApiAttach = "(void) cudbgApiAttach()";
   CORE_ADDR debugFlagAddr;
   CORE_ADDR resumeAppOnAttachFlagAddr;
+  CORE_ADDR attachDataAvailableFlagAddr;
   unsigned char resumeAppOnAttach;
   unsigned int timeOut = 5000; // ms
   unsigned int timeElapsed = 0;
@@ -257,13 +219,53 @@ cuda_nat_attach (void)
   uint64_t internal_error_code;
   unsigned char *sigs = NULL;
 
-  /* Return early if CUDA driver isn't available. Attaching to the host
-     process has already been completed at this point. */
-  cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_IN_PROGRESS);
-  if (!cuda_initialize_target ())
+  if (is_remote_target (inf->process_target ()))
     {
-      cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_NOT_STARTED);
-      return;
+      /* Make sure the debug API is in an attachable state for remote */
+      if (cuda_debugapi::get_attach_state () != CUDA_ATTACH_STATE_NOT_STARTED
+	  && cuda_debugapi::get_attach_state ()
+		 != CUDA_ATTACH_STATE_DETACH_COMPLETE)
+	return;
+      /* Try to init remote target */
+      cuda_remote_initialize_target ();
+
+      CORE_ADDR sessionIdAddr
+	  = cuda_get_symbol_address (_STRING_ (CUDBG_SESSION_ID));
+
+      /* Return early if CUDA driver isn't available. Attaching to the host
+	 process has already been completed at this point. */
+      if (!sessionIdAddr)
+	return;
+
+      /* TODO: This isn't actually used. Do we need to continue reading this value? */
+      uint32_t sessionId = 0;
+      target_read_memory (sessionIdAddr, (gdb_byte *)&sessionId,
+			  sizeof (sessionId));
+      if (!sessionId)
+	return;
+
+      attachDataAvailableFlagAddr = cuda_get_symbol_address (
+	  _STRING_ (CUDBG_ATTACH_HANDLER_AVAILABLE));
+
+      /* If this is not available, the CUDA driver doesn't support attaching.
+       */
+      if (!attachDataAvailableFlagAddr)
+	error (
+	    _ ("This CUDA driver does not support attaching to a running CUDA "
+	       "process."));
+
+      cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_IN_PROGRESS);
+    }
+  else
+    {
+      /* Return early if CUDA driver isn't available. Attaching to the host
+	 process has already been completed at this point. */
+      cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_IN_PROGRESS);
+      if (!cuda_initialize_target ())
+	{
+	  cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_NOT_STARTED);
+	  return;
+	}
     }
 
   /* If the CUDA driver has been loaded but software preemption has been turned
@@ -277,8 +279,6 @@ cuda_nat_attach (void)
 
   if (!lookup_cmd_composition ("call", &alias, &prefix_cmd, &cmd))
     error (_ ("Failed to initiate attach."));
-
-  cuda_sigtrap_set_silent ();
 
   do
     {
@@ -302,17 +302,17 @@ cuda_nat_attach (void)
       if (need_retry)
 	{
 	  /* Resume the target */
-	  prepare_execution_command (current_inferior ()->top_target (), true);
+	  prepare_execution_command (inf->top_target (), true);
 	  continue_1 (true);
 
 	  usleep (retry_delay * 1000);
 
 	  /* Trigger the future wait() */
-	  kill (current_inferior ()->pid, SIGTRAP);
+	  interrupt_target_1 (true);
 
 	  /* Get control back */
 	  cuda_wait_for_inferior ();
-	  set_running (current_inferior ()->process_target (), minus_one_ptid,
+	  set_running (inf->process_target (), minus_one_ptid,
 		       0);
 
 	  retry_count++;
@@ -327,8 +327,6 @@ cuda_nat_attach (void)
     error (_ ("Attaching not possible. "
 	      "Please verify that software preemption is disabled "
 	      "and that nvidia-cuda-mps-server is not running."));
-
-  cuda_sigtrap_restore_settings ();
 
   if ((unsigned int)internal_error_code
       == CUDBG_ERROR_SOME_DEVICES_WATCHDOGGED)
@@ -369,8 +367,29 @@ cuda_nat_attach (void)
       capabilities
 	  |= CUDBG_DEBUGGER_CAPABILITY_REPORT_EXCEPTIONS_IN_EXITED_WARPS;
 
+      cuda_trace_domain (
+	  CUDA_TRACE_GENERAL,
+	  "requesting no context push / pop events be delivered\n");
+      capabilities
+	  |= CUDBG_DEBUGGER_CAPABILITY_NO_CONTEXT_PUSH_POP_EVENTS;
+
       target_write_memory (capability_addr, (const gdb_byte *)&capabilities,
 			   sizeof (capabilities));
+    }
+
+  /* Ensure the remote target has been initialized at this point */
+  if (is_remote_target (inf->process_target ()))
+    {
+      while (!cuda_remote_initialize_target ())
+	{
+	  if (timeElapsed < timeOut)
+	    usleep (sleepTime * 1000);
+	  else
+	    error (_ ("Timed out waiting for the CUDA remote target to initialize."));
+
+	  timeElapsed += sleepTime;
+	}
+      timeElapsed = 0;
     }
 
   /* Wait till the backend has started up and is ready to service API calls */
@@ -395,7 +414,10 @@ cuda_nat_attach (void)
     }
 
   /* Check if the inferior needs to be resumed */
-  target_read_memory (resumeAppOnAttachFlagAddr, &resumeAppOnAttach, 1);
+  if (is_remote_target (inf->process_target ()))
+    target_read_memory (attachDataAvailableFlagAddr, &resumeAppOnAttach, 1);
+  else
+    target_read_memory (resumeAppOnAttachFlagAddr, &resumeAppOnAttach, 1);
 
   if (resumeAppOnAttach)
     {
@@ -409,9 +431,20 @@ cuda_nat_attach (void)
 			   == CUDA_ATTACH_STATE_IN_PROGRESS;
 	   cnt++)
 	{
-	  prepare_execution_command (current_inferior ()->top_target (), true);
+	  prepare_execution_command (inf->top_target (), true);
 	  continue_1 (false);
+	  /* force resumed state to false */
+	  bool resumed_state;
+	  if (is_remote_target (inf->process_target ()))
+	    {
+	      resumed_state = current_inferior ()->process_target ()->commit_resumed_state;
+	      current_inferior ()->process_target ()->commit_resumed_state = false;
+	    }
 	  cuda_wait_for_inferior ();
+	  if (is_remote_target (inf->process_target ()))
+	    {
+	      current_inferior ()->process_target ()->commit_resumed_state = resumed_state;
+	    }
 	  /* infrun's async_event_handler is in the "ready" state after running
 	     `continue_1` above. Since we've waited for inferior above, we now
 	     run the completions and reset the "ready" state by calling the
@@ -420,11 +453,8 @@ cuda_nat_attach (void)
 	  inferior_event_handler (INF_EXEC_COMPLETE);
 	}
 
-      /* Inform the user of new kernel state. */
-      normal_stop ();
-
       /* No threads are running at this point.  */
-      set_running (current_inferior ()->process_target (), minus_one_ptid, 0);
+      set_running (inf->process_target (), minus_one_ptid, 0);
 
       /* Manually cleanup */
       cleanup.release ();
@@ -437,24 +467,39 @@ cuda_nat_attach (void)
     }
   else
     {
+      cuda_force_stop_print_frame ();
+
       /* Enable debugger callbacks from the CUDA driver */
       cuda_write_bool (debugFlagAddr, true);
 
       /* No data to collect, attach complete. */
       cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_COMPLETE);
+
+      /* Initialize CUDA and suspend the devices */
+      cuda_initialize ();
+      for (dev = 0; dev < cuda_state::get_num_devices (); ++dev)
+	cuda_state::device_suspend (dev);
     }
 
-  /* Initialize CUDA and suspend the devices */
-  cuda_initialize ();
-  for (dev = 0; dev < cuda_state::get_num_devices (); ++dev)
-    cuda_state::device_suspend (dev);
-
   /* The inferior just got signaled, we're not expecting any other stop */
-  current_inferior ()->control.stop_soon = NO_STOP_QUIETLY;
+  inf->control.stop_soon = NO_STOP_QUIETLY;
+}
+
+static void
+cuda_inferior_created (inferior *inf)
+{
+#ifndef __QNXTARGET__
+  // If attaching we need to initialize the debug API manually
+  // QNX: QNX will always set the attach_flag to true, so this mechanism
+  // won't work there. We don't support attaching to a running process on
+  // QNX today.
+  if (inf->attach_flag)
+    cuda_nat_attach (inf);
+#endif
 }
 
 void
-cuda_do_detach (inferior *inf, bool remote)
+cuda_do_detach (inferior *inf)
 {
   struct cmd_list_element *alias = NULL;
   struct cmd_list_element *prefix_cmd = NULL;
@@ -592,22 +637,25 @@ switch_to_cuda_thread (const cuda_coords &coords)
 
   cuda_current_focus::set (const_cast<cuda_coords &> (coords));
 
-  cuda_update_convenience_variables ();
-  cuda_update_cudart_symbols ();
-  reinit_frame_cache ();
-  registers_changed ();
-
-  if (const_cast<cuda_coords &> (coords).isValidOnDevice ())
-    pc = cuda_state::lane_get_pc (
-	coords.physical ().dev (), coords.physical ().sm (),
-	coords.physical ().wp (), coords.physical ().ln ());
-  else
-    pc = (CORE_ADDR)~0;
-
   thread_info *thr = find_thread_ptid (current_inferior ()->process_target (),
 				       inferior_ptid);
+  /* Only update if a host thread still exists. */
   if (thr)
-    thr->set_stop_pc (pc);
+    {
+      switch_to_thread_keep_cuda_focus (thr);
+
+      cuda_update_convenience_variables ();
+      cuda_update_cudart_symbols ();
+
+      if (const_cast<cuda_coords &> (coords).isValidOnDevice ())
+	pc = cuda_state::lane_get_pc (
+	    coords.physical ().dev (), coords.physical ().sm (),
+	    coords.physical ().wp (), coords.physical ().ln ());
+      else
+	pc = (CORE_ADDR)~0;
+
+      thr->set_stop_pc (pc);
+    }
 }
 
 struct objfile *cuda_create_builtins_objfile (void);
@@ -795,4 +843,16 @@ cuda_create_builtins_objfile (void)
 		      int32_type);
 
   return objfile;
+}
+
+void _initialize_cuda_nat ();
+void
+_initialize_cuda_nat ()
+{
+  /* Initialize the cleanup routines */
+  make_final_cleanup (cuda_final_cleanup, NULL);
+
+  gdb::observers::inferior_created.attach (cuda_inferior_created, "CUDA");
+
+  cuda_debugging_enabled = true;
 }

@@ -87,15 +87,11 @@
 #include "gdbsupport/selftest.h"
 
 #ifdef NVIDIA_CUDA_GDB
-#include "cuda/cuda-tdep.h"
-#ifdef __QNXTARGET__
+#include "cuda/cuda-linux-nat-template.h"
+#include "cuda/cuda-linux-nat.h"
+#endif
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
 #include "remote-nto.h"
-#endif
-#include "cuda/remote-cuda.h"
-static remote_target *cuda_new_remote_target (void);
-#ifndef __QNXTARGET__
-static remote_target *cuda_new_extended_remote_target (void);
-#endif
 #endif
 /* The remote target.  */
 
@@ -126,14 +122,12 @@ typedef std::unique_ptr<stop_reply> stop_reply_up;
    supports.  Allows the user to specify the use of the packet as well
    as allowing GDB to auto-detect support in the remote stub.  */
 
-#ifndef NVIDIA_CUDA_GDB
 enum packet_support
   {
     PACKET_SUPPORT_UNKNOWN = 0,
     PACKET_ENABLE,
     PACKET_DISABLE
   };
-#endif
 
 /* Analyze a packet's return value and update the packet config
    accordingly.  */
@@ -840,11 +834,7 @@ public: /* Remote specific methods.  */
 
   void get_offsets ();
 
-#ifdef NVIDIA_CUDA_GDB
-  virtual void remote_check_symbols ();
-#else
   void remote_check_symbols ();
-#endif
 
   void remote_supported_packet (const struct protocol_feature *feature,
 				enum packet_support support,
@@ -987,7 +977,6 @@ static const target_info extended_remote_target_info = {
    target and adding to it.  */
 
 #ifdef NVIDIA_CUDA_GDB
-/* Cuda derives this class in remote-cuda.c */
 class extended_remote_target : public remote_target
 #else
 class extended_remote_target final : public remote_target
@@ -1056,7 +1045,14 @@ as_remote_target (process_stratum_target *target)
 bool
 is_remote_target (process_stratum_target *target)
 {
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+  /* Allow this to work with qnx target as well */
+  if (as_remote_target (target) != nullptr)
+    return true;
+  return is_qnx_target (target);
+#else
   return as_remote_target (target) != nullptr;
+#endif
 }
 
 /* Per-program-space data key.  */
@@ -1536,14 +1532,6 @@ get_current_remote_target ()
   return dynamic_cast<remote_target *> (proc_target);
 }
 
-#ifdef NVIDIA_CUDA_GDB
-/* External linkage to get_current_remote_target */
-remote_target *
-cuda_get_current_remote_target ()
-{
-  return get_current_remote_target ();
-}
-#endif
 /* Return the current allowed size of a remote packet.  This is
    inferred from the current architecture, and should be used to
    limit the length of outgoing packets.  */
@@ -1559,13 +1547,6 @@ remote_target::get_remote_packet_size ()
   return rsa->remote_packet_size;
 }
 
-#ifdef NVIDIA_CUDA_GDB
-long
-get_remote_packet_size (void)
-{
-  return get_current_remote_target ()->get_remote_packet_size ();
-}
-#endif
 static struct packet_reg *
 packet_reg_from_regnum (struct gdbarch *gdbarch, struct remote_arch_state *rsa,
 			long regnum)
@@ -2482,18 +2463,6 @@ static const ptid_t magic_null_ptid (42000, -1, 1);
 static const ptid_t not_sent_ptid (42000, -2, 1);
 static const ptid_t any_thread_ptid (42000, 0, 1);
 
-#ifdef NVIDIA_CUDA_GDB
-/* Signal that we have another remote event to handle.  */
-void
-remote_report_event (remote_target *remote, int enable)
-{
-  remote_state *rs = remote->get_remote_state ();
-  if (enable)
-    mark_async_event_handler (rs->remote_async_inferior_event_token);
-  else
-    clear_async_event_handler (rs->remote_async_inferior_event_token);
-}
-#endif
 /* Find out if the stub attached to PID (and hence GDB should offer to
    detach instead of killing it when bailing out).  */
 
@@ -4260,10 +4229,6 @@ remote_target::close ()
   /* Make sure we leave stdin registered in the event loop.  */
   terminal_ours ();
 
-#ifdef NVIDIA_CUDA_GDB
-  /* CUDA - set cuda_remote flag to be false */
-  set_cuda_remote_flag (false);
-#endif
   trace_reset_local_state ();
 
   delete this;
@@ -5304,7 +5269,6 @@ remote_target::set_permissions ()
 	     rs->buf.data ());
 }
 
-#ifndef NVIDIA_CUDA_GDB
 /* This type describes each known response to the qSupported
    packet.  */
 struct protocol_feature
@@ -5331,7 +5295,6 @@ struct protocol_feature
      FUNC is remote_supported_packet.  */
   int packet;
 };
-#endif
 
 static void
 remote_supported_packet (remote_target *remote,
@@ -5348,6 +5311,54 @@ remote_supported_packet (remote_target *remote,
 
   remote_protocol_packets[feature->packet].support = support;
 }
+#ifdef NVIDIA_CUDA_GDB
+void
+cuda_remote_version_handshake (remote_target *remote,
+			       const struct protocol_feature *feature,
+			       enum packet_support support,
+			       const char *version_string)
+{
+  uint32_t server_major, server_minor, server_rev;
+
+  gdb_assert (strcmp (feature->name, "CUDAVersion") == 0);
+  if (support != PACKET_ENABLE)
+    error (_ ("Server doesn't support CUDA.\n"));
+
+  gdb_assert (version_string);
+  sscanf (version_string, "%d.%d.%d", &server_major, &server_minor,
+	  &server_rev);
+
+  if (server_major == CUDBG_API_VERSION_MAJOR
+      && server_minor == CUDBG_API_VERSION_MINOR
+      && server_rev == CUDBG_API_VERSION_REVISION)
+    return;
+
+  error (_ ("cuda-gdb version (%d.%d.%d) is not compatible with "
+	    "cuda-gdbserver version (%d.%d.%d).\n"
+	    "Please use the same version of cuda-gdb and cuda-gdbserver."),
+	 CUDBG_API_VERSION_MAJOR, CUDBG_API_VERSION_MINOR,
+	 CUDBG_API_VERSION_REVISION, server_major, server_minor, server_rev);
+}
+#ifdef __QNXTARGET__
+/* QNX specific version check */
+void
+cuda_qnx_version_handshake_check (const char *version_string)
+{
+  struct protocol_feature feature;
+  feature.name = "CUDAVersion";
+  return cuda_remote_version_handshake (NULL, &feature, PACKET_ENABLE,
+					version_string);
+}
+#endif
+/* Signal that we have another remote event to handle.  */
+void
+cuda_remote_report_event ()
+{
+  remote_target *remote = get_current_remote_target ();
+  remote_state *rs = remote->get_remote_state ();
+  mark_async_event_handler (rs->remote_async_inferior_event_token);
+}
+#endif
 
 void
 remote_target::remote_packet_size (const protocol_feature *feature,
@@ -5493,7 +5504,7 @@ static const struct protocol_feature remote_protocol_features[] = {
   { "no-resumed", PACKET_DISABLE, remote_supported_packet, PACKET_no_resumed },
   { "memory-tagging", PACKET_DISABLE, remote_supported_packet,
     PACKET_memory_tagging_feature },
-#if defined(NVIDIA_CUDA_GDB) && !defined(__QNXTARGET__)
+#if defined(NVIDIA_CUDA_GDB)
   /* CUDA - version handshake */
   { "CUDAVersion", PACKET_DISABLE, cuda_remote_version_handshake, PACKET_CUDAVersion },
 #endif
@@ -5834,13 +5845,12 @@ remote_target::open_1 (const char *name, int from_tty, int extended_p)
   reread_symbols (from_tty);
 
 #ifdef NVIDIA_CUDA_GDB
-  /* CUDA - Since we want to preserve the "remote" and "extended-remote" target names,
-     we have to modify the line below to return CUDA-enhanced target classes */
-#ifdef __QNXTARGET__
-  remote_target *remote = cuda_new_remote_target ();
-#else
-  remote_target *remote = extended_p ? cuda_new_extended_remote_target () : cuda_new_remote_target ();
-#endif
+  /* CUDA - Since we want to preserve the "remote" and "extended-remote" target
+     names, we have to modify the line below to return CUDA-enhanced target
+     classes */
+  remote_target *remote
+      = (extended_p ? (remote_target *)new cuda_nat_linux<extended_remote_target> {}
+		    : (remote_target *)new cuda_nat_linux<remote_target> {});
 #else
   remote_target *remote
     = (extended_p ? new extended_remote_target () : new remote_target ());
@@ -5885,10 +5895,6 @@ remote_target::open_1 (const char *name, int from_tty, int extended_p)
       gdb_puts ("\n");
     }
 
-#ifdef NVIDIA_CUDA_GDB
-  /* CUDA - set cuda_remote flag to be true */
-  set_cuda_remote_flag (true);
-#endif
   /* Switch to using the remote target now.  */
   current_inferior ()->push_target (std::move (target_holder));
 
@@ -5970,10 +5976,6 @@ remote_target::open_1 (const char *name, int from_tty, int extended_p)
 
   if (target_async_permitted)
     rs->wait_forever_enabled_p = 1;
-#ifdef NVIDIA_CUDA_GDB
-  /* CUDA - Initialize the remote target */
-  cuda_remote_attach ();
-#endif
 }
 
 /* Determine if WS represents a fork status.  */
@@ -9632,11 +9634,7 @@ escape_buffer (const char *buf, int n)
 int
 remote_target::putpkt (const char *buf)
 {
-#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
-  return qnx_putpkt (this, buf);
-#else
   return putpkt_binary (buf, strlen (buf));
-#endif
 }
 
 /* Wrapper around remote_target::putpkt to avoid exporting
@@ -9648,19 +9646,6 @@ putpkt (remote_target *remote, const char *buf)
   return remote->putpkt (buf);
 }
 
-#if defined(NVIDIA_CUDA_GDB)
-/* Raw unsafe putpkt_binary */
-int
-putpkt_binary (const char *buf, int cnt)
-{
-#ifdef __QNXTARGET__
-  return qnx_putpkt_binary (buf, cnt);
-#else
-  return get_current_remote_target ()->putpkt_binary (buf, cnt);
-#endif
-}
-#endif
-
 /* Send a packet to the remote machine, with error checking.  The data
    of the packet is in BUF.  The string in BUF can be at most
    get_remote_packet_size () - 5 to account for the $, # and checksum,
@@ -9670,9 +9655,6 @@ putpkt_binary (const char *buf, int cnt)
 int
 remote_target::putpkt_binary (const char *buf, int cnt)
 {
-#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
-  return qnx_putpkt_binary (buf, cnt);
-#else
   struct remote_state *rs = get_remote_state ();
   int i;
   unsigned char csum = 0;
@@ -9826,7 +9808,6 @@ remote_target::putpkt_binary (const char *buf, int cnt)
     }
 
   return 0;
-#endif
 }
 
 /* Come here after finding the start of a frame when we expected an
@@ -10011,25 +9992,8 @@ show_watchdog (struct ui_file *file, int from_tty,
 void
 remote_target::getpkt (gdb::char_vector *buf, int forever)
 {
-#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
-  qnx_getpkt_sane (buf, forever);
-#else
   getpkt_sane (buf, forever);
-#endif
 }
-
-#ifdef NVIDIA_CUDA_GDB
-void
-getpkt (remote_target *remote, gdb::char_vector *buf, int forever)
-{
-  remote->getpkt (buf, forever);
-}
-int
-getpkt_sane (gdb::char_vector *buf, int forever)
-{
-  return get_current_remote_target ()->getpkt_sane (buf, forever);
-}
-#endif
 
 /* Read a packet from the remote machine, with error checking, and
    store it in *BUF.  Resize *BUF if necessary to hold the result.  If
@@ -10191,11 +10155,7 @@ remote_target::getpkt_or_notif_sane_1 (gdb::char_vector *buf,
 int
 remote_target::getpkt_sane (gdb::char_vector *buf, int forever)
 {
-#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
-  return qnx_getpkt_sane (buf, forever);
-#else
   return getpkt_or_notif_sane_1 (buf, forever, 0, NULL);
-#endif
 }
 
 int
@@ -11684,16 +11644,6 @@ remote_target::rcmd (const char *command, struct ui_file *outbuf)
   if (command == NULL)
     command = "";
 
-#ifdef NVIDIA_CUDA_GDB
-  /* CUDA - cleanup on "monitor exit" command. */
-  if (strcmp (command, "exit") == 0)
-    {
-      cuda_debugapi::finalize ();
-      cuda_cleanup ();
-      cuda_gdb_session_destroy ();
-      set_cuda_remote_flag (false);
-    }
-#endif
   /* The query prefix.  */
   strcpy (rs->buf.data (), "qRcmd,");
   p = strchr (rs->buf.data (), '\0');
@@ -11818,6 +11768,14 @@ send_remote_packet (gdb::array_view<const char> &buf,
 {
   if (buf.size () == 0 || buf.data ()[0] == '\0')
     error (_("a remote packet must not be empty"));
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+  /* Add QNX support */
+  if (is_qnx_target (current_inferior ()->process_target ()))
+    {
+      send_qnx_packet (buf, callbacks);
+      return;
+    }
+#endif
 
   remote_target *remote = get_current_remote_target ();
   if (remote == nullptr)
@@ -15054,14 +15012,6 @@ test_memory_tagging_functions ()
 } // namespace selftests
 #endif /* GDB_SELF_TEST */
 
-#ifdef NVIDIA_CUDA_GDB
-/* QNX NTO protocol */
-#if __QNXTARGET__
-#include "remote-nto.c"
-#endif
-/* CUDA */
-#include "cuda/remote-cuda.c"
-#endif
 void _initialize_remote ();
 void
 _initialize_remote ()
@@ -15069,10 +15019,6 @@ _initialize_remote ()
   add_target (remote_target_info, remote_target::open);
   add_target (extended_remote_target_info, extended_remote_target::open);
 
-  /* CUDA - we hijack the default remote targets, adding CUDA support */
-#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
-  _initialize_nto();
-#endif
   /* Hook into new objfile notification.  */
   gdb::observers::new_objfile.attach (remote_new_objfile, "remote");
 

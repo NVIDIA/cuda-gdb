@@ -74,8 +74,7 @@ void cuda_parser_reset_lexer (void);
 %token KERNEL GRID BLOCK THREAD
 %token BLOCKIDX_X BLOCKIDX_Y BLOCKIDX_Z
 %token THREADIDX_X THREADIDX_Y THREADIDX_Z
-%token BREAKPOINT
-%token CURRENT WILDCARD ALL
+%token CURRENT WILDCARD
 %token <value> VALUE
 %token <cmp> CMP
 %token COMMA
@@ -105,7 +104,6 @@ filter : device
        | grid
        | block
        | thread
-       | breakpoint 
        ;
 
 device     : DEVICE scalar           { handle_filter (FILTER_TYPE_DEVICE); }
@@ -123,10 +121,6 @@ grid       : GRID scalar             { handle_filter (FILTER_TYPE_GRID); }
 block      : BLOCK cudim3            { handle_filter (FILTER_TYPE_BLOCK); }
            ;
 thread     : THREAD cudim3           { handle_filter (FILTER_TYPE_THREAD); }
-           ;
-breakpoint : BREAKPOINT ALL          { handle_filter (FILTER_TYPE_BREAKPOINT); handle_scalar (0, 0); }
-           ;
-breakpoint : BREAKPOINT scalar       { handle_filter (FILTER_TYPE_BREAKPOINT); }
            ;
 
 queries : query
@@ -189,19 +183,16 @@ triplet : x COMMA y COMMA z   { ; }
 x : VALUE    { handle_scalar (0, $1); }
   | CURRENT  { handle_scalar (0, CUDA_CURRENT); }
   | WILDCARD { handle_scalar (0, CUDA_WILDCARD); }
-  | ALL      { handle_scalar (0, CUDA_WILDCARD); }
   ;
 
 y : VALUE    { handle_scalar (1, $1); }
   | CURRENT  { handle_scalar (1, CUDA_CURRENT); }
   | WILDCARD { handle_scalar (1, CUDA_WILDCARD); }
-  | ALL      { handle_scalar (1, CUDA_WILDCARD); }
   ;
 
 z : VALUE    { handle_scalar (2, $1); }
   | CURRENT  { handle_scalar (2, CUDA_CURRENT); }
   | WILDCARD { handle_scalar (2, CUDA_WILDCARD); }
-  | ALL      { handle_scalar (2, CUDA_WILDCARD); }
   ;
 
 %%
@@ -320,7 +311,6 @@ print_request (request_t *request)
   if (request->type & FILTER_TYPE_THREADIDX_X) printf ("threadIdx.z");
   if (request->type & FILTER_TYPE_THREADIDX_Y) printf ("threadIdx.y");
   if (request->type & FILTER_TYPE_THREADIDX_Z) printf ("threadIdx.z");
-  if (request->type & FILTER_TYPE_BREAKPOINT) printf ("breakpoint");
 
   if (request->cmp == CMP_EQ) printf (" == ");
   if (request->cmp == CMP_NE) printf (" != ");

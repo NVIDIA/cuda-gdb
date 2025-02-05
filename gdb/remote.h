@@ -25,9 +25,6 @@
 #define REMOTE_H
 
 #include "remote-notif.h"
-#ifdef NVIDIA_CUDA_GDB
-#include "gdbsupport/byte-vector.h"
-#endif
 
 struct target_desc;
 struct remote_target;
@@ -54,37 +51,6 @@ extern bool remote_debug;
 #define REMOTE_SCOPED_DEBUG_ENTER_EXIT \
   scoped_debug_enter_exit (remote_debug, "remote")
 
-#ifdef NVIDIA_CUDA_GDB
-enum packet_support
-{
-  PACKET_SUPPORT_UNKNOWN = 0,
-  PACKET_ENABLE,
-  PACKET_DISABLE
-};
-/* This type describes each known response to the qSupported
-   packet.  */
-struct protocol_feature
-{
-  /* The name of this protocol feature.  */
-  const char *name;
-  /* The default for this protocol feature.  */
-  enum packet_support default_support;
-  /* The function to call when this feature is reported, or after
-     qSupported processing if the feature is not supported.
-     The first argument points to this structure.  The second
-     argument indicates whether the packet requested support be
-     enabled, disabled, or probed (or the default, if this function
-     is being called at the end of processing and this feature was
-     not reported).  The third argument may be NULL; if not NULL, it
-     is a NUL-terminated string taken from the packet following
-     this feature's name and an equals sign.  */
-  void (*func) (remote_target *remote, const struct protocol_feature *,
-		enum packet_support, const char *);
-  /* The corresponding packet for this feature.  Only used if
-     FUNC is remote_supported_packet.  */
-  int packet;
-};
-#endif
 /* Read a packet from the remote machine, with error checking, and
    store it in *BUF.  Resize *BUF using xrealloc if necessary to hold
    the result, and update *SIZEOF_BUF.  If FOREVER, wait forever
@@ -93,9 +59,6 @@ struct protocol_feature
 
 extern void getpkt (remote_target *remote,
 		    char **buf, long *sizeof_buf, int forever);
-#ifdef NVIDIA_CUDA_GDB
-extern int getpkt_sane (char **buf, long *sizeof_buf, int forever);
-#endif
 
 /* Send a packet to the remote machine, with error checking.  The data
    of the packet is in BUF.  The string in BUF can be at most PBUFSIZ
@@ -104,9 +67,6 @@ extern int getpkt_sane (char **buf, long *sizeof_buf, int forever);
    as a string.  */
 
 extern int putpkt (remote_target *remote, const char *buf);
-#ifdef NVIDIA_CUDA_GDB
-extern int putpkt_binary (const char *buf, int cnt);
-#endif
 
 void register_remote_g_packet_guess (struct gdbarch *gdbarch, int bytes,
 				     const struct target_desc *tdesc);
@@ -118,10 +78,6 @@ void remote_file_get (const char *remote_file, const char *local_file,
 		      int from_tty);
 void remote_file_delete (const char *remote_file, int from_tty);
 
-#ifdef NVIDIA_CUDA_GDB
-int remote_query_attached (int pid);
-long get_remote_packet_size (void);
-#endif
 extern int remote_register_number_and_offset (struct gdbarch *gdbarch,
 					      int regnum, int *pnum,
 					      int *poffset);
@@ -171,9 +127,9 @@ extern void send_remote_packet (gdb::array_view<const char> &buf,
 extern bool is_remote_target (process_stratum_target *target);
 
 #ifdef NVIDIA_CUDA_GDB
-void remote_report_event (remote_target *remote, int enable);
-void getpkt (remote_target *remote, gdb::char_vector *buf, int forever);
-int getpkt_sane (gdb::char_vector *buf, int forever);
-remote_target *cuda_get_current_remote_target (void);
+void cuda_remote_report_event ();
+#ifdef __QNXTARGET__
+void cuda_qnx_version_handshake_check (const char *version_string);
+#endif
 #endif
 #endif

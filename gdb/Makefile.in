@@ -279,11 +279,10 @@ SUBDIR_CUDA_SRCS = \
 	cuda/cuda-convvars.c \
 	cuda/cuda-coords.c \
 	cuda/cuda-corelow.c \
-	cuda/cuda-elf-image.c \
+	cuda/cuda-env-vars.c \
 	cuda/cuda-events.c \
 	cuda/cuda-exceptions.c \
 	cuda/cuda-frame.c \
-	cuda/cuda-functions.c \
 	cuda/cuda-kernel.c \
 	cuda/cuda-lang.c \
 	cuda/cuda-linux-nat.c \
@@ -292,6 +291,7 @@ SUBDIR_CUDA_SRCS = \
 	cuda/cuda-options.c \
 	cuda/cuda-packet-manager.c \
 	cuda/cuda-regmap.c \
+	cuda/cuda-sass-json.c \
 	cuda/cuda-special-register.c \
 	cuda/cuda-state.c \
 	cuda/cuda-tdep.c \
@@ -300,7 +300,7 @@ SUBDIR_CUDA_SRCS = \
 	cuda/self-bt.c \
 	cuda/libcudbg.c \
 	cuda/libcudbgipc.c \
-	cuda/cuda-env-vars.c
+	cuda/remote-cuda.c
 
 @ENABLE_CUDA_TRUE@SUBDIR_CUDA_SFILE_SRCS = cuda/cuda-parser.exp.y cuda/cuda-parser.lex.l
 @ENABLE_CUDA_FALSE@SUBDIR_CUDA_SFILE_SRCS =
@@ -520,6 +520,9 @@ SUBDIR_PYTHON_DEPS =
 SUBDIR_PYTHON_LDFLAGS =
 SUBDIR_PYTHON_CFLAGS =
 
+@ENABLE_CUDA_TRUE@CUDA_SELFTESTS_SRCS = unittests/cuda-sass-json-selftests.c
+@ENABLE_CUDA_FALSE@CUDA_SELFTESTS_SRCS =
+
 SELFTESTS_SRCS = \
 	disasm-selftests.c \
 	gdbarch-selftests.c \
@@ -566,6 +569,7 @@ SELFTESTS_SRCS = \
 	unittests/unpack-selftests.c \
 	unittests/utils-selftests.c \
 	unittests/vec-utils-selftests.c \
+	$(CUDA_SELFTESTS_SRCS) \
 	unittests/xml-utils-selftests.c
 
 SELFTESTS_OBS = $(patsubst %.c,%.o,$(SELFTESTS_SRCS))
@@ -775,6 +779,7 @@ ALL_64_TARGET_OBS = \
 	aarch64-fbsd-tdep.o \
 	aarch64-linux-tdep.o \
 	aarch64-newlib-tdep.o \
+	aarch64-nto-tdep.o \
 	aarch64-ravenscar-thread.o \
 	aarch64-tdep.o \
 	alpha-bsd-tdep.o \
@@ -788,6 +793,7 @@ ALL_64_TARGET_OBS = \
 	amd64-fbsd-tdep.o \
 	amd64-linux-tdep.o \
 	amd64-netbsd-tdep.o \
+	amd64-nto-tdep.o \
 	amd64-obsd-tdep.o \
 	amd64-ravenscar-thread.o \
 	amd64-sol2-tdep.o \
@@ -1386,7 +1392,6 @@ HFILES_NO_SRCDIR = \
 	cuda/cuda-coord-set.h \
 	cuda/cuda-corelow.h \
 	cuda/cuda-defs.h \
-	cuda/cuda-elf-image.h \
 	cuda/cuda-events.h \
 	cuda/cuda-exceptions.h \
 	cuda/cuda-frame.h \
@@ -1400,10 +1405,12 @@ HFILES_NO_SRCDIR = \
 	cuda/cuda-packet-manager.h \
 	cuda/cuda-parser.h \
 	cuda/cuda-regmap.h \
+	cuda/cuda-sass-json.h \
 	cuda/cuda-special-register.h \
 	cuda/cuda-state.h \
 	cuda/cuda-tdep.h \
 	cuda/cuda-utils.h \
+	cuda/cuda-util-stream.h \
 	cuda/cuda-version.h \
 	cuda/libcudbg.h \
 	cuda/libcudbgipc.h \
@@ -1742,6 +1749,7 @@ ALLDEPFILES = \
 	aarch64-linux-nat.c \
 	aarch64-linux-tdep.c \
 	aarch64-newlib-tdep.c \
+	aarch64-nto-tdep.c \
 	aarch64-ravenscar-thread.c \
 	aarch64-tdep.c \
 	aix-thread.c \
@@ -1763,6 +1771,7 @@ ALLDEPFILES = \
 	amd64-nat.c \
 	amd64-netbsd-nat.c \
 	amd64-netbsd-tdep.c \
+	amd64-nto-tdep.c \
 	amd64-obsd-nat.c \
 	amd64-obsd-tdep.c \
 	amd64-ravenscar-thread.c \
@@ -1863,6 +1872,7 @@ ALLDEPFILES = \
 	msp430-tdep.c \
 	netbsd-nat.c \
 	netbsd-tdep.c \
+	nto-procfs.c \
 	nds32-tdep.c \
 	nios2-linux-tdep.c \
 	nios2-tdep.c \

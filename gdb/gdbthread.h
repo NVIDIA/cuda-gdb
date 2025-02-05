@@ -42,8 +42,6 @@ struct symtab;
 #include "thread-fsm.h"
 #ifdef NVIDIA_CUDA_GDB
 #include "cuda/cuda-coords.h"
-/* Serial command to request all threads to stop when the target is running. */
-#define SERIAL_REMOTE_STOP_CMD  "\x04"
 #endif
 
 struct inferior;

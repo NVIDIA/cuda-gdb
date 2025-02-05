@@ -15,11 +15,6 @@
  * $
  */
 
-/* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2024 NVIDIA Corporation
-   Modified from the original GDB file referenced above by the CUDA-GDB
-   team at NVIDIA <cudatools@nvidia.com>. */
-
 
 #ifndef __QNX_LINKMAP_NOTE_H_INCLUDED__
 #define __QNX_LINKMAP_NOTE_H_INCLUDED__

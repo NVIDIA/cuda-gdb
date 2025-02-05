@@ -304,6 +304,23 @@ cuda_process_update_cluster_idx_in_sm_packet (char *buf)
 }
 
 static void
+cuda_process_update_cluster_dim_in_sm_packet (char *buf)
+{
+  cuda_process_update_per_warp_info_in_sm_packet<CuDim3> (
+      buf, [] (uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 *cluster_dim) {
+	/* Need to be backwards compatible with older CUDA drivers. */
+	if (cuda_debugapi_version_revision >= 148)
+	  return cudbgAPI->getClusterDim (dev, sm, wp, cluster_dim);
+	else
+	  {
+	    uint64_t gridId64;
+	    cudbgAPI->readGridId (dev, sm, wp, &gridId64);
+	    return cudbgAPI->getClusterDim120 (dev, gridId64, cluster_dim);
+	  }
+      });
+}
+
+static void
 cuda_process_update_block_idx_in_sm_packet (char *buf)
 {
   cuda_process_update_per_warp_info_in_sm_packet<CuDim3> (
@@ -577,12 +594,12 @@ cuda_process_get_grid_info_packet (char *buf)
   char *p;
   uint32_t dev;
   uint64_t grid_id;
-  CUDBGGridInfo info;
+  CUDBGGridInfo120 info;
 
   extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
   extract_bin (NULL, (unsigned char *) &grid_id, sizeof (grid_id));
 
-  res = cudbgAPI->getGridInfo (dev, grid_id, &info);
+  res = cudbgAPI->getGridInfo120 (dev, grid_id, &info);
   p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
   p = append_bin ((unsigned char *) &info, p, sizeof (info), false);
 }
@@ -1621,6 +1638,9 @@ handle_cuda_packet (char *buf)
 #ifndef __QNXHOST__
     case UPDATE_CLUSTER_IDX_IN_SM:
       cuda_process_update_cluster_idx_in_sm_packet (buf);
+      break;
+    case UPDATE_CLUSTER_DIM_IN_SM:
+      cuda_process_update_cluster_dim_in_sm_packet (buf);
       break;
 #endif /* !__QNXHOST__ */
     case GET_DEVICE_INFO_SIZES:

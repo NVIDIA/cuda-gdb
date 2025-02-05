@@ -1,16 +1,16 @@
 /*
  * $QNXLicenseC:
- * Copyright 2007, QNX Software Systems. All Rights Reserved.
- * 
- * You must obtain a written license from and pay applicable license fees to QNX 
- * Software Systems before you may reproduce, modify or distribute this software, 
- * or any work that includes all or part of this software.   Free development 
- * licenses are available for evaluation and non-commercial purposes.  For more 
+ * Copyright 2005-2021, QNX Software Systems. All Rights Reserved.
+ *
+ * You must obtain a written license from and pay applicable license fees to QNX
+ * Software Systems before you may reproduce, modify or distribute this software,
+ * or any work that includes all or part of this software.   Free development
+ * licenses are available for evaluation and non-commercial purposes.  For more
  * information visit http://licensing.qnx.com or email licensing@qnx.com.
- *  
- * This file may contain contributions from others.  Please review this entire 
- * file for other proprietary rights or license notices, as well as the QNX 
- * Development Suite License Guide at http://licensing.qnx.com/license-guide/ 
+ *
+ * This file may contain contributions from others.  Please review this entire
+ * file for other proprietary rights or license notices, as well as the QNX
+ * Development Suite License Guide at http://licensing.qnx.com/license-guide/
  * for other information.
  * $
  */
@@ -23,22 +23,21 @@
 
 
 
-
 #ifndef dsmsgs_h_included
 #define dsmsgs_h_included
 
 //
 // These are the protocol versioning numbers
-// Update them with changes that introduce potential 
+// Update them with changes that introduce potential
 // compatibility issues
 //
 #define PDEBUG_PROTOVER_MAJOR				0x00000000
-#define PDEBUG_PROTOVER_MINOR				0x00000007
+#define PDEBUG_PROTOVER_MINOR				0x00000008
 
 #include <stddef.h>
 
 /* These are pdebug specific errors, sent sometimes with the errno after
-   an action failed.  Simply provides additional info on the reason for the 
+   an action failed.  Simply provides additional info on the reason for the
    error.  Sent in the DSrMsg_err_t.hdr.subcmd byte.  */
 
 #define PDEBUG_ENOERR		0	/* No error.  */
@@ -53,29 +52,29 @@
 #define PDEBUG_EQPROXY		9	/* QNX4 Proxy error.  */
 #define PDEBUG_EQDBG		10	/* QNX4 qnx_debug_* error.  */
 
-/* There is room for pdebugerrnos up to sizeof(unsigned char).
+/* There is room for pdebugerrnos up to sizeof(uint8_t).
 
    We are moving away from the channel commands - only the RESET
    and NAK are required.  The DEBUG and TEXT channels are now part
    of the DShdr and TShdr structs, 4th byte.  GP June 1 1999.
-   They are still supported, but not required. 
+   They are still supported, but not required.
 
-   A packet containg a single byte is a set channel command. 
-   IE:  7e xx chksum 7e 
+   A packet containg a single byte is a set channel command.
+   IE:  7e xx chksum 7e
 
    After a set channel all following packets are in the format
    for the specified channel.  Currently three channels are defined.
    The raw channel has no structure.  The other channels are all framed.
-   The contents of each channel is defined by structures below. 
-  
+   The contents of each channel is defined by structures below.
+
    0 - Reset channel. Used when either end starts.
-  
+
    1 - Debug channel with the structure which follows below.
        Uses DS (Debug Services) prefix.
-  
+
    2 - Text channel with the structure which follows below.
        Uses TS (Text Services) prefix.
-  
+
    0xff - Negative acknowledgment of a packet transmission.  */
 
 #define SET_CHANNEL_RESET				0
@@ -102,10 +101,10 @@
 #define DSHDR_MSG_BIG_ENDIAN	0x80
 struct DShdr
 {
-  unsigned char cmd;
-  unsigned char subcmd;
-  unsigned char mid;
-  unsigned char channel;
+  uint8_t cmd;
+  uint8_t subcmd;
+  uint8_t mid;
+  uint8_t channel;
 };
 
 /* Command types.  */
@@ -140,15 +139,20 @@ enum
   DStMsg_tidnames,		/* 26  0x1A */
   DStMsg_procfsinfo,		/* 27  0x1B */
   DStMsg_procfsstatus,		/* 28  0x1C */
+  DStMsg_targenv,		/* 29  0x1D */
+#ifdef NVIDIA_CUDA_GDB
   /* CUDA request */
-  DStMsg_cuda,    /* 29 0x1D */
+  DStMsg_cuda,			/* 30  0x1E */
+#endif
   /* Room for new codes here.  */
   DSrMsg_err = 32,		/* 32  0x20 */
   DSrMsg_ok,			/* 33  0x21 */
   DSrMsg_okstatus,		/* 34  0x22 */
   DSrMsg_okdata,		/* 35  0x23 */
+#ifdef NVIDIA_CUDA_GDB
   /* CUDA response */
-  DSrMsg_okcuda,    /* 36  0x24 */
+  DSrMsg_okcuda,		/* 36  0x24 */
+#endif
   /* Room for new codes here.  */
   DShMsg_notify = 64		/* 64  0x40 */
 };
@@ -170,6 +174,12 @@ enum
   DSMSG_ENV_CLEARENV,
   DSMSG_ENV_SETENV,
   DSMSG_ENV_SETENV_MORE
+};
+
+enum
+{
+  DSMSG_TARGENV_GETNAMES,
+  DSMSG_TARGENV_GETVALUE
 };
 
 enum
@@ -280,9 +290,9 @@ enum
 typedef struct
 {
   struct DShdr hdr;
-  unsigned char major;
-  unsigned char minor;
-  unsigned char spare[2];
+  uint8_t			major;
+  uint8_t			minor;
+  uint8_t			spare[2];
 } DStMsg_connect_t;
 
 
@@ -297,8 +307,8 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  int pid;
-  int tid;
+  int32_t pid;
+  int32_t tid;
 } DStMsg_select_t;
 
 
@@ -307,8 +317,8 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  int pid;
-  int addr;
+  int32_t pid;
+  int32_t addr;
 } DStMsg_mapinfo_t;
 
 
@@ -316,8 +326,8 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  int argc;
-  int envc;
+  int32_t argc;
+  int32_t envc;
   char cmdline[DS_DATA_MAX_SIZE];
 } DStMsg_load_t;
 
@@ -326,7 +336,7 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  int pid;
+  int32_t pid;
 } DStMsg_attach_t;
 
 typedef DStMsg_attach_t DStMsg_procfsinfo_t;
@@ -336,7 +346,7 @@ typedef DStMsg_attach_t DStMsg_procfsstatus_t;
 typedef struct
 {
   struct DShdr hdr;
-  int pid;
+  int32_t pid;
 } DStMsg_detach_t;
 
 
@@ -344,7 +354,7 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  int signo;
+  int32_t signo;
 } DStMsg_kill_t;
 
 
@@ -359,9 +369,9 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  unsigned spare0;
-  unsigned long long addr;
-  unsigned short size;
+  uint32_t spare0;
+  uint64_t addr;
+  uint16_t size;
 } DStMsg_memrd_t;
 
 
@@ -369,9 +379,9 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  unsigned spare0;
-  unsigned long long addr;
-  unsigned char data[DS_DATA_MAX_SIZE];
+  uint32_t spare0;
+  uint64_t addr;
+  uint8_t data[DS_DATA_MAX_SIZE];
 } DStMsg_memwr_t;
 
 
@@ -379,8 +389,8 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  unsigned short offset;
-  unsigned short size;
+  uint16_t offset;
+  uint16_t size;
 } DStMsg_regrd_t;
 
 
@@ -388,8 +398,8 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  unsigned short offset;
-  unsigned char data[DS_DATA_MAX_SIZE];
+  uint16_t offset;
+  uint8_t data[DS_DATA_MAX_SIZE];
 } DStMsg_regwr_t;
 
 
@@ -419,14 +429,14 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  unsigned addr;
-  unsigned size;
+  uint32_t addr;
+  uint32_t size;
 } DStMsg32_brk_t;
 
 typedef struct
 {
   struct DShdr hdr;
-  unsigned size;
+  uint32_t size;
   uint64_t addr;
 } DStMsg_brk_t;
 
@@ -434,8 +444,8 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  int mode;
-  int perms;
+  int32_t mode;
+  int32_t perms;
   char pathname[DS_DATA_MAX_SIZE];
 } DStMsg_fileopen_t;
 
@@ -452,7 +462,7 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  unsigned char data[DS_DATA_MAX_SIZE];
+  uint8_t data[DS_DATA_MAX_SIZE];
 } DStMsg_filewr_t;
 
 
@@ -460,7 +470,7 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  int mtime;
+  int32_t mtime;
 } DStMsg32_fileclose_t;
 
 typedef struct
@@ -474,8 +484,8 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  int pid;			/* Only valid for type subtype SPECIFIC.  */
-  int tid;			/* Tid to start reading from.  */
+  int32_t pid;			/* Only valid for type subtype SPECIFIC.  */
+  int32_t tid;			/* Tid to start reading from.  */
 } DStMsg_pidlist_t;
 
 
@@ -483,7 +493,7 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  unsigned char path[DS_DATA_MAX_SIZE];
+  uint8_t path[DS_DATA_MAX_SIZE];
 } DStMsg_cwd_t;
 
 
@@ -506,8 +516,8 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  unsigned char major;
-  unsigned char minor;
+  uint8_t major;
+  uint8_t minor;
 } DStMsg_protover_t;
 
 
@@ -515,9 +525,9 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  unsigned char signals[QNXNTO_NSIG];
-  unsigned sig_to_pass;
-  unsigned char signals2[QNXNTO_MAXSIG - QNXNTO_NSIG]; /* 64 - 57 */ 
+  uint8_t signals[QNXNTO_NSIG];
+  uint32_t sig_to_pass;
+  uint8_t signals2[QNXNTO_MAXSIG - QNXNTO_NSIG]; /* 64 - 57 */
 } DStMsg_handlesig_t;
 
 
@@ -525,14 +535,14 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  unsigned spare;
+  uint32_t spare;
 } DStMsg_cpuinfo_t;
 
 /* Get the names of the threads */
 typedef struct
 {
   struct DShdr hdr;
-  unsigned spare;
+  uint32_t spare;
 } DStMsg_tidnames_t;
 
 /* Messages sent to the host. DStMsg_* (h - for host messages).  */
@@ -583,60 +593,7 @@ typedef struct
 			uint32_t		vfork;
 			}		fork_event;
 	} un;
-} DShMsg_notify_t_64;
-
-typedef struct aaa32 {
-	struct DShdr	hdr;
-	int32_t			pid;
-	int32_t			tid;
-	union {
-		struct {
-			uint32_t		codeoff;
-			uint32_t		dataoff;
-			uint16_t		ostype;
-			uint16_t		cputype;
-			uint32_t		cpuid;		// CPU dependant value
-			char			name[DS_DATA_MAX_SIZE];
-			}		pidload;
-		struct {
-			int32_t			status;
-			}		pidunload;
-		struct {
-			int32_t			status;
-			uint8_t			faulted;
-			uint8_t			reserved[3];
-			}		pidunload_v3;
-		struct {
-			uint32_t		ip;
-			uint32_t		dp;
-			uint32_t		flags;	// defined in <sys/debug.h>
-			}		brk;
-		struct {
-			uint32_t		ip;
-			uint32_t		lastip;
-			}		step;
-		struct {
-			int32_t			signo;
-			int32_t			code;
-			int32_t			value;
-			}		sigev;
-		struct {
-			int32_t			tid;
-			}		thread_event;
-		struct {
-			int32_t			pid;
-			uint32_t		vfork;
-			}		fork_event;
-	} un;
-} DShMsg_notify_t_32;
-
-
-typedef union {
-	DShMsg_notify_t_64 _64;
-	DShMsg_notify_t_32 _32;
 } DShMsg_notify_t;
-
-
 
 /* Responses to a message. DSrMsg_* (r - for response messages).  */
 
@@ -644,7 +601,7 @@ typedef union {
 typedef struct
 {
   struct DShdr hdr;
-  int err;
+  int32_t err;
 } DSrMsg_err_t;
 
 /* Simple OK response.  */
@@ -662,27 +619,27 @@ typedef struct
 typedef struct
 {
   struct DShdr hdr;
-  int status;
+  int32_t status;
 } DSrMsg_okstatus_t;
 
 
 /* The following structures overlay data[..] on a DSrMsg_okdata_t.  */
 struct dslinkmap
 {
-  unsigned addr;
-  unsigned size;
-  unsigned flags;
-  unsigned debug_vaddr;
-  unsigned long long offset;
+  uint32_t addr;
+  uint32_t size;
+  uint32_t flags;
+  uint32_t debug_vaddr;
+  uint64_t offset;
 };
 
 struct dsmapinfo
 {
   struct dsmapinfo *next;
-  unsigned spare0;
-  unsigned long long ino;
-  unsigned dev;
-  unsigned spare1;
+  uint32_t spare0;
+  uint64_t ino;
+  uint32_t dev;
+  uint32_t spare1;
   struct dslinkmap text;
   struct dslinkmap data;
   char name[256];
@@ -690,34 +647,34 @@ struct dsmapinfo
 
 struct tidinfo
 {
-  short tid;
-  unsigned char state;
-  unsigned char flags;
+  int16_t tid;
+  uint8_t state;
+  uint8_t flags;
 };
 
 struct dspidlist
 {
-  int pid;
-  int num_tids;			/* Num of threads this pid has.  */
-  int spare[6];
+  int32_t pid;
+  int32_t num_tids;			/* Num of threads this pid has.  */
+  int32_t spare[6];
   struct tidinfo tids[1];	/* Variable length terminated by tid==0.  */
   char name[1];			/* Variable length terminated by \0.  */
 };
 
 struct dscpuinfo
 {
-  unsigned cpuflags;
-  unsigned spare1;
-  unsigned spare2;
-  unsigned spare3;
+  uint32_t cpuflags;
+  uint32_t spare1;
+  uint32_t spare2;
+  uint32_t spare3;
 };
 
 struct dstidnames
 {
-  unsigned	numtids;
-  unsigned	numleft;
-  unsigned	spare1;
-  unsigned	spare2;
+  uint32_t	numtids;
+  uint32_t	numleft;
+  uint32_t	spare1;
+  uint32_t	spare2;
   char		data[1]; /* A bunch of string data tidNULLnameNULL... */
 };
 
@@ -726,15 +683,18 @@ struct dstidnames
 typedef struct
 {
   struct DShdr hdr;
-  unsigned char data[DS_DATA_MAX_SIZE];
+  uint8_t data[DS_DATA_MAX_SIZE];
 } DSrMsg_okdata_t;
 
+#ifdef NVIDIA_CUDA_GDB
 /* CUDA packet.  */
 typedef struct
 {
   struct DShdr hdr;
   unsigned char data[DS_DATA_MAX_SIZE];
 } DStMsg_cuda_t;
+#endif
+
 
 /* A union of all possible messages and responses.  */
 typedef union
@@ -777,8 +737,10 @@ typedef union
   DSrMsg_ok_t ok;
   DSrMsg_okstatus_t okstatus;
   DSrMsg_okdata_t okdata;
+#ifdef NVIDIA_CUDA_GDB
   /* CUDA */
   DStMsg_cuda_t cuda;
+#endif
 } DSMsg_union_t;
 
 
@@ -801,10 +763,10 @@ enum
 
 struct TShdr
 {
-  unsigned char cmd;
-  unsigned char console;
-  unsigned char spare1;
-  unsigned char channel;
+  uint8_t cmd;
+  uint8_t console;
+  uint8_t spare1;
+  uint8_t channel;
 };
 
 
@@ -825,7 +787,7 @@ typedef struct
 } TSMsg_done_t;
 
 
-/* TextStart or TextStop flow controlÿ.  */
+/* TextStart or TextStop flow control.  */
 typedef struct
 {
   struct TShdr hdr;

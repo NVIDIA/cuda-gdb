@@ -37,18 +37,6 @@ public:
 	return;
       }
 
-    /* Initialize the CUDA modules */
-    try
-      {
-	cuda_utils_initialize (); 
-	cuda_notification_initialize (); 
-      }
-    catch (const gdb_exception_error &ex)
-      {
-	warning("%s", ex.what());
-	return;
-      }
-
     cuda_debugging_enabled = true;
   }
 

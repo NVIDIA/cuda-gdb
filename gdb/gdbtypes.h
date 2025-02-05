@@ -2340,6 +2340,7 @@ struct builtin_type
   struct type *builtin_unsigned_int = nullptr;
   struct type *builtin_unsigned_long = nullptr;
 #ifdef NVIDIA_CUDA_GDB
+  struct type *builtin_nv_fp8_e8m0 = nullptr;
   struct type *builtin_nv_fp8_e5m2 = nullptr;
   struct type *builtin_nv_fp8_e4m3 = nullptr;
 #endif
@@ -2480,6 +2481,7 @@ extern const struct floatformat *floatformats_vax_d[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_ibm_long_double[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_bfloat16[BFD_ENDIAN_UNKNOWN];
 #ifdef NVIDIA_CUDA_GDB
+extern const struct floatformat *floatformats_nv_fp8_e8m0[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_nv_fp8_e5m2[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_nv_fp8_e4m3[BFD_ENDIAN_UNKNOWN];
 #endif

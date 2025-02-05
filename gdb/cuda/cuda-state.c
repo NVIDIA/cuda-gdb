@@ -15,6 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
+
 #include "defs.h"
 
 #include "breakpoint.h"
@@ -122,7 +123,10 @@ static uint32_t debug_invalidate = 0;
 
 cuda_state cuda_state::m_instance;
 
-cuda_state::cuda_state () : m_num_devices (0) { reset (); }
+cuda_state::cuda_state ()
+{
+  reset ();
+}
 
 void
 cuda_state::reset (void)
@@ -137,6 +141,11 @@ cuda_state::reset (void)
   unknown_sm_attribute_warning = 0;
   unknown_warp_attribute_warning = 0;
   unknown_lane_attribute_warning = 0;
+
+  // Delete the contexts and modules through the use of unique pointers
+  m_instance.set_current_context (nullptr);
+  m_instance.m_context_map.clear ();
+  m_instance.m_module_map.clear ();
 
   // Automatically deletes all device/sm/warp/lane objects
   m_instance.m_devs.clear ();
@@ -183,7 +192,6 @@ void
 cuda_state::finalize (void)
 {
   CUDA_STATE_TRACE ("");
-  gdb_assert (cuda_initialized);
 
   reset ();
 }
@@ -195,6 +203,114 @@ cuda_state::get_supported_capabilities ()
   gdb_assert (cuda_initialized);
 
   return cuda_debugapi::get_supported_capabilities ();
+}
+
+cuda_context*
+cuda_state::create_context (uint32_t dev_id, uint64_t context_id, uint32_t thread_id)
+{
+  cuda_trace ("Context create device %u context 0x%llx", dev_id, context_id);
+
+  m_instance.m_context_map[context_id]
+    = std::make_unique<cuda_context> (dev_id, context_id);
+
+  return m_instance.m_context_map[context_id].get ();
+}
+
+void
+cuda_state::destroy_context (uint64_t context_id)
+{
+  auto context = find_context_by_id (context_id);
+  cuda_trace ("Context destroy device %u context 0x%llx", context->dev_id (), context_id);
+
+  if (context == current_context ())
+    set_current_context (nullptr);
+
+  m_instance.m_context_map.erase (context_id);
+}
+
+cuda_context*
+cuda_state::find_context_by_id (uint64_t context_id)
+{
+  auto iter = m_instance.m_context_map.find (context_id);
+  if (iter != m_instance.m_context_map.end ())
+    return iter->second.get ();
+  return nullptr;
+}
+
+cuda_module*
+cuda_state::create_module (uint64_t module_id,
+			   CUDBGElfImageProperties properties,
+			   uint64_t context_id,
+			   uint64_t elf_image_size)
+{
+  CUDA_STATE_TRACE ("Module create module_id 0x%llx context_id 0x%llx size %llu",
+		    module_id, context_id, elf_image_size);
+
+  auto context = find_context_by_id (context_id);
+  gdb_assert (context);
+  
+  // Install it in the map before doing anything else
+  m_instance.m_module_map[module_id]
+    = std::make_unique<cuda_module> (module_id, properties,
+				     context, elf_image_size);
+
+  // Now get the cuda_module* and update the context map
+  auto module = m_instance.m_module_map[module_id].get ();
+  context->add_module (module);
+
+  // Now that the module is in the map, the objfile can be loaded.
+  module->load_objfile ();
+
+  return module;
+}
+
+void
+cuda_state::destroy_module (uint64_t module_id)
+{
+  CUDA_STATE_TRACE ("Module destroy 0x%llx", module_id);
+
+  auto module = find_module_by_id (module_id);
+  gdb_assert (module);
+  
+  module->context ()->remove_module (module);
+  m_instance.m_module_map.erase (module->id ());
+}
+
+cuda_module*
+cuda_state::find_module_by_id (uint64_t module_id)
+{
+  CUDA_STATE_TRACE ("find_module_by_id 0x%llx", module_id);
+
+  auto iter = m_instance.m_module_map.find (module_id);
+  if (iter != m_instance.m_module_map.end ())
+    return iter->second.get ();
+
+  gdb_assert (false);
+  return nullptr;
+}
+
+cuda_module*
+cuda_state::find_module_by_address (CORE_ADDR addr)
+{
+  for (auto& iter : m_instance.m_module_map)
+    if (iter.second.get ()->contains_address (addr))
+      {
+	CUDA_STATE_TRACE ("find_module_by_address 0x%llx module 0x%llx",
+			  addr, iter.second.get ()->id ());
+	return iter.second.get ();
+      }
+
+  CUDA_STATE_TRACE ("find_module_by_address 0x%llx - not found", addr);
+  return nullptr;
+}
+
+bool
+cuda_state::is_any_context_present (uint32_t dev_id)
+{
+  for (const auto& iter : m_instance.m_context_map)
+    if (iter.second.get ()->dev_id () == dev_id)
+      return true;
+  return false;
 }
 
 void
@@ -226,9 +342,8 @@ cuda_state::resolve_breakpoints (int bp_number_from)
 {
   CUDA_STATE_TRACE ("");
 
-  elf_image_t elf_image;
-  CUDA_ALL_LOADED_ELF_IMAGES (elf_image)
-    cuda_resolve_breakpoints (bp_number_from, elf_image);
+  for (auto& iter : m_instance.m_module_map)
+    cuda_resolve_breakpoints (bp_number_from, iter.second.get ());
 }
 
 void
@@ -241,39 +356,13 @@ cuda_state::cleanup_breakpoints (void)
   cuda_unresolve_breakpoints (nullptr);
 }
 
-void
-cuda_state::cleanup_contexts (void)
+bool
+cuda_state::is_context_active (cuda_context* context)
 {
-  CUDA_STATE_TRACE ("");
-
-  for (uint32_t dev_id = 0; dev_id < get_num_devices (); ++dev_id)
-    device (dev_id)->cleanup_contexts ();
-}
-
-context_t
-cuda_state::find_context_by_addr (CORE_ADDR addr)
-{
-  for (uint32_t dev_id = 0; dev_id < get_num_devices (); ++dev_id)
-    {
-      context_t context = device (dev_id)->find_context_by_addr (addr);
-      if (context)
-	return context;
-    }
-
-  return nullptr;
-}
-
-context_t
-cuda_state::find_context_by_id (uint64_t context_id)
-{
-  for (uint32_t dev_id = 0; dev_id < get_num_devices (); ++dev_id)
-    {
-      context_t context = device (dev_id)->find_context_by_id (context_id);
-      if (context)
-	return context;
-    }
-
-  return nullptr;
+  const auto& iter = m_instance.m_context_map.find (context->id ());
+  if (iter == m_instance.m_context_map.end ())
+    return false;
+  return true;
 }
 
 void
@@ -281,13 +370,8 @@ cuda_state::flush_disasm_caches ()
 {
   CUDA_STATE_TRACE ("");
 
-  // Iterate over all contexts (modules)
-  for (auto dev_id = 0; dev_id < get_num_devices (); ++dev_id)
-    {
-      auto contexts = device_get_contexts (dev_id);
-      if (contexts)
-	contexts_flush_disasm_caches (contexts);
-    }
+  for (auto& iter : m_instance.m_context_map)
+    iter.second->flush_disasm_caches ();
 }
 
 void
@@ -403,11 +487,11 @@ cuda_device::cuda_device (uint32_t idx) : m_dev_id (idx)
   m_sms.reserve (m_num_sms);
   for (uint32_t sm_idx = 0; sm_idx < m_num_sms; ++sm_idx)
     m_sms.emplace_back (new cuda_sm (this, sm_idx));
-
-  m_contexts = contexts_new ();
 }
 
-cuda_device::~cuda_device () { cleanup_contexts (); }
+cuda_device::~cuda_device ()
+{
+}
 
 bool
 cuda_device::suspended ()
@@ -539,18 +623,6 @@ cuda_device::has_exception ()
   return m_sm_exception_mask.any ();
 }
 
-void
-cuda_device::cleanup_contexts ()
-{
-  CUDA_STATE_TRACE_DEV (this, "");
-
-  if (m_contexts)
-    {
-      contexts_delete (m_contexts);
-      m_contexts = nullptr;
-    }
-}
-
 uint32_t
 cuda_device::get_sm_version ()
 {
@@ -608,10 +680,9 @@ cuda_device::get_num_kernels ()
 }
 
 bool
-cuda_device::is_any_context_present ()
+cuda_device::is_any_context_present () const
 {
-  auto contexts = get_contexts ();
-  return contexts_is_any_context_present (contexts);
+  return cuda_state::is_any_context_present (dev_idx ());
 }
 
 const cuda_bitset &
@@ -661,26 +732,10 @@ cuda_device::get_kernel (uint64_t grid_id)
   return kernel;
 }
 
-context_t
-cuda_device::find_context_by_id (uint64_t context_id)
-{
-  auto contexts = get_contexts ();
-  return contexts_find_context_by_id (contexts, context_id);
-}
-
-context_t
-cuda_device::find_context_by_addr (CORE_ADDR addr)
-{
-  auto contexts = get_contexts ();
-  return contexts_find_context_by_address (contexts, addr);
-}
-
 void
 cuda_device::print ()
 {
   CUDA_STATE_TRACE_DEV (this, "");
-
-  contexts_print (get_contexts ());
 }
 
 void
@@ -766,7 +821,7 @@ cuda_device::set_device_spec (uint32_t num_sms, uint32_t num_warps,
 			      uint32_t num_lanes, uint32_t num_registers,
 			      const char *dev_type, const char *sm_type)
 {
-  gdb_assert (cuda_remote);
+  gdb_assert (is_remote_target (current_inferior ()->process_target ()));
 
   // Number of SMs is variable, and may exceed the CUDBG_MAX_SMS cuda-gdb
   // was compiled with.
@@ -798,8 +853,8 @@ cuda_device::set_device_spec (uint32_t num_sms, uint32_t num_warps,
  *
  ******************************************************************************/
 
-cuda_sm::cuda_sm (cuda_device *parent_dev, uint32_t idx)
-    : m_sm_idx (idx), m_device (parent_dev)
+cuda_sm::cuda_sm (cuda_device *parent_dev, uint32_t sm_idx)
+    : m_sm_idx (sm_idx), m_device (parent_dev)
 {
   m_warps.clear ();
   for (uint32_t idx = 0; idx < device ()->get_num_warps (); ++idx)
@@ -1105,8 +1160,8 @@ cuda_sm::update_state ()
  *
  ******************************************************************************/
 
-cuda_warp::cuda_warp (cuda_sm *parent_sm, uint32_t idx)
-    : m_warp_idx (idx), m_sm (parent_sm), m_lanes ()
+cuda_warp::cuda_warp (cuda_sm *parent_sm, uint32_t wp)
+    : m_warp_idx (wp), m_sm (parent_sm), m_lanes ()
 {
   // Just size it.
   m_uregisters_p.resize (sm ()->device ()->get_num_uregisters ());
@@ -1282,9 +1337,23 @@ cuda_warp::invalidate (bool quietly, bool recurse)
   m_error_pc = 0;
   m_error_pc_available = false;
 
+  // Default to no cluster exception target block idx
+  m_cluster_exception_target_block_idx_p = false;
+  m_cluster_exception_target_block_idx = { 0 };
+  m_cluster_exception_target_block_idx_available = false;
+
   m_cluster_idx = CuDim3{ 0, 0, 0 };
   m_cluster_idx_p = false;
+  m_cluster_dim = CuDim3{ 0, 0, 0 };
+  m_cluster_dim_p = false;
 
+  // Reset the warp resources predicate and values
+  m_warp_resources_p = false;
+  // Number of registers currently allocated
+  m_registers_allocated = 0;
+  // Amount of shared memory currently allocated
+  m_shared_mem_size = 0;
+  
   // Quietly invalidate the lanes
   if (recurse)
     for (auto &ln : m_lanes)
@@ -1316,9 +1385,8 @@ cuda_warp::set_grid_id (uint64_t grid_id)
 uint64_t
 cuda_warp::get_grid_id ()
 {
-  if (cuda_remote && !m_grid_id)
-    cuda_remote_update_grid_id_in_sm (cuda_get_current_remote_target (),
-				      dev_idx (), sm_idx ());
+  if (is_remote_target (current_inferior ()->process_target ()) && !m_grid_id)
+    cuda_remote_update_grid_id_in_sm (dev_idx (), sm_idx ());
 
   if (!m_grid_id)
     update_state ();
@@ -1332,7 +1400,7 @@ cuda_warp::get_grid_id ()
 void
 cuda_warp::set_block_idx (const CuDim3 &block_idx)
 {
-  gdb_assert (cuda_remote);
+  gdb_assert (is_remote_target (current_inferior ()->process_target ()));
 
   m_block_idx = block_idx;
   m_block_idx_p = true;
@@ -1341,9 +1409,9 @@ cuda_warp::set_block_idx (const CuDim3 &block_idx)
 const CuDim3 &
 cuda_warp::get_block_idx ()
 {
-  if (cuda_remote && !m_block_idx_p && sm ()->warp_valid (warp_idx ()))
-    cuda_remote_update_block_idx_in_sm (cuda_get_current_remote_target (),
-					dev_idx (), sm_idx ());
+  if (is_remote_target (current_inferior ()->process_target ())
+      && !m_block_idx_p && sm ()->warp_valid (warp_idx ()))
+    cuda_remote_update_block_idx_in_sm (dev_idx (), sm_idx ());
   if (!m_block_idx_p)
     update_state ();
 
@@ -1353,7 +1421,7 @@ cuda_warp::get_block_idx ()
 void
 cuda_warp::set_cluster_idx (const CuDim3 &cluster_idx)
 {
-  gdb_assert (cuda_remote);
+  gdb_assert (is_remote_target (current_inferior ()->process_target ()));
 
   m_cluster_idx = cluster_idx;
   m_cluster_idx_p = true;
@@ -1362,13 +1430,34 @@ cuda_warp::set_cluster_idx (const CuDim3 &cluster_idx)
 const CuDim3 &
 cuda_warp::get_cluster_idx ()
 {
-  if (cuda_remote && !m_cluster_idx_p && sm ()->warp_valid (warp_idx ()))
-    cuda_remote_update_cluster_idx_in_sm (cuda_get_current_remote_target (),
-					  dev_idx (), sm_idx ());
+  if (is_remote_target (current_inferior ()->process_target ())
+      && !m_cluster_idx_p && sm ()->warp_valid (warp_idx ()))
+    cuda_remote_update_cluster_idx_in_sm (dev_idx (), sm_idx ());
   if (!m_cluster_idx_p)
     update_state ();
 
   return m_cluster_idx;
+}
+
+void
+cuda_warp::set_cluster_dim (const CuDim3 &cluster_dim)
+{
+  gdb_assert (is_remote_target (current_inferior ()->process_target ()));
+
+  m_cluster_dim = cluster_dim;
+  m_cluster_dim_p = true;
+}
+
+const CuDim3 &
+cuda_warp::get_cluster_dim ()
+{
+  if (is_remote_target (current_inferior ()->process_target ())
+      && !m_cluster_dim_p && sm ()->warp_valid (warp_idx ()))
+    cuda_remote_update_cluster_dim_in_sm (dev_idx (), sm_idx ());
+  if (!m_cluster_dim_p)
+    update_state ();
+
+  return m_cluster_dim;
 }
 
 kernel_t
@@ -1434,6 +1523,59 @@ cuda_warp::get_error_pc ()
   gdb_assert (0);
 }
 
+bool
+cuda_warp::has_cluster_exception_target_block_idx ()
+{
+  if (!m_cluster_exception_target_block_idx_p)
+    {
+      cuda_debugapi::get_cluster_exception_target_block (
+	  dev_idx (), sm_idx (), warp_idx (),
+	  &m_cluster_exception_target_block_idx,
+	  &m_cluster_exception_target_block_idx_available);
+      m_cluster_exception_target_block_idx_p = true;
+    }
+
+  return m_cluster_exception_target_block_idx_available;
+}
+
+CuDim3
+cuda_warp::get_cluster_exception_target_block_idx ()
+{
+  if (has_cluster_exception_target_block_idx ())
+    return m_cluster_exception_target_block_idx;
+  gdb_assert (0);
+}
+
+void
+cuda_warp::update_warp_resources ()
+{
+  if (!m_warp_resources_p)
+    {
+      // If reading warp resources isn't supported by the debugger backend,
+      // the cuda_debugapi call will return with resources set to 0.
+      CUDBGWarpResources resources;
+      cuda_debugapi::read_warp_resources (dev_idx (), sm_idx (), warp_idx (),
+    					  &resources);
+      m_registers_allocated = resources.numRegisters;
+      m_shared_mem_size = resources.sharedMemSize;
+      m_warp_resources_p = true;
+    }
+}
+
+uint32_t
+cuda_warp::registers_allocated ()
+{
+  update_warp_resources ();
+  return m_registers_allocated;
+}
+
+uint32_t
+cuda_warp::shared_mem_size ()
+{
+  update_warp_resources ();
+  return m_shared_mem_size;
+}
+
 void
 cuda_warp::update_state ()
 {
@@ -1468,10 +1610,18 @@ cuda_warp::update_state ()
 
   m_cluster_idx = warp_state.clusterIdx;
   m_cluster_idx_p = true;
+  m_cluster_dim = warp_state.clusterDim;
+  m_cluster_dim_p = true;
 
   m_error_pc_p = true;
   m_error_pc = warp_state.errorPC;
   m_error_pc_available = warp_state.errorPCValid;
+
+  m_cluster_exception_target_block_idx_p = true;
+  m_cluster_exception_target_block_idx
+      = warp_state.clusterExceptionTargetBlockIdx;
+  m_cluster_exception_target_block_idx_available
+      = warp_state.clusterExceptionTargetBlockIdxValid;
 
   const auto num_lanes = sm ()->device ()->get_num_lanes ();
   for (auto ln_id = 0; ln_id < num_lanes; ++ln_id)
@@ -1536,9 +1686,9 @@ cuda_lane::get_thread_idx ()
 {
   /* In a remote session, we fetch the threadIdx of all valid thread in the
    * warp using one rsp packet to reduce the amount of communication. */
-  if (cuda_remote && !(m_thread_idx_p) && warp ()->lane_valid (lane_idx ()))
-    cuda_remote_update_thread_idx_in_warp (cuda_get_current_remote_target (),
-					   dev_idx (), sm_idx (), warp_idx ());
+  if (is_remote_target (current_inferior ()->process_target ())
+      && !m_thread_idx_p && warp ()->lane_valid (lane_idx ()))
+    cuda_remote_update_thread_idx_in_warp (dev_idx (), sm_idx (), warp_idx ());
 
   if (!m_thread_idx_p)
     warp ()->update_state ();
@@ -1590,7 +1740,7 @@ cuda_lane::invalidate (bool quietly)
   m_return_address.clear ();
 
   // Just clear the valid predicate bits
-  m_predicates_p = 0;
+  m_predicates_p = false;
 
   set_timestamp (0);
 }
@@ -1960,6 +2110,8 @@ cuda_warp::decode (const CUDBGDeviceInfoSizes &info_sizes,
 
   m_cluster_idx = CuDim3{ 0, 0, 0 };
   m_cluster_idx_p = false;
+  m_cluster_dim = CuDim3{ 0, 0, 0 };
+  m_cluster_dim_p = false;
 
   // Default to no exception
   CUDBGException_t exception = CUDBG_EXCEPTION_NONE;
@@ -2013,11 +2165,33 @@ cuda_warp::decode (const CUDBGDeviceInfoSizes &info_sizes,
 		  m_cluster_idx.y, m_cluster_idx.z);
 	      break;
 
+	    case CUDBG_WARP_ATTRIBUTE_CLUSTERDIM:
+	      m_cluster_dim = *(CuDim3 *)ptr;
+	      m_cluster_dim_p = true;
+	      CUDA_STATE_TRACE_DOMAIN_WARP (
+		  CUDA_TRACE_STATE_DECODE, this,
+		  "Decoding Warp CLUSTERDIM (%u, %u, %u)", m_cluster_dim.x,
+		  m_cluster_dim.y, m_cluster_dim.z);
+	      break;
+
 	    case CUDBG_WARP_ATTRIBUTE_LANE_UPDATE_MASK:
 	      updated_lane_mask = *(uint32_t *)ptr;
 	      CUDA_STATE_TRACE_DOMAIN_WARP (
 		  CUDA_TRACE_STATE_DECODE, this,
 		  "Decoding Warp updated Lane mask 0x%08x", updated_lane_mask);
+	      break;
+
+	    case CUDBG_WARP_ATTRIBUTE_CLUSTER_EXCEPTION_TARGET_BLOCK_IDX:
+	      m_cluster_exception_target_block_idx = *(CuDim3 *)ptr;
+	      m_cluster_exception_target_block_idx_p = true;
+	      m_cluster_exception_target_block_idx_available = true;
+	      CUDA_STATE_TRACE_DOMAIN_WARP (
+		  CUDA_TRACE_STATE_DECODE, this,
+		  "Decoding Warp CLUSTER_EXCEPTION_TARGET_BLOCK_IDX (%u, %u, "
+		  "%u)",
+		  m_cluster_exception_target_block_idx.x,
+		  m_cluster_exception_target_block_idx.y,
+		  m_cluster_exception_target_block_idx.z);
 	      break;
 
 	      // Ignore anything we don't understand

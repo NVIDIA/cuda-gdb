@@ -31,19 +31,18 @@
 
 #include "arch-utils.h"
 #include "cuda-commands.h"
+#include "cuda-convvars.h"
 #include "cuda-events.h"
 #include "cuda-exceptions.h"
 #include "cuda-notifications.h"
 #include "cuda-options.h"
-#include "cuda-tdep.h"
-#include "linux-nat.h"
-// #include "cuda-parser.h"
-#include "cuda-convvars.h"
 #include "cuda-packet-manager.h"
 #include "cuda-state.h"
+#include "cuda-tdep.h"
 #include "cuda-utils.h"
 #include "gdbthread.h"
 #include "inf-child.h"
+#include "linux-nat.h"
 
 /* Various state used by cuda-linux-nat-template.h */
 extern struct cuda_cudart_symbols_st cuda_cudart_symbols;
@@ -55,7 +54,7 @@ extern void cuda_signal_restore_settings (int sig,
 					  struct cuda_signal_info_st *save);
 extern void cuda_sigtrap_restore_settings (void);
 extern void cuda_sigtrap_set_silent (void);
-extern int cuda_check_pending_sigint (pid_t pid);
+extern bool cuda_check_pending_sigint (pid_t pid);
 extern struct objfile *cuda_create_builtins_objfile (void);
 
 class inf_child_target;
@@ -84,8 +83,6 @@ public:
     return tc_none;
   }
 
-  static void open (const char *name, int from_tty);
-
   virtual void kill () override;
 
   virtual enum target_xfer_status
@@ -93,19 +90,14 @@ public:
 		gdb_byte *readbuf, const gdb_byte *writebuf, ULONGEST offset,
 		ULONGEST len, ULONGEST *xfered_len) override;
 
-  enum target_xfer_status xfer_siginfo (enum target_object object,
-					const char *annex, gdb_byte *readbuf,
-					const gdb_byte *writebuf,
-					ULONGEST offset, LONGEST len,
-					ULONGEST *xfered_len);
-
   virtual void mourn_inferior () override;
 
   virtual void resume (ptid_t arg0,
 		       int TARGET_DEBUG_PRINTER (target_debug_print_step) arg1,
 		       enum gdb_signal arg2) override;
 
-  void resume (ptid_t ptid, int sstep, int host_sstep, enum gdb_signal ts);
+  void resume (ptid_t ptid, int sstep, int host_sstep,
+	       enum gdb_signal ts);
 
   virtual ptid_t wait (ptid_t arg0, struct target_waitstatus *arg1,
 		       target_wait_flags arg2) override;
@@ -124,9 +116,11 @@ public:
 
   virtual void detach (inferior *, int) override;
 
-protected:
-  /* Override the GNU/Linux inferior startup hook.  */
-  virtual void post_startup_inferior (ptid_t) override;
+private:
+  enum target_xfer_status
+  cuda_xfer_siginfo (enum target_object object, const char *annex,
+		     gdb_byte *readbuf, const gdb_byte *writebuf,
+		     ULONGEST offset, LONGEST len, ULONGEST *xfered_len);
 };
 
 #endif

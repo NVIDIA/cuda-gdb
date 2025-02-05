@@ -84,6 +84,7 @@
 #include "cuda/cuda-options.h"
 #include "cuda/cuda-state.h"
 #include "nat/linux-waitpid.h"
+#include "remote.h"
 #endif
 
 /* Prototypes for local functions */
@@ -717,10 +718,14 @@ follow_fork ()
 {
   bool follow_child = (follow_fork_mode_string == follow_fork_mode_child);
 #ifdef NVIDIA_CUDA_GDB
-  /* Disallow follow-fork child if we already started initialization of the CUDA debug API */
-  if (follow_child && (!cuda_debugapi::api_state_uninitialized () || cuda_remote))
+  /* Disallow follow-fork child if we already started initialization of the
+   * CUDA debug API */
+  if (follow_child
+      && (!cuda_debugapi::api_state_uninitialized ()
+	  || is_remote_target (current_inferior ()->process_target ())))
     {
-      warning (_("Unable to follow child process when debugging CUDA process."));
+      warning (
+	  _ ("Unable to follow child process when debugging CUDA process."));
       follow_child = false;
     }
 #endif
@@ -4103,6 +4108,11 @@ cuda_wait_for_inferior (void)
 {
   wait_for_inferior (current_inferior ());
 }
+void
+cuda_force_stop_print_frame (void)
+{
+  stop_print_frame = true;
+}
 #endif
 
 /* Cleanup that reinstalls the readline callback handler, if the
@@ -5842,10 +5852,15 @@ handle_inferior_event (struct execution_control_state *ecs)
 	  bool follow_child
 	    = (follow_fork_mode_string == follow_fork_mode_child);
 #ifdef NVIDIA_CUDA_GDB
-	  /* Disallow follow-fork child if we already started initialization of the CUDA debug API */
-	  if (follow_child && (!cuda_debugapi::api_state_uninitialized () || cuda_remote))
+	  /* Disallow follow-fork child if we already started initialization of
+	   * the CUDA debug API */
+	  if (follow_child
+	      && (!cuda_debugapi::api_state_uninitialized ()
+		  || is_remote_target (
+		      ecs->event_thread->inf->process_target ())))
 	    {
-	      warning (_("Unable to follow child process when debugging CUDA process."));
+	      warning (_ ("Unable to follow child process when debugging CUDA "
+			  "process."));
 	      follow_child = false;
 	    }
 #endif
@@ -6328,10 +6343,19 @@ handle_signal_stop (struct execution_control_state *ecs)
      they weren't stopped implicitly, then the stub will report a
      GDB_SIGNAL_0, meaning: stopped for no particular reason
      other than GDB's request.  */
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: We do the same thing here but use SIGURG */
+  if (stop_soon == STOP_QUIETLY_NO_SIGSTOP
+      && (ecs->event_thread->stop_signal () == GDB_SIGNAL_STOP
+	  || ecs->event_thread->stop_signal () == GDB_SIGNAL_TRAP
+	  || ecs->event_thread->stop_signal () == GDB_SIGNAL_0
+	  || ecs->event_thread->stop_signal () == GDB_SIGNAL_URG))
+#else
   if (stop_soon == STOP_QUIETLY_NO_SIGSTOP
       && (ecs->event_thread->stop_signal () == GDB_SIGNAL_STOP
 	  || ecs->event_thread->stop_signal () == GDB_SIGNAL_TRAP
 	  || ecs->event_thread->stop_signal () == GDB_SIGNAL_0))
+#endif
     {
       stop_print_frame = true;
       stop_waiting (ecs);

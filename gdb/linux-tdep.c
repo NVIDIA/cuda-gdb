@@ -1593,14 +1593,22 @@ linux_find_memory_regions_full (struct gdbarch *gdbarch,
 
       if (map.has_anonymous)
 	{
-	  should_dump_p
-	    = should_dump_mapping_p (filterflags, &map.vmflags,
-				     map.priv,
-				     map.mapping_anon_p,
-				     map.mapping_file_p,
-				     map.filename.c_str (),
-				     map.start_address,
-				     map.offset);
+#ifdef NVIDIA_BUGFIX
+	  /* Recent kernels are compiled with CONFIG_LEGACY_VSYSCALL_XONLY=y
+	     which disables read permisison on the vsyscall page.
+	     In that case, dumping this map would fail with a read error. */
+	  if (map.filename == "[vsyscall]")
+	    should_dump_p = map.read;
+	  else
+#endif
+	    should_dump_p
+	      = should_dump_mapping_p (filterflags, &map.vmflags,
+				       map.priv,
+				       map.mapping_anon_p,
+				       map.mapping_file_p,
+				       map.filename.c_str (),
+				       map.start_address,
+				       map.offset);
 	}
       else
 	{

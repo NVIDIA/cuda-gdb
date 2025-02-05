@@ -23,10 +23,12 @@
 #include "cuda-bitset.h"
 #include "cuda-tdep.h"
 #include "cuda-context.h"
+#include "cuda-modules.h"
 #include "cuda-utils.h"
 #include "cuda-packet-manager.h"
 #include "cuda-options.h"
-#include "cuda-elf-image.h"
+
+#include "cudadebugger.h"
 
 #include <array>
 #include <bitset>
@@ -40,6 +42,7 @@ class cuda_lane;
 class cuda_warp;
 class cuda_sm;
 class cuda_device;
+
 
 class cuda_lane final
 {
@@ -206,11 +209,16 @@ public:
   bool has_error_pc ();
   uint64_t get_error_pc ();
 
+  bool has_cluster_exception_target_block_idx ();
+  CuDim3 get_cluster_exception_target_block_idx ();
+
   const CuDim3& get_block_idx ();
   void set_block_idx (const CuDim3& block_idx);
 
   const CuDim3& get_cluster_idx ();
   void set_cluster_idx (const CuDim3& cluster_idx);
+  const CuDim3& get_cluster_dim ();
+  void set_cluster_dim (const CuDim3& cluster_dim);
 
   uint32_t get_valid_lanes_mask ();
   uint32_t get_active_lanes_mask ();
@@ -239,6 +247,9 @@ public:
 
   kernel_t get_kernel ();
 
+  uint32_t registers_allocated ();
+  uint32_t shared_mem_size ();
+
   // For internal use only - lazy device state handling
   void update_state ();
 
@@ -248,6 +259,8 @@ public:
 	       const CUDBGSMInfo *sm_info, uint8_t*& ptr);
 
 private:
+  void update_warp_resources ();
+
   /* parent and index */
   uint32_t	m_warp_idx = ~0;
   cuda_sm	*m_sm = nullptr;
@@ -270,12 +283,18 @@ private:
   bool          m_error_pc_available = false;
   uint64_t      m_error_pc = 0;
 
+  bool m_cluster_exception_target_block_idx_p = false;
+  bool m_cluster_exception_target_block_idx_available = false;
+  CuDim3 m_cluster_exception_target_block_idx = { 0 };
+
   // thread index for lane 0 in this warp
   CuDim3	m_base_thread_idx = { 0, 0, 0 };
 
   // Less frequently used values, read and cached on demand
   bool		m_cluster_idx_p = false;
   CuDim3	m_cluster_idx = { 0, 0, 0 };
+  bool		m_cluster_dim_p = false;
+  CuDim3	m_cluster_dim = { 0, 0, 0 };
 
   // Uniform register caches
   uint32_t	m_upredicates[CUDA_UREG_MAX_PREDICATES];
@@ -283,6 +302,13 @@ private:
 
   cuda_bitset	        m_uregisters_p;
   std::vector<uint32_t> m_uregisters;
+
+  // Resources assigned to this warp
+  bool m_warp_resources_p = false;
+  // Number of registers currently allocated to this warp
+  uint32_t m_registers_allocated = 0;
+  // Amount of shared memory currently allocated to this warp
+  uint32_t m_shared_mem_size = 0;
 
   /* Array of lanes belonging to this warp */
   std::array<cuda_lane, CUDBG_MAX_LANES> m_lanes;
@@ -411,15 +437,11 @@ public:
 
   void invalidate (bool quietly, bool recurse);
 
-  bool is_any_context_present ();
+  bool is_any_context_present () const;
 
-  bool is_active_context (context_t context) const
-  { return contexts_is_active_context (m_contexts, context); }
+  bool is_active_context (cuda_context* context) const;
 
   bool suspended ();
-
-  contexts_t get_contexts () const
-  { return m_contexts; }
 
   uint32_t get_num_registers () const
   { return m_num_registers; }
@@ -456,9 +478,6 @@ public:
   kernel_t get_kernel (uint64_t grid_id);
   const CUDBGGridInfo& get_grid_info (uint64_t grid_id);
 
-  context_t find_context_by_id (uint64_t context_id);
-  context_t find_context_by_addr (CORE_ADDR addr);
-
   void print ();
   void suspend ();
   void resume ();
@@ -466,8 +485,6 @@ public:
   void set_device_spec (uint32_t num_sms, uint32_t num_warps,
 			uint32_t num_lanes, uint32_t num_registers,
 			const char *dev_type, const char *sm_type);
-
-  void cleanup_contexts ();
 
   void update (CUDBGDeviceInfoQueryType_t type);
 
@@ -521,9 +538,6 @@ private:
   cuda_bitset m_sm_exception_mask;
   bool m_sm_exception_mask_p = false;
 
-  // state for contexts associated with this device
-  contexts_t m_contexts = nullptr;
-
   // Grid info cache
   std::unordered_map<uint64_t, CUDBGGridInfo> m_grid_info;
 
@@ -567,9 +581,33 @@ public:
   static void resolve_breakpoints (int bp_number_from);
   static void cleanup_breakpoints ();
 
-  static void cleanup_contexts ();
-  static context_t find_context_by_id (uint64_t context_id);
-  static context_t find_context_by_addr (CORE_ADDR addr);
+  static cuda_context* create_context (uint32_t dev_id, uint64_t context_id, uint32_t thread_id);
+  static void destroy_context (uint64_t context_id);
+  static bool is_context_active (cuda_context* context);
+  static bool is_any_context_present (uint32_t dev_id);
+  static cuda_context* find_context_by_id (uint64_t context_id);
+  
+  static cuda_context* current_context ()
+  { return m_instance.m_current_context; }
+
+  static void set_current_context (cuda_context* context)
+  { m_instance.m_current_context = context; }
+
+  static std::unordered_map<uint64_t, std::unique_ptr<cuda_context>>& contexts ()
+  { return m_instance.m_context_map; }
+
+  static std::unordered_map<uint64_t, std::unique_ptr<cuda_module>>& modules ()
+  { return m_instance.m_module_map; }
+
+  static cuda_module* create_module (uint64_t module_id,
+				     CUDBGElfImageProperties properties,
+				     uint64_t context_id,
+				     uint64_t elf_image_size);
+
+  static void destroy_module (uint64_t module_id);
+
+  static cuda_module* find_module_by_id (uint64_t module_id);
+  static cuda_module* find_module_by_address (CORE_ADDR addr);
 
   static bool broken (cuda_coords &coords);
 
@@ -657,26 +695,11 @@ public:
   static bool device_valid (uint32_t dev_id)
   { return device (dev_id)->valid (); }
 
-  static bool device_is_any_context_present (uint32_t dev_id)
-  { return device (dev_id)->is_any_context_present (); }
-
-  static bool device_is_active_context (uint32_t dev_id, context_t context)
-  { return device (dev_id)->is_active_context (context); }
-
   static bool device_has_exception (uint32_t dev_id)
   { return device (dev_id)->has_exception (); }
 
   static const cuda_bitset& device_get_active_sms_mask (uint32_t dev_id)
   { return device (dev_id)->get_active_sms_mask (); }
-
-  static contexts_t device_get_contexts (uint32_t dev_id)
-  { return device (dev_id)->get_contexts (); }
-
-  static context_t device_find_context_by_id (uint32_t dev_id, uint64_t context_id)
-  { return device (dev_id)->find_context_by_id (context_id); }
-
-  static context_t device_find_context_by_addr (uint32_t dev_id, CORE_ADDR addr)
-  { return device (dev_id)->find_context_by_addr (addr); }
 
   static void device_print (uint32_t dev_id)
   { device (dev_id)->print (); }
@@ -740,6 +763,14 @@ public:
   static bool warp_has_error_pc (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id)
   { return warp (dev_id, sm_id, wp_id)->has_error_pc (); }
 
+  static bool
+  warp_has_cluster_exception_target_block_idx (uint32_t dev_id, uint32_t sm_id,
+					       uint32_t wp_id)
+  {
+    return warp (dev_id, sm_id, wp_id)
+	->has_cluster_exception_target_block_idx ();
+  }
+
   static kernel_t warp_get_kernel (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id)
   { return device (dev_id)->sm (sm_id)->warp (wp_id)->get_kernel (); }
 
@@ -751,6 +782,9 @@ public:
 
   static const CuDim3& warp_get_cluster_idx (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id)
   { return device (dev_id)->sm (sm_id)->warp (wp_id)->get_cluster_idx (); }
+
+  static const CuDim3& warp_get_cluster_dim (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id)
+  { return device (dev_id)->sm (sm_id)->warp (wp_id)->get_cluster_dim (); }
 
   static uint64_t warp_get_grid_id (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id)
   { return device (dev_id)->sm (sm_id)->warp (wp_id)->get_grid_id (); }
@@ -773,11 +807,22 @@ public:
   static uint64_t warp_get_error_pc (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id)
   { return warp (dev_id, sm_id, wp_id)->get_error_pc (); }
 
+  static CuDim3
+  warp_get_cluster_exception_target_block_idx (uint32_t dev_id, uint32_t sm_id,
+					       uint32_t wp_id)
+  {
+    return warp (dev_id, sm_id, wp_id)
+	->get_cluster_exception_target_block_idx ();
+  }
+
   static void warp_set_grid_id (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint64_t grid_id)
   { warp (dev_id, sm_id, wp_id)->set_grid_id (grid_id); }
 
   static void warp_set_cluster_idx (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, const CuDim3& cluster_idx)
   { warp (dev_id, sm_id, wp_id)->set_cluster_idx (cluster_idx); }
+
+  static void warp_set_cluster_dim (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, const CuDim3& cluster_dim)
+  { warp (dev_id, sm_id, wp_id)->set_cluster_dim (cluster_dim); }
 
   static uint32_t warp_get_uregister (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t regno)
   { return warp (dev_id, sm_id, wp_id)->get_uregister (regno); }
@@ -790,6 +835,12 @@ public:
 
   static void warp_set_upredicate (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t pred, bool value)
   { warp (dev_id, sm_id, wp_id)->set_upredicate (pred, value); }
+
+  static uint32_t warp_registers_allocated (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id)
+  { return warp (dev_id, sm_id, wp_id)->registers_allocated (); }
+
+  static uint32_t warp_shared_mem_size (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id)
+  { return warp (dev_id, sm_id, wp_id)->shared_mem_size (); }
 
   // Lane helper functions
   static cuda_clock_t lane_timestamp (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id)
@@ -853,7 +904,13 @@ private:
   uint32_t    m_num_devices = 0;
 
   cuda_bitset m_suspended_devices_mask;
+
   std::vector<std::unique_ptr<cuda_device>> m_devs;
+
+  std::unordered_map<uint64_t, std::unique_ptr<cuda_context>> m_context_map;
+  std::unordered_map<uint64_t, std::unique_ptr<cuda_module>> m_module_map;
+
+  cuda_context* m_current_context;
 };
 
 #endif

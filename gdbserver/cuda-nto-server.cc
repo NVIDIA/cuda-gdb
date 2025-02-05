@@ -185,25 +185,47 @@ launch_pdebug (char *argv[], int first_arg, int argc, int port)
 static int
 connect_all (uint16_t port, uint16_t pdebug_port)
 {
-  int server_sockfd, hostfd;
+  int server_sockfd, hostfd, res;
   struct sockaddr_in addr, host_addr, pdebug_addr;
   socklen_t client_addr_len;
-  struct hostent *pdebug;
+  struct addrinfo hint, *addrinfo = NULL, *addr_iter;
 
   pdebug_sockfd = socket (AF_INET, SOCK_STREAM, 0);
   if (pdebug_sockfd < 0)
     {
       error ("Failed to create socket");
     }
-  pdebug = gethostbyname ("localhost");
-  if (pdebug == NULL)
+
+  memset (&hint, 0, sizeof (hint));
+  hint.ai_family = AF_INET;
+
+  res = getaddrinfo ("localhost", NULL, &hint, &addrinfo);
+  if (res != 0)
     {
-      error ("Cannot find pdebug host");
+      error ("Cannot find pdebug host: %s", strerror (errno));
     }
+
   memset (&pdebug_addr, 0, sizeof (pdebug_addr));
   pdebug_addr.sin_family = AF_INET;
   pdebug_addr.sin_port = htons (pdebug_port);
-  memcpy (&pdebug_addr.sin_addr.s_addr, pdebug->h_addr, pdebug->h_length);
+
+  addr_iter = addrinfo;
+
+  while (addr_iter) {
+    if (addr_iter->ai_family == AF_INET) {
+      addr = *(sockaddr_in*)addr_iter->ai_addr;
+      memcpy (&pdebug_addr.sin_addr.s_addr, &addr.sin_addr.s_addr, sizeof (addr.sin_addr.s_addr));
+      break;
+    }
+    addr_iter = addr_iter->ai_next;
+  }
+  freeaddrinfo (addrinfo);
+
+  if (!addr_iter)
+    {
+      error ("Cannot find pdebug host");
+    }
+
   if (connect (pdebug_sockfd, (struct sockaddr *) &pdebug_addr, sizeof (pdebug_addr)) < 0)
     {
       error ("Cannot connect to pdebug");
@@ -249,12 +271,8 @@ handle_pdebug_packet (unsigned char *buf, int length, int hostfd)
       switch (processResponse)
         {
         case DStMsg_load:
-          inferior_pid = response.pkt.notify._32.pid;
+          inferior_pid = response.pkt.notify.pid;
           printf ("Inferior pid: %d\n", inferior_pid);
-          break;
-        case DStMsg_detach:
-          cuda_cleanup();
-          inferior_pid = 0;
           break;
         default:
           error ("Unhandled response");
@@ -332,7 +350,7 @@ handle_host_packet (unsigned char *buf, int length, int hostfd)
               gdbserver_debug_print(GDB, PDB, buf+1);
             }
 
-          if (buf[1] == DStMsg_load || buf[1] == DStMsg_detach)
+          if (buf[1] == DStMsg_load)
             {
               processResponse = buf[1];
             }
@@ -360,10 +378,6 @@ initialize_cuda_remote (void)
       printf ("warning: CUDA support disabled. Could not obtain the CUDA debugger API\n");
       return;
     }
-
-  /* Initialize the CUDA modules */
-  cuda_utils_initialize ();
-  cuda_notification_initialize ();
 
   cuda_debugging_enabled = true;
 }
@@ -433,6 +447,20 @@ captured_main (int argc, char *argv[])
 
   /* TODO: find a better way to create pipes on QNX, see bug 1949586 */
   ensure_functional_tmpdir ();
+
+  /* We use the gdb initializers for some of the CUDA sources we share between
+   * gdb and gdbserver. See gdb/make-init-c for more info. There is no
+   * equivalent concept for gdbserver today. We need to explicitly call the
+   * intializers once per execution. */
+  static bool cuda_called_initializers = false;
+  extern void _initialize_cuda_notification ();
+  extern void _initialize_cuda_utils ();
+  if (!cuda_called_initializers)
+    {
+      cuda_called_initializers = true;
+      _initialize_cuda_notification ();
+      _initialize_cuda_utils ();
+    }
 
   launch_pdebug (argv, first_pdebug_arg, argc, port + 1);
 

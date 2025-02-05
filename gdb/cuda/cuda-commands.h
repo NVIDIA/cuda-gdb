@@ -19,7 +19,6 @@
 #ifndef _CUDA_COMMANDS_H
 #define _CUDA_COMMANDS_H 1
 
-void cuda_commands_initialize (void);
 void run_info_cuda_command (void (*command)(const char *), const char *arg);
 
 /*'info cuda' commands */

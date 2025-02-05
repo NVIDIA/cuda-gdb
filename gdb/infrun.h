@@ -187,6 +187,7 @@ extern void fetch_inferior_event ();
 extern void init_wait_for_inferior (void);
 #ifdef NVIDIA_CUDA_GDB
 extern void cuda_wait_for_inferior (void);
+extern void cuda_force_stop_print_frame (void);
 #endif
 
 extern void insert_step_resume_breakpoint_at_sal (struct gdbarch *,

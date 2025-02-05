@@ -14668,8 +14668,11 @@ read_structure_type (struct die_info *die, struct dwarf2_cu *cu)
 #ifdef NVIDIA_CUDA_GDB
   name = dwarf2_name (die, cu);
   int nv_bits = 0;
-  /* Load __nv_fp8_e5m2 and __nv_fp8_e4m3 structs as float */
-  if (name && (!strcmp(name, "__nv_fp8_e5m2") || !strcmp(name, "__nv_fp8_e4m3")))
+  /* Load Nvidia fp8 structs as float */
+  if (name
+      && (!strcmp (name, "__nv_fp8_e5m2")
+	  || !strcmp (name, "__nv_fp8_e4m3")
+	  || !strcmp (name, "__nv_fp8_e8m0")))
     nv_bits = 8;
   /* Load __half and __nv_bfloat16 structs as float */
   if (name && (!strcmp(name, "__half") || !strcmp(name, "__nv_bfloat16")))
@@ -15013,8 +15016,12 @@ process_structure_scope (struct die_info *die, struct dwarf2_cu *cu)
 
 #ifdef NVIDIA_CUDA_GDB
   const char *type_name = type->name ();
-  if (type_name && (!strcmp (type_name, "__half") || !strcmp(type_name, "__nv_bfloat16")
-		    || !strcmp(type_name, "__nv_fp8_e5m2") || !strcmp(type_name, "__nv_fp8_e4m3")))
+  if (type_name
+      && (!strcmp (type_name, "__half")
+	  || !strcmp (type_name, "__nv_bfloat16")
+	  || !strcmp (type_name, "__nv_fp8_e5m2")
+	  || !strcmp (type_name, "__nv_fp8_e4m3")
+	  || !strcmp (type_name, "__nv_fp8_e8m0")))
     return;
 #endif
   bool has_template_parameters = false;

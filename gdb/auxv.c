@@ -358,7 +358,15 @@ invalidate_auxv_cache (void)
 }
 
 /* See auxv.h.  */
-
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+/* CUDA: Changed this slightly from upstream QNX to provide better encapsulation. */
+gdb::optional<gdb::byte_vector>&
+qnx_get_auxv_data (struct inferior *inf)
+{
+  auxv_info *info = auxv_inferior_data.emplace (inf);
+  return info->data;
+}
+#endif
 gdb::optional<gdb::byte_vector>
 target_read_auxv ()
 {
@@ -510,15 +518,17 @@ default_print_auxv_entry (struct gdbarch *gdbarch, struct ui_file *file,
 	   AUXV_FORMAT_HEX);
       TAG (AT_L1D_CACHESHAPE, _("L1 Data cache information"), AUXV_FORMAT_HEX);
       TAG (AT_L1D_CACHESIZE, _("L1 Data cache size"), AUXV_FORMAT_HEX);
+#ifndef __QNXTARGET__
       TAG (AT_L1D_CACHEGEOMETRY, _("L1 Data cache geometry"),
 	   AUXV_FORMAT_HEX);
+#endif
       TAG (AT_L2_CACHESHAPE, _("L2 cache information"), AUXV_FORMAT_HEX);
+#ifndef __QNXTARGET__
       TAG (AT_L2_CACHESIZE, _("L2 cache size"), AUXV_FORMAT_HEX);
-#if defined(NVIDIA_CUDA_GDB) && !defined(__QNXTARGET__)
       TAG (AT_L2_CACHEGEOMETRY, _("L2 cache geometry"), AUXV_FORMAT_HEX);
 #endif
       TAG (AT_L3_CACHESHAPE, _("L3 cache information"), AUXV_FORMAT_HEX);
-#if defined(NVIDIA_CUDA_GDB) && !defined(__QNXTARGET__)
+#ifndef __QNXTARGET__
       TAG (AT_L3_CACHESIZE, _("L3 cache size"), AUXV_FORMAT_HEX);
       TAG (AT_L3_CACHEGEOMETRY, _("L3 cache geometry"), AUXV_FORMAT_HEX);
 #endif
@@ -560,16 +570,13 @@ default_print_auxv_entry (struct gdbarch *gdbarch, struct ui_file *file,
 	   AUXV_FORMAT_HEX);
       TAG (AT_SUN_CAP_HW2, _("Machine-dependent CPU capability hints 2"),
 	   AUXV_FORMAT_HEX);
-#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
-#undef TAG
-#define TAG(tag, nme, text, kind) \
-      case tag: name = nme; description = text; format = kind; break
-      TAG (45, "AT_INTP_DEVICE", _("QNX Extension"), AUXV_FORMAT_HEX);
-      TAG (46, "AT_INTP_INODE", _("QNX Extension"), AUXV_FORMAT_HEX);
-      TAG (47, "AT_EXEFILE", _("QNX Extension"), AUXV_FORMAT_HEX);
-      TAG (48, "AT_LIBPATH", _("QNX Extension"), AUXV_FORMAT_HEX);
-      TAG (49, "AT_DATA", _("QNX Extension"), AUXV_FORMAT_HEX);
-#undef TAG
+#ifdef __QNXTARGET__
+      TAG (AT_FREE_STACK, _("QNX Extension"), AUXV_FORMAT_HEX);
+      TAG (AT_INTP_DEVICE, _("QNX Extension"), AUXV_FORMAT_HEX);
+      TAG (AT_INTP_INODE, _("QNX Extension"), AUXV_FORMAT_HEX);
+      TAG (AT_EXEFILE, _("QNX Extension"), AUXV_FORMAT_HEX);
+      TAG (AT_LIBPATH, _("QNX Extension"), AUXV_FORMAT_HEX);
+      TAG (AT_DATA, _("QNX Extension"), AUXV_FORMAT_HEX);
 #endif
     }
 

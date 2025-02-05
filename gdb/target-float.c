@@ -355,6 +355,11 @@ floatformat_is_negative (const struct floatformat *fmt,
   gdb_assert (fmt->totalsize
 	      <= FLOATFORMAT_LARGEST_BYTES * FLOATFORMAT_CHAR_BIT);
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Handle FMT without a sign bit. */
+  if (fmt->sign_start == fmt->exp_start)
+    return 0;
+#endif
   /* An IBM long double (a two element array of double) always takes the
      sign of the first double.  */
   if (fmt->split_half)
@@ -772,7 +777,12 @@ host_float_ops<T>::from_target (const struct floatformat *fmt,
     }
 
   /* Negate it if negative.  */
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Handle fmt without a sign bit. */
+  if ((fmt->sign_start != fmt->exp_start) && get_field (ufrom, order, fmt->totalsize, fmt->sign_start, 1))
+#else
   if (get_field (ufrom, order, fmt->totalsize, fmt->sign_start, 1))
+#endif
     dto = -dto;
   *to = dto;
 }
@@ -869,7 +879,12 @@ host_float_ops<T>::to_target (const struct floatformat *fmt,
     }
 
   /* If negative, set the sign bit.  */
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Handle fmt without a sign bit. */
+  if ((fmt->sign_start != fmt->exp_start) && dfrom < 0)
+#else
   if (dfrom < 0)
+#endif
     {
       put_field (uto, order, fmt->totalsize, fmt->sign_start, 1, 1);
       dfrom = -dfrom;
@@ -1380,7 +1395,12 @@ mpfr_float_ops::from_target (const struct floatformat *fmt,
     }
 
   /* Negate it if negative.  */
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Handle fmt without a sign bit. */
+  if ((fmt->sign_start != fmt->exp_start) && get_field (from, order, fmt->totalsize, fmt->sign_start, 1))
+#else
   if (get_field (from, order, fmt->totalsize, fmt->sign_start, 1))
+#endif
     mpfr_neg (to.val, to.val, MPFR_RNDN);
 }
 
@@ -1447,7 +1467,12 @@ mpfr_float_ops::to_target (const struct floatformat *fmt,
     }
 
   /* If negative, set the sign bit.  */
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Handle fmt without a sign bit. */
+  if ((fmt->sign_start != fmt->exp_start) && mpfr_sgn (tmp.val) < 0)
+#else
   if (mpfr_sgn (tmp.val) < 0)
+#endif
     {
       put_field (to, order, fmt->totalsize, fmt->sign_start, 1, 1);
       mpfr_neg (tmp.val, tmp.val, MPFR_RNDN);

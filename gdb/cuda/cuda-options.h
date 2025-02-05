@@ -19,10 +19,7 @@
 #ifndef _CUDA_OPTIONS_H
 #define _CUDA_OPTIONS_H 1
 
-#include "cudadebugger.h"
 #include "cuda-tdep.h"
-
-void cuda_options_initialize (void);
 
 bool cuda_options_debug_general (void);
 bool cuda_options_debug_notifications (void);

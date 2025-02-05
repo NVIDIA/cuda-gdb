@@ -74,15 +74,25 @@ static_assert (both.lwp () == 2, "both's lwp is right");
 /* Verify tid_p.  */
 
 static_assert (!pid.tid_p (), "pid's tid_p is right");
+#if defined(NVIDIA_CUDA_GDB) && !defined(__QNXTARGET__)
+static_assert (lwp.tid_p (), "lwp's tid_p is right");
+static_assert (!tid.tid_p (), "tid's tid_p is right");
+#else
 static_assert (!lwp.tid_p (), "lwp's tid_p is right");
 static_assert (tid.tid_p (), "tid's tid_p is right");
+#endif
 static_assert (both.tid_p (), "both's tid_p is right");
 
 /* Verify tid.  */
 
 static_assert (pid.tid () == 0, "pid's tid is right");
+#if defined(NVIDIA_CUDA_GDB) && !defined(__QNXTARGET__)
+static_assert (lwp.tid () == 2, "lwp's tid is right");
+static_assert (tid.tid () == 0, "tid's tid is right");
+#else
 static_assert (lwp.tid () == 0, "lwp's tid is right");
 static_assert (tid.tid () == 2, "tid's tid is right");
+#endif
 static_assert (both.tid () == 2, "both's tid is right");
 
 /* Verify is_pid.  */

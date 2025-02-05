@@ -306,10 +306,14 @@ gdb_signal_from_host (int hostsig)
     return GDB_SIGNAL_PRIO;
 #endif
 
-#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+#ifdef __QNXTARGET__
 #if defined (SIGSELECT)
   if (hostsig == SIGSELECT)
     return GDB_SIGNAL_SELECT;
+#endif
+#if defined (SIGDOOM)
+  if (hostsig == SIGDOOM)
+    return GDB_SIGNAL_DOOM;
 #endif
 #endif
 
@@ -570,10 +574,14 @@ do_gdb_signal_to_host (enum gdb_signal oursig,
       return SIGPRIO;
 #endif
 
-#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+#ifdef __QNXTARGET__
 #if defined (SIGSELECT)
     case GDB_SIGNAL_SELECT:
       return SIGSELECT;
+#endif
+#if defined (SIGDOOM)
+    case GDB_SIGNAL_DOOM:
+      return SIGDOOM;
 #endif
 #endif
 

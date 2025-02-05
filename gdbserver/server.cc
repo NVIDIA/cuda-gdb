@@ -4186,7 +4186,8 @@ cuda_final_cleanup (void)
 int
 main (int argc, char *argv[])
 {
-#if defined(NVIDIA_CUDA_GDB) && !defined(__QNXHOST__)
+#if defined(NVIDIA_CUDA_GDB)
+#if !defined(__QNXHOST__)
   /* For QNX cuda_debugging_enabled is only set in captured_main.
    * Exceptions thrown there will be caught by captured_main try/catch
    * block.  */
@@ -4195,6 +4196,21 @@ main (int argc, char *argv[])
       warning("CUDA debugging cannot be enabled, exiting");
       return -1;
     }
+
+  /* We use the gdb initializers for some of the CUDA sources we share between
+   * gdb and gdbserver. See gdb/make-init-c for more info. There is no
+   * equivalent concept for gdbserver today. We need to explicitly call the
+   * intializers once per execution. */
+  static bool cuda_called_initializers = false;
+  extern void _initialize_cuda_notification ();
+  extern void _initialize_cuda_utils ();
+  if (!cuda_called_initializers)
+    {
+      cuda_called_initializers = true;
+      _initialize_cuda_notification ();
+      _initialize_cuda_utils ();
+    }
+#endif
 #endif
 
   try

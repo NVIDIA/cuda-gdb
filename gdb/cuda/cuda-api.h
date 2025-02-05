@@ -23,6 +23,10 @@
 #include "defs.h"
 #endif
 
+#include <array>
+#include <chrono>
+#include <type_traits>
+
 #include "cudadebugger.h"
 
 typedef enum {
@@ -55,6 +59,16 @@ public:
     uint32_t m_revision;
 };
 
+// Profiling interface
+struct cuda_api_stat
+{
+  std::string name;
+  uint32_t times_called;
+  std::chrono::microseconds total_time;
+  std::chrono::microseconds min_time;
+  std::chrono::microseconds max_time;
+};
+
 class cuda_debugapi final
 {
 public:
@@ -65,39 +79,39 @@ public:
   ~cuda_debugapi () = default;
 
   static void set_api(CUDBGAPI api)
-  { m_instance.m_cudbgAPI = api; }
+  { s_instance.m_cudbgAPI = api; }
 
   static void set_api_version (const cuda_debugapi_version& api_version)
-  { m_instance.m_api_version = api_version; }
+  { s_instance.m_api_version = api_version; }
     
   static void set_api_version (uint32_t major, uint32_t minor, uint32_t revision)
-  { m_instance.m_api_version = cuda_debugapi_version (major, minor, revision); }
+  { s_instance.m_api_version = cuda_debugapi_version (major, minor, revision); }
     
   static const cuda_debugapi_version& api_version ()
-  { return m_instance.m_api_version; }
+  { return s_instance.m_api_version; }
 
   static int  get_api_ptid ()
-  { return m_instance.m_api_ptid; }
+  { return s_instance.m_api_ptid; }
 
   static bool api_state_initializing ()
-  { return m_instance.m_api_state == CUDA_API_STATE_INITIALIZING; }
+  { return s_instance.m_api_state == CUDA_API_STATE_INITIALIZING; }
 
   static bool api_state_initialized ()
-  { return m_instance.m_api_state == CUDA_API_STATE_INITIALIZED; }
+  { return s_instance.m_api_state == CUDA_API_STATE_INITIALIZED; }
 
   static bool api_state_uninitialized ()
-  { return m_instance.m_api_state == CUDA_API_STATE_UNINITIALIZED; }
+  { return s_instance.m_api_state == CUDA_API_STATE_UNINITIALIZED; }
 
   // Attach support
   static void set_attach_state (cuda_attach_state_t state);
   
   static cuda_attach_state_t get_attach_state ()
-  { return m_instance.m_attach_state; }
+  { return s_instance.m_attach_state; }
 
   static bool attach_or_detach_in_progress ()
   {
-    return (m_instance.m_attach_state == CUDA_ATTACH_STATE_DETACHING) ||
-      (m_instance.m_attach_state == CUDA_ATTACH_STATE_IN_PROGRESS);
+    return (s_instance.m_attach_state == CUDA_ATTACH_STATE_DETACHING) ||
+      (s_instance.m_attach_state == CUDA_ATTACH_STATE_IN_PROGRESS);
   }
 
   static void clear_state ();
@@ -139,7 +153,8 @@ public:
 
   static void read_error_pc (uint32_t dev, uint32_t sm, uint32_t wp, uint64_t *pc, bool* valid);
   static void read_warp_state (uint32_t dev, uint32_t sm, uint32_t wp, CUDBGWarpState *state);
-
+  static void read_warp_resources (uint32_t dev, uint32_t sm, uint32_t wp, CUDBGWarpResources *resources);
+  
   static void read_grid_id (uint32_t dev, uint32_t sm, uint32_t wp, uint64_t *grid_id);
   static void read_cluster_idx (uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 *clusterIdx);
   static void read_block_idx (uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 *blockIdx);
@@ -179,7 +194,7 @@ public:
 
   // Grid properties
   static void get_grid_dim (uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 *grid_dim);
-  static void get_cluster_dim (uint32_t dev, uint64_t gridId64, CuDim3 *cluster_dim);
+  static void get_cluster_dim (uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 *cluster_dim);
   static void get_block_dim (uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 *block_dim);
   static void get_blocking (uint32_t dev, uint32_t sm, uint32_t wp, bool *blocking);
 
@@ -240,6 +255,15 @@ public:
   // Internal debugging commands
   static bool execute_internal_command (const char *command, char *resultBuffer, uint32_t sizeInBytes);
 
+  static bool get_cluster_exception_target_block (uint32_t dev, uint32_t sm,
+						  uint32_t wp,
+						  CuDim3 *blockIdx,
+						  bool *blockIdxValid);
+
+  static void for_each_api_stat (std::function<void(const cuda_api_stat&)> func);
+
+  static void reset_api_stat ();
+
 private:
   // Everyone else can use the getters
   typedef enum
@@ -255,7 +279,7 @@ private:
   static void cuda_api_print_api_call_result (const char *function, CUDBGResult res);
 
   // The singleton instance
-  static cuda_debugapi m_instance;
+  static cuda_debugapi s_instance;
 
   cuda_debugapi_version m_api_version;
   CUDBGAPI m_cudbgAPI;
@@ -263,6 +287,14 @@ private:
   int  m_api_ptid;
   cuda_api_state_t m_api_state;
   cuda_attach_state_t m_attach_state;
+
+  // Profiling interface
+  // Ensure we can use offsetof on CUDBGAPI. This assumes that the struct
+  // CUDBGAPI_st will only have function pointers and no other data members.
+  gdb_static_assert (
+      std::is_trivial<std::remove_pointer<CUDBGAPI>::type>::value == true);
+  static std::array<cuda_api_stat, sizeof (*m_cudbgAPI) / sizeof (uintptr_t)>
+      s_api_call_stats;
 };
 
 const char* cuda_api_mask_string(const cuda_api_warpmask* mask);

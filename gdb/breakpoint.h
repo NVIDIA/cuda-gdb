@@ -43,6 +43,7 @@
 #include "target/waitstatus.h"
 #ifdef NVIDIA_CUDA_GDB
 #include "cuda/cuda-coords.h"
+#include "cuda/cuda-modules.h"
 struct value;
 #endif
 
@@ -552,7 +553,7 @@ public:
   const struct objfile *objfile = NULL;
 #ifdef NVIDIA_CUDA_GDB
   /* CUDA - breakpoints */
-  elf_image_t    cuda_elf_image = NULL;          /* ELF image of the address */
+  cuda_module* m_cuda_module = NULL;
   /* CUDA - device breakpoints */
   /* Once the location has been resolved to a CUDA address, remember that.
      Used to avoid disabling the breakpoint when the ELF image
@@ -1974,11 +1975,11 @@ struct breakpoint *cuda_find_autostep_by_addr (CORE_ADDR address);
 /* CUDA - breakpoint */
 bool cuda_eval_thread_at_breakpoint (uint64_t pc, const cuda_coords& c, int b_number);
 /* CUDA - auto breakpoints */
-void cuda_auto_breakpoints_forced_add_location (elf_image_t elf_image, CORE_ADDR addr);
-void cuda_auto_breakpoints_remove_locations (elf_image_t elf_image);
+void cuda_auto_breakpoints_forced_add_location (cuda_module* module, CORE_ADDR addr);
+void cuda_auto_breakpoints_remove_locations (cuda_module* module);
 void cuda_auto_breakpoints_update (void);
 void cuda_auto_breakpoints_cleanup (void);
-void cuda_auto_breakpoints_event_add_break (elf_image_t elf_image, CORE_ADDR addr);
+void cuda_auto_breakpoints_event_add_break (cuda_module* module, CORE_ADDR addr);
 extern void cuda_delete_command (const char *arg, int from_tty);
 #endif
 /* Command element for the 'commands' command.  */

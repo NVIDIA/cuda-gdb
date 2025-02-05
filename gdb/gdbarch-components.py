@@ -196,6 +196,23 @@ Each format describes both the big and little endian layouts (if
 useful).
 """,
     type="int",
+    name="nv_fp8_e8m0_bit",
+    predefault="TARGET_CHAR_BIT",
+    invalid=False,
+    cudaonly=True,
+)
+
+Value(
+    type="const struct floatformat **",
+    name="nv_fp8_e8m0_format",
+    postdefault="floatformats_nv_fp8_e8m0",
+    invalid=True,
+    printer="pformat (gdbarch, gdbarch->nv_fp8_e8m0_format)",
+    cudaonly=True,
+)
+
+Value(
+    type="int",
     name="nv_fp8_e5m2_bit",
     predefault="TARGET_CHAR_BIT",
     invalid=False,

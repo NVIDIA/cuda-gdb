@@ -36,6 +36,7 @@
 #ifdef NVIDIA_CUDA_GDB
 #include "cuda/cuda-utils.h"
 #include "cuda/cuda-tdep.h"
+#include "complaints.h"
 #endif
 
 /* This holds gdbarch-specific types used by the DWARF expression
@@ -992,6 +993,17 @@ dwarf_expr_context::fetch_result (struct type *type, struct type *subobj_type,
 		gdb_regnum = cuda_reg_to_regnum_extrapolated (f_arch, dwarf_regnum);
 		if (cuda_is_regnum_valid (f_arch, gdb_regnum))
 		  is_extrapolated = true;
+		else
+		  {
+		    // gdb_regnum is still invalid, complain and return optimized out indication
+		    complaint ("Unknown DWARF CUDA register 0x%08x", dwarf_regnum);
+
+		    value *tmp = allocate_value (subobj_type);
+		    value_contents_copy (tmp, 0, retval, 0,
+					 subobj_type->length ());
+		    retval = tmp;
+		    break;
+		  }
 	      }
 #endif
 	    retval = value_from_register (subobj_type, gdb_regnum,
@@ -1735,17 +1747,24 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 
 #ifdef NVIDIA_CUDA_GDB
 	  /* CUDA: PTX virtual registers are encoded as strings (e.g. "\04r%")
-	   * which will overflow an int. To work around this, we create an 
-	   * internal cache of dwarf2 regnum and obtain the offset of the string
-	   * or'ed with CUDA_PTX_VIRTUAL_TAG to be out-of-range of a normal 
-	   * register set size on cuda architectures.
+	   * which will overflow an int. To work around this, we create an
+	   * internal cache of dwarf2 regnum and obtain the offset of the
+	   * string or'ed with CUDA_PTX_VIRTUAL_TAG to be out-of-range of a
+	   * normal register set size on cuda architectures.
 	   */
-	  if (cuda_is_cuda_gdbarch (arch) &&
-	      reg > 0xff)
+	  if (cuda_is_cuda_gdbarch (arch) && reg > 0xff)
 	    {
-	      /* Check if this is a ptx virtual address string and convert
+	      /* Check if this is a ptx virtual register string and convert
 	       * to identifier via cuda-tdep. */
-	      reg = cuda_check_dwarf2_reg_ptx_virtual_register (reg);
+	      uint64_t new_reg
+		  = cuda_check_dwarf2_reg_ptx_virtual_register (reg);
+	      /* Also check if this is an ascii encoded register string and
+		 convert to identifier. Only do this if we didn't detect a ptx
+		 virtual register string. */
+	      if (new_reg == reg)
+		new_reg
+		    = cuda_check_dwarf2_reg_ascii_encoded_register (arch, reg);
+	      reg = new_reg;
 	    }
 #endif
 	  result = reg;
@@ -1843,19 +1862,26 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 	  {
 	    op_ptr = safe_read_uleb128 (op_ptr, op_end, &reg);
 #ifdef NVIDIA_CUDA_GDB
-	  /* CUDA: PTX virtual registers are encoded as strings (e.g. "\04r%")
-	   * which will overflow an int. To work around this, we create an 
-	   * internal cache of dwarf2 regnum and obtain the offset of the string
-	   * or'ed with CUDA_PTX_VIRTUAL_TAG to be out-of-range of a normal 
-	   * register set size on cuda architectures.
-	   */
-	  if (cuda_is_cuda_gdbarch (arch) &&
-	      reg > 0xff)
-	    {
-	      /* Check if this is a ptx virtual address string and convert
-	       * to identifier via cuda-tdep. */
-	      reg = cuda_check_dwarf2_reg_ptx_virtual_register (reg);
-	    }
+	    /* CUDA: PTX virtual registers are encoded as strings (e.g.
+	     * "\04r%") which will overflow an int. To work around this, we
+	     * create an internal cache of dwarf2 regnum and obtain the offset
+	     * of the string or'ed with CUDA_PTX_VIRTUAL_TAG to be out-of-range
+	     * of a normal register set size on cuda architectures.
+	     */
+	    if (cuda_is_cuda_gdbarch (arch) && reg > 0xff)
+	      {
+		/* Check if this is a ptx virtual register string and convert
+		 * to identifier via cuda-tdep. */
+		uint64_t new_reg
+		    = cuda_check_dwarf2_reg_ptx_virtual_register (reg);
+		/* Also check if this is an ascii encoded register string and
+		   convert to identifier. Only do this if we didn't detect a
+		   ptx virtual register string. */
+		if (new_reg == reg)
+		  new_reg = cuda_check_dwarf2_reg_ascii_encoded_register (arch,
+									  reg);
+		reg = new_reg;
+	      }
 #endif
 	    op_ptr = safe_read_sleb128 (op_ptr, op_end, &offset);
 	    ensure_have_frame (this->m_frame, "DW_OP_bregx");

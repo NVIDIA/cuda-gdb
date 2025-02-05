@@ -137,7 +137,7 @@ write_gcore_file (bfd *obfd)
 /* gcore_command -- implements the 'gcore' command.
    Generate a core file from the inferior process.  */
 
-#if 0
+#ifdef NVIDIA_CUDA_GDB
 static std::string help_msg;
 
 struct gcore_params
@@ -853,7 +853,7 @@ _initialize_gcore ()
 {
   cmd_list_element *generate_core_file_cmd;
 
-#if 0
+#ifdef NVIDIA_CUDA_GDB
   const auto def_grp = make_gcore_opt_def_group(nullptr);
   help_msg = build_help(_("\
 Save a core file with the current state of the debugged process.\n\

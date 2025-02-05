@@ -95,6 +95,9 @@ public:
   {
     return false;
   }
+
+private:
+  void core_cleanup ();
 };
 
 CudaCore *cuda_core_target::m_cuda_core = nullptr;
@@ -135,6 +138,19 @@ cuda_core_target::fetch_registers (struct regcache *regcache, int regno)
 void
 cuda_core_fetch_registers (struct regcache *regcache, int regno)
 {
+  if (!cuda_is_cuda_gdbarch(regcache->arch ()) && regno >= 0)
+  {
+    /* Wrong architecture, this is likely the fake host thread
+       being "restored" and we're "reading" its stop PC.
+       cuda_core_target doesn't support cross-arch reg fetch,
+       unlike its counterpart cuda_nat_linux which can pass it
+       to its parent(native target)'s method.
+       Just invalidate the regno cache as REG_UNAVAILABLE.
+       Note: This won't work if all regs are requested (-1) */
+    regcache->raw_supply(regno, nullptr);
+    return;
+  }
+
   if (!cuda_current_focus::isDevice ())
     return;
 
@@ -250,10 +266,10 @@ cuda_core_initialize_events_exceptions (void)
 	  /* Set the current coordinates context to current */
 	  kernel_t kernel
 	      = kernels_find_kernel_by_kernel_id (c.logical ().kernelId ());
-	  context_t ctx
-	      = kernel ? kernel_get_context (kernel) : get_current_context ();
+	  auto ctx
+	      = kernel ? kernel_get_context (kernel) : cuda_state::current_context ();
 	  if (ctx != NULL)
-	    set_current_context (ctx);
+	    cuda_state::set_current_context (ctx);
 	}
       /* Print the exception */
       ex.printMessage ();
@@ -274,10 +290,10 @@ cuda_core_initialize_events_exceptions (void)
 	  /* Set the current coordinates context to current */
 	  kernel_t kernel
 	      = kernels_find_kernel_by_kernel_id (it->logical ().kernelId ());
-	  context_t ctx
-	      = kernel ? kernel_get_context (kernel) : get_current_context ();
+	  auto ctx
+	      = kernel ? kernel_get_context (kernel) : cuda_state::current_context ();
 	  if (ctx != NULL)
-	    set_current_context (ctx);
+	    cuda_state::set_current_context (ctx);
 
 	  cuda_set_signo (GDB_SIGNAL_TRAP);
 	  gdb_printf (_ ("Program terminated with signal %s, %s.\n"),
@@ -401,14 +417,29 @@ cuda_core_target_open (const char *filename, int from_tty)
 void
 cuda_core_target::close ()
 {
+  /* core_open will call detach and close but run_command will not call detach,
+     hence we need to call cleanup here as well. */
+  this->core_cleanup ();
+  cuda_core_free ();
+
+  /* If close got called, no more refs are pointing to this object. */
+  delete this;
+}
+
+void
+cuda_core_target::core_cleanup ()
+{
   switch_to_no_thread ();
   exit_inferior_silent (current_inferior ());
-  cuda_core_free ();
+
+  clear_solib ();
+  current_program_space->cbfd.reset (nullptr);
 }
 
 void
 cuda_core_target::detach (inferior *inf, int from_tty)
 {
+  this->core_cleanup ();
   inf->unpush_target (this);
   registers_changed ();
   reinit_frame_cache ();

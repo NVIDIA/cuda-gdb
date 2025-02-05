@@ -228,6 +228,8 @@ cv_update_hw_vars (void)
       cv_set_uint32_var ("cuda_num_lanes", CUDA_INVALID);
       cv_set_uint32_var ("cuda_num_registers", CUDA_INVALID);
       cv_set_uint32_var ("cuda_num_uregisters", CUDA_INVALID);
+      cv_set_uint32_var ("cuda_num_registers_allocated", CUDA_INVALID);
+      cv_set_uint32_var ("cuda_shared_memory_size", CUDA_INVALID);
       return;
     }
 
@@ -242,6 +244,10 @@ cv_update_hw_vars (void)
                      cuda_state::device_get_num_registers (c.dev ()));
   cv_set_uint32_var ("cuda_num_uregisters",
                      cuda_state::device_get_num_uregisters (c.dev ()));
+  cv_set_uint32_var ("cuda_num_registers_allocated",
+        	     cuda_state::warp_registers_allocated (c.dev (), c.sm (), c.wp ()));
+  cv_set_uint32_var ("cuda_shared_memory_size",
+        	     cuda_state::warp_shared_mem_size (c.dev (), c.sm (), c.wp ()));
 }
 
 static void

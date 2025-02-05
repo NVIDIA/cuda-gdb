@@ -2639,10 +2639,6 @@ attach_post_wait (int from_tty, enum attach_post_wait_mode mode)
       if (deprecated_attach_hook)
 	deprecated_attach_hook ();
     }
-#ifdef NVIDIA_CUDA_GDB
-  /* CUDA - attach */
-  cuda_nat_attach ();
-#endif
 }
 
 /* "attach" command entry point.  Takes a program started up outside

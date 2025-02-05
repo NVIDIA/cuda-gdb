@@ -25,6 +25,11 @@
  * the declaration of wcwidth().
  */
 
+/* TODO: why does the cross g++ not support restrict? */
+#ifdef __QNXTARGET__
+# define restrict __restrict__
+#endif
+
 #if __GNUC__ >= 3
 @PRAGMA_SYSTEM_HEADER@
 #endif

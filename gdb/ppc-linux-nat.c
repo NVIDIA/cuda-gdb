@@ -17,11 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-/* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2024 NVIDIA Corporation
-   Modified from the original GDB file referenced above by the CUDA-GDB
-   team at NVIDIA <cudatools@nvidia.com>. */
-
 #include "defs.h"
 #include "frame.h"
 #include "inferior.h"
@@ -60,10 +55,6 @@
 #include "nat/ppc-linux.h"
 #include "linux-tdep.h"
 #include "expop.h"
-
-#ifdef NVIDIA_CUDA_GDB
-#include "cuda/cuda-linux-nat-template.h"
-#endif
 
 /* Similarly for the hardware watchpoint support.  These requests are used
    when the PowerPC HWDEBUG ptrace interface is not available.  */
@@ -499,11 +490,7 @@ struct ppc_linux_process_info
   gdb::optional<long> requested_wp_val;
 };
 
-#ifdef NVIDIA_CUDA_GDB
-struct ppc_linux_nat_target : public linux_nat_target
-#else
 struct ppc_linux_nat_target final : public linux_nat_target
-#endif
 {
   /* Add our register access methods.  */
   void fetch_registers (struct regcache *, int) override;
@@ -639,9 +626,7 @@ private:
 		      ptid_hash> m_installed_hw_bps;
 };
 
-#ifndef NVIDIA_CUDA_GDB
 static ppc_linux_nat_target the_ppc_linux_nat_target;
-#endif
 
 /* *INDENT-OFF* */
 /* registers layout, as presented by the ptrace interface:
@@ -3231,9 +3216,6 @@ ppc_linux_nat_target::get_arch_lwp_info (struct lwp_info *lp)
   return lwp_arch_private_info (lp);
 }
 
-#ifdef NVIDIA_CUDA_GDB
-static cuda_nat_linux<ppc_linux_nat_target> the_ppc_linux_nat_target;
-#endif
 void _initialize_ppc_linux_nat ();
 void
 _initialize_ppc_linux_nat ()

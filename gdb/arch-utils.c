@@ -303,11 +303,13 @@ default_floatformat_for_type (struct gdbarch *gdbarch,
       && len == gdbarch_bfloat16_bit (gdbarch))
     format = gdbarch_bfloat16_format (gdbarch);
 #ifdef NVIDIA_CUDA_GDB
-  /* fp8 are the same length for both e5m2 and e4m3 */
-  else if (len == gdbarch_nv_fp8_e5m2_bit (gdbarch))
+  /* fp8 are the same length for all variants */
+  else if (len == gdbarch_nv_fp8_e8m0_bit (gdbarch))
     {
       /* CUDA - nv_fp8 support */
-      if (name && !strcmp(name, "__nv_fp8_e5m2"))
+      if (name && !strcmp(name, "__nv_fp8_e8m0"))
+	format = gdbarch_nv_fp8_e8m0_format (gdbarch);
+      else if (name && !strcmp(name, "__nv_fp8_e5m2"))
 	format = gdbarch_nv_fp8_e5m2_format (gdbarch);
       else if (name && !strcmp(name, "__nv_fp8_e4m3"))
 	format = gdbarch_nv_fp8_e4m3_format (gdbarch);

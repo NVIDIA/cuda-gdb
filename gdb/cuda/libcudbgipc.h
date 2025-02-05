@@ -114,31 +114,7 @@ typedef struct {
     double max_time;
 } CUDBGIPCStat_t;
 
-void cudbgipcStatsCollect (uint32_t, const char *, struct timespec *, struct timespec *);
+void cudbgipcStatsClear (void);
 const CUDBGIPCStat_t *cudbgipcGetProfileStat(uint32_t);
-
-extern struct timespec cudbgipc_profile_start;
-
-extern bool cuda_options_statistics_collection_enabled (void);
-
-#define CUDBG_IPC_PROFILE_START()                       \
-if (cuda_options_statistics_collection_enabled())       \
- {                                                      \
-  struct timeval tv;                                    \
-  gettimeofday (&tv, NULL);                             \
-  cudbgipc_profile_start.tv_sec = tv.tv_sec;            \
-  cudbgipc_profile_start.tv_nsec = tv.tv_usec*1000;     \
-} while (0)
-
-#define CUDBG_IPC_PROFILE_END(id,name)                                     \
-if (cuda_options_statistics_collection_enabled())                          \
-{                                                                          \
-  struct timeval tv;                                                       \
-  struct timespec profile_stop;                                            \
-  gettimeofday (&tv, NULL);                                                \
-  profile_stop.tv_sec = tv.tv_sec;                                         \
-  profile_stop.tv_nsec = tv.tv_usec*1000;                                  \
-  cudbgipcStatsCollect (id, name, &cudbgipc_profile_start, &profile_stop); \
-} while (0)
 
 #endif

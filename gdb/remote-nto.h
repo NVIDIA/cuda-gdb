@@ -16,31 +16,30 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+/* CUDA added interfaces to the nto target */
+
 #ifndef REMOTE_NTO_H
 #define REMOTE_NTO_H
+#ifdef NVIDIA_CUDA_GDB
 
+#include "remote.h"
 #include "nto-share/dsmsgs.h"
-#include "gdbsupport/byte-vector.h"
-#include <stdbool.h>
 
-typedef union
-{
-  unsigned char buf[DS_DATA_MAX_SIZE];
-  DSMsg_union_t pkt;
-  TSMsg_text_t text;
-} DScomm_t;
+/* Return true if TARGET is a qnx target, otherwise,
+   return false.  */
+extern bool is_qnx_target (process_stratum_target *target);
 
+/* Send BUF to the current remote target.  If BUF points to an empty
+   string, either zero length, or the first character is the null
+   character, then an error is thrown.  If the current target is not a
+   remote target then an error is thrown.
 
-/* Compatibility functions for the CUDA remote I/O */
-struct remote_target;
+   Calls CALLBACKS->sending() just before the packet is sent to the remote
+   target, and calls CALLBACKS->received() with the reply once this is
+   received from the remote target.  */
 
-int
-qnx_getpkt (remote_target *ops, gdb::char_vector* buf, int forever);
-int
-qnx_getpkt_sane (gdb::char_vector* buf, int forever);
-int
-qnx_putpkt (remote_target *ops, const char *buf);
-int
-qnx_putpkt_binary (const char *buf, int cnt);
+extern void send_qnx_packet (gdb::array_view<const char> &buf,
+			     send_remote_packet_callbacks *callbacks);
 
+#endif
 #endif

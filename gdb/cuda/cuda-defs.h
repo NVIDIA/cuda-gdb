@@ -23,23 +23,13 @@
 
 /* Early declarations to avoid cyclic dependencies */
 
-struct context_st;
-struct contexts_st;
-struct elf_image_st;
 struct kernel_st;
-struct module_st;
-struct modules_st;
-struct regmap_st;
-
-typedef struct context_st *context_t;
-typedef struct contexts_st *contexts_t;
-typedef struct elf_image_st *elf_image_t;
 typedef struct kernel_st *kernel_t;
-typedef struct module_st *module_t;
-typedef struct modules_st *modules_t;
+
+struct regmap_st;
 typedef struct regmap_st *regmap_t;
+
 typedef uint64_t cuda_clock_t;
-typedef void *disasm_cache_t;
 
 extern const bool CACHED;
 #endif

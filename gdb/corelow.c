@@ -77,11 +77,7 @@ static const target_info core_target_info = {
 Specify the filename of the core file.")
 };
 
-#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
-class core_target : public process_stratum_target
-#else
 class core_target final : public process_stratum_target
-#endif
 {
 public:
   core_target ();

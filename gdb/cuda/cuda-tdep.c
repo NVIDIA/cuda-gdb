@@ -69,13 +69,13 @@
 #include "user-regs.h"
 #include "valprint.h"
 #include "value.h"
+#include "remote.h"
 
 #include "elf-bfd.h"
 
 #include "cuda-asm.h"
 #include "cuda-autostep.h"
 #include "cuda-context.h"
-#include "cuda-elf-image.h"
 #include "cuda-frame.h"
 #include "cuda-coord-set.h"
 #include "cuda-modules.h"
@@ -91,9 +91,6 @@
 #include "gdb_bfd.h"
 #include "mach-o.h"
 #include "self-bt.h"
-#ifdef __QNXTARGET__
-#include "remote-cuda.h"
-#endif /* __QNXTARDET__ */
 
 #define REGMAP_CLASS(x) (x >> 24)
 #define REGMAP_REG(x) (x & 0xffffff)
@@ -102,7 +99,6 @@
 /* FIXME: Move these to the arch struct! */
 CuDim3 gridDim = { 0, 0, 0 };
 CuDim3 blockDim = { 0, 0, 0 };
-bool cuda_remote = false;
 bool cuda_initialized = false;
 bool cuda_is_target_mourn_pending = false;
 static bool inferior_in_debug_mode = false;
@@ -360,6 +356,11 @@ cuda_breakpoint_hit_p (cuda_coords &coords)
 uint64_t
 cuda_check_dwarf2_reg_ptx_virtual_register (uint64_t dwarf2_reg)
 {
+  /* Ensure that the dwarf2_reg is greater than one character. Anything less
+   * would be an invalid ascii string. */
+  if (dwarf2_reg <= 0xff)
+    return dwarf2_reg;
+
   /* Convert the uleb128 to a string. The order of characters
    * has to be reversed in order to be read as a standard string. */
   uint64_t reg_copy = dwarf2_reg;
@@ -374,9 +375,13 @@ cuda_check_dwarf2_reg_ptx_virtual_register (uint64_t dwarf2_reg)
   raw_str.back () = '\0';
 
   /* Advance past any '\0' */
-  auto data_ptr = raw_str.data ();
-  while (*data_ptr == '\0')
+  auto data_ptr = raw_str.begin ();
+  while (*data_ptr == '\0' && data_ptr != raw_str.end ())
     ++data_ptr;
+
+  /* Early return if we have an empty string */
+  if (data_ptr == raw_str.end ())
+    return dwarf2_reg;
 
   /* Create the possible ptx virtual register string */
   std::string ptx_reg_str{ data_ptr };
@@ -408,6 +413,59 @@ cuda_check_dwarf2_reg_ptx_virtual_register (uint64_t dwarf2_reg)
           cuda_ptx_virtual_map[dwarf2_reg] = tag;
           dwarf2_reg = (uint64_t)tag;
         }
+    }
+
+  return dwarf2_reg;
+}
+
+/* Check if a dwarf2 register is encoded as an ascii register string.
+ * We look at the encoding to determine if it is.
+ * Example:
+ *                      as char[4]    as uint32_t
+ *   device reg R4 :        "\04R"     0x00257234
+ *   host reg  4    : "\0\0\0\004"     0x00000004
+ */
+uint64_t
+cuda_check_dwarf2_reg_ascii_encoded_register (struct gdbarch *gdbarch,
+					      uint64_t dwarf2_reg)
+{
+  /* Ensure that the dwarf2_reg is greater than one character. Anything less
+   * would be an invalid ascii string. */
+  if (dwarf2_reg <= 0xff)
+    return dwarf2_reg;
+
+  /* Convert the uleb128 to a string. The order of characters
+   * has to be reversed in order to be read as a standard string. */
+  uint64_t reg_copy = dwarf2_reg;
+  std::array<char, sizeof (uint64_t) + 1> raw_str;
+  for (auto i = 0; i < sizeof (uint64_t); ++i)
+    {
+      raw_str[sizeof (uint64_t) - i - 1] = reg_copy & 0xff;
+      reg_copy = reg_copy >> 8;
+    }
+
+  /* Null terminate the string */
+  raw_str.back () = '\0';
+
+  /* Advance past any '\0' */
+  auto data_ptr = raw_str.begin ();
+  while (*data_ptr == '\0' && data_ptr != raw_str.end ())
+    ++data_ptr;
+
+  /* Early return if we have an empty string */
+  if (data_ptr == raw_str.end ())
+    return dwarf2_reg;
+
+  /* Create the possible register string */
+  std::string reg_str{ data_ptr };
+
+  /* Is this an ascii encoded register? Today the compiler
+   * only supports regular registers which start with 'R'. */
+  if (reg_str[0] == 'R')
+    {
+      /* Convert to uint64_t and store in dwarf2_reg */
+      dwarf2_reg = user_reg_map_name_to_regnum (gdbarch, reg_str.c_str (),
+						reg_str.length ());
     }
 
   return dwarf2_reg;
@@ -505,49 +563,38 @@ static struct type *
 cuda_register_type (struct gdbarch *gdbarch, int regnum)
 {
   if (cuda_special_regnum_p (gdbarch, regnum))
-    return builtin_type (gdbarch)->builtin_int64;
+    return builtin_type (gdbarch)->builtin_uint64;
 
   if (cuda_pc_regnum_p (gdbarch, regnum)
       || cuda_error_pc_regnum_p (gdbarch, regnum))
     return builtin_type (gdbarch)->builtin_func_ptr;
 
-  return builtin_type (gdbarch)->builtin_int32;
+  return builtin_type (gdbarch)->builtin_uint32;
 }
 
 static regmap_t
 cuda_get_physical_register (const char *reg_name)
 {
-  uint64_t addr, virt_addr;
-  kernel_t kernel;
-  const char *func_name = NULL;
-  module_t module;
-  elf_image_t elf_image;
-  struct objfile *objfile;
-  regmap_t regmap = NULL;
-  struct symbol *symbol = NULL;
-  CORE_ADDR func_start;
-  frame_info_ptr frame = NULL;
-
   gdb_assert (cuda_current_focus::isDevice ());
 
-  frame = get_selected_frame (NULL);
-  virt_addr = get_frame_pc (frame);
+  auto frame = get_selected_frame (NULL);
+  auto virt_addr = get_frame_pc (frame);
 
-  kernel = cuda_current_focus::get ().logical ().kernel ();
-  module = kernel_get_module (kernel);
-  elf_image = module_get_elf_image (module);
-  objfile = cuda_elf_image_get_objfile (elf_image);
-  symbol = find_pc_function ((CORE_ADDR)virt_addr);
+  auto kernel = cuda_current_focus::get ().logical ().kernel ();
+  auto module = kernel_get_module (kernel);
 
+  auto symbol = find_pc_function ((CORE_ADDR)virt_addr);
   if (symbol)
     {
+      CORE_ADDR func_start;
+
       find_pc_partial_function (virt_addr, NULL, &func_start, NULL);
-      func_name = symbol->linkage_name ();
-      addr = virt_addr - func_start;
-      regmap = regmap_table_search (objfile, func_name, reg_name, addr);
+      auto func_name = symbol->linkage_name ();
+      auto addr = virt_addr - func_start;
+      return regmap_table_search (module->objfile (), func_name, reg_name, addr);
     }
 
-  return regmap;
+  return nullptr;
 }
 
 /*
@@ -1014,20 +1061,19 @@ cuda_print_insn (bfd_vma pc, disassemble_info *info)
   auto kernel = cuda_current_focus::get ().logical ().kernel ();
   gdb_assert (kernel);
 
-  module_t module = kernel_get_module (kernel);
+  auto module = kernel_get_module (kernel);
   gdb_assert (module);
 
-  auto disassembler = module_disassembler (module);
+  auto disassembler = module->disassembler ();
   gdb_assert (disassembler);
-  
-  std::string inst;
-  uint32_t inst_size;
-  auto found = disassembler->disassemble (pc, inst, inst_size);
-  if (!found)
+
+  const uint32_t inst_size = disassembler->insn_size ();
+  auto inst = disassembler->disassemble_instruction (pc);
+  if (!inst)
     info->fprintf_func (info->stream,
 			"Cannot disassemble instruction at pc 0x%lx", pc);
   else
-    info->fprintf_func (info->stream, "%s", inst.c_str ());
+    info->fprintf_func (info->stream, "%s", inst->to_string ().c_str ());
 
   return inst_size;
 }
@@ -1132,21 +1178,20 @@ cuda_is_bfd_version_call_abi (bfd *obfd)
 bool
 cuda_current_active_elf_image_uses_abi (void)
 {
-  kernel_t kernel;
-  module_t module;
-  elf_image_t elf_image;
-
-  if (!get_current_context ())
+  if (!cuda_state::current_context ())
     return false;
 
   if (!cuda_current_focus::isDevice ())
     return false;
 
-  kernel = cuda_current_focus::get ().logical ().kernel ();
-  module = kernel_get_module (kernel);
-  elf_image = module_get_elf_image (module);
-  gdb_assert (cuda_elf_image_is_loaded (elf_image));
-  return cuda_elf_image_uses_abi (elf_image);
+  auto kernel = cuda_current_focus::get ().logical ().kernel ();
+  gdb_assert (kernel);
+  
+  auto module = kernel_get_module (kernel);
+  gdb_assert (module);
+
+  gdb_assert (module->loaded ());
+  return module->uses_abi ();
 }
 
 /* CUDA - breakpoints */
@@ -1261,6 +1306,188 @@ cuda_get_last_driver_api_error_func_name (char **name)
   *name = func_name;
 }
 
+bool
+cuda_get_last_driver_api_error_source_name (std::string &source)
+{
+  if (cuda_debugapi::api_version ().m_revision < 147)
+    {
+      return false;
+    }
+
+  CORE_ADDR error_code_addr = cuda_get_symbol_address (
+      _STRING_ (CUDBG_REPORTED_DRIVER_API_ERROR_SOURCE));
+  if (!error_code_addr)
+    {
+      /* UMD revision does not match Debug API revision */
+      cuda_trace (_ ("Driver API error source symbol is unavailable; "
+        "API Version doesn't match actual UMD version."));
+      return false;
+    }
+
+  uint32_t res;
+  target_read_memory (error_code_addr, (gdb_byte *)&res, sizeof (res));
+  
+  switch (res)
+    {
+    case CUDBG_REPORTED_DRIVER_API_ERROR_SOURCE_DRIVER:
+      source = "Driver";
+      break;
+    case CUDBG_REPORTED_DRIVER_API_ERROR_SOURCE_RUNTIME:
+      source = "Runtime";
+      break;
+    default:
+      cuda_trace (_ ("Error source reporting unsupported, got: 0x%x."), res);
+      return false;
+    }
+
+  return true;
+}
+
+static bool
+cuda_get_last_driver_api_error_name_size (uint64_t &size)
+{
+  CORE_ADDR error_name_size_addr = cuda_get_symbol_address (
+      _STRING_ (CUDBG_REPORTED_DRIVER_API_ERROR_NAME_SIZE));
+  if (!error_name_size_addr)
+    {
+      /* UMD revision does not match Debug API revision */
+      cuda_trace (_ ("Driver API error source symbol is unavailable; "
+        "API Version doesn't match actual UMD version."));
+      return false;
+    }
+
+  target_read_memory (error_name_size_addr, (gdb_byte *)&size,
+		      sizeof (size));
+  return true;
+}
+
+bool
+cuda_get_last_driver_api_error_name (std::string &name)
+{
+  if (cuda_debugapi::api_version ().m_revision < 147)
+    {
+      return false;
+    }
+
+  using char_t = char;
+
+  uint64_t size;
+  bool success = cuda_get_last_driver_api_error_name_size (size);
+  if (!success)
+    {
+      cuda_trace (_ ("Cannot retrieve the last driver API error name size."));
+      return false;
+    }
+  if (!size)
+    {
+      cuda_trace (_ ("Last Driver API error name is empty."));
+      return false;
+    }
+
+  gdb::unique_xmalloc_ptr<char_t> buffer((char_t *)xcalloc (sizeof (char_t), size));
+  if (!buffer)
+    {
+      /* Buffer for name string should be created successfully  */
+      error (_ ("Cannot allocate memory to save the reported error name."));
+    }
+
+  CORE_ADDR error_name_core_addr = cuda_get_symbol_address (
+      _STRING_ (CUDBG_REPORTED_DRIVER_API_ERROR_NAME_ADDR));
+  if (!error_name_core_addr)
+    {
+      /* This should never happen. If UMD revision was lower, 
+      cuda_get_last_driver_api_error_name_size would have failed */
+      error (_ ("Cannot retrieve the last driver API error name addr."));
+    }
+
+  uint64_t error_error_name_addr;
+  target_read_memory (error_name_core_addr,
+		      (gdb_byte *)&error_error_name_addr, sizeof (uint64_t));
+  if (!error_name_core_addr)
+    {
+      cuda_trace (_ ("Last Driver API error name is null."));
+      return false;
+    }
+
+  target_read_memory (error_error_name_addr, (gdb_byte *)buffer.get (), size);
+  name = buffer.get ();
+
+  return true;
+}
+
+static bool
+cuda_get_last_driver_api_error_string_size (uint64_t &size)
+{
+  CORE_ADDR error_string_size_addr = cuda_get_symbol_address (
+      _STRING_ (CUDBG_REPORTED_DRIVER_API_ERROR_STRING_SIZE));
+  if (!error_string_size_addr)
+    {
+      /* UMD revision does not match Debug API revision */
+      cuda_trace (_ ("Driver API error string size symbol is unavailable; "
+        "API Version doesn't match actual UMD version"));
+      return false;
+    }
+
+  target_read_memory (error_string_size_addr, (gdb_byte *)&size,
+		      sizeof (size));
+  return true;
+}
+
+bool
+cuda_get_last_driver_api_error_string (std::string &string)
+{
+  if (cuda_debugapi::api_version ().m_revision < 147)
+    {
+      return false;
+    }
+
+  using char_t = char;
+
+  uint64_t size;
+  bool success = cuda_get_last_driver_api_error_string_size (size);
+  if (!success)
+    {
+      cuda_trace (_ ("Cannot retrieve the last driver API error string size."));
+      return false;
+    }
+  if (!size)
+    {
+      cuda_trace (_ ("Last Driver API error string is empty."));
+      return false;
+    }
+
+  gdb::unique_xmalloc_ptr<char_t> buffer((char_t *)xcalloc (sizeof (char_t), size));
+  if (!buffer)
+    {
+      /* Buffer for error string should be created successfully  */
+      error (_ ("Cannot allocate memory to save the reported error string."));
+    }
+
+  CORE_ADDR error_string_core_addr = cuda_get_symbol_address (
+      _STRING_ (CUDBG_REPORTED_DRIVER_API_ERROR_STRING_ADDR));
+  if (!error_string_core_addr)
+    {
+      /* This should never happen. If we hit the breakpoint we should have
+       * the symbol */
+      error (_ ("Cannot retrieve the last driver API error string addr."));
+    }
+
+  uint64_t error_error_string_addr;
+  target_read_memory (error_string_core_addr,
+		      (gdb_byte *)&error_error_string_addr, sizeof (uint64_t));
+  if (!error_string_core_addr)
+    {
+      /* The backend does not report error names */
+      cuda_trace (_ ("Last Driver API error string is null."));
+      return false;
+    }
+
+  target_read_memory (error_error_string_addr, (gdb_byte *)buffer.get (), size);
+  string = buffer.get ();
+
+  return true;
+}
+
 uint64_t
 cuda_get_last_driver_internal_error_code (void)
 {
@@ -1304,36 +1531,22 @@ cuda_cleanup (void)
   cuda_trace ("cuda_cleanup");
 
   registers_changed ();
-  set_current_context (NULL);
   cuda_auto_breakpoints_cleanup ();
   cuda_state::cleanup_breakpoints ();
   cuda_cleanup_cudart_symbols ();
   cuda_current_focus::invalidate ();
-  cuda_state::cleanup_contexts ();
-  if (cuda_initialized)
-    cuda_state::finalize ();
+  cuda_state::finalize ();
   cuda_sstep_reset (false);
   cuda_set_device_launch_used (false);
 
-  /* In remote session, these functions are called on server side by
-   * cuda_linux_mourn() */
-  if (!cuda_remote)
-    {
-      cuda_debugapi::finalize ();
-      /* Notification reset must be called after notification thread has
-       * been terminated, which is done as part of cuda_api_finalize() call.
-       */
-      cuda_notification_reset ();
-    }
-#if __QNXTARGET__
-  else
-    {
-      cuda_finalize_remote_target ();
-    }
-#endif /* __QNXTARGET__ */
+  cuda_debugapi::finalize ();
+  /* Notification reset must be called after notification thread has
+   * been terminated, which is done as part of cuda_api_finalize() call. */
+  cuda_notification_reset ();
 
   inferior_in_debug_mode = false;
   cuda_initialized = false;
+  current_inferior ()->cuda_initialized = false;
 }
 
 void
@@ -1392,6 +1605,23 @@ cuda_initialize (void)
             printf ("Running on legacy stack.\n");
         }
     }
+}
+
+static bool
+cuda_get_cudbg_api (void)
+{
+  CUDBGAPI api = nullptr;
+
+  CUDBGResult res
+      = cudbgGetAPI (CUDBG_API_VERSION_MAJOR, CUDBG_API_VERSION_MINOR,
+		     CUDBG_API_VERSION_REVISION, &api);
+
+  if (res == CUDBG_SUCCESS)
+    cuda_debugapi::set_api (api);
+  else
+    cuda_debugapi::print_get_api_error (res);
+
+  return (res != CUDBG_SUCCESS);
 }
 
 static void
@@ -1510,6 +1740,11 @@ cuda_initialize_target (void)
       return true;
     }
 
+  /* This is already done during cuda_linux_nat initialization, however some targets
+     like cuda_core, will overwrite the loaded debugapi with their own. */
+  if (cuda_get_cudbg_api ())
+    error (_ ("Cannot get CUDA debugger API."));
+
   debugFlagAddr = cuda_get_symbol_address (_STRING_ (CUDBG_IPC_FLAG_NAME));
   if (!debugFlagAddr)
     return false;
@@ -1517,7 +1752,6 @@ cuda_initialize_target (void)
   cuda_trace ("Initializing cuda target.\n");
 
   /* Initialize cuda utils, check if cuda-gdb lock is busy */
-  cuda_utils_initialize ();
   cuda_signals_initialize ();
   cuda_debugapi::set_notify_new_event_callback (cuda_notification_notify);
   cuda_initialize ();
@@ -1577,6 +1811,12 @@ cuda_initialize_target (void)
 	  "requesting tracking of exceptions in exited warps\n");
       capabilities
 	  |= CUDBG_DEBUGGER_CAPABILITY_REPORT_EXCEPTIONS_IN_EXITED_WARPS;
+
+      cuda_trace_domain (
+	  CUDA_TRACE_GENERAL,
+	  "requesting no context push / pop events be delivered\n");
+      capabilities
+	  |= CUDBG_DEBUGGER_CAPABILITY_NO_CONTEXT_PUSH_POP_EVENTS;
 
       target_write_memory (capability_addr, (const gdb_byte *)&capabilities,
 			   sizeof (capabilities));
@@ -1754,7 +1994,7 @@ cuda_elf_make_msymbol_special (asymbol *sym, struct minimal_symbol *msym)
       /* Only insert loaded/relocated kernel entry points */
       auto addr = msym->value_raw_address ();
       if (addr)
-        cuda_elf_image_add_kernel_entry (addr);
+	cuda_module::add_kernel_entry (addr);
 
       msym->set_value_address (addr);
     }
@@ -1821,10 +2061,11 @@ read_cudart_variable (uint64_t address, void *buffer, unsigned amount)
     }
   else if (CUDBG_CLUSTERDIM_OFFSET <= address)
     {
-      auto kernel
-          = kernels_find_kernel_by_kernel_id (cur.logical ().kernelId ());
-      gdb_assert (kernel);
-      auto clusterDim = kernel_get_cluster_dim (kernel);
+      // We could use clusterDim here in cur, but that allows CUDA_IGNORE
+      // which we don't want to expose to the user.
+      auto clusterDim = cuda_state::warp_get_cluster_dim (
+          cur.physical ().dev (), cur.physical ().sm (),
+          cur.physical ().wp ());
       memcpy (buffer,
               (char *)&clusterDim + (int64_t)address - CUDBG_CLUSTERDIM_OFFSET,
               amount);
@@ -2373,78 +2614,6 @@ cuda_sstep_set_ptid (ptid_t ptid)
   cuda_sstep_info.ptid = ptid;
 }
 
-static bool
-cuda_control_flow_instruction (const std::string &inst, bool skip_subroutines)
-{
-  if (inst.size () == 0)
-    return true;
-
-  const char *inst_str = inst.c_str ();
-
-  /* Maxwell+:
-   * https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#maxwell-pascal
-   */
-  if (strstr (inst_str, "BRA") != 0)
-    return true;
-  if (strstr (inst_str, "BRX") != 0)
-    return true;
-  if (strstr (inst_str, "JMP") != 0)
-    return true;
-  if (strstr (inst_str, "JMX") != 0)
-    return true;
-  if (strstr (inst_str, "CAL") != 0 && !skip_subroutines)
-    return true;
-  // JCAL - covered with CAL
-  if (strstr (inst_str, "RET") != 0)
-    return true;
-  if (strstr (inst_str, "BRK") != 0)
-    return true;
-  if (strstr (inst_str, "CONT") != 0)
-    return true;
-  if (strstr (inst_str, "SSY") != 0)
-    return true;
-  if (strstr (inst_str, "BPT") != 0)
-    return true;
-  if (strstr (inst_str, "EXIT") != 0)
-    return true;
-  if (strstr (inst_str, "BAR") != 0)
-    return true;
-  if (strstr (inst_str, "SYNC") != 0)
-    return true;
-  /* Volta+:
-   * https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#volta */
-  if (strstr (inst_str, "BREAK") != 0)
-    return true;
-  /* BSYNC - covered with SYNC */
-  /* CALL - covered with CAL */
-  if (strstr (inst_str, "KILL") != 0)
-    return true;
-  if (strstr (inst_str, "NANOSLEEP") != 0)
-    return true;
-  if (strstr (inst_str, "RTT") != 0)
-    return true;
-  if (strstr (inst_str, "WARPSYNC") != 0)
-    return true;
-  if (strstr (inst_str, "YIELD") != 0)
-    return true;
-  if (strstr (inst_str, "BMOV") != 0)
-    return true;
-  if (strstr (inst_str, "RPCMOV") != 0)
-    return true;
-  /* Turing+:
-   * https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#turing */
-  /* BRXU - covered with BRX */
-  /* JMXU - covered with JMX */
-  /* Hopper+:
-   * https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#hopper */
-  if (strstr (inst_str, "ACQBULK") != 0)
-    return true;
-  if (strstr (inst_str, "ENDCOLLECTIVE") != 0)
-    return true;
-  /* UCGABAR_* - covered with BAR */
-  return false;
-}
-
 bool
 cuda_find_next_control_flow_instruction (uint64_t pc, uint64_t range_start_pc,
                                          uint64_t range_end_pc, /* Exclusive */
@@ -2453,7 +2622,7 @@ cuda_find_next_control_flow_instruction (uint64_t pc, uint64_t range_start_pc,
 {
   uint64_t adj_pc;
   kernel_t kernel = cuda_current_focus::get ().logical ().kernel ();
-  std::string inst;
+  std::string inst_str;
 
   inst_size = 0;
 
@@ -2482,23 +2651,27 @@ cuda_find_next_control_flow_instruction (uint64_t pc, uint64_t range_start_pc,
   end_pc = pc;
   while (end_pc <= range_end_pc)
     {
-      module_t module = kernel_get_module (kernel);
+      auto module = kernel_get_module (kernel);
       gdb_assert (module);
-      auto disassembler = module_disassembler (module);
+
+      auto disassembler = module->disassembler ();
       gdb_assert (disassembler);
 
-      bool found = disassembler->disassemble (end_pc, inst, inst_size);
-      if (!found)
+      inst_size = disassembler->insn_size ();
+
+      auto inst = disassembler->disassemble_instruction (end_pc);
+      if (!inst)
         {
           cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
                              "could not disassemble pc=0x%lx", end_pc);
           break;
         }
 
+        inst_str = inst->to_string();
       cuda_trace_domain (CUDA_TRACE_BREAKPOINT, "%s: pc=0x%lx inst %.*s",
-                         __func__, end_pc, 20, inst.c_str ());
+                         __func__, end_pc, 20, inst_str.c_str ());
 
-      if (cuda_control_flow_instruction (inst, skip_subroutines))
+      if (inst->is_control_flow (skip_subroutines))
         break;
 
       end_pc += inst_size;
@@ -2522,7 +2695,7 @@ cuda_find_next_control_flow_instruction (uint64_t pc, uint64_t range_start_pc,
     cuda_trace_domain (
         CUDA_TRACE_BREAKPOINT,
         "%s: next control point after %lx (up to %lx) is at %lx (inst %s)",
-        __func__, pc, range_end_pc, end_pc, inst.c_str ());
+        __func__, pc, range_end_pc, end_pc, inst_str.c_str ());
   else
     cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
                        "no control point found at end_pc=%lx", end_pc);
@@ -3232,17 +3405,17 @@ cuda_adjust_breakpoint_address (struct gdbarch *gdbarch, CORE_ADDR bpaddr)
 {
   uint64_t adjusted_addr = bpaddr;
 
-  context_t context = cuda_state::find_context_by_addr (bpaddr);
-
-  if (context)
+  auto module = cuda_state::find_module_by_address (bpaddr);
+  if (module)
     {
       // This can fail if the bpaddr is unrelocated. In that case, we return
       // the original address
       try
         {
-          cuda_debugapi::get_adjusted_code_address (
-              context_get_device_id (context), bpaddr, &adjusted_addr,
-              CUDBG_ADJ_CURRENT_ADDRESS);
+          cuda_debugapi::get_adjusted_code_address (module->context ()->dev_id (),
+						    bpaddr,
+						    &adjusted_addr,
+						    CUDBG_ADJ_CURRENT_ADDRESS);
         }
       catch (const gdb_exception &ex)
         {
@@ -3508,30 +3681,26 @@ cuda_gdb_session_get_dir (void)
 
 /* Find out if the provided address is a GPU address, and if so adjust it. */
 void
-cuda_adjust_device_code_address (CORE_ADDR original_addr,
+cuda_adjust_device_code_address (CORE_ADDR addr,
                                  CORE_ADDR *adjusted_addr)
 {
-  context_t context = cuda_state::find_context_by_addr (original_addr);
-  uint64_t addr = original_addr;
-
-  if (context)
-    cuda_debugapi::get_adjusted_code_address (context_get_device_id (context),
-                                              original_addr, &addr,
-                                              CUDBG_ADJ_CURRENT_ADDRESS);
+  auto module = cuda_state::find_module_by_address (addr);
+  if (module)
+    cuda_debugapi::get_adjusted_code_address (module->context ()->dev_id (),
+					      addr, &addr,
+					      CUDBG_ADJ_CURRENT_ADDRESS);
   *adjusted_addr = (CORE_ADDR)addr;
 }
 
 void
-cuda_next_device_code_address (CORE_ADDR original_addr,
+cuda_next_device_code_address (CORE_ADDR addr,
                                CORE_ADDR *adjusted_addr)
 {
-  context_t context = cuda_state::find_context_by_addr (original_addr);
-  uint64_t addr = original_addr;
-
-  if (context)
-    cuda_debugapi::get_adjusted_code_address (context_get_device_id (context),
-                                              original_addr, &addr,
-                                              CUDBG_ADJ_NEXT_ADDRESS);
+  auto module = cuda_state::find_module_by_address (addr);
+  if (module)
+    cuda_debugapi::get_adjusted_code_address (module->context ()->dev_id (),
+					      addr, &addr,
+					      CUDBG_ADJ_NEXT_ADDRESS);
   *adjusted_addr = (CORE_ADDR)addr;
 }
 

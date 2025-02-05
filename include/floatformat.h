@@ -143,6 +143,8 @@ extern const struct floatformat floatformat_bfloat16_big;
 extern const struct floatformat floatformat_bfloat16_little;
 #ifdef NVIDIA_CUDA_GDB
 /* CUDA - fp8 formats */
+extern const struct floatformat floatformat_nv_fp8_e8m0_big;
+extern const struct floatformat floatformat_nv_fp8_e8m0_little;
 extern const struct floatformat floatformat_nv_fp8_e5m2_big;
 extern const struct floatformat floatformat_nv_fp8_e5m2_little;
 extern const struct floatformat floatformat_nv_fp8_e4m3_big;

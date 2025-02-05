@@ -31,9 +31,6 @@
 #define __S__(s)                #s
 #define _STRING_(s)       __S__(s)
 
-/* Initialize everything */
-void cuda_utils_initialize (void);
-
 /* Get the gdb temporary directory path */
 extern const char* cuda_gdb_tmpdir_getdir (void);
 

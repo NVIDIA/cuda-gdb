@@ -24,7 +24,7 @@
 
 #include "python-internal.h"
 
-PyObject *gdbpy_cuda_execute_internal_command (PyObject *self, PyObject *args);
+PyMODINIT_FUNC gdbpy_cuda_init(void);
 
 #endif
 

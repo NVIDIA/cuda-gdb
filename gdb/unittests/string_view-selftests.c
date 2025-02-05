@@ -19,7 +19,7 @@
 
 /* No need to test string_view if we're using C++17, since we're going to use
    the "real" version.  */
-#if __cplusplus < 201703L
+#if (__cplusplus < 201703L) && !defined(__QNX__)
 
 #define GNULIB_NAMESPACE gnulib
 

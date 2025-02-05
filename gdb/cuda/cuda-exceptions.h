@@ -38,6 +38,7 @@ private:
   void print_exception_device () const;
   void print_assert_message () const;
   void print_exception_name () const;
+  void print_cluster_exception_origin () const;
 
 public:
   /* CTOR/DTOR */

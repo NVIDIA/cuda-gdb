@@ -65,7 +65,7 @@ struct kernel_st
   gdb::unique_xmalloc_ptr<char> name; /* name of the kernel if available */
   gdb::unique_xmalloc_ptr<char> args; /* kernel arguments in string format */
   uint64_t virt_code_base;  /* virtual address of the kernel entry point */
-  module_t module;          /* CUmodule handle of the kernel */
+  cuda_module* module;      /* cuda_module of the kernel */
   bool launched;            /* Has the kernel been seen on the hw? */
   CuDim3 grid_dim;          /* The grid dimensions of the kernel. */
   CuDim3 cluster_dim;       /* The cluster dimensions of the kernel. */
@@ -130,7 +130,7 @@ should_print_kernel_event (kernel_t kernel)
 
 static kernel_t
 kernel_new (uint32_t dev_id, uint64_t grid_id, uint64_t virt_code_base,
-            gdb::unique_xmalloc_ptr<char> name, module_t module,
+            gdb::unique_xmalloc_ptr<char> name, cuda_module* module,
             CuDim3 grid_dim, CuDim3 block_dim, CUDBGKernelType type,
             uint64_t parent_grid_id, CUDBGKernelOrigin origin,
             bool has_cluster_dim, CuDim3 cluster_dim)
@@ -315,24 +315,19 @@ kernel_get_virt_code_base (kernel_t kernel)
   return kernel->virt_code_base;
 }
 
-context_t
+cuda_context*
 kernel_get_context (kernel_t kernel)
 {
   gdb_assert (kernel);
-  return module_get_context (kernel->module);
+  gdb_assert (kernel->module);
+  return kernel->module->context ();
 }
 
-module_t
+cuda_module*
 kernel_get_module (kernel_t kernel)
 {
   gdb_assert (kernel);
   return kernel->module;
-}
-
-void
-kernel_set_module (kernel_t kernel, module_t module)
-{
-  kernel->module = module;
 }
 
 uint32_t
@@ -349,14 +344,20 @@ kernel_get_grid_dim (kernel_t kernel)
   return kernel->grid_dim;
 }
 
+/* This will return the normal cluster size only. If it is all zero,
+   that means no clusters are present and the preferred cluster size
+   is also ignored. This value may differ from the per warp cluster
+   dim sizes. */
 CuDim3
 kernel_get_cluster_dim (kernel_t kernel)
 {
   gdb_assert (kernel);
   if (!kernel->cluster_dim_p)
     {
-      cuda_debugapi::get_cluster_dim (kernel->dev_id, kernel->grid_id,
-                                      &kernel->cluster_dim);
+      CUDBGGridInfo grid_info;
+      cuda_debugapi::get_grid_info (kernel->dev_id, kernel->grid_id,
+                                      &grid_info);
+      kernel->cluster_dim = grid_info.clusterDim;
       kernel->cluster_dim_p = CACHED;
     }
   return kernel->cluster_dim;
@@ -486,7 +487,7 @@ kernel_print (kernel_t kernel)
   fprintf (stderr, "        device id   : %u\n", kernel->dev_id);
   fprintf (stderr, "        grid id     : %lld\n", (long long)kernel->grid_id);
   fprintf (stderr, "        module id   : 0x%llx\n",
-           (unsigned long long)module_get_id (kernel->module));
+           (unsigned long long)kernel->module->id ());
   fprintf (stderr, "        entry point : 0x%llx\n",
            (unsigned long long)kernel->virt_code_base);
   fprintf (stderr, "        dimensions  : %s\n", kernel->dimensions);
@@ -525,7 +526,7 @@ kernels_start_kernel (uint32_t dev_id, uint64_t grid_id,
                       CUDBGKernelOrigin origin, bool has_cluster_dim,
                       CuDim3 cluster_dim)
 {
-  auto context = cuda_state::device_find_context_by_id (dev_id, context_id);
+  auto context = cuda_state::find_context_by_id (context_id);
   if (!context)
     {
       warning ("Could not find CUDA context for context_id 0x%llx",
@@ -533,8 +534,7 @@ kernels_start_kernel (uint32_t dev_id, uint64_t grid_id,
       return;
     }
 
-  auto modules = context_get_modules (context);
-  auto module = modules_find_module_by_id (modules, module_id);
+  auto module = cuda_state::find_module_by_id (module_id);
   if (!module)
     {
       warning ("Could not find CUDA module for context_id 0x%llx module_id 0x%llx",
@@ -542,14 +542,14 @@ kernels_start_kernel (uint32_t dev_id, uint64_t grid_id,
       return;
     }
 
-  if (context)
-    set_current_context (context);
+  cuda_state::set_current_context (context);
 
   gdb::unique_xmalloc_ptr<char> kernel_name
     = cuda_find_function_name_from_pc (virt_code_base, true);
+
+  // NOTE: Not having an entry function is a normal situation, this means
+  // an internal kernel contained in a public module was launched.
   if (kernel_name.get () == nullptr)
-    // NOTE: Not having an entry function is a normal situation, this means
-    // an internal kernel contained in a public module was launched.
     kernel_name = make_unique_xstrdup ("<internal>");
 
   auto kernel
@@ -617,7 +617,7 @@ kernels_terminate_kernel (kernel_t kernel)
 }
 
 void
-kernels_terminate_module (module_t module)
+kernels_terminate_module (cuda_module* module)
 {
   kernel_t kernel, next_kernel;
 

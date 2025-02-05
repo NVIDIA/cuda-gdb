@@ -20,6 +20,7 @@
 #define CUDA_NTO_PROTOCOL_H
 
 #include "gdbsupport/common-defs.h"
+#include "gdbsupport/array-view.h"
 #include "remote-nto.h"
 
 #include <unistd.h>
@@ -27,6 +28,14 @@
 /* Each byte can be escaped, plus two frame markers (~),
    plus a checksum that can also possibly be escaped */
 #define MAX_PACKET_SIZE (DS_DATA_MAX_SIZE * 2 + 4)
+
+/* Copied from remote-nto.c */
+typedef union
+{
+  unsigned char buf[DS_DATA_MAX_SIZE];
+  DSMsg_union_t pkt;
+  TSMsg_text_t text;
+} DScomm_t;
 
 enum endpoint {GDB, SRV, PDB};
 

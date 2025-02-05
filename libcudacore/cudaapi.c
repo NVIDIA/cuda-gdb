@@ -450,8 +450,10 @@ DEF_API_CALL(readWarpState)(uint32_t devId, uint32_t sm, uint32_t wp,
 	CudbgGridTableEntry *gte;
 	CudbgCTATableEntry *ctate;
 	CudbgThreadTableEntry *tte;
+	CudbgSmTableEntry *smte;
 	CUDBGResult rc;
 	size_t ctateSize;
+	size_t smteSize;
 
 	TRACE_FUNC("devId=%u sm=%u wp=%u state=%p", devId, sm, wp, state);
 
@@ -466,6 +468,9 @@ DEF_API_CALL(readWarpState)(uint32_t devId, uint32_t sm, uint32_t wp,
 	GET_TABLE_ENTRY(gte, NULL, CUDBG_ERROR_INVALID_GRID,
 			"grid%llu_dev%u", ctate->gridId64, devId);
 
+	GET_TABLE_ENTRY (smte, &smteSize, CUDBG_ERROR_INVALID_SM, "sm%u_dev%u",
+			 sm, devId);
+
 	memset(state, 0, sizeof(*state));
 	state->gridId = gte->gridId64;
 	state->errorPC = wte->errorPC;
@@ -475,6 +480,26 @@ DEF_API_CALL(readWarpState)(uint32_t devId, uint32_t sm, uint32_t wp,
 		state->clusterIdx.y = ctate->clusterIdxY;
 		state->clusterIdx.z = ctate->clusterIdxZ;
 	}
+	if (offsetof(CudbgCTATableEntry, clusterDimZ) < ctateSize)
+	{
+		state->clusterDim.x = ctate->clusterDimX;
+		state->clusterDim.y = ctate->clusterDimY;
+		state->clusterDim.z = ctate->clusterDimZ;
+	}
+
+	if (offsetof (CudbgSmTableEntry, clusterExceptionTargetBlockIdxZ)
+	    < smteSize)
+	  {
+	    state->clusterExceptionTargetBlockIdx.x
+		= smte->clusterExceptionTargetBlockIdxX;
+	    state->clusterExceptionTargetBlockIdx.y
+		= smte->clusterExceptionTargetBlockIdxY;
+	    state->clusterExceptionTargetBlockIdx.z
+		= smte->clusterExceptionTargetBlockIdxZ;
+	    state->clusterExceptionTargetBlockIdxValid
+		= smte->clusterExceptionTargetBlockIdxValid;
+	  }
+
 	state->blockIdx.x = ctate->blockIdxX;
 	state->blockIdx.y = ctate->blockIdxY;
 	state->blockIdx.z = ctate->blockIdxZ;
@@ -703,6 +728,12 @@ DEF_API_CALL(getGridInfo)(uint32_t devId, uint64_t gridId, CUDBGGridInfo *info)
 		info->clusterDim.x = gte->clusterDimX;
 		info->clusterDim.y = gte->clusterDimY;
 		info->clusterDim.z = gte->clusterDimZ;
+	}
+	if (offsetof(CudbgGridTableEntry, preferredClusterDimZ) < gteSize)
+	{
+		info->preferredClusterDim.x = gte->preferredClusterDimX;
+		info->preferredClusterDim.y = gte->preferredClusterDimY;
+		info->preferredClusterDim.z = gte->preferredClusterDimZ;
 	}
 
 	return CUDBG_SUCCESS;
@@ -1579,22 +1610,35 @@ DEF_API_CALL(readUniformPredicates)(uint32_t devId, uint32_t sm, uint32_t wp,
 	return rc;
 }
 
-DEF_API_CALL(getClusterDim)(uint32_t devId, uint64_t gridId, CuDim3 *clusterDim)
+DEF_API_CALL(getClusterDim)(uint32_t devId, uint32_t sm, uint32_t wp, CuDim3 *clusterDim)
 {
 	CudbgGridTableEntry *gte;
+	CudbgCTATableEntry *ctate;
 	size_t gteSize;
+	size_t ctateSize;
 
-	TRACE_FUNC("devId=%u gridId=%llu clusterDim=%p", devId, gridId, clusterDim);
+	TRACE_FUNC("devId=%u sm=%u wp=%u clusterDim=%p", devId, sm, wp, clusterDim);
 
 	VERIFY_ARG(clusterDim);
 
 	if (devId >= cuCoreGetNumDevices(curcc))
 		return CUDBG_ERROR_INVALID_DEVICE;
 
-	GET_TABLE_ENTRY(gte, &gteSize, CUDBG_ERROR_INVALID_GRID,
-			"grid%llu_dev%u", gridId, devId);
+	GET_TABLE_ENTRY(ctate, &ctateSize, CUDBG_ERROR_UNKNOWN,
+			"wp%u_sm%u_dev%u_cta", wp, sm, devId);
 
-	assert(gridId == gte->gridId64);
+	if (offsetof(CudbgCTATableEntry, clusterDimZ) < ctateSize)
+	{
+		clusterDim->x = ctate->clusterDimX;
+		clusterDim->y = ctate->clusterDimY;
+		clusterDim->z = ctate->clusterDimZ;
+		return CUDBG_SUCCESS;
+	}
+
+	GET_TABLE_ENTRY(gte, &gteSize, CUDBG_ERROR_INVALID_GRID,
+			"grid%llu_dev%u", ctate->gridId64, devId);
+
+	assert(ctate->gridId64 == gte->gridId64);
 	memset(clusterDim, 0, sizeof(*clusterDim));
 	if (offsetof(CudbgGridTableEntry, clusterDimZ) < gteSize)
 	{
@@ -1753,200 +1797,263 @@ DEF_API_CALL(readSmException)(uint32_t dev, uint32_t sm,
 	return CUDBG_SUCCESS;
 }
 
+DEF_API_CALL (getClusterExceptionTargetBlock)
+(uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 *blockIdx, bool *blockIdxValid)
+{
+  CudbgSmTableEntry *smte;
+  size_t smteSize;
+
+  TRACE_FUNC ("dev=%u sm=%u wp=%u blockIdx=%p blockIdxValid=%p", dev, sm, wp,
+	      blockIdx, blockIdxValid);
+
+  VERIFY_ARG (blockIdx);
+  VERIFY_ARG (blockIdxValid);
+
+  GET_TABLE_ENTRY (smte, &smteSize, CUDBG_ERROR_INVALID_SM, "sm%u_dev%u", sm,
+		   dev);
+
+  if (offsetof (CudbgSmTableEntry, clusterExceptionTargetBlockIdxZ) < smteSize)
+    {
+      blockIdx->x = smte->clusterExceptionTargetBlockIdxX;
+      blockIdx->y = smte->clusterExceptionTargetBlockIdxY;
+      blockIdx->z = smte->clusterExceptionTargetBlockIdxZ;
+      *blockIdxValid = smte->clusterExceptionTargetBlockIdxValid;
+    }
+  else
+    {
+      memset (blockIdx, 0, sizeof (*blockIdx));
+      *blockIdxValid = false;
+    }
+
+  return CUDBG_SUCCESS;
+}
+
+DEF_API_CALL(readWarpResources)(uint32_t dev, uint32_t sm, uint32_t wp,
+				CUDBGWarpResources *resources)
+{
+  CudbgWarpTableEntry *wte;
+  CUDBGResult rc;
+  size_t wteSize;
+
+  TRACE_FUNC("dev=%u sm=%u wp=%u resources=%p", dev, sm, wp, resources);
+  
+  VERIFY_ARG(resources);
+  memset (resources, 0, sizeof (*resources));
+  
+  GET_TABLE_ENTRY(wte, NULL, CUDBG_ERROR_INVALID_WARP,
+  		"wp%u_sm%u_dev%u", wp, sm, dev);
+  
+  if (offsetof (CudbgWarpTableEntry, numRegs) < wteSize)
+    resources->numRegisters = wte->numRegs;
+  if (offsetof (CudbgWarpTableEntry, sharedMemSize) < wteSize)
+    resources->sharedMemSize = wte->sharedMemSize;
+  
+  return CUDBG_SUCCESS;
+}
+
 static const struct CUDBGAPI_st cudbgCoreApi = {
-    /* Initialization */
-    API_CALL(doNothing),
-    API_CALL(doNothing),
+  /* Initialization */
+  API_CALL (doNothing),
+  API_CALL (doNothing),
 
-    /* Device Execution Control */
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
+  /* Device Execution Control */
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
 
-    /* Breakpoints */
-    API_CALL(notSupported),
-    API_CALL(notSupported),
+  /* Breakpoints */
+  API_CALL (notSupported),
+  API_CALL (notSupported),
 
-    /* Device State Inspection */
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(readThreadIdx),
-    API_CALL(readBrokenWarps),
-    API_CALL(readValidWarps),
-    API_CALL(readValidLanes),
-    API_CALL(readActiveLanes),
-    API_CALL(readCodeMemory),
-    API_CALL(readConstMemory),
-    API_CALL(notSupported),
-    API_CALL(readParamMemory),
-    API_CALL(readSharedMemory),
-    API_CALL(readLocalMemory),
-    API_CALL(readRegister),
-    API_CALL(readPC),
-    API_CALL(readVirtualPC),
-    API_CALL(readLaneStatus),
+  /* Device State Inspection */
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (readThreadIdx),
+  API_CALL (readBrokenWarps),
+  API_CALL (readValidWarps),
+  API_CALL (readValidLanes),
+  API_CALL (readActiveLanes),
+  API_CALL (readCodeMemory),
+  API_CALL (readConstMemory),
+  API_CALL (notSupported),
+  API_CALL (readParamMemory),
+  API_CALL (readSharedMemory),
+  API_CALL (readLocalMemory),
+  API_CALL (readRegister),
+  API_CALL (readPC),
+  API_CALL (readVirtualPC),
+  API_CALL (readLaneStatus),
 
-    /* Device State Alteration */
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
+  /* Device State Alteration */
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
 
-    /* Grid Properties */
-    API_CALL(notSupported),
-    API_CALL(getBlockDim),
-    API_CALL(getTID),
-    API_CALL(getElfImage32),
+  /* Grid Properties */
+  API_CALL (notSupported),
+  API_CALL (getBlockDim),
+  API_CALL (getTID),
+  API_CALL (getElfImage32),
 
-    /* Device Properties */
-    API_CALL(getDeviceType),
-    API_CALL(getSmType),
-    API_CALL(getNumDevices),
-    API_CALL(getNumSMs),
-    API_CALL(getNumWarps),
-    API_CALL(getNumLanes),
-    API_CALL(getNumRegisters),
+  /* Device Properties */
+  API_CALL (getDeviceType),
+  API_CALL (getSmType),
+  API_CALL (getNumDevices),
+  API_CALL (getNumSMs),
+  API_CALL (getNumWarps),
+  API_CALL (getNumLanes),
+  API_CALL (getNumRegisters),
 
-    /* DWARF-related routines */
-    API_CALL(notSupported),
-    API_CALL(disassemble),
-    API_CALL(notSupported),
-    API_CALL(lookupDeviceCodeSymbol),
+  /* DWARF-related routines */
+  API_CALL (notSupported),
+  API_CALL (disassemble),
+  API_CALL (notSupported),
+  API_CALL (lookupDeviceCodeSymbol),
 
-    /* Events */
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
+  /* Events */
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
 
-    /* 3.1 Extensions */
-    API_CALL(getGridAttribute),
-    API_CALL(getGridAttributes),
-    API_CALL(notSupported),
-    API_CALL(readLaneException),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
+  /* 3.1 Extensions */
+  API_CALL (getGridAttribute),
+  API_CALL (getGridAttributes),
+  API_CALL (notSupported),
+  API_CALL (readLaneException),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
 
-    /* 3.1 - ABI */
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
+  /* 3.1 - ABI */
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
 
-    /* 3.2 Extensions */
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(readGlobalMemory),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
+  /* 3.2 Extensions */
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (readGlobalMemory),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
 
-    /* 4.0 Extensions */
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(readBlockIdx),
-    API_CALL(getGridDim),
-    API_CALL(readCallDepth),
-    API_CALL(readReturnAddress),
-    API_CALL(readVirtualReturnAddress),
-    API_CALL(getElfImage),
+  /* 4.0 Extensions */
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (readBlockIdx),
+  API_CALL (getGridDim),
+  API_CALL (readCallDepth),
+  API_CALL (readReturnAddress),
+  API_CALL (readVirtualReturnAddress),
+  API_CALL (getElfImage),
 
-    /* 4.1 Extensions */
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(readSyscallCallDepth),
+  /* 4.1 Extensions */
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (readSyscallCallDepth),
 
-    /* 4.2 Extensions */
-    API_CALL(notSupported),
+  /* 4.2 Extensions */
+  API_CALL (notSupported),
 
-    /* 5.0 Extensions */
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
+  /* 5.0 Extensions */
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
 
-    /* 5.5 Extensions */
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(readGridId),
-    API_CALL(getGridStatus),
-    API_CALL(notSupported),
-    API_CALL(getDevicePCIBusInfo),
-    API_CALL(notSupported),
+  /* 5.5 Extensions */
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (readGridId),
+  API_CALL (getGridStatus),
+  API_CALL (notSupported),
+  API_CALL (getDevicePCIBusInfo),
+  API_CALL (notSupported),
 
-   /* 6.0 Extensions */
-    API_CALL(getAdjustedCodeAddress),
-    API_CALL(readErrorPC),
-    API_CALL(getNextEvent),
-    API_CALL(getElfImageByHandle),
-    API_CALL(notSupported),
-    API_CALL(notSupported),
-    API_CALL(readRegisterRange),
-    API_CALL(readGenericMemory),
-    API_CALL(notSupported),
-    API_CALL(readGlobalMemory),
-    API_CALL(notSupported),
-    API_CALL(getManagedMemoryRegionInfo),
-    API_CALL(isDeviceCodeAddress),
-    API_CALL(notSupported),
+  /* 6.0 Extensions */
+  API_CALL (getAdjustedCodeAddress),
+  API_CALL (readErrorPC),
+  API_CALL (getNextEvent),
+  API_CALL (getElfImageByHandle),
+  API_CALL (notSupported),
+  API_CALL (notSupported),
+  API_CALL (readRegisterRange),
+  API_CALL (readGenericMemory),
+  API_CALL (notSupported),
+  API_CALL (readGlobalMemory),
+  API_CALL (notSupported),
+  API_CALL (getManagedMemoryRegionInfo),
+  API_CALL (isDeviceCodeAddress),
+  API_CALL (notSupported),
 
-   /* 6.5 Extensions */
-    API_CALL(readPredicates),
-    API_CALL(notSupported),
-    API_CALL(getNumPredicates),
-    API_CALL(readCCRegister),
-    API_CALL(notSupported),
+  /* 6.5 Extensions */
+  API_CALL (readPredicates),
+  API_CALL (notSupported),
+  API_CALL (getNumPredicates),
+  API_CALL (readCCRegister),
+  API_CALL (notSupported),
 
-    API_CALL(getDeviceName),
-    API_CALL(notSupported),
+  API_CALL (getDeviceName),
+  API_CALL (notSupported),
 
-    /* 9.0 Extensions */
-    API_CALL(readDeviceExceptionState),
+  /* 9.0 Extensions */
+  API_CALL (readDeviceExceptionState),
 
-    /* 10.0 Extensions */
-    API_CALL(getNumUniformRegisters),
-    API_CALL(readUniformRegisterRange),
-    API_CALL(notSupported),
-    API_CALL(getNumUniformPredicates),
-    API_CALL(readUniformPredicates),
-    API_CALL(notSupported),
+  /* 10.0 Extensions */
+  API_CALL (getNumUniformRegisters),
+  API_CALL (readUniformRegisterRange),
+  API_CALL (notSupported),
+  API_CALL (getNumUniformPredicates),
+  API_CALL (readUniformPredicates),
+  API_CALL (notSupported),
 
-    /* 11.8 Extensions */
-    API_CALL(notSupported),
+  /* 11.8 Extensions */
+  API_CALL (notSupported),
 
-    /* 12.0 Extensions */
-    API_CALL(getGridInfo),
-    API_CALL(getClusterDim),
-    API_CALL(readWarpState),
-    API_CALL(readClusterIdx),
+  /* 12.0 Extensions */
+  API_CALL (notSupported), /* getGridInfo120 */
+  API_CALL (notSupported), /* getClusterDim120 */
+  API_CALL (notSupported), /* readWarpState120 */
+  API_CALL (readClusterIdx),
 
-    /* 12.2 Extensions */
-    API_CALL(getErrorStringEx),
+  /* 12.2 Extensions */
+  API_CALL (getErrorStringEx),
 
-    /* 12.3 Extensions */
-    API_CALL(notSupported), /* getLoadedFunctionInfo */
-    API_CALL(notSupported), /* generateCoredump */
-    API_CALL(getConstBankAddress123),
+  /* 12.3 Extensions */
+  API_CALL (notSupported), /* getLoadedFunctionInfo */
+  API_CALL (notSupported), /* generateCoredump */
+  API_CALL (getConstBankAddress123),
 
-    /* 12.4 Extensions */
-    API_CALL(notSupported), /* getDeviceInfoSizes */
-    API_CALL(notSupported), /* getDeviceInfo */
-    API_CALL(getConstBankAddress),
-    API_CALL(notSupported), /* singleStepWarp */
+  /* 12.4 Extensions */
+  API_CALL (notSupported), /* getDeviceInfoSizes */
+  API_CALL (notSupported), /* getDeviceInfo */
+  API_CALL (getConstBankAddress),
+  API_CALL (notSupported), /* singleStepWarp */
 
-    /* 12.5 Extensions */
-    API_CALL(readAllVirtualReturnAddresses),
-    API_CALL(notSupported), /* getSupportedDebuggerCapabilities */
-    API_CALL(readSmException),
+  /* 12.5 Extensions */
+  API_CALL (readAllVirtualReturnAddresses),
+  API_CALL (notSupported), /* getSupportedDebuggerCapabilities */
+  API_CALL (readSmException),
 
-    /* 12.6 Extensions */
-    API_CALL(notSupported), /* executeInternalCommand */
+  /* 12.6 Extensions */
+  API_CALL (notSupported), /* executeInternalCommand */
+
+  /* 12.7 Extensions */
+  API_CALL (getGridInfo),
+  API_CALL (getClusterDim),
+  API_CALL (readWarpState),
+  API_CALL (getClusterExceptionTargetBlock),
+
+  /* 12.8 Extensions */
+  API_CALL (readWarpResources),
 };
 
 CUDBGAPI cuCoreGetApi(CudaCore *cc)

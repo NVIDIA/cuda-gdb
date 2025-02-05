@@ -96,7 +96,6 @@ typedef enum {
   FILTER_TYPE_THREADIDX_X = 0x0800,    /* threadIdx.x */
   FILTER_TYPE_THREADIDX_Y = 0x1000,    /* threadIdx.y */
   FILTER_TYPE_THREADIDX_Z = 0x2000,    /* threadidx.z */
-  FILTER_TYPE_BREAKPOINT  = 0x4000,    /* threads that hit a breakpoint. */
 } filter_type_t;
 
 typedef union {

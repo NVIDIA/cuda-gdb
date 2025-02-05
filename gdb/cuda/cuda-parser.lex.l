@@ -110,15 +110,12 @@ blockIdx\.x     { return BLOCKIDX_X; }
 blockIdx\.y     { return BLOCKIDX_Y; }
 blockIdx\.z     { return BLOCKIDX_Z; }
 
-breakpoint      { return BREAKPOINT; }
-
 {NUM10}         { cuda_parser_lval.value = strtol (yytext, NULL, 10); return VALUE; }
 {NUM16} 	{ cuda_parser_lval.value = strtol (yytext, NULL, 16); return VALUE; }
 {CONV}          { cuda_parser_lval.value = value_as_long (parse_to_comma_and_eval ((const char **)&yytext)); return VALUE; }
 
 current         { return CURRENT; }
 any             { return WILDCARD; }
-all             { return ALL; }
 
 "&&"		{ return LOGICAL_AND; }
 "||"		{ return LOGICAL_OR; }

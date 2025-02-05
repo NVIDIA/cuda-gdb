@@ -19,41 +19,124 @@
 #ifndef _CUDA_MODULES_H
 #define _CUDA_MODULES_H 1
 
-#include "defs.h"
+#include "cuda-context.h"
 #include "cuda-defs.h"
+#include "cudadebugger.h"
 
-class cuda_disassembler;
+#include <map>
+#include <unordered_map>
 
-struct module_st {
-  uint64_t           module_id;            /* the CUmodule handle */
-  context_t          context;              /* the parent context state */
-  elf_image_t        elf_image;            /* the ELF image object for the module */
-  module_t           next;                 /* next module in the list */
-  cuda_disassembler* disassembler;         /* the disassembler for this module */
+class cuda_context;
+class cuda_module_disassembly_cache;
+
+class cuda_module
+{
+public:
+  cuda_module (uint64_t module_id,
+	       CUDBGElfImageProperties properties,
+	       cuda_context* context,
+	       uint64_t elf_image_size);
+
+  ~cuda_module ();
+
+  uint64_t id () const
+  { return m_id; }
+
+  cuda_context* context () const
+  { return m_context; }
+
+  struct objfile* objfile () const
+  { return m_objfile; }
+
+  uint64_t size () const
+  { return m_size; }
+
+  bool loaded () const
+  { return m_loaded; }
+
+  uint64_t functions_loaded () const
+  { return m_functions_loaded; }
+
+  bool uses_abi () const
+  { return m_uses_abi; }
+
+  CUDBGElfImageProperties properties () const
+  { return m_properties; }
+
+  bool system () const
+  { return m_properties & CUDBG_ELF_IMAGE_PROPERTIES_SYSTEM; }
+
+  const std::string& filename () const
+  { return m_filename; }
+
+  bool contains_address (CORE_ADDR addr) const;
+
+  cuda_module_disassembly_cache* disassembler ();
+  void flush_disasm_caches ();
+
+  void load_objfile ();
+
+  void functions_loaded_event (uint32_t count);
+
+  // Static class methods
+  static void add_kernel_entry (CORE_ADDR addr);
+  
+  static void auto_breakpoints_update_locations ();
+
+  // For internal debugging
+  void print () const;
+
+private:
+  void unload_objfile (bool unlink_file);
+
+  // Read / write cubins using m_filename
+  // Buffer is guarenteed / assumed to be m_size bytes in length
+  void read_cubin (void* buffer);
+  void write_cubin (const void* buffer);
+
+  // Helper function that correctly handles writing cubins that
+  // are larger than the max number of bytes that can be written
+  // in a single call to write() (just under 2G on Linux).
+  static void write_buffer (int fd, const void* image, uint64_t len);
+
+  // buffer is assumed to be m_size bytes in length
+  static void apply_function_load_updates (uint8_t *buffer,
+					   CUDBGLoadedFunctionInfo *info,
+					   uint32_t count);
+
+  // module_id
+  uint64_t        m_id;
+
+  // Property bitmask
+  CUDBGElfImageProperties m_properties;
+
+  // Context module is loaded in
+  cuda_context*   m_context;
+
+  // Path to the ELF/cubin file in /tmp
+  std::string     m_filename;
+
+  // The underlying objfile - may be null at certain points
+  struct objfile* m_objfile;
+
+  // The size of the relocated ELF image
+  uint64_t        m_size;
+
+  // Is the ELF image in memory?
+  bool            m_loaded;
+
+  // How many functions have been loaded through LFL so far
+  uint64_t        m_functions_loaded;
+
+  // Does the ELF image uses the ABI to call functions
+  bool            m_uses_abi;
+
+  // Optional disassembler
+  std::unique_ptr<cuda_module_disassembly_cache> m_disassembler;
+
+  // Class members
+  static cuda_module* s_current_module;
+  static std::multimap<uint64_t, CORE_ADDR> s_kernel_entry_points;
 };
 
-module_t    module_new    (context_t context, uint64_t module_id,
-                           void *elf_image, uint64_t elf_image_size);
-void        module_delete (module_t module);
-void        module_print  (module_t module);
-
-uint64_t    module_get_id         (module_t module);
-context_t   module_get_context    (module_t module);
-elf_image_t module_get_elf_image  (module_t module);
-void        module_set_elf_image  (module_t module, elf_image_t elf_image);
-module_t    module_get_next_module (module_t module);
-
-cuda_disassembler* module_disassembler (module_t module);
-
-modules_t  modules_new    (void);
-void       modules_delete (modules_t modules);
-void       modules_add    (modules_t modules, module_t module);
-void       modules_remove (modules_t modules, module_t module);
-void       modules_print  (modules_t modules);
-
-module_t   modules_find_module_by_id      (modules_t modules, uint64_t module_id);
-module_t   modules_find_module_by_address (modules_t modules, CORE_ADDR addr);
-void       modules_flush_disasm_caches    (modules_t modules);
-
 #endif
-

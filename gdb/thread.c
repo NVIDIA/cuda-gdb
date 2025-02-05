@@ -60,6 +60,12 @@
 /* See gdbthread.h.  */
 
 bool debug_threads = false;
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA FIXME: When switching threads using the thread command,
+   we get into trouble when we try to switch from CUDA focus
+   to host focus with the same host thread. */
+ptid_t thread_command_previous_ptid = null_ptid;
+#endif
 
 /* Implement 'show debug threads'.  */
 
@@ -305,6 +311,12 @@ add_thread_with_info (process_stratum_target *targ, ptid_t ptid,
 {
   thread_info *result = add_thread_silent (targ, ptid);
 
+#if defined(__QNXTARGET__)
+// TODO: bweb - this is bad when a thread is added outside the listener!
+  /* Do not NULL the private data that was just set in the add_thread_silent
+     observer */
+  if( priv != NULL )
+#endif
   result->priv.reset (priv);
 
   if (print_thread_events)
@@ -1076,6 +1088,7 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
 #ifdef NVIDIA_CUDA_GDB
   /* Switching to each thread will invalidate the cuda coordinates */
   bool focus_is_device = cuda_current_focus::isDevice ();
+  thread_command_previous_ptid = inferior_ptid;
 #endif
   update_thread_list ();
 
@@ -1394,6 +1407,9 @@ switch_to_no_thread ()
 static void
 switch_to_thread_1 (thread_info *thr, bool keep_cuda_focus)
 {
+  /* This tracks the previous focus. Default to assuming host focus. */
+  static bool prev_device_focus = false;
+
   /* FIXME: The original switch_to_thread code treats this as an assertion.
    * We get into a weird situation at tear down intermittently where the CUDA
    * thread is trying to restore focus, but the host thread has exited. This
@@ -1401,48 +1417,61 @@ switch_to_thread_1 (thread_info *thr, bool keep_cuda_focus)
    * Silently return in this case. */
   if (thr == NULL)
     return;
-  /* Switch the program space as well, if we can infer it from the now
-     current thread.  Otherwise, it's up to the caller to select the
-     space it wants.  */
-  set_current_program_space (thr->inf->pspace);
-  set_current_inferior (thr->inf);
-  /* CUDA - focus */
-  /* We can only compare ptid equivalence (for early exit) if
-     we're not focused on the device, as otherwise it can prevent
-     the full switch from happening when changing focus from the
-     device to a host thread (as the host thread ID may not have
-     changed based on the user's switch). */
-  if (!cuda_current_focus::isDevice () && is_current_thread (thr))
-    return; 
-  /* If we switch the focus away from the CUDA device, we will end up
-     with regular information from the host machine's threads.  If we
-     currently have focus on the device, make it so we keep that focus
-     regardless of whether we switch away from the original thread or not.  */
-  /* CUDA - focus
-   * Only invalidate if this isn't the fake_pid_p for cuda coredumps. */
+
+  /* Only invalidate focus if this isn't the fake_pid_p for cuda coredumps.
+     We invalidate to signal we want to go back to host focus. This happens
+     before checking current_device_focus so that we can detect the change. */
   if (!keep_cuda_focus && !thr->inf->fake_pid_p)
     cuda_current_focus::invalidate ();
+
+  /* We can only compare ptid equivalence (for early exit) if
+     we haven't changed focus between host/device and we are
+     currently focused on the host. We modify the host thread
+     state to track cuda focus. We must restore this when
+     switching back to the host thread. Also, we need to
+     update cuda focus when switching between device threads. */
+  bool current_device_focus = cuda_current_focus::isDevice ();
+
+  /* FIXME: GDB will switch to no threads and we will lose our concept of cuda focus.
+     We need to work around those situations. Reset on match. */
+  bool previous_ptid_match = (thr->ptid == thread_command_previous_ptid);
+  if (previous_ptid_match)
+    thread_command_previous_ptid = null_ptid;
+
+  /* Check to see if we need a focus update due to changing state as described above. */
+  bool need_focus_update
+      = ((prev_device_focus != current_device_focus) || current_device_focus || previous_ptid_match);
+
+  /* Early exit if we don't need to do anything */
+  if (!need_focus_update && is_current_thread (thr))
+    return;
+
   /* Following two calls is existing switch_to_thread code */
   switch_to_thread_no_regs (thr);
-  reinit_frame_cache (); 
+  reinit_frame_cache ();
+
   /* CUDA - focus */
-  registers_changed ();
-  /* We don't check for is_stopped, because we're called at times
-     while in the TARGET_RUNNING state, e.g., while handling an
-     internal event. Don't call this for threads that are not alive. 
-     This may throw when running remote - in which case we are unable
-     to query the stop pc. */
-  try 
+  /* Force the correct stop_pc for the thread and flush the register cache. */
+  if (need_focus_update)
     {
-      if (thread_alive (thr)
-	  && !thr->executing ())
-	thr->set_stop_pc (regcache_read_pc (get_thread_regcache (thr)));
-      else
-	thr->set_stop_pc (~(CORE_ADDR) 0);
-    } 
-  catch (const gdb_exception &ex) 
-    {
-      thr->set_stop_pc (~(CORE_ADDR) 0); 
+      prev_device_focus = current_device_focus;
+      registers_changed ();
+      /* We don't check for is_stopped, because we're called at times
+	 while in the TARGET_RUNNING state, e.g., while handling an
+	 internal event. Don't call this for threads that are not alive.
+	 This may throw when running remote - in which case we are unable
+	 to query the stop pc. */
+      try
+	{
+	  if (thread_alive (thr) && !thr->executing ())
+	    thr->set_stop_pc (regcache_read_pc (get_thread_regcache (thr)));
+	  else
+	    thr->set_stop_pc (~(CORE_ADDR)0);
+	}
+      catch (const gdb_exception &ex)
+	{
+	  thr->set_stop_pc (~(CORE_ADDR)0);
+	}
     }
 }
 /* See gdbthread.h.  */
@@ -1976,7 +2005,7 @@ thread_command (const char *tidstr, int from_tty)
       /* CUDA - focus */
       if (cuda_current_focus::isDevice ())
         {
-          printf_unfiltered (_("Focus not set on any host thread.\n"));
+          cuda_current_focus::printFocus (false);
           return;
         }
 #endif
@@ -1999,12 +2028,21 @@ thread_command (const char *tidstr, int from_tty)
   else
     {
       ptid_t previous_ptid = inferior_ptid;
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - focus */
+      bool was_cuda_focus = cuda_current_focus::isDevice ();
+      thread_command_previous_ptid = inferior_ptid;
+#endif
 
       thread_select (tidstr, parse_thread_id (tidstr, NULL));
 
       /* Print if the thread has not changed, otherwise an event will
 	 be sent.  */
+#ifdef NVIDIA_CUDA_GDB
+      if (inferior_ptid == previous_ptid && was_cuda_focus == cuda_current_focus::isDevice ())
+#else
       if (inferior_ptid == previous_ptid)
+#endif
 	{
 	  print_selected_thread_frame (current_uiout,
 				       USER_SELECTED_THREAD

@@ -88,13 +88,13 @@
 #include "gdbsupport/array-view.h"
 #include "gdbsupport/gdb_optional.h"
 #ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-asm.h"
 #include "cuda/cuda-coord-set.h"
 #include "cuda/cuda-tdep.h"
 #include "cuda/cuda-state.h"
 #include "cuda/cuda-modules.h"
 #include "cuda/cuda-context.h"
 #include "cuda/cuda-autostep.h"
-#include "cuda/cuda-elf-image.h"
 #include "cuda/cuda-options.h"
 #include "cuda/cuda-convvars.h"
 #include "cuda/cuda-utils.h"
@@ -349,7 +349,7 @@ struct cuda_auto_breakpoint : public internal_breakpoint
 
   cuda_auto_breakpoint (struct gdbarch *gdbarch,
                         enum cuda_auto_breakpoint_type type, CORE_ADDR address,
-                        elf_image_t elf_image)
+                        cuda_module* module)
       : internal_breakpoint (gdbarch, bp_cuda_auto, address)
   {
     cuda_auto_type = type;
@@ -367,7 +367,7 @@ struct cuda_auto_breakpoint : public internal_breakpoint
       }
     cuda_breakpoint = true;
     locspec = new_address_location_spec (loc->address, NULL, 0);
-    loc->cuda_elf_image = elf_image;
+    loc->m_cuda_module = module;
   }
 
   void re_set () override;
@@ -528,17 +528,6 @@ breakpoint_commands (struct breakpoint *b)
 
 static bool breakpoint_proceeded;
 
-#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
-extern CORE_ADDR svr4_r_debug_state (void);
-/* Return 1 if r_rdevent is RT_CONSISTENT */
-static int
-stop_on_this_shlib_event (void)
-{
-  const int state = svr4_r_debug_state ();
-  /* Stop only if debug state is consistent */
-  return state == 0;
-}
-#endif
 const char *
 bpdisp_text (enum bpdisp disp)
 {
@@ -3532,10 +3521,10 @@ create_internal_breakpoint (struct gdbarch *gdbarch,
 static struct breakpoint *
 create_cuda_auto_breakpoint (struct gdbarch *gdbarch, CORE_ADDR address,
                              enum cuda_auto_breakpoint_type type,
-                             elf_image_t elf_image)
+                             cuda_module* module)
 {
   std::unique_ptr<cuda_auto_breakpoint> b (
-      new cuda_auto_breakpoint (gdbarch, type, address, elf_image));
+      new cuda_auto_breakpoint (gdbarch, type, address, module));
 
   b->number = internal_breakpoint_number--;
 
@@ -6282,14 +6271,7 @@ bpstat_stop_status (const address_space *aspace,
     {
       if (bs->breakpoint_at && bs->breakpoint_at->type == bp_shlib_event)
 	{
-#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
-	  if (stop_on_this_shlib_event ())
-	    {
-	      handle_solib_event ();
-	    }
-#else
 	  handle_solib_event ();
-#endif
 	  break;
 	}
     }
@@ -6505,11 +6487,33 @@ bpstat_what (bpstat *bs_head)
                     /* Don't stop, just show a warning */
                     uint64_t error_code
                         = cuda_get_last_driver_api_error_code ();
-                    char *func_name = NULL;
+                    char *func_name = nullptr;
+                    std::string error_source;
+                    std::string error_name;
+                    std::string error_string;
+                    bool has_error_string
+                        = cuda_get_last_driver_api_error_source_name (error_source)
+                        && cuda_get_last_driver_api_error_name (error_name)
+                        && cuda_get_last_driver_api_error_string (error_string);
                     cuda_get_last_driver_api_error_func_name (&func_name);
-                    warning (
-                        _ ("Cuda API error detected: %s returned (0x%llx)\n"),
-                        func_name, (unsigned long long)error_code);
+
+                    if (has_error_string)
+                      {
+                        warning (
+                          _ ("Cuda %s API error detected: "
+                             "%s returned %s(0x%llx): %s\n"),
+                          error_source.c_str (), func_name, error_name.c_str (), 
+                          (unsigned long long)error_code, error_string.c_str ());
+                      }
+                    else
+                      {
+                        cuda_trace_breakpoint ("Backend does not report Cuda API Error strings.");
+                        warning (
+                          _ ("Cuda API error detected: "
+                             "%s returned (0x%llx)\n"),
+                          func_name, (unsigned long long)error_code);
+                      }
+                    
                     xfree (func_name);
                   }
                 this_action = BPSTAT_WHAT_SINGLE;
@@ -6534,7 +6538,7 @@ bpstat_what (bpstat *bs_head)
         case bp_cuda_graph:
           /* Setup auto breakpoints to use forced method. */
           cuda_set_device_launch_used (true);
-          cuda_elf_image_auto_breakpoints_update_locations ();
+	  cuda_module::auto_breakpoints_update_locations ();
           this_action = BPSTAT_WHAT_SINGLE;
           /* Delete forced detection breakpoints once it was hit */
           delete_cuda_cdp_breakpoint ();
@@ -8624,23 +8628,19 @@ delete_cuda_uvm_breakpoint (void)
  * location is updated with the device address.
  */
 static bool
-cuda_add_location (code_breakpoint *b, elf_image_t elf_image)
+cuda_add_location (code_breakpoint *b, cuda_module* module)
 {
-  struct gdbarch *arch = NULL;
-  struct objfile *objfile = NULL;
-  module_t module = NULL;
-  context_t context = NULL;
-  uint64_t context_id = 0;
-  struct bp_location *loc = NULL;
+  struct gdbarch *arch = nullptr;
+  struct objfile *objfile = nullptr;
+  struct bp_location *loc = nullptr;
   struct symtab_and_line sal;
+
   gdb_assert (b);
-  gdb_assert (elf_image);
-  gdb_assert (cuda_elf_image_is_loaded (elf_image));
-  arch       = cuda_get_gdbarch ();
-  objfile    = cuda_elf_image_get_objfile (elf_image);
-  module     = cuda_elf_image_get_module (elf_image);
-  context    = module_get_context (module);
-  context_id = context_get_id (context);
+  gdb_assert (module);
+  gdb_assert (module->loaded ());
+
+  arch = cuda_get_gdbarch ();
+  objfile = module->objfile ();
 
   /* skip bps that were set on the current pc when focus on host */
   if (b->locspec == nullptr || breakpoint_location_spec_empty_p (b) != 0)
@@ -8666,11 +8666,11 @@ cuda_add_location (code_breakpoint *b, elf_image_t elf_image)
   sal = find_pc_line (addr, 0);
   /* create the new location and populate it */
   loc = b->add_location (sal);
-  loc->cuda_elf_image   = elf_image;
+  loc->m_cuda_module    = module;
   loc->cuda_breakpoint  = true;
   b->cuda_breakpoint    = true;
   b->gdbarch            = arch;
-  gdb_assert (loc->cuda_elf_image);
+  gdb_assert (loc->m_cuda_module);
   loc->address = adjust_breakpoint_address (b->gdbarch, addr, b->type, current_program_space);
   if (b->cond_string)
     {
@@ -8678,25 +8678,27 @@ cuda_add_location (code_breakpoint *b, elf_image_t elf_image)
       loc->cond = parse_exp_1 (&arg, addr, block_for_pc(addr), 0);
     }
   /* the location has been created. No need to to do more. */
-  cuda_trace_breakpoint ("added CUDA breakpoint location: breakpoint %d address %p context 0x%llx",
-			 b->number, loc->address, (long long)context_id);
+  cuda_trace_breakpoint ("added CUDA breakpoint location: breakpoint %d address %p module 0x%llx",
+			 b->number, loc->address, module->id ());
   return true;
 }
 static struct bp_location*
-cuda_promote_location (struct bp_location* loc, elf_image_t elf_image)
+cuda_promote_location (struct bp_location* loc, cuda_module* module)
 {
   struct gdbarch *arch = NULL;
   struct objfile *objfile = NULL;
   CORE_ADDR addr = 0;
   bool found = false;
   struct breakpoint *b = NULL;
+
   gdb_assert (loc);
-  gdb_assert (elf_image);
-  gdb_assert (cuda_elf_image_is_loaded (elf_image));
+  gdb_assert (module);
+  gdb_assert (module->loaded ());
+
   b          = loc->owner;
   addr       = loc->address;
   arch       = cuda_get_gdbarch ();
-  objfile    = cuda_elf_image_get_objfile (elf_image);
+  objfile    = module->objfile ();
   /* skip already resolved cuda breakpoints */
   if (loc->cuda_breakpoint)
     return NULL;
@@ -8733,7 +8735,7 @@ cuda_promote_location (struct bp_location* loc, elf_image_t elf_image)
     }
   /* attach all the information required for CUDA breakpoints */
   loc->address          = addr;
-  loc->cuda_elf_image   = elf_image;
+  loc->m_cuda_module    = module;
   loc->cuda_breakpoint  = true;
   b->cuda_breakpoint    = true;
   b->gdbarch            = arch;
@@ -8766,13 +8768,16 @@ cuda_print_breakpoint (const char *desc, struct breakpoint *b)
    locations on host and device. Happens when setting a breakpoint on the
    closing bracket of a device function. */
 static void
-cuda_clean_shadow_host_breakpoints (struct breakpoint *b, elf_image_t elf_image)
+cuda_clean_shadow_host_breakpoints (struct breakpoint *b, cuda_module* module)
 {
-  struct objfile *objfile = cuda_elf_image_get_objfile (elf_image);
+  gdb_assert (module);
+  
   CORE_ADDR addr = 0;
   int num_device_locations = 0;
   int num_host_locations = 0;
   struct bp_location *loc = NULL;
+  struct objfile *objfile = module->objfile ();
+
   /* check if we have a mixed bag of host and device locations */
   for (loc = b->loc; loc; loc = loc->next)
   {
@@ -8834,10 +8839,10 @@ cuda_remove_duplicate_locations (struct bp_location *promoted_loc, struct breakp
 
   *ploc = promoted_loc->next;
   /* If another location type is yet not set, copy it from promoted location */
-  if (loc->cuda_elf_image == NULL)
+  if (loc->m_cuda_module == nullptr)
     {
-      loc->cuda_elf_image = promoted_loc->cuda_elf_image;
-      gdb_assert (loc->cuda_elf_image);
+      loc->m_cuda_module = promoted_loc->m_cuda_module;
+      gdb_assert (loc->m_cuda_module);
       loc->cuda_breakpoint = true;
     }
 
@@ -8845,20 +8850,20 @@ cuda_remove_duplicate_locations (struct bp_location *promoted_loc, struct breakp
     cuda_trace_breakpoint ("removed %s breakpoint location: breakpoint %d addr %p",
 			   loc->cuda_breakpoint ? "CUDA" : "host",
 			   b->number, loc->address);
-  promoted_loc->cuda_elf_image = NULL;
+  promoted_loc->m_cuda_module = nullptr;
   promoted_loc->cuda_breakpoint = false;
   update_global_location_list (UGLL_DONT_INSERT);
   return true;
 }
 void
-cuda_resolve_breakpoints (int bp_number_from, elf_image_t elf_image)
+cuda_resolve_breakpoints (int bp_number_from, cuda_module* module)
 {
   struct breakpoint *b = NULL;
   struct breakpoint *tmp = NULL;
   struct bp_location *loc = NULL;
   struct bp_location *promoted_loc = NULL;
-  cuda_trace_breakpoint ("resolve cuda breakpoints for ELF image %p", elf_image);
-  gdb_assert (cuda_elf_image_is_loaded (elf_image));
+  cuda_trace_breakpoint ("resolve cuda breakpoints for module 0x%llx", module->id ());
+  gdb_assert (module->loaded ());
   /* conditional breakpoints might rely on cuda symbols */
   cuda_update_cudart_symbols ();
   cuda_update_convenience_variables ();
@@ -8887,12 +8892,12 @@ cuda_resolve_breakpoints (int bp_number_from, elf_image_t elf_image)
 	}
       cuda_print_breakpoint ("after breakpoint reset", b);
       /* avoid duplicate breakpoints on shadow code */
-      cuda_clean_shadow_host_breakpoints (b, elf_image);
+      cuda_clean_shadow_host_breakpoints (b, module);
       /* Promote existing host breakpoints to device breakpoints if possible */
       loc = b->loc;
       while (loc)
         {
-          promoted_loc = cuda_promote_location (loc, elf_image);
+          promoted_loc = cuda_promote_location (loc, module);
           if (promoted_loc)
             {
 	      if (cuda_remove_duplicate_locations (promoted_loc, b))
@@ -8909,7 +8914,7 @@ cuda_resolve_breakpoints (int bp_number_from, elf_image_t elf_image)
             used on a device function), OR
           - when there are more than one device location (the first is
             promoted, the others are created from scratch). */
-      cuda_add_location ((code_breakpoint *)b, elf_image);
+      cuda_add_location ((code_breakpoint *)b, module);
       cuda_print_breakpoint ("after cuda_add_location", b);
       /* restore the section (and objfile) if it has been removed after
          unloading the ELF image for one reason or another. */
@@ -8931,14 +8936,15 @@ cuda_resolve_breakpoints (int bp_number_from, elf_image_t elf_image)
  breakpoint will become active the next time a valid stack comes into
  focus.
 
- Pass in nullptr for elf_image to unreslove all CUDA breakpoints. Used
+ Pass in nullptr for module to unreslove all CUDA breakpoints. Used
  by cuda_state::cleanup_breakpoints() which was originally iterating over all
- the elf_image_t objects, calling this for each one.
+ the module objects, calling this for each one.
 */
 void
-cuda_unresolve_breakpoints (elf_image_t elf_image)
+cuda_unresolve_breakpoints (cuda_module* module)
 {
-  cuda_trace_breakpoint ("unresolve cuda breakpoints for ELF image %p", elf_image);
+  cuda_trace_breakpoint ("unresolve cuda breakpoints for module 0x%llx",
+			 module ? module->id () : -1);
   for (breakpoint *b : all_breakpoints ())
     {
       if (b->type != bp_breakpoint
@@ -8953,14 +8959,14 @@ cuda_unresolve_breakpoints (elf_image_t elf_image)
           disable_breakpoint (b);
         }
 
-      // Unresolve if the elf_image matches, or if elf_image is nullptr
+      // Unresolve if the module matches, or if module is nullptr
       for(bp_location **ploc = &b->loc; *ploc; )
-        if ((elf_image && ((*ploc)->cuda_elf_image == elf_image))
-	    || (!elf_image && ((*ploc)->cuda_elf_image != nullptr)))
+        if ((module && ((*ploc)->m_cuda_module == module))
+	    || (!module && ((*ploc)->m_cuda_module != nullptr)))
           {
             cuda_trace_breakpoint ("  -> unresolved CUDA breakpoint %d addr %p",
 				   b->number, (*ploc)->address);
-            (*ploc)->cuda_elf_image = NULL;
+            (*ploc)->m_cuda_module = nullptr;
             /* the objfile and the section do not exist anymore */
             (*ploc)->section = NULL;
             /* Remove location form the list of breakpoint locations chain */
@@ -9565,10 +9571,10 @@ code_breakpoint::add_location (const symtab_and_line &sal)
   /* CUDA - breakpoints */
   if (new_loc->gdbarch == cuda_get_gdbarch ())
     {
-      if (!new_loc->cuda_elf_image && sal.symtab)
-	new_loc->cuda_elf_image = cuda_get_elf_image_by_objfile (sal.symtab->compunit ()->objfile ());
-      if (!new_loc->cuda_elf_image && sal.section)
-	new_loc->cuda_elf_image = cuda_get_elf_image_by_objfile (sal.section->objfile);
+      if (!new_loc->m_cuda_module && sal.symtab)
+	new_loc->m_cuda_module = sal.symtab->compunit ()->objfile ()->m_cuda_module;
+      if (!new_loc->m_cuda_module && sal.section)
+	new_loc->m_cuda_module = sal.section->objfile->m_cuda_module;
       new_loc->cuda_breakpoint = true;
       cuda_breakpoint = true;
       /* LFL - ensure that the address is relocated. We want to disable unrelocated locations. */
@@ -13591,8 +13597,8 @@ cuda_auto_breakpoint::print_it (const bpstat *bs) const
 			   async_reason_lookup (EXEC_ASYNC_BREAKPOINT_HIT));
     }
 
-  gdb_assert (loc->cuda_elf_image);
-  if (cuda_elf_image_is_system (loc->cuda_elf_image))
+  gdb_assert (loc->m_cuda_module);
+  if (loc->m_cuda_module->system ())
     uiout->text ("system");
   else
     uiout->text ("application");
@@ -13609,15 +13615,33 @@ cuda_api_error_breakpoint::print_it (const bpstat *bs) const
   struct ui_out *uiout = current_uiout;
   uint64_t res = cuda_get_last_driver_api_error_code ();
   char *func_name = nullptr;
+  std::string error_source;
+  std::string error_name;
+  std::string error_string;
+  bool has_error_string
+      = cuda_get_last_driver_api_error_source_name (error_source)
+      && cuda_get_last_driver_api_error_name (error_name)
+      && cuda_get_last_driver_api_error_string (error_string);
   cuda_get_last_driver_api_error_func_name (&func_name);
   if (uiout->is_mi_like_p ())
   {
      uiout->field_string ("reason", async_reason_lookup (EXEC_ASYNC_SIGNAL_RECEIVED));
      uiout->field_string ("signal-name", "CUDA API ERROR");
   }
-  uiout->field_fmt ("signal-meaning",
+  if (has_error_string)
+    {
+      uiout->field_fmt ("signal-meaning",
+        "Cuda %s API error detected: %s returned %s(0x%llx): %s",
+        error_source.c_str (), func_name, error_name.c_str (), (unsigned long long) res, 
+        error_string.c_str ());
+    }
+  else
+    {
+      cuda_trace_breakpoint ("Backend does not report Cuda API Error strings.");
+      uiout->field_fmt ("signal-meaning",
 		    "Cuda API error detected: %s returned (0x%llx)",
 		    func_name, (unsigned long long) res);
+    }
   uiout->text ("\n");
   xfree(func_name);
   return PRINT_NOTHING;
@@ -14380,10 +14404,10 @@ update_breakpoint_locations (code_breakpoint *b,
 
       new_loc = b->add_location (sal);
 #ifdef NVIDIA_CUDA_GDB
-      /* FIXME: Hack in cuda_elf_image - this should be removed. */
+      /* FIXME: Hack in cuda_module - this should be removed. */
       if (new_loc->cuda_breakpoint)
         {
-          elf_image_t cuda_image;
+          cuda_module* module = nullptr;
           if (existing_locations)
             {
               auto loc = existing_locations;
@@ -14391,7 +14415,7 @@ update_breakpoint_locations (code_breakpoint *b,
                 {
                   if (loc->cuda_breakpoint)
                     {
-                      cuda_image = loc->cuda_elf_image;
+                      module = loc->m_cuda_module;
                       break;
                     }
 		  loc = loc->next;
@@ -14404,13 +14428,13 @@ update_breakpoint_locations (code_breakpoint *b,
                 {
                   if (loc->cuda_breakpoint)
                     {
-                      cuda_image = loc->cuda_elf_image;
+                      module = loc->m_cuda_module;
                       break;
                     }
 		  loc = loc->next;
                 }
 	    }
-          new_loc->cuda_elf_image = cuda_image;
+          new_loc->m_cuda_module = module;
         }
 #endif
 
@@ -16004,7 +16028,7 @@ save_tracepoints_command (const char *args, int from_tty)
 
 #ifdef NVIDIA_CUDA_GDB
 void
-cuda_auto_breakpoints_forced_add_location (elf_image_t elf_image,
+cuda_auto_breakpoints_forced_add_location (cuda_module* module,
                                            CORE_ADDR addr)
 {
   gdbarch *cuda_gdbarch = cuda_get_gdbarch ();
@@ -16025,7 +16049,7 @@ cuda_auto_breakpoints_forced_add_location (elf_image_t elf_image,
                                     current_program_space);
 
   /* Try to re-use existing breakpoint */
-  bool isSystem = cuda_elf_image_is_system (elf_image);
+  bool isSystem = module->system ();
   for (breakpoint *b : all_breakpoints_safe ())
     {
       if (b->type == bp_cuda_auto
@@ -16044,7 +16068,7 @@ cuda_auto_breakpoints_forced_add_location (elf_image_t elf_image,
           sal.explicit_pc = 1;
           auto loc = ((cuda_auto_breakpoint *)b)->add_location (sal);
           /* update elf image for location */
-          loc->cuda_elf_image = elf_image;
+          loc->m_cuda_module = module;
           return;
         }
     }
@@ -16053,23 +16077,22 @@ cuda_auto_breakpoints_forced_add_location (elf_image_t elf_image,
   breakpoint *b = create_cuda_auto_breakpoint (
       cuda_gdbarch, addr,
       isSystem ? CUDA_FORCED_SYSTEM_BP : CUDA_FORCED_APPLICATION_BP,
-      elf_image);
+      module);
   cuda_trace_breakpoint ("created %s auto breakpoint bp %d at 0x%llx",
                          isSystem ? "system" : "application", b->number,
                          (unsigned long long)addr);
 }
 void
-cuda_auto_breakpoints_remove_locations (elf_image_t elf_image)
+cuda_auto_breakpoints_remove_locations (cuda_module* module)
 {
   bool need_location_update = false;
   auto remove_loc = [&] (struct breakpoint *bp) {
     if (!bp || !bp->loc)
       return;
-    cuda_trace_breakpoint (
-        "remove auto breakpoint bp %d locations for ELF image %p", bp->number,
-        elf_image);
+    cuda_trace_breakpoint ("remove auto breakpoint bp %d locations for module 0x%llx",
+			   bp->number, module->id ());
     for (bp_location **ploc = &bp->loc; *ploc;)
-      if ((*ploc)->cuda_elf_image == elf_image)
+      if ((*ploc)->m_cuda_module == module)
         {
           /* Remove location form the list of breakpoint locations chain */
           /* Dangling locations are freed in update_global_location_list */
@@ -16088,12 +16111,12 @@ cuda_auto_breakpoints_remove_locations (elf_image_t elf_image)
           switch (((cuda_auto_breakpoint *)b)->cuda_auto_type)
             {
             case CUDA_EVENT_BP:
-              /* Check to see if it matches the elf_image we are unloading. */
-              if (b->loc->cuda_elf_image == elf_image)
+              /* Check to see if it matches the module we are unloading. */
+              if (b->loc->m_cuda_module == module)
                 {
                   cuda_trace_breakpoint (
-                      "remove auto breakpoint bp %d for ELF image %p",
-                      b->number, elf_image);
+                      "remove auto breakpoint bp %d for module 0x%llx",
+                      b->number, module->id ());
                   delete_breakpoint (b);
                 }
               break;
@@ -16125,8 +16148,7 @@ cuda_auto_breakpoints_update (void)
                  * break_on_launch system or it's an application breakpoint and
                  * we don't have break_on_launch application or we need forced
                  * delete it. */
-                auto isSystem
-                    = cuda_elf_image_is_system (b->loc->cuda_elf_image);
+                auto isSystem = b->loc->m_cuda_module->system ();
                 if ((isSystem && !cuda_options_break_on_launch_system ())
                     || (!isSystem
                         && !cuda_options_break_on_launch_application ())
@@ -16190,10 +16212,10 @@ cuda_auto_breakpoints_cleanup (void)
 }
 /* Used when a KERNEL_READY event is detected. We have the entry pc provided to us. */
 void
-cuda_auto_breakpoints_event_add_break (elf_image_t elf_image, CORE_ADDR addr)
+cuda_auto_breakpoints_event_add_break (cuda_module* module, CORE_ADDR addr)
 {
   /* Check to see if auto breakpoints are enabled for this kernel */
-  if (cuda_elf_image_is_system (elf_image))
+  if (module->system ())
     {
       if (!cuda_options_break_on_launch_system ())
         return;
@@ -16222,8 +16244,7 @@ cuda_auto_breakpoints_event_add_break (elf_image_t elf_image, CORE_ADDR addr)
   addr = adjust_breakpoint_address (cuda_gdbarch, addr, bp_cuda_auto,
                                     current_program_space);
   /* Create an internal temporary breakpoint. */
-  struct breakpoint *bp = create_cuda_auto_breakpoint (
-      cuda_gdbarch, addr, CUDA_EVENT_BP, elf_image);
+  struct breakpoint *bp = create_cuda_auto_breakpoint (cuda_gdbarch, addr, CUDA_EVENT_BP, module);
   cuda_trace_breakpoint ("Created event auto breakpoint bp %d at 0x%llx", bp->number,
                          (unsigned long long)addr);
 }

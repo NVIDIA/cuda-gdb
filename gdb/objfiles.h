@@ -49,6 +49,7 @@ struct htab;
 struct objfile_data;
 struct partial_symbol;
 #ifdef NVIDIA_CUDA_GDB
+class cuda_module;
 struct cuda_regmap_table;
 #endif
 
@@ -797,6 +798,8 @@ public:
 #ifdef NVIDIA_CUDA_GDB
   /* CUDA - cuda_objfile */
   bool cuda_objfile = false;
+  cuda_module* m_cuda_module = nullptr;
+
   /* CUDA - Whether this objfile is in the process of being discarded or not.
      This is used as a way to tell GDB that we no longer want types associated
      with this particular CUDA objfile and therefore want the types to be

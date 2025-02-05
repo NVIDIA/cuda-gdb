@@ -149,10 +149,10 @@ aarch64*-*-linux*)
 	;;
 
 aarch64*-*-nto*)
-	# Target: AArch64 nto (QNX)
-	gdb_target_obs="aarch64-tdep.o aarch64-nto-tdep.o solib-svr4.o \
-			nto-tdep.o arch/aarch64-insn.o"
-	;;
+        # Target: AArch64 nto (QNX)
+        gdb_target_obs="aarch64-tdep.o aarch64-nto-tdep.o solib-svr4.o \
+                        solib-nto.o nto-tdep.o remote-nto.o"
+        ;;
 
 alpha*-*-linux*)
 	# Target: Little-endian Alpha running Linux
@@ -304,20 +304,12 @@ i[34567]86-*-openbsd*)
 	# Target: OpenBSD/i386
 	gdb_target_obs="i386-bsd-tdep.o i386-obsd-tdep.o bsd-uthread.o"
 	;;
-i[34567]86-*-nto*)
-	# Target: Intel 386 running qnx6.
-	gdb_target_obs="solib-svr4.o \
-			i386-nto-tdep.o nto-tdep.o"
-	if test "x$enable_64_bit_bfd" = "xyes"; then
-	    # Target: nto x86-64
-	    gdb_target_obs="amd64-tdep.o amd64-nto-tdep.o ${gdb_target_obs}"
-	fi
-	;;
 x86_64-*-nto*)
-	# Target: x86_64 running qnx6
-	gdb_target_obs="i386-tdep.o i387-tdep.o amd64-tdep.o amd64-nto-tdep.o \
-			i386-nto-tdep.o nto-tdep.o solib-svr4.o"
-	;;
+        # Target: Intel x86_64 running qnx8
+        gdb_target_obs="solib-svr4.o solib-nto.o \
+                i386-tdep.o i387-tdep.o amd64-tdep.o \
+                amd64-nto-tdep.o i386-nto-tdep.o nto-tdep.o remote-nto.o"
+        ;;
 i[34567]86-*-solaris2* | x86_64-*-solaris2*)
 	# Target: Solaris x86_64
 	gdb_target_obs="${i386_tobjs} ${amd64_tobjs} \

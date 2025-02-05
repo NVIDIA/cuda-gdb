@@ -34,7 +34,6 @@
 #include "cuda-regmap.h"
 #include "cuda-tdep.h"
 #include "cuda-utils.h"
-#include "cuda-elf-image.h"
 
 /*List of set/show cuda commands */
 struct cmd_list_element *setcudalist;
@@ -207,8 +206,8 @@ out:
   if (flags)
     xfree (flags);
 
-  if (cuda_remote)
-    cuda_remote_set_option (cuda_get_current_remote_target ());
+  if (is_remote_target (current_inferior ()->process_target ()))
+    cuda_remote_set_option ();
 }
 
 static void
@@ -269,8 +268,8 @@ static void
 cuda_set_debug_notifications (const char *args, int from_tty,
                               struct cmd_list_element *c)
 {
-  if (cuda_remote)
-    cuda_remote_set_option (cuda_get_current_remote_target ());
+  if (is_remote_target (current_inferior ()->process_target ()))
+    cuda_remote_set_option ();
 }
 
 static void
@@ -307,8 +306,8 @@ static void
 cuda_set_debug_libcudbg (const char *args, int from_tty,
                          struct cmd_list_element *c)
 {
-  if (cuda_remote)
-    cuda_remote_set_option (cuda_get_current_remote_target ());
+  if (is_remote_target (current_inferior ()->process_target ()))
+    cuda_remote_set_option ();
 }
 
 static void
@@ -522,8 +521,8 @@ cuda_show_notify (struct ui_file *file, int from_tty,
 static void
 cuda_set_notify (const char *args, int from_tty, struct cmd_list_element *c)
 {
-  if (cuda_remote)
-    cuda_remote_set_option (cuda_get_current_remote_target ());
+  if (is_remote_target (current_inferior ()->process_target ()))
+    cuda_remote_set_option ();
 }
 
 static void
@@ -582,8 +581,9 @@ cuda_set_break_on_launch (const char *args, int from_tty, struct cmd_list_elemen
 {
   /* Update to receive KERNEL_READY events. */
   cuda_options_force_set_launch_notification_update ();
+
   /* Update kernel entry bpts if needed. */
-  cuda_elf_image_auto_breakpoints_update_locations ();
+  cuda_module::auto_breakpoints_update_locations ();
 }
 
 static void
@@ -812,8 +812,9 @@ cuda_set_show_kernel_events (const char *args, int from_tty, struct cmd_list_ele
 {
   /* Update to receive KERNEL_READY events. */
   cuda_options_force_set_launch_notification_update ();
+
   /* Update kernel entry bpts if needed. */
-  cuda_elf_image_auto_breakpoints_update_locations ();
+  cuda_module::auto_breakpoints_update_locations ();
 }
 
 static void
@@ -1162,11 +1163,27 @@ cuda_options_variable_value_cache_enabled (void)
          cuda_variable_value_cache_enabled == AUTO_BOOLEAN_AUTO;
 }
 
+/*
+ * set cuda api stat collection
+ */
+static bool cuda_gpu_collect_stats = true;
+
+static void
+cuda_show_cuda_gpu_collect_stats (struct ui_file *file, int from_tty,
+                         struct cmd_list_element *c, const char *value)
+{
+  gdb_printf (file, _("CUDA debugger API statistics collection is %s.\n"), value);
+}
+
+bool
+cuda_options_statistics_collection_enabled (void)
+{
+  return cuda_gpu_collect_stats;
+}
+
 static void
 cuda_print_statistics (const char *args, int from_tty)
 {
-  uint32_t cnt;
-  const CUDBGIPCStat_t *st;
   struct ui_out *uiout = current_uiout;
 
   /* column headers */
@@ -1179,17 +1196,17 @@ cuda_print_statistics (const char *args, int from_tty)
 
   size_t name_width = strlen(header_name);
   int row_no = 0;
-  double total = 0;
+  std::chrono::microseconds total_time = std::chrono::microseconds::zero ();
 
-  for (cnt = 0; cnt < CUDBGIPC_API_STAT_MAX; cnt++)
-    {
-      st = cudbgipcGetProfileStat (cnt);
-      if (!st) continue;
-
-      total += st->total_time;
-      name_width = std::max(name_width, strlen(st->name));
-      row_no++;
-    }
+  auto preprocess_stats = [&](const cuda_api_stat &stat)
+  {
+    if (stat.times_called == 0)
+      return;
+    name_width = std::max(name_width, stat.name.length());
+    ++row_no;
+    total_time += stat.total_time;
+  };
+  cuda_debugapi::for_each_api_stat (preprocess_stats);
 
   ui_out_emit_table table_cleanup (uiout, 6, row_no, "CUDBGAPIStatTable");
   uiout->table_header (name_width,           ui_left,  "name",  header_name);
@@ -1200,39 +1217,27 @@ cuda_print_statistics (const char *args, int from_tty)
   uiout->table_header (strlen(header_total), ui_right, "total", header_total);
   uiout->table_body ();
 
-  for (cnt=0; cnt < CUDBGIPC_API_STAT_MAX; cnt++)
-    {
-      st = cudbgipcGetProfileStat (cnt);
-      if (!st) continue;
+  auto process_stats = [&] (const cuda_api_stat &stat) {
+    if (stat.times_called == 0)
+      return;
+    ui_out_emit_tuple row_cleanup (uiout, "CUDBGAPIStatRow");
+    uiout->field_string ("name", stat.name.c_str ());
+    uiout->field_signed ("calls", stat.times_called);
+    uiout->field_signed ("avg", stat.total_time.count () / stat.times_called);
+    uiout->field_signed ("min", stat.min_time.count ());
+    uiout->field_signed ("max", stat.max_time.count ());
+    uiout->field_signed ("total", stat.total_time.count ());
+    uiout->text ("\n");
+  };
+  cuda_debugapi::for_each_api_stat (process_stats);
 
-      ui_out_emit_tuple row_cleanup (uiout, "CUDBGAPIStatRow");
-      uiout->field_string ("name", st->name);
-      uiout->field_signed ("calls", st->times_called);
-      uiout->field_signed ("avg", (int)(st->total_time/st->times_called));
-      uiout->field_signed ("min", (int)st->min_time);
-      uiout->field_signed ("max", (int)st->max_time);
-      uiout->field_signed ("total", (int)st->total_time);
-      uiout->text ("\n");
-    }
-
-  printf_unfiltered ("Total time spend in CUDBG API is %f sec\n", total*1e-6);
+  printf_unfiltered ("Total time spent in CUDBG API is %.6f sec\n", std::chrono::duration<double>(total_time).count ());
 }
-
-
-static bool cuda_gpu_collect_stats = true;
 
 static void
-cuda_show_cuda_gpu_collect_stats (struct ui_file *file, int from_tty,
-                         struct cmd_list_element *c, const char *value)
+cuda_reset_statistics (const char *args, int from_tty)
 {
-  gdb_printf (file, _("CUDA debugger API statistics collection is %s.\n"), value);
-}
-
-
-bool
-cuda_options_statistics_collection_enabled (void)
-{
-  return cuda_gpu_collect_stats != false;
+  cuda_debugapi::reset_api_stat ();
 }
 
 static void
@@ -1242,12 +1247,16 @@ cuda_options_initialize_stats (void)
            _("Print statistics about CUDA Debugger API."),
            &maintenanceprintlist);
 
-  add_setshow_boolean_cmd ("collect_stats", class_cuda, &cuda_gpu_collect_stats,
+  add_cmd ("reset_cuda_stats", class_maintenance, cuda_reset_statistics,
+	   _("Reset collected statistics about CUDA Debugger API."),
+	   &maintenancelist);
+
+  add_setshow_boolean_cmd ("cuda_stats", class_maintenance, &cuda_gpu_collect_stats,
                            _("Turn on/off CUDA Debugger API statistics collection"),
                            _("Show if CUDA Debugger API statistics collection is enabled."),
                            _("When enabled, cuda-gdb will collect debugger API call statistics."),
                            NULL, cuda_show_cuda_gpu_collect_stats,
-                           &setcudalist, &showcudalist);
+                           &maintenance_set_cmdlist, &maintenance_show_cmdlist);
 }
 
 /*
@@ -1396,8 +1405,8 @@ cuda_set_stop_signal (const char *args, int from_tty, struct cmd_list_element *c
   if (strcasecmp(cuda_stop_signal_string,"SIGTRAP")==0)
      cuda_stop_signal = GDB_SIGNAL_TRAP;
 
-  if (cuda_remote)
-    cuda_remote_set_option (cuda_get_current_remote_target ());
+  if (is_remote_target (current_inferior ()->process_target ()))
+    cuda_remote_set_option ();
 }
 
 unsigned cuda_options_stop_signal (void)
@@ -1447,8 +1456,9 @@ cuda_options_device_resume_on_cpu_dynamic_function_call (void)
 }
 
 /*Initialization */
+void _initialize_cuda_options ();
 void
-cuda_options_initialize (void)
+_initialize_cuda_options ()
 {
   cuda_options_initialize_cuda_prefix ();
   cuda_options_initialize_debug_cuda_prefix ();

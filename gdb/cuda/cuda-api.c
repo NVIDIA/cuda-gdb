@@ -28,6 +28,7 @@
 #include "cuda-packet-manager.h"
 #include "cuda-utils.h"
 
+#include <chrono>
 #include <signal.h>
 #include <unistd.h>
 #include <execinfo.h>
@@ -66,9 +67,76 @@
 #define CUDA_API_ERROR_DEV_SM_WARP_LANE(res, dev, sm, wp, ln, fmt, ...)	\
   cuda_api_error (res, "%s(%u, %u, %u, %u): " fmt, __FUNCTION__, dev, sm, wp, ln, ## __VA_ARGS__)
 
-// Globals
-cuda_debugapi cuda_debugapi::m_instance;
+#define CUDA_API_FUNC_OFFSET(func)                                            \
+  (s_api_call_stats[static_cast<std::size_t> (                                \
+      offsetof (std::remove_pointer<CUDBGAPI>::type, func)                    \
+      / sizeof (uintptr_t))])
 
+#define CUDA_API_PROFILE(func)                                                \
+  cuda_api_profiling timer { __FUNCTION__, CUDA_API_FUNC_OFFSET (func) }
+
+// Globals
+cuda_debugapi cuda_debugapi::s_instance;
+decltype (cuda_debugapi::s_api_call_stats) cuda_debugapi::s_api_call_stats;
+
+class cuda_api_profiling
+{
+public:
+  // Assumes the lifetime of function matches the lifetime of
+  // cuda_api_profiling
+  cuda_api_profiling (const char *function, cuda_api_stat &stat)
+      : m_stat (stat), m_func (function)
+  {
+    if (cuda_options_statistics_collection_enabled ())
+      {
+	m_start_time = std::chrono::steady_clock::now ();
+      }
+  }
+  ~cuda_api_profiling ()
+  {
+    if (cuda_options_statistics_collection_enabled ())
+      {
+	const auto end = std::chrono::steady_clock::now ();
+	const std::chrono::microseconds elapsed
+	    = std::chrono::duration_cast<std::chrono::microseconds> (
+		end - m_start_time);
+	if (m_stat.times_called == 0)
+	  {
+	    // First time recording this function
+	    m_stat.name = std::string (m_func);
+	    m_stat.times_called = 1;
+	    m_stat.total_time = elapsed;
+	    m_stat.min_time = elapsed;
+	    m_stat.max_time = elapsed;
+	  }
+	else
+	  {
+	    m_stat.times_called++;
+	    m_stat.total_time += elapsed;
+	    m_stat.min_time = std::min (m_stat.min_time, elapsed);
+	    m_stat.max_time = std::max (m_stat.max_time, elapsed);
+	  }
+      }
+  }
+
+private:
+  cuda_api_stat &m_stat;
+  const char *m_func;
+  std::chrono::steady_clock::time_point m_start_time;
+};
+
+void
+cuda_debugapi::for_each_api_stat (std::function<void (const cuda_api_stat &)> func)
+{
+  for (const auto &stat : s_api_call_stats)
+    func (stat);
+}
+
+void
+cuda_debugapi::reset_api_stat ()
+{
+  std::fill (std::begin (s_api_call_stats), std::end (s_api_call_stats), cuda_api_stat {});
+}
 
 cuda_debugapi::cuda_debugapi ()
   : m_cudbgAPI { nullptr },
@@ -133,10 +201,12 @@ cuda_debugapi::initialize ()
 
   CUDA_API_TRACE ("");
 
-  // Save the inferior_ptid that we are initializing
-  m_instance.m_api_ptid = cuda_gdb_get_tid_or_pid (inferior_ptid);
+  CUDA_API_PROFILE (initialize);
 
-  CUDBGResult res = m_instance.m_cudbgAPI->initialize ();
+  // Save the inferior_ptid that we are initializing
+  s_instance.m_api_ptid = cuda_gdb_get_tid_or_pid (inferior_ptid);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->initialize ();
   cuda_api_print_api_call_result (__FUNCTION__, res);
   handle_initialization_error (res);
 
@@ -150,9 +220,9 @@ cuda_debugapi::initialize ()
 					CUDBG_API_VERSION_REVISION);
 
       CUDA_API_TRACE ("Attached to debug agent version %u.%u.%u",
-		      m_instance.m_api_version.m_major,
-		      m_instance.m_api_version.m_minor,
-		      m_instance.m_api_version.m_revision);
+		      s_instance.m_api_version.m_major,
+		      s_instance.m_api_version.m_minor,
+		      s_instance.m_api_version.m_revision);
     }
 
   return (res != CUDBG_SUCCESS && res != CUDBG_ERROR_SOME_DEVICES_WATCHDOGGED);
@@ -166,13 +236,15 @@ cuda_debugapi::finalize ()
 
   CUDA_API_TRACE ("");
 
+  CUDA_API_PROFILE (finalize);
+
   clear_state ();
 
   CUDBGResult res;
-  if (cuda_remote)
-    res = cuda_remote_api_finalize (cuda_get_current_remote_target ());
+  if (is_remote_target (current_inferior ()->process_target ()))
+    res = cuda_remote_api_finalize ();
   else
-    res = m_instance.m_cudbgAPI->finalize ();
+    res = s_instance.m_cudbgAPI->finalize ();
   if (res != CUDBG_SUCCESS)
     handle_finalize_api_error (res);
 }
@@ -189,8 +261,10 @@ cuda_debugapi::get_supported_capabilities ()
   if (api_version ().m_revision < 144)
     return CUDBG_DEBUGGER_CAPABILITY_NONE;
 
+  CUDA_API_PROFILE (getSupportedDebuggerCapabilities);
+
   CUDBGCapabilityFlags flags;
-  CUDBGResult res = m_instance.m_cudbgAPI->getSupportedDebuggerCapabilities (&flags);
+  CUDBGResult res = s_instance.m_cudbgAPI->getSupportedDebuggerCapabilities (&flags);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -231,19 +305,9 @@ cuda_debugapi::cuda_api_fatal (const char *msg, CUDBGResult res)
 {
   CUDA_API_TRACE ("%s: %s", cudbgGetErrorString(res), msg);
 
-  if (cuda_remote)
-    {
-      cuda_remote_api_finalize (cuda_get_current_remote_target ());
-      target_kill ();
-    }
-  else
-    {
-      /* Finalize API */
-      cuda_debugapi::finalize ();
-
-      /* Kill inferior */
-      kill (cuda_gdb_get_tid_or_pid (inferior_ptid), SIGKILL);
-    }
+  /* Finalize API */
+  cuda_debugapi::finalize ();
+  target_kill ();
 
   cuda_managed_memory_clean_regions ();
 
@@ -258,19 +322,19 @@ cuda_debugapi::handle_initialization_error (CUDBGResult res)
   switch (res)
     {
     case CUDBG_SUCCESS:
-      m_instance.m_api_state = CUDA_API_STATE_INITIALIZED;
+      s_instance.m_api_state = CUDA_API_STATE_INITIALIZED;
       break;
 
     case CUDBG_ERROR_SOME_DEVICES_WATCHDOGGED:
       warning (_("One or more CUDA devices are made unavailable to the application "
                  "because they are used for display and cannot be used while debugging. "
                  "This may change the application behavior."));
-      m_instance.m_api_state = CUDA_API_STATE_INITIALIZED;
+      s_instance.m_api_state = CUDA_API_STATE_INITIALIZED;
       break;
 
     case CUDBG_ERROR_UNINITIALIZED:
       /* Not ready yet. Will try later. */
-      m_instance.m_api_state = CUDA_API_STATE_INITIALIZING;
+      s_instance.m_api_state = CUDA_API_STATE_INITIALIZING;
       break;
 
     case CUDBG_ERROR_ALL_DEVICES_WATCHDOGGED:
@@ -305,7 +369,7 @@ cuda_debugapi::clear_state ()
 
   /* Mark the API as not initialized as early as possible. If the finalize()
    * call fails, we won't try to do anything stupid afterwards. */
-  m_instance.m_api_state = CUDA_API_STATE_UNINITIALIZED;
+  s_instance.m_api_state = CUDA_API_STATE_UNINITIALIZED;
   cuda_set_uvm_used (false);
 
   set_attach_state (CUDA_ATTACH_STATE_NOT_STARTED);
@@ -335,12 +399,14 @@ cuda_debugapi::initialize_attach_stub ()
 
   CUDA_API_TRACE ("");
 
+  CUDA_API_PROFILE (initializeAttachStub);
+
   /* Mark the API as not initialized as early as possible. If the finalize()
    * call fails, we won't try to do anything stupid afterwards. */
-  m_instance.m_api_state = CUDA_API_STATE_UNINITIALIZED;
+  s_instance.m_api_state = CUDA_API_STATE_UNINITIALIZED;
   cuda_set_uvm_used (false);
 
-  CUDBGResult res = m_instance.m_cudbgAPI->initializeAttachStub ();
+  CUDBGResult res = s_instance.m_cudbgAPI->initializeAttachStub ();
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -356,7 +422,9 @@ cuda_debugapi::get_host_addr_from_device_addr (uint32_t dev, uint64_t devaddr, u
   if (!api_state_initialized ())
     return true;
 
-  auto res = m_instance.m_cudbgAPI->getHostAddrFromDeviceAddr (dev, devaddr, hostaddr);
+  CUDA_API_PROFILE (getHostAddrFromDeviceAddr);
+
+  auto res = s_instance.m_cudbgAPI->getHostAddrFromDeviceAddr (dev, devaddr, hostaddr);
   cuda_api_print_api_call_result (__FUNCTION__, res);
   if (res != CUDBG_SUCCESS)
     CUDA_API_ERROR_DEV (res, dev, "Failed to translate device VA 0x%lx to host VA", devaddr);
@@ -371,7 +439,9 @@ cuda_debugapi::read_grid_id (uint32_t dev, uint32_t sm, uint32_t wp, uint64_t *g
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readGridId (dev, sm, wp, grid_id);
+  CUDA_API_PROFILE (readGridId);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readGridId (dev, sm, wp, grid_id);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -386,7 +456,9 @@ cuda_debugapi::read_block_idx (uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 *b
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readBlockIdx (dev, sm, wp, blockIdx);
+  CUDA_API_PROFILE (readBlockIdx);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readBlockIdx (dev, sm, wp, blockIdx);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -404,7 +476,9 @@ cuda_debugapi::read_cluster_idx (uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readClusterIdx (dev, sm, wp, clusterIdx);
+  CUDA_API_PROFILE (readClusterIdx);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readClusterIdx (dev, sm, wp, clusterIdx);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS && res != CUDBG_ERROR_NOT_SUPPORTED)
@@ -420,7 +494,9 @@ cuda_debugapi::read_active_lanes (uint32_t dev, uint32_t sm, uint32_t wp, uint32
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readActiveLanes (dev, sm, wp, active_lanes);
+  CUDA_API_PROFILE (readActiveLanes);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readActiveLanes (dev, sm, wp, active_lanes);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -435,7 +511,9 @@ cuda_debugapi::read_code_memory (uint32_t dev, uint64_t addr, void *buf, uint32_
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readCodeMemory (dev, addr, buf, sz);
+  CUDA_API_PROFILE (readCodeMemory);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readCodeMemory (dev, addr, buf, sz);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -450,7 +528,9 @@ cuda_debugapi::read_const_memory (uint32_t dev, uint64_t addr, void *buf, uint32
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readConstMemory (dev, addr, buf, sz);
+  CUDA_API_PROFILE (readConstMemory);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readConstMemory (dev, addr, buf, sz);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -468,7 +548,9 @@ cuda_debugapi::read_generic_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint
   if (!api_state_initialized ())
     return false;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readGenericMemory (dev, sm, wp, ln, addr, buf, sz);
+  CUDA_API_PROFILE (readGenericMemory);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readGenericMemory (dev, sm, wp, ln, addr, buf, sz);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   // If the address is not in device memory, return false to indicate
@@ -502,7 +584,9 @@ cuda_debugapi::read_pinned_memory (uint64_t addr, void *buf, uint32_t sz)
   if (!api_state_initialized ())
     return false;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readPinnedMemory (addr, buf, sz);
+  CUDA_API_PROFILE (readPinnedMemory);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readPinnedMemory (addr, buf, sz);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res == CUDBG_ERROR_MEMORY_MAPPING_FAILED)
@@ -529,7 +613,9 @@ cuda_debugapi::read_param_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint64
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readParamMemory (dev, sm, wp, addr, buf, sz);
+  CUDA_API_PROFILE (readParamMemory);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readParamMemory (dev, sm, wp, addr, buf, sz);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -550,7 +636,9 @@ cuda_debugapi::read_shared_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint6
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readSharedMemory (dev, sm, wp, addr, buf, sz);
+  CUDA_API_PROFILE (readSharedMemory);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readSharedMemory (dev, sm, wp, addr, buf, sz);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (!target_has_execution () && (res == CUDBG_ERROR_MISSING_DATA))
@@ -571,7 +659,9 @@ cuda_debugapi::read_local_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint32
   if (!api_state_initialized ())
     return false;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readLocalMemory (dev, sm, wp, ln, addr, buf, sz);
+  CUDA_API_PROFILE (readLocalMemory);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readLocalMemory (dev, sm, wp, ln, addr, buf, sz);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (!target_has_execution () && (res == CUDBG_ERROR_MISSING_DATA))
@@ -598,7 +688,9 @@ cuda_debugapi::read_register (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t l
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readRegister (dev, sm, wp, ln, regno, val);
+  CUDA_API_PROFILE (readRegister);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readRegister (dev, sm, wp, ln, regno, val);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -613,7 +705,9 @@ cuda_debugapi::read_uregister (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t 
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readUniformRegisterRange (dev, sm, wp, regno, 1, val);
+  CUDA_API_PROFILE (readUniformRegisterRange);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readUniformRegisterRange (dev, sm, wp, regno, 1, val);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   /* Not all devices support uniform registers */
@@ -632,7 +726,9 @@ cuda_debugapi::read_predicates (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readPredicates (dev, sm, wp, ln, predicates_size, predicates);
+  CUDA_API_PROFILE (readPredicates);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readPredicates (dev, sm, wp, ln, predicates_size, predicates);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -656,7 +752,9 @@ cuda_debugapi::read_upredicates (uint32_t dev, uint32_t sm, uint32_t wp,
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readUniformPredicates (dev, sm, wp, predicates_size, predicates);
+  CUDA_API_PROFILE (readUniformPredicates);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readUniformPredicates (dev, sm, wp, predicates_size, predicates);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   /* Not all devices support uniform registers */
@@ -684,7 +782,9 @@ cuda_debugapi::read_cc_register (uint32_t dev, uint32_t sm, uint32_t wp, uint32_
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readCCRegister (dev, sm, wp, ln, val);
+  CUDA_API_PROFILE (readCCRegister);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readCCRegister (dev, sm, wp, ln, val);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -699,7 +799,9 @@ cuda_debugapi::read_pc (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uin
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readPC (dev, sm, wp, ln, pc);
+  CUDA_API_PROFILE (readPC);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readPC (dev, sm, wp, ln, pc);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -714,7 +816,9 @@ cuda_debugapi::read_virtual_pc (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readVirtualPC (dev, sm, wp, ln, pc);
+  CUDA_API_PROFILE (readVirtualPC);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readVirtualPC (dev, sm, wp, ln, pc);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -729,7 +833,9 @@ cuda_debugapi::read_lane_exception (uint32_t dev, uint32_t sm, uint32_t wp, uint
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readLaneException (dev, sm, wp, ln, exception);
+  CUDA_API_PROFILE (readLaneException);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readLaneException (dev, sm, wp, ln, exception);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -746,7 +852,9 @@ cuda_debugapi::read_device_exception_state (uint32_t dev, uint64_t *exceptionSMM
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readDeviceExceptionState (dev, exceptionSMMask, n);
+  CUDA_API_PROFILE (readDeviceExceptionState);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readDeviceExceptionState (dev, exceptionSMMask, n);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -767,10 +875,12 @@ cuda_debugapi::read_sm_exception (uint32_t dev, uint32_t sm, CUDBGException_t *e
   if (!api_state_initialized ())
     return;
 
+  CUDA_API_PROFILE (readSmException);
+
   CUDBGResult res = CUDBG_ERROR_NOT_SUPPORTED;
 
   if (api_version ().m_revision >= 145)
-    res = m_instance.m_cudbgAPI->readSmException (dev, sm, exception, errorPC, errorPCValid);
+    res = s_instance.m_cudbgAPI->readSmException (dev, sm, exception, errorPC, errorPCValid);
 
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
@@ -792,7 +902,9 @@ cuda_debugapi::write_generic_memory (uint32_t dev, uint32_t sm, uint32_t wp, uin
   if (!api_state_initialized ())
     return false;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->writeGenericMemory (dev, sm, wp, ln, addr, buf, sz);
+  CUDA_API_PROFILE (writeGenericMemory);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->writeGenericMemory (dev, sm, wp, ln, addr, buf, sz);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   // If the address is not in device memory, return false to indicate
@@ -822,7 +934,9 @@ cuda_debugapi::write_pinned_memory (uint64_t addr, const void *buf, uint32_t sz)
   if (!api_state_initialized ())
     return false;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->writePinnedMemory (addr, buf, sz);
+  CUDA_API_PROFILE (writePinnedMemory);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->writePinnedMemory (addr, buf, sz);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS && res != CUDBG_ERROR_MEMORY_MAPPING_FAILED)
@@ -839,7 +953,9 @@ cuda_debugapi::write_param_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint6
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->writeParamMemory (dev, sm, wp, addr, buf, sz);
+  CUDA_API_PROFILE (writeParamMemory);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->writeParamMemory (dev, sm, wp, addr, buf, sz);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -855,7 +971,9 @@ cuda_debugapi::write_shared_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->writeSharedMemory (dev, sm, wp, addr, buf, sz);
+  CUDA_API_PROFILE (writeSharedMemory);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->writeSharedMemory (dev, sm, wp, addr, buf, sz);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -872,7 +990,9 @@ cuda_debugapi::write_local_memory (uint32_t dev, uint32_t sm, uint32_t wp, uint3
   if (!api_state_initialized ())
     return false;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->writeLocalMemory (dev, sm, wp, ln, addr, buf, sz);
+  CUDA_API_PROFILE (writeLocalMemory);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->writeLocalMemory (dev, sm, wp, ln, addr, buf, sz);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -894,7 +1014,9 @@ cuda_debugapi::write_register (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t 
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->writeRegister (dev, sm, wp, ln, regno, val);
+  CUDA_API_PROFILE (writeRegister);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->writeRegister (dev, sm, wp, ln, regno, val);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -909,7 +1031,9 @@ cuda_debugapi::write_uregister (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->writeUniformRegister (dev, sm, wp, regno, val);
+  CUDA_API_PROFILE (writeUniformRegister);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->writeUniformRegister (dev, sm, wp, regno, val);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -934,7 +1058,9 @@ cuda_debugapi::write_predicates (uint32_t dev, uint32_t sm, uint32_t wp, uint32_
 				       preds);
     }
 
-  CUDBGResult res = m_instance.m_cudbgAPI->writePredicates (dev, sm, wp, ln, predicates_size, predicates);
+  CUDA_API_PROFILE (writePredicates);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->writePredicates (dev, sm, wp, ln, predicates_size, predicates);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -956,7 +1082,9 @@ cuda_debugapi::write_upredicates (uint32_t dev, uint32_t sm, uint32_t wp, uint32
       CUDA_API_TRACE_DEV_SM_WARP (dev, sm, wp, "predicates 0x%08x", preds);
     }
 
-  CUDBGResult res = m_instance.m_cudbgAPI->writeUniformPredicates (dev, sm, wp, predicates_size, predicates);
+  CUDA_API_PROFILE (writeUniformPredicates);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->writeUniformPredicates (dev, sm, wp, predicates_size, predicates);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -969,7 +1097,9 @@ cuda_debugapi::write_cc_register (uint32_t dev, uint32_t sm, uint32_t wp, uint32
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->writeCCRegister (dev, sm, wp, ln, val);
+  CUDA_API_PROFILE (writeCCRegister);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->writeCCRegister (dev, sm, wp, ln, val);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -984,7 +1114,9 @@ cuda_debugapi::get_grid_dim (uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 *gri
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getGridDim (dev, sm, wp, grid_dim);
+  CUDA_API_PROFILE (getGridDim);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getGridDim (dev, sm, wp, grid_dim);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -992,22 +1124,34 @@ cuda_debugapi::get_grid_dim (uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 *gri
 }
 
 void
-cuda_debugapi::get_cluster_dim (uint32_t dev, uint64_t gridId64, CuDim3 *cluster_dim)
+cuda_debugapi::get_cluster_dim (uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 *cluster_dim)
 {
   memset(cluster_dim, 0, sizeof(*cluster_dim));
 
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getClusterDim (dev, gridId64, cluster_dim);
+  CUDBGResult res;
+  if (api_version ().m_revision >= 148)
+    {
+      CUDA_API_PROFILE (getClusterDim);
+      res = s_instance.m_cudbgAPI->getClusterDim (dev, sm, wp, cluster_dim);
+      CUDA_API_TRACE_DEV_SM_WARP (dev, sm, wp, "cluster_dim = (%u, %u, %u)",
+				  cluster_dim->x, cluster_dim->y, cluster_dim->z);
+    }
+  else
+    {
+      CUDA_API_PROFILE (getClusterDim120);
+      uint64_t gridId64;
+      read_grid_id (dev, sm, wp, &gridId64);
+      res = s_instance.m_cudbgAPI->getClusterDim120 (dev, gridId64, cluster_dim);
+      CUDA_API_TRACE_DEV_SM_WARP (dev, sm, wp, "gridId %ld cluster_dim = (%u, %u, %u)",
+				  (int64_t)gridId64, cluster_dim->x, cluster_dim->y, cluster_dim->z);
+    }
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS && res != CUDBG_ERROR_NOT_SUPPORTED)
-    CUDA_API_ERROR_DEV (res, dev, "failed to read grid %ld cluster dimensions",
-			(int64_t)gridId64);
-
-  CUDA_API_TRACE_DEV (dev, "gridId %ld cluster_dim = (%u, %u, %u)",
-		      (int64_t)gridId64, cluster_dim->x, cluster_dim->y, cluster_dim->z);
+    CUDA_API_ERROR_DEV_SM_WARP (res, dev, sm, wp, "failed to read grid cluster dimensions");
 }
 
 void
@@ -1016,7 +1160,9 @@ cuda_debugapi::get_block_dim (uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 *bl
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getBlockDim (dev, sm, wp, block_dim);
+  CUDA_API_PROFILE (getBlockDim);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getBlockDim (dev, sm, wp, block_dim);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1032,8 +1178,10 @@ cuda_debugapi::get_blocking (uint32_t dev, uint32_t sm, uint32_t wp, bool *block
   if (!api_state_initialized ())
     return;
 
+  CUDA_API_PROFILE (getGridAttribute);
+
   uint64_t blocking64;
-  CUDBGResult res = m_instance.m_cudbgAPI->getGridAttribute (dev, sm, wp, CUDBG_ATTR_GRID_LAUNCH_BLOCKING, &blocking64);
+  CUDBGResult res = s_instance.m_cudbgAPI->getGridAttribute (dev, sm, wp, CUDBG_ATTR_GRID_LAUNCH_BLOCKING, &blocking64);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1050,7 +1198,9 @@ cuda_debugapi::get_tid (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t *tid)
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getTID (dev, sm, wp, tid);
+  CUDA_API_PROFILE (getTID);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getTID (dev, sm, wp, tid);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1066,7 +1216,9 @@ cuda_debugapi::get_elf_image (uint32_t dev,  uint64_t handle, bool relocated,
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getElfImageByHandle (dev, handle,
+  CUDA_API_PROFILE (getElfImageByHandle);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getElfImageByHandle (dev, handle,
 								relocated ? CUDBG_ELF_IMAGE_TYPE_RELOCATED : CUDBG_ELF_IMAGE_TYPE_NONRELOCATED,
 								elfImage, size);
   cuda_api_print_api_call_result (__FUNCTION__, res);
@@ -1083,7 +1235,9 @@ cuda_debugapi::get_device_type (uint32_t dev, char *buf, uint32_t sz)
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getDeviceType (dev, buf, sz);
+  CUDA_API_PROFILE (getDeviceType);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getDeviceType (dev, buf, sz);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1098,7 +1252,9 @@ cuda_debugapi::get_sm_type (uint32_t dev, char *buf, uint32_t sz)
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getSmType (dev, buf, sz);
+  CUDA_API_PROFILE (getSmType);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getSmType (dev, buf, sz);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1113,7 +1269,9 @@ cuda_debugapi::get_device_name (uint32_t dev, char *buf, uint32_t sz)
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getDeviceName (dev, buf, sz);
+  CUDA_API_PROFILE (getDeviceName);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getDeviceName (dev, buf, sz);
   cuda_api_print_api_call_result (__FUNCTION__, res);
  
  if (res != CUDBG_SUCCESS)
@@ -1130,7 +1288,9 @@ cuda_debugapi::get_num_devices (uint32_t *numDev)
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getNumDevices (numDev);
+  CUDA_API_PROFILE (getNumDevices);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getNumDevices (numDev);
   cuda_api_print_api_call_result (__FUNCTION__, res);
  
  if (res != CUDBG_SUCCESS)
@@ -1145,7 +1305,9 @@ cuda_debugapi::get_num_sms (uint32_t dev, uint32_t *numSMs)
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getNumSMs (dev, numSMs);
+  CUDA_API_PROFILE (getNumSMs);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getNumSMs (dev, numSMs);
   cuda_api_print_api_call_result (__FUNCTION__, res);
  
  if (res != CUDBG_SUCCESS)
@@ -1160,7 +1322,9 @@ cuda_debugapi::get_num_warps (uint32_t dev, uint32_t *numWarps)
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getNumWarps (dev, numWarps);
+  CUDA_API_PROFILE (getNumWarps);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getNumWarps (dev, numWarps);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1175,7 +1339,9 @@ cuda_debugapi::get_num_lanes (uint32_t dev, uint32_t *numLanes)
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getNumLanes (dev, numLanes);
+  CUDA_API_PROFILE (getNumLanes);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getNumLanes (dev, numLanes);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1190,7 +1356,9 @@ cuda_debugapi::get_num_registers (uint32_t dev, uint32_t *numRegs)
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getNumRegisters (dev, numRegs);
+  CUDA_API_PROFILE (getNumRegisters);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getNumRegisters (dev, numRegs);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1205,7 +1373,9 @@ cuda_debugapi::get_num_predicates (uint32_t dev, uint32_t *numPredicates)
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getNumPredicates (dev, numPredicates);
+  CUDA_API_PROFILE (getNumPredicates);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getNumPredicates (dev, numPredicates);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1220,7 +1390,9 @@ cuda_debugapi::get_num_uregisters (uint32_t dev, uint32_t *numRegs)
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getNumUniformRegisters (dev, numRegs);
+  CUDA_API_PROFILE (getNumUniformRegisters);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getNumUniformRegisters (dev, numRegs);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1235,7 +1407,9 @@ cuda_debugapi::get_num_upredicates (uint32_t dev, uint32_t *numPredicates)
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getNumUniformPredicates (dev, numPredicates);
+  CUDA_API_PROFILE (getNumUniformPredicates);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getNumUniformPredicates (dev, numPredicates);
   cuda_api_print_api_call_result (__FUNCTION__, res);
  
  if (res != CUDBG_SUCCESS)
@@ -1253,7 +1427,9 @@ cuda_debugapi::is_device_code_address (uint64_t addr, bool *is_device_address)
       return;
     }
 
-  CUDBGResult res = m_instance.m_cudbgAPI->isDeviceCodeAddress (addr, is_device_address);
+  CUDA_API_PROFILE (isDeviceCodeAddress);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->isDeviceCodeAddress (addr, is_device_address);
   cuda_api_print_api_call_result (__FUNCTION__, res);
  
  if (res != CUDBG_SUCCESS)
@@ -1278,7 +1454,9 @@ cuda_debugapi::set_notify_new_event_callback (CUDBGNotifyNewEventCallback callba
      fully initialized, which means there should not be a
      check here. */
 
-  CUDBGResult res = m_instance.m_cudbgAPI->setNotifyNewEventCallback (callback);
+  CUDA_API_PROFILE (setNotifyNewEventCallback);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->setNotifyNewEventCallback (callback);
   cuda_api_print_api_call_result (__FUNCTION__, res);
   if (res != CUDBG_SUCCESS)
     CUDA_API_ERROR (res, "failed to set the new event callback");
@@ -1291,7 +1469,9 @@ cuda_debugapi::get_next_sync_event (CUDBGEvent *event)
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getNextEvent (CUDBG_EVENT_QUEUE_TYPE_SYNC, event);
+  CUDA_API_PROFILE (getNextEvent);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getNextEvent (CUDBG_EVENT_QUEUE_TYPE_SYNC, event);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS && res != CUDBG_ERROR_NO_EVENT_AVAILABLE)
@@ -1304,7 +1484,9 @@ cuda_debugapi::acknowledge_sync_events ()
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->acknowledgeSyncEvents ();
+  CUDA_API_PROFILE (acknowledgeSyncEvents);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->acknowledgeSyncEvents ();
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1318,7 +1500,9 @@ cuda_debugapi::get_next_async_event (CUDBGEvent *event)
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getNextEvent (CUDBG_EVENT_QUEUE_TYPE_ASYNC, event);
+  CUDA_API_PROFILE (getNextEvent);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getNextEvent (CUDBG_EVENT_QUEUE_TYPE_ASYNC, event);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS && res != CUDBG_ERROR_NO_EVENT_AVAILABLE)
@@ -1331,7 +1515,9 @@ cuda_debugapi::disassemble (uint32_t dev, uint64_t addr, uint32_t *instSize, cha
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->disassemble (dev, addr, instSize, buf, bufSize);
+  CUDA_API_PROFILE (disassemble);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->disassemble (dev, addr, instSize, buf, bufSize);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1345,12 +1531,14 @@ cuda_debugapi::set_attach_state (cuda_attach_state_t state)
 {
   CUDA_API_TRACE ("state %d", state);
 
-  m_instance.m_attach_state = state;
+  s_instance.m_attach_state = state;
 
   if (state != CUDA_ATTACH_STATE_DETACHING)
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->clearAttachState ();
+  CUDA_API_PROFILE (clearAttachState);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->clearAttachState ();
 
   if (res != CUDBG_SUCCESS)
     warning (_("Failed to set attach state to %u (%s (0x%x / %u)).\n"),
@@ -1362,7 +1550,9 @@ cuda_debugapi::set_attach_state (cuda_attach_state_t state)
 void
 cuda_debugapi::request_cleanup_on_detach (uint32_t resumeAppFlag)
 {
-  CUDBGResult res = m_instance.m_cudbgAPI->requestCleanupOnDetach (resumeAppFlag);
+  CUDA_API_PROFILE (requestCleanupOnDetach);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->requestCleanupOnDetach (resumeAppFlag);
 
   CUDA_API_TRACE ("resume %u", resumeAppFlag);
 
@@ -1376,7 +1566,9 @@ cuda_debugapi::get_grid_status (uint32_t dev, uint64_t grid_id, CUDBGGridStatus 
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getGridStatus (dev, grid_id, status);
+  CUDA_API_PROFILE (getGridStatus);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getGridStatus (dev, grid_id, status);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1391,7 +1583,16 @@ cuda_debugapi::get_grid_info (uint32_t dev, uint64_t grid_id, CUDBGGridInfo *inf
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getGridInfo (dev, grid_id, info);
+  CUDA_API_PROFILE (getGridInfo);
+
+  CUDBGResult res;
+  if (api_version ().m_revision >= 148)
+    res = s_instance.m_cudbgAPI->getGridInfo (dev, grid_id, info);
+  else
+    {
+      res = s_instance.m_cudbgAPI->getGridInfo120 (dev, grid_id, reinterpret_cast<CUDBGGridInfo120 *>(info));
+      memset (reinterpret_cast<char *>(info) + sizeof(CUDBGGridInfo120), 0, sizeof(*info) - sizeof(CUDBGGridInfo120));
+    }
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1406,7 +1607,9 @@ cuda_debugapi::get_adjusted_code_address (uint32_t dev, uint64_t addr, uint64_t 
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getAdjustedCodeAddress (dev, addr, adjusted_addr, adj_action);
+  CUDA_API_PROFILE (getAdjustedCodeAddress);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getAdjustedCodeAddress (dev, addr, adjusted_addr, adj_action);
   cuda_api_print_api_call_result (__FUNCTION__, res);
  
  if (res != CUDBG_SUCCESS)
@@ -1421,7 +1624,10 @@ cuda_debugapi::set_kernel_launch_notification_mode(CUDBGKernelLaunchNotifyMode m
 {
   if (!api_state_initialized ())
     return;
-  m_instance.m_cudbgAPI->setKernelLaunchNotificationMode (mode);
+
+  CUDA_API_PROFILE (setKernelLaunchNotificationMode);
+
+  s_instance.m_cudbgAPI->setKernelLaunchNotificationMode (mode);
 
   CUDA_API_TRACE ("%d", mode);
 }
@@ -1435,7 +1641,9 @@ cuda_debugapi::get_device_pci_bus_info (uint32_t dev, uint32_t *pci_bus_id, uint
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getDevicePCIBusInfo (dev, pci_bus_id, pci_dev_id);
+  CUDA_API_PROFILE (getDevicePCIBusInfo);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getDevicePCIBusInfo (dev, pci_bus_id, pci_dev_id);
   if (res != CUDBG_SUCCESS)
     CUDA_API_ERROR_DEV (res, dev, "failed to get PCI bus information");
 
@@ -1448,7 +1656,18 @@ cuda_debugapi::read_warp_state (uint32_t dev, uint32_t sm, uint32_t wp, CUDBGWar
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readWarpState (dev, sm, wp, state);
+  CUDA_API_PROFILE (readWarpState);
+
+  CUDBGResult res;
+  if (api_version ().m_revision >= 148)
+    res = s_instance.m_cudbgAPI->readWarpState (dev, sm, wp, state);
+  else
+    {
+      res = s_instance.m_cudbgAPI->readWarpState120 (dev, sm, wp, reinterpret_cast<CUDBGWarpState120*>(state));
+      memset (reinterpret_cast<char *>(state) + sizeof(CUDBGWarpState120), 0, sizeof(*state) - sizeof(CUDBGWarpState120));
+      /* Handle clusterDim updates via old interface */
+      cuda_debugapi::get_cluster_dim (dev, sm, wp, &state->clusterDim);
+    }
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1466,7 +1685,9 @@ cuda_debugapi::read_register_range (uint32_t dev, uint32_t sm, uint32_t wp, uint
 
   CUDA_API_TRACE_DEV_SM_WARP_LANE (dev, sm, wp, ln, "idx %u count %u", idx, count);
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readRegisterRange (dev, sm, wp, ln, idx, count, regs);
+  CUDA_API_PROFILE (readRegisterRange);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readRegisterRange (dev, sm, wp, ln, idx, count, regs);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1487,7 +1708,9 @@ cuda_debugapi::read_uregister_range (uint32_t dev, uint32_t sm, uint32_t wp, uin
 
   CUDA_API_TRACE_DEV_SM_WARP (dev, sm, wp, "idx %u count %u", idx, count);
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readUniformRegisterRange (dev, sm, wp, idx, count, regs);
+  CUDA_API_PROFILE (readUniformRegisterRange);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readUniformRegisterRange (dev, sm, wp, idx, count, regs);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res == CUDBG_ERROR_INVALID_DEVICE || res == CUDBG_ERROR_MISSING_DATA)
@@ -1507,7 +1730,9 @@ cuda_debugapi::read_global_memory (uint64_t addr, void *buf, uint32_t buf_size)
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readGlobalMemory (addr, buf, buf_size);
+  CUDA_API_PROFILE (readGlobalMemory);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readGlobalMemory (addr, buf, buf_size);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (!target_has_execution () && (res == CUDBG_ERROR_MISSING_DATA))
@@ -1527,7 +1752,9 @@ cuda_debugapi::write_global_memory (uint64_t addr, const void *buf, uint32_t buf
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->writeGlobalMemory (addr, (void *)buf, buf_size);
+  CUDA_API_PROFILE (writeGlobalMemory);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->writeGlobalMemory (addr, (void *)buf, buf_size);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1543,7 +1770,9 @@ cuda_debugapi::get_managed_memory_region_info (uint64_t start_addr, CUDBGMemoryI
   if (!api_state_initialized () || !cuda_is_uvm_used())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getManagedMemoryRegionInfo (start_addr, meminfo, entries_count, entries_written);
+  CUDA_API_PROFILE (getManagedMemoryRegionInfo);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getManagedMemoryRegionInfo (start_addr, meminfo, entries_count, entries_written);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1558,7 +1787,9 @@ cuda_debugapi::suspend_device (uint32_t dev)
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->suspendDevice (dev);
+  CUDA_API_PROFILE (suspendDevice);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->suspendDevice (dev);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS && res != CUDBG_ERROR_SUSPENDED_DEVICE)
@@ -1573,7 +1804,9 @@ cuda_debugapi::resume_device (uint32_t dev)
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->resumeDevice (dev);
+  CUDA_API_PROFILE (resumeDevice);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->resumeDevice (dev);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS && res != CUDBG_ERROR_RUNNING_DEVICE)
@@ -1588,7 +1821,9 @@ cuda_debugapi::set_breakpoint (uint32_t dev, uint64_t addr)
   if (!api_state_initialized ())
     return true;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->setBreakpoint (dev, addr);
+  CUDA_API_PROFILE (setBreakpoint);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->setBreakpoint (dev, addr);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS && res != CUDBG_ERROR_INVALID_ADDRESS)
@@ -1605,7 +1840,9 @@ cuda_debugapi::unset_breakpoint (uint32_t dev, uint64_t addr)
   if (!api_state_initialized ())
     return true;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->unsetBreakpoint (dev, addr);
+  CUDA_API_PROFILE (unsetBreakpoint);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->unsetBreakpoint (dev, addr);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS && res != CUDBG_ERROR_INVALID_ADDRESS)
@@ -1622,7 +1859,9 @@ cuda_debugapi::read_thread_idx (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readThreadIdx (dev, sm, wp, ln, threadIdx);
+  CUDA_API_PROFILE (readThreadIdx);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readThreadIdx (dev, sm, wp, ln, threadIdx);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1638,7 +1877,9 @@ cuda_debugapi::read_broken_warps (uint32_t dev, uint32_t sm, cuda_api_warpmask *
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readBrokenWarps (dev, sm, &brokenWarpsMask->mask);
+  CUDA_API_PROFILE (readBrokenWarps);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readBrokenWarps (dev, sm, &brokenWarpsMask->mask);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1653,7 +1894,9 @@ cuda_debugapi::read_valid_lanes (uint32_t dev, uint32_t sm, uint32_t wp, uint32_
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readValidLanes (dev, sm, wp, valid_lanes);
+  CUDA_API_PROFILE (readValidLanes);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readValidLanes (dev, sm, wp, valid_lanes);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1672,7 +1915,9 @@ cuda_debugapi::single_step_warp (uint32_t dev, uint32_t sm, uint32_t wp,
   if (!api_state_initialized ())
     return false;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->singleStepWarp65 (dev, sm, wp, nsteps, &warp_mask->mask);
+  CUDA_API_PROFILE (singleStepWarp65);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->singleStepWarp65 (dev, sm, wp, nsteps, &warp_mask->mask);
 
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
@@ -1698,7 +1943,9 @@ cuda_debugapi::single_step_warp (uint32_t dev, uint32_t sm, uint32_t wp,
   if (!api_state_initialized ())
     return false;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->singleStepWarp (dev, sm, wp, laneHint, nsteps, flags, &warp_mask->mask);
+  CUDA_API_PROFILE (singleStepWarp);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->singleStepWarp (dev, sm, wp, laneHint, nsteps, flags, &warp_mask->mask);
 
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
@@ -1722,7 +1969,9 @@ cuda_debugapi::resume_warps_until_pc (uint32_t dev, uint32_t sm, cuda_api_warpma
 
   CUDA_API_TRACE_DEV_SM (dev, sm, "mask %s pc 0x%lx", cuda_api_mask_string (warp_mask), virt_pc);
 
-  CUDBGResult res = m_instance.m_cudbgAPI->resumeWarpsUntilPC (dev, sm, warp_mask->mask, virt_pc);
+  CUDA_API_PROFILE (resumeWarpsUntilPC);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->resumeWarpsUntilPC (dev, sm, warp_mask->mask, virt_pc);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res == CUDBG_ERROR_WARP_RESUME_NOT_POSSIBLE)
@@ -1748,7 +1997,9 @@ cuda_debugapi::read_call_depth (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readCallDepth (dev, sm, wp, ln, depth);
+  CUDA_API_PROFILE (readCallDepth);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readCallDepth (dev, sm, wp, ln, depth);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1764,7 +2015,9 @@ cuda_debugapi::read_syscall_call_depth (uint32_t dev, uint32_t sm,
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readSyscallCallDepth (dev, sm, wp, ln, depth);
+  CUDA_API_PROFILE (readSyscallCallDepth);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readSyscallCallDepth (dev, sm, wp, ln, depth);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1779,7 +2032,9 @@ cuda_debugapi::read_valid_warps (uint32_t dev, uint32_t sm, cuda_api_warpmask *v
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readValidWarps (dev, sm, &valid_warps->mask);
+  CUDA_API_PROFILE (readValidWarps);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readValidWarps (dev, sm, &valid_warps->mask);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1796,7 +2051,9 @@ cuda_debugapi::read_virtual_return_address (uint32_t dev, uint32_t sm, uint32_t 
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readVirtualReturnAddress (dev, sm, wp, ln,
+  CUDA_API_PROFILE (readVirtualReturnAddress);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readVirtualReturnAddress (dev, sm, wp, ln,
 							   (uint32_t)level,
 							   ra);
   cuda_api_print_api_call_result (__FUNCTION__, res);
@@ -1815,7 +2072,9 @@ cuda_debugapi::read_error_pc (uint32_t dev, uint32_t sm, uint32_t wp,
   if (!api_state_initialized ())
     return;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->readErrorPC (dev, sm, wp, pc, valid);
+  CUDA_API_PROFILE (readErrorPC);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->readErrorPC (dev, sm, wp, pc, valid);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1834,11 +2093,13 @@ cuda_debugapi::get_loaded_function_info (uint32_t dev, uint64_t handle,
   if (!api_state_initialized ())
     return;
 
+  CUDA_API_PROFILE (getLoadedFunctionInfo);
+
   CUDBGResult res = CUDBG_ERROR_NOT_SUPPORTED;
 
   // The newer version of the call is now the default
-  if (api_version ().m_revision >= 138)
-    res = m_instance.m_cudbgAPI->getLoadedFunctionInfo (dev, handle, info, startIndex, numEntries);
+  if (api_version ().m_revision >= 135)
+    res = s_instance.m_cudbgAPI->getLoadedFunctionInfo (dev, handle, info, startIndex, numEntries);
 
   if (res != CUDBG_SUCCESS)
     CUDA_API_ERROR_DEV (res, dev, "handle 0x%lx startIndex %u numEntries %u",
@@ -1856,9 +2117,11 @@ cuda_debugapi::get_loaded_function_info (uint32_t dev, uint64_t handle,
   if (!api_state_initialized ())
     return;
 
+  CUDA_API_PROFILE (getLoadedFunctionInfo118);
+
   CUDBGResult res = CUDBG_ERROR_NOT_SUPPORTED;
   if (api_version ().m_revision >= 132)
-    res = m_instance.m_cudbgAPI->getLoadedFunctionInfo118 (dev, handle, info, numEntries);
+    res = s_instance.m_cudbgAPI->getLoadedFunctionInfo118 (dev, handle, info, numEntries);
 
   if (res != CUDBG_SUCCESS)
     CUDA_API_ERROR_DEV (res, dev, "handle 0x%lx numEntries %u", handle, numEntries);
@@ -1873,7 +2136,9 @@ cuda_debugapi::generate_coredump (const char *name,
   if (!api_state_initialized ())
     error ("CUDA is not initialized");
 
-  CUDBGResult res = m_instance.m_cudbgAPI->generateCoredump (name, flags);
+  CUDA_API_PROFILE (generateCoredump);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->generateCoredump (name, flags);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res != CUDBG_SUCCESS)
@@ -1891,7 +2156,8 @@ cuda_debugapi::get_error_string_ex (char *buf, uint32_t bufSz, uint32_t *msgSz)
   // This method first became available in revision 134
   if (api_state_initialized () && (api_version ().m_revision >= 134))
     {
-      res = m_instance.m_cudbgAPI->getErrorStringEx (buf, bufSz, msgSz);
+      CUDA_API_PROFILE (getErrorStringEx);
+      res = s_instance.m_cudbgAPI->getErrorStringEx (buf, bufSz, msgSz);
       // Don't trace empty error strings
       if ((res == CUDBG_SUCCESS) || (res == CUDBG_ERROR_BUFFER_TOO_SMALL))
 	CUDA_API_TRACE ("%s", buf);
@@ -1921,7 +2187,8 @@ cuda_debugapi::get_const_bank_address (uint32_t dev, uint32_t sm, uint32_t wp,
 
   if (api_version ().m_revision >= 138)
     {
-      CUDBGResult res = m_instance.m_cudbgAPI->getConstBankAddress123 (dev, sm, wp, bank, offset, address);
+      CUDA_API_PROFILE (getConstBankAddress123);
+      CUDBGResult res = s_instance.m_cudbgAPI->getConstBankAddress123 (dev, sm, wp, bank, offset, address);
       cuda_api_print_api_call_result (__FUNCTION__, res);
 
       if (res != CUDBG_SUCCESS)
@@ -1946,7 +2213,8 @@ cuda_debugapi::get_const_bank_address (uint32_t dev, uint64_t gridId64, uint32_t
 
   if (api_version ().m_revision >= 141)
     {
-      CUDBGResult res = m_instance.m_cudbgAPI->getConstBankAddress (dev, gridId64, bank, address, size);
+      CUDA_API_PROFILE (getConstBankAddress);
+      CUDBGResult res = s_instance.m_cudbgAPI->getConstBankAddress (dev, gridId64, bank, address, size);
       cuda_api_print_api_call_result (__FUNCTION__, res);
 
       if (res != CUDBG_SUCCESS)
@@ -1964,7 +2232,9 @@ cuda_debugapi::get_device_info_sizes (uint32_t dev, CUDBGDeviceInfoSizes* sizes)
   if (!api_state_initialized ())
     return false;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getDeviceInfoSizes (dev, sizes);
+  CUDA_API_PROFILE (getDeviceInfoSizes);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getDeviceInfoSizes (dev, sizes);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res == CUDBG_SUCCESS)
@@ -1983,7 +2253,9 @@ cuda_debugapi::get_device_info (uint32_t dev, CUDBGDeviceInfoQueryType_t type,
   if (!api_state_initialized ())
     return false;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->getDeviceInfo (dev, type, buffer, length, data_length);
+  CUDA_API_PROFILE (getDeviceInfo);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getDeviceInfo (dev, type, buffer, length, data_length);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   if (res == CUDBG_SUCCESS)
@@ -2005,7 +2277,9 @@ bool cuda_debugapi::execute_internal_command (const char *command,
   if (api_version ().m_revision < 146)
     return false;
 
-  CUDBGResult res = m_instance.m_cudbgAPI->executeInternalCommand (command, resultBuffer, sizeInBytes);
+  CUDA_API_PROFILE (executeInternalCommand);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->executeInternalCommand (command, resultBuffer, sizeInBytes);
   cuda_api_print_api_call_result (__FUNCTION__, res);
 
   switch (res)
@@ -2024,6 +2298,58 @@ bool cuda_debugapi::execute_internal_command (const char *command,
   }
 
   return true;
+}
+
+bool
+cuda_debugapi::get_cluster_exception_target_block (uint32_t dev, uint32_t sm,
+						   uint32_t wp,
+						   CuDim3 *blockIdx,
+						   bool *blockIdxValid)
+{
+  gdb_assert (blockIdx);
+  gdb_assert (blockIdxValid);
+
+  if (!api_state_initialized ())
+    return false;
+
+  if (api_version ().m_revision < 149)
+    return false;
+
+  CUDA_API_PROFILE (getClusterExceptionTargetBlock);
+
+  CUDBGResult res = s_instance.m_cudbgAPI->getClusterExceptionTargetBlock (
+      dev, sm, wp, blockIdx, blockIdxValid);
+  cuda_api_print_api_call_result (__FUNCTION__, res);
+
+  CUDA_API_TRACE_DEV_SM_WARP (
+      dev, sm, wp, "blockIdx = (%u, %u, %u), valid = %s", blockIdx->x,
+      blockIdx->y, blockIdx->z, *blockIdxValid ? "true" : "false");
+
+  return res == CUDBG_SUCCESS;
+}
+
+void
+cuda_debugapi::read_warp_resources (uint32_t dev, uint32_t sm, uint32_t wp, CUDBGWarpResources *resources)
+{
+  gdb_assert (resources);
+
+  if (!api_state_initialized ())
+    return;
+
+  CUDA_API_PROFILE (readWarpResources);
+
+  memset (resources, 0, sizeof (*resources));
+
+  CUDBGResult res = CUDBG_ERROR_NOT_SUPPORTED;
+  if (api_version ().m_revision >= 152)
+    res = s_instance.m_cudbgAPI->readWarpResources (dev, sm, wp, resources);
+  cuda_api_print_api_call_result (__FUNCTION__, res);
+
+  if ((res != CUDBG_SUCCESS) && (res != CUDBG_ERROR_NOT_SUPPORTED))
+    CUDA_API_ERROR_DEV_SM_WARP (res, dev, sm, wp, "failed to read warp resources");
+
+  CUDA_API_TRACE_DEV_SM_WARP (dev, sm, wp, "numRegisters %u sharedMemSize %u",
+			      resources->numRegisters, resources->sharedMemSize);
 }
 
 void

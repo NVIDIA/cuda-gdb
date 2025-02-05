@@ -60,6 +60,10 @@
 #include "cli/cli-style.h"
 #include "solib-target.h"
 
+#ifdef __QNXTARGET__
+#include "solib-nto.h"
+#endif
+
 /* See solib.h.  */
 
 bool debug_solib;
@@ -618,17 +622,17 @@ solib_map_sections (struct so_list *so)
     error (_("Shared library file name is too long."));
   strcpy (so->so_name, bfd_get_filename (so->abfd));
 
-#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
-  gdb_assert (ops->validate != NULL);
-  if (ops->validate != NULL && !ops->validate (so))
+#ifdef __QNXTARGET__
+  /* validate the internal versioning to make sure that host and target are
+     using the very same library */
+  if ((!nto_allow_mismatched_debuginfo) && (nto_so_validate (so) != 0))
     {
-      warning (_("Shared object \"%s\" could not be validated "
-		 "and will be ignored."), so->so_name);
       gdb_bfd_unref (so->abfd);
       so->abfd = NULL;
       return 0;
     }
-#endif
+#endif /* __QNXTARGET__ */
+
   if (so->sections == nullptr)
     so->sections = new target_section_table;
   *so->sections = build_section_table (so->abfd);
@@ -714,9 +718,6 @@ free_so (struct so_list *so)
   clear_so (so);
   ops->free_so (so);
 
-#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
-  xfree (so->build_id);
-#endif
   xfree (so);
 }
 
@@ -1128,8 +1129,9 @@ info_sharedlibrary_command (const char *pattern, int from_tty)
   int nr_libs;
   struct gdbarch *gdbarch = target_gdbarch ();
   struct ui_out *uiout = current_uiout;
-#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+#ifdef __QNXTARGET__
   int verbose = 0;
+
   if (pattern)
     {
       /* Check if there are options */
@@ -1142,7 +1144,7 @@ info_sharedlibrary_command (const char *pattern, int from_tty)
 	  pattern = NULL;
       }
     }
-#endif
+#endif /* __QNXTARGET__ */
 
   if (pattern)
     {
@@ -1212,16 +1214,16 @@ info_sharedlibrary_command (const char *pattern, int from_tty)
 	else
 	  uiout->field_string ("syms-read", so->symbols_loaded ? "Yes" : "No");
 
-#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
-        char buff[SO_NAME_MAX_PATH_SIZE * 2 + 100];
-        if (verbose)
-          {
-            snprintf (buff, sizeof (buff), "%s (%s)", so->so_name,
-                      so->so_original_name);
-            uiout->field_string ("name", buff);
-          }
-        else
-#endif
+#ifdef __QNXTARGET__
+	if (verbose)
+	  {
+	    char buff[SO_NAME_MAX_PATH_SIZE * 2 + 100];
+	    snprintf (buff, sizeof (buff), "%s (%s)", so->so_name,
+		      so->so_original_name);
+	    uiout->field_string ("name", buff);
+	  }
+	else
+#endif /* __QNXTARGET__ */
 	uiout->field_string ("name", so->so_name, file_name_style.style ());
 
 	uiout->text ("\n");
