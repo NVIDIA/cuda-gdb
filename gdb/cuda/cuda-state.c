@@ -123,10 +123,7 @@ static uint32_t debug_invalidate = 0;
 
 cuda_state cuda_state::m_instance;
 
-cuda_state::cuda_state ()
-{
-  reset ();
-}
+cuda_state::cuda_state () { reset (); }
 
 void
 cuda_state::reset (void)
@@ -223,13 +220,14 @@ cuda_state::get_supported_capabilities ()
   return cuda_debugapi::get_supported_capabilities ();
 }
 
-cuda_context*
-cuda_state::create_context (uint32_t dev_id, uint64_t context_id, uint32_t thread_id)
+cuda_context *
+cuda_state::create_context (uint32_t dev_id, uint64_t context_id,
+			    uint32_t thread_id)
 {
   cuda_trace ("Context create device %u context 0x%llx", dev_id, context_id);
 
   m_instance.m_context_map[context_id]
-    = std::make_unique<cuda_context> (dev_id, context_id);
+      = std::make_unique<cuda_context> (dev_id, context_id);
 
   return m_instance.m_context_map[context_id].get ();
 }
@@ -238,13 +236,14 @@ void
 cuda_state::destroy_context (uint64_t context_id)
 {
   auto context = find_context_by_id (context_id);
-  cuda_trace ("Context destroy device %u context 0x%llx", context->dev_id (), context_id);
+  cuda_trace ("Context destroy device %u context 0x%llx", context->dev_id (),
+	      context_id);
 
 
   m_instance.m_context_map.erase (context_id);
 }
 
-cuda_context*
+cuda_context *
 cuda_state::find_context_by_id (uint64_t context_id)
 {
   auto iter = m_instance.m_context_map.find (context_id);
@@ -253,17 +252,17 @@ cuda_state::find_context_by_id (uint64_t context_id)
   return nullptr;
 }
 
-cuda_module*
+cuda_module *
 cuda_state::create_module (uint64_t module_id,
 			   CUDBGElfImageProperties properties,
-			   uint64_t context_id,
-			   uint64_t elf_image_size)
+			   uint64_t context_id, uint64_t elf_image_size)
 {
-  CUDA_STATE_TRACE ("Module create module_id 0x%llx context_id 0x%llx size %llu",
-		    module_id, context_id, elf_image_size);
+  CUDA_STATE_TRACE (
+      "Module create module_id 0x%llx context_id 0x%llx size %llu", module_id,
+      context_id, elf_image_size);
 
-  /* Sanity - Classic stack at times will try to load the same module multiple times.
-     To deal with this, destroy the previous module first. */
+  /* Sanity - Classic stack at times will try to load the same module multiple
+     times. To deal with this, destroy the previous module first. */
   if (find_module_by_id (module_id))
     {
       CUDA_STATE_TRACE ("Module 0x%llx already loaded, destroying", module_id);
@@ -272,11 +271,10 @@ cuda_state::create_module (uint64_t module_id,
 
   auto context = find_context_by_id (context_id);
   gdb_assert (context);
-  
+
   // Install it in the map before doing anything else
-  m_instance.m_module_map[module_id]
-    = std::make_unique<cuda_module> (module_id, properties,
-				     context, elf_image_size);
+  m_instance.m_module_map[module_id] = std::make_unique<cuda_module> (
+      module_id, properties, context, elf_image_size);
 
   // Now get the cuda_module* and update the context map
   auto module = m_instance.m_module_map[module_id].get ();
@@ -295,7 +293,7 @@ cuda_state::destroy_module (uint64_t module_id)
 
   auto module = find_module_by_id (module_id);
   gdb_assert (module);
-  
+
   // Remove the module from the context map
   module->context ()->remove_module (module);
 
@@ -306,7 +304,7 @@ cuda_state::destroy_module (uint64_t module_id)
   m_instance.m_module_map.erase (module->id ());
 }
 
-cuda_module*
+cuda_module *
 cuda_state::find_module_by_id (uint64_t module_id)
 {
   auto iter = m_instance.m_module_map.find (module_id);
@@ -321,7 +319,7 @@ cuda_state::find_module_by_id (uint64_t module_id)
   return nullptr;
 }
 
-cuda_module*
+cuda_module *
 cuda_state::find_module_by_address (CORE_ADDR addr)
 {
   return cuda_module::find_cuda_module_by_address (addr);
@@ -330,7 +328,7 @@ cuda_state::find_module_by_address (CORE_ADDR addr)
 bool
 cuda_state::is_any_context_present (uint32_t dev_id)
 {
-  for (const auto& iter : m_instance.m_context_map)
+  for (const auto &iter : m_instance.m_context_map)
     if (iter.second.get ()->dev_id () == dev_id)
       return true;
   return false;
@@ -340,7 +338,7 @@ void
 cuda_state::device_invalidate_kernels (uint32_t dev_id)
 {
   CUDA_STATE_TRACE_DEV (device (dev_id), "");
-  for (const auto& iter : kernels ())
+  for (const auto &iter : kernels ())
     if (iter.second.get ()->dev_id () == dev_id)
       iter.second.get ()->invalidate ();
 }
@@ -353,7 +351,7 @@ cuda_state::get_num_present_kernels (void)
   if (!cuda_initialized)
     return 0;
 
-  for (const auto& iter : kernels ())
+  for (const auto &iter : kernels ())
     if (iter.second.get ()->present ())
       ++num_present_kernel;
 
@@ -361,9 +359,9 @@ cuda_state::get_num_present_kernels (void)
 }
 
 bool
-cuda_state::is_context_active (cuda_context* context)
+cuda_state::is_context_active (cuda_context *context)
 {
-  const auto& iter = m_instance.m_context_map.find (context->id ());
+  const auto &iter = m_instance.m_context_map.find (context->id ());
   if (iter == m_instance.m_context_map.end ())
     return false;
   return true;
@@ -374,7 +372,7 @@ cuda_state::flush_disasm_caches ()
 {
   CUDA_STATE_TRACE ("");
 
-  for (auto& iter : m_instance.m_context_map)
+  for (auto &iter : m_instance.m_context_map)
     iter.second->flush_disasm_caches ();
 }
 
@@ -409,11 +407,12 @@ cuda_state::broken (cuda_coords &coords)
   return true;
 }
 
-cuda_kernel*
+cuda_kernel *
 cuda_state::find_kernel_by_grid_id (uint32_t dev_id, uint64_t grid_id)
 {
-  for (const auto& iter : m_instance.m_kernel_map)
-    if ((iter.second->dev_id () == dev_id) && (iter.second->grid_id () == grid_id))
+  for (const auto &iter : m_instance.m_kernel_map)
+    if ((iter.second->dev_id () == dev_id)
+	&& (iter.second->grid_id () == grid_id))
       {
 	CUDA_STATE_TRACE_DEV (device (dev_id),
 			      "kernel %lu found for grid_id %ld",
@@ -421,35 +420,35 @@ cuda_state::find_kernel_by_grid_id (uint32_t dev_id, uint64_t grid_id)
 	return iter.second.get ();
       }
 
-  CUDA_STATE_TRACE_DEV (device (dev_id),
-			"kernel not found for grid_id %ld",
+  CUDA_STATE_TRACE_DEV (device (dev_id), "kernel not found for grid_id %ld",
 			(int64_t)grid_id);
   return nullptr;
 }
 
-cuda_kernel*
+cuda_kernel *
 cuda_state::find_kernel_by_kernel_id (uint64_t kernel_id)
 {
   auto iter = m_instance.m_kernel_map.find (kernel_id);
   if (iter != m_instance.m_kernel_map.end ())
-      {
-	CUDA_STATE_TRACE_DEV (device (iter->second.get ()->dev_id ()),
-			      "kernel %lu found by kernel id", kernel_id);
-	return iter->second.get ();
-      }
+    {
+      CUDA_STATE_TRACE_DEV (device (iter->second.get ()->dev_id ()),
+			    "kernel %lu found by kernel id", kernel_id);
+      return iter->second.get ();
+    }
 
   CUDA_STATE_TRACE ("kernel %lu not found", kernel_id);
   return nullptr;
 }
 
-cuda_kernel*
+cuda_kernel *
 cuda_state::create_kernel (uint32_t dev_id, uint64_t grid_id)
 {
   const auto grid_info = cuda_state::device_get_grid_info (dev_id, grid_id);
-  
+
   auto context = cuda_state::find_context_by_id (grid_info.context);
   if (!context)
-    error ("Could not find CUDA context for context_id 0x%lx", grid_info.context);
+    error ("Could not find CUDA context for context_id 0x%lx",
+	   grid_info.context);
 
   const auto module = cuda_state::find_module_by_id (grid_info.module);
   if (!module)
@@ -461,50 +460,51 @@ cuda_state::create_kernel (uint32_t dev_id, uint64_t grid_id)
   const auto virt_code_base = grid_info.functionEntry;
   const auto grid_dim = grid_info.gridDim;
   const auto block_dim = grid_info.blockDim;
-  const auto cluster_dim = grid_info.clusterDim;
+  const auto cluster_dim_default = grid_info.clusterDim;
+  const auto cluster_dim_preferred = grid_info.preferredClusterDim;
 
   const auto type = grid_info.type;
   const auto origin = grid_info.origin;
   const auto parent_grid_id = grid_info.parentGridId;
 
-  return create_kernel (dev_id, grid_id, virt_code_base, module_id,
-			grid_dim, block_dim, cluster_dim,
-			type, origin, parent_grid_id);
+  return create_kernel (dev_id, grid_id, virt_code_base, module_id, grid_dim,
+			block_dim, cluster_dim_default, cluster_dim_preferred, type, origin, parent_grid_id);
 }
 
-cuda_kernel*
+cuda_kernel *
 cuda_state::create_kernel (uint32_t dev_id, uint64_t grid_id,
 			   uint64_t virt_code_base, uint64_t module_id,
-			   CuDim3 grid_dim, CuDim3 block_dim, CuDim3 cluster_dim,
-			   CUDBGKernelType type, CUDBGKernelOrigin origin, uint64_t parent_grid_id)
+			   CuDim3 grid_dim, CuDim3 block_dim,
+			   CuDim3 cluster_dim_default, CuDim3 cluster_dim_preferred,
+                           CUDBGKernelType type, CUDBGKernelOrigin origin,
+                           uint64_t parent_grid_id)
 {
   // First see if there's a parent kernel for this grid.
   // If not, create one before proceeding
-  if (parent_grid_id && !cuda_state::find_kernel_by_grid_id (dev_id, parent_grid_id))
+  if (parent_grid_id
+      && !cuda_state::find_kernel_by_grid_id (dev_id, parent_grid_id))
     cuda_state::add_parent_kernel (dev_id, grid_id);
 
   auto module = find_module_by_id (module_id);
   gdb_assert (module);
 
   auto kernel_id = m_instance.m_next_kernel_id++;
-  auto kernel = std::make_unique<cuda_kernel> (kernel_id, dev_id, grid_id,
-					       virt_code_base, module,
-					       grid_dim, block_dim, cluster_dim,
-					       type, origin, parent_grid_id);
+  auto kernel = std::make_unique<cuda_kernel> (
+      kernel_id, dev_id, grid_id, virt_code_base, module, grid_dim, block_dim,
+      cluster_dim_default, cluster_dim_preferred, type, origin, parent_grid_id);
 
   if (kernel->should_print_kernel_event ())
     printf_unfiltered (
-        _ ("[Launch of CUDA Kernel %lu (%s%s) on Device %u, level %u]\n"),
-        kernel->id (),
-	kernel->name ().c_str (), kernel->dimensions ().c_str (),
-	kernel->dev_id (), kernel->depth ());
+	_ ("[Launch of CUDA Kernel %lu (%s%s) on Device %u, level %u]\n"),
+	kernel->id (), kernel->name ().c_str (),
+	kernel->dimensions ().c_str (), kernel->dev_id (), kernel->depth ());
 
   m_instance.m_kernel_map.emplace (kernel_id, std::move (kernel));
 
   return m_instance.m_kernel_map[kernel_id].get ();
 }
 
-cuda_kernel*
+cuda_kernel *
 cuda_state::add_parent_kernel (uint32_t dev_id, uint64_t grid_id)
 {
   if (!grid_id)
@@ -520,13 +520,13 @@ cuda_state::add_parent_kernel (uint32_t dev_id, uint64_t grid_id)
 
   CUDBGGridStatus parent_grid_status;
   cuda_debugapi::get_grid_status (dev_id, grid_info.parentGridId,
-                                  &parent_grid_status);
+				  &parent_grid_status);
   if (parent_grid_status == CUDBG_GRID_STATUS_INVALID)
     return nullptr;
 
   CUDBGGridInfo parent_grid_info;
   cuda_debugapi::get_grid_info (dev_id, grid_info.parentGridId,
-                                &parent_grid_info);
+				&parent_grid_info);
   return cuda_state::create_kernel (dev_id, parent_grid_info.gridId64);
 }
 
@@ -535,23 +535,26 @@ cuda_state::destroy_kernel (uint32_t dev_id, uint64_t grid_id)
 {
   auto kernel = find_kernel_by_grid_id (dev_id, grid_id);
   if (!kernel)
-    CUDA_STATE_TRACE_DEV (device (dev_id), "kernel not found for grid_id %ld", (int64_t)grid_id);
+    CUDA_STATE_TRACE_DEV (device (dev_id), "kernel not found for grid_id %ld",
+			  (int64_t)grid_id);
   else
     destroy_kernel (kernel);
 }
 
 void
-cuda_state::destroy_kernel (cuda_kernel* kernel)
+cuda_state::destroy_kernel (cuda_kernel *kernel)
 {
   gdb_assert (kernel);
 
-  CUDA_STATE_TRACE_DEV (device (kernel->dev_id ()), "kernel %lu dev_id %u grid_id %ld",
-			kernel->id (), kernel->dev_id (), (int64_t)kernel->grid_id ());
+  CUDA_STATE_TRACE_DEV (device (kernel->dev_id ()),
+			"kernel %lu dev_id %u grid_id %ld", kernel->id (),
+			kernel->dev_id (), (int64_t)kernel->grid_id ());
 
   if (kernel->should_print_kernel_event ())
-    printf_unfiltered (_ ("[Termination of CUDA Kernel %lu (%s%s) on Device %u, level %u]\n"),
-                       kernel->id (), kernel->name ().c_str (),
-                       kernel->dimensions ().c_str (), kernel->dev_id (), kernel->depth ());
+    printf_unfiltered (
+	_ ("[Termination of CUDA Kernel %lu (%s%s) on Device %u, level %u]\n"),
+	kernel->id (), kernel->name ().c_str (),
+	kernel->dimensions ().c_str (), kernel->dev_id (), kernel->depth ());
 
   m_instance.m_kernel_map.erase (kernel->id ());
 }
@@ -559,15 +562,15 @@ cuda_state::destroy_kernel (cuda_kernel* kernel)
 void
 cuda_state::invalidate_kernels (uint32_t dev_id)
 {
-  for (const auto& iter : m_instance.m_kernel_map)
+  for (const auto &iter : m_instance.m_kernel_map)
     if (iter.second->dev_id () == dev_id)
       iter.second->invalidate ();
 }
 
 void
-cuda_state::invalidate_kernels (cuda_module* module)
+cuda_state::invalidate_kernels (cuda_module *module)
 {
-  for (const auto& iter : m_instance.m_kernel_map)
+  for (const auto &iter : m_instance.m_kernel_map)
     if (iter.second->module () == module)
       iter.second->invalidate ();
 }
@@ -575,7 +578,7 @@ cuda_state::invalidate_kernels (cuda_module* module)
 void
 cuda_state::update_kernel_args (void)
 {
-  for (const auto& iter : m_instance.m_kernel_map)
+  for (const auto &iter : m_instance.m_kernel_map)
     if (iter.second->present ())
       iter.second->populate_args ();
 }
@@ -591,8 +594,8 @@ cuda_state::update_kernels_terminated (void)
   };
 
   // rediscover the kernels currently running on the hardware
-  std::vector<cuda_kernel*> kernel_destroy_list;
-  for (const auto& iter : m_instance.m_kernel_map)
+  std::vector<cuda_kernel *> kernel_destroy_list;
+  for (const auto &iter : m_instance.m_kernel_map)
     {
       // terminate the kernels that we had seen running at some point
       // but are not here on the hardware anymore. If there is any child kernel
@@ -601,7 +604,7 @@ cuda_state::update_kernels_terminated (void)
       if (kernel->present ())
 	kernel->launched (true);
       else if (kernel->launched ())
-        kernel_destroy_list.push_back (kernel);
+	kernel_destroy_list.push_back (kernel);
     }
   for (auto kernel : kernel_destroy_list)
     destroy_kernel (kernel);
@@ -691,9 +694,7 @@ cuda_device::cuda_device (uint32_t idx) : m_dev_id (idx)
     m_sms.emplace_back (new cuda_sm (this, sm_idx));
 }
 
-cuda_device::~cuda_device ()
-{
-}
+cuda_device::~cuda_device () {}
 
 bool
 cuda_device::suspended ()
@@ -743,7 +744,8 @@ cuda_device::update (CUDBGDeviceInfoQueryType_t type)
     {
       if (incremental ())
 	{
-	  CUDA_STATE_TRACE_DEV (this, "Incremental update - invalidate device");
+	  CUDA_STATE_TRACE_DEV (this,
+				"Incremental update - invalidate device");
 	  invalidate (!debug_invalidate, true);
 	  CUDA_STATE_TRACE_DEV (this, "Incremental update - invalidate done");
 	}
@@ -873,7 +875,7 @@ cuda_device::get_num_kernels ()
   gdb_assert (valid ());
 
   uint32_t num_kernels = 0;
-  for (auto& iter : cuda_state::kernels ())
+  for (auto &iter : cuda_state::kernels ())
     if (iter.second->dev_id () == dev_idx ())
       ++num_kernels;
 
@@ -917,7 +919,7 @@ cuda_device::get_active_sms_mask ()
   return m_sm_active_mask;
 }
 
-cuda_kernel*
+cuda_kernel *
 cuda_device::get_kernel (uint64_t grid_id)
 {
   gdb_assert (grid_id != 0);
@@ -1204,15 +1206,6 @@ cuda_sm::resume_warps_until_pc (cuda_api_warpmask *mask, uint64_t pc)
   if (!cuda_debugapi::resume_warps_until_pc (dev_idx (), sm_idx (), mask, pc))
     return false;
 
-  if (cuda_options_software_preemption ())
-    {
-      if (device ()->incremental ())
-	device ()->invalidate (!debug_invalidate, true);
-      else
-	device ()->update (CUDBG_RESPONSE_TYPE_UPDATE);
-      return true;
-    }
-
   if (device ()->incremental ())
     {
       // Invalidate the cache for the warps that have been single-stepped.
@@ -1254,12 +1247,6 @@ cuda_sm::single_step_warp (uint32_t wp_id, uint32_t lane_id_hint,
       CUDA_STATE_TRACE_SM (this, "single_step_warp() failed");
       device ()->update (CUDBG_RESPONSE_TYPE_FULL);
       return rc;
-    }
-
-  if (cuda_options_software_preemption ())
-    {
-      device ()->update (CUDBG_RESPONSE_TYPE_FULL);
-      return true;
     }
 
   if (!cuda_api_get_bit (single_stepped_warp_mask, wp_id))
@@ -1308,8 +1295,7 @@ cuda_sm::single_step_warp (uint32_t wp_id, uint32_t lane_id_hint,
 	  warp (wp_id),
 	  "Stepped warp mask %" WARP_MASK_FORMAT
 	  " lanes valid 0x%08x active 0x%08x active pc 0x%llx",
-	  cuda_api_mask_string (single_stepped_warp_mask),
-	  valid_lanes_mask,
+	  cuda_api_mask_string (single_stepped_warp_mask), valid_lanes_mask,
 	  active_lanes_mask,
 	  active_lanes_mask ? warp (wp_id)->get_active_pc () : 0);
     }
@@ -1400,9 +1386,9 @@ cuda_warp::get_uregister (uint32_t regno)
   // m_uregisters_p was sized in the constructor.
   if (!m_uregisters_p[regno])
     {
-      cuda_debugapi::read_uregister_range (dev_idx (), sm_idx (), warp_idx (),
-					   0, sm ()->device ()->get_num_uregisters (),
-					   &m_uregisters[0]);
+      cuda_debugapi::read_uregister_range (
+	  dev_idx (), sm_idx (), warp_idx (), 0,
+	  sm ()->device ()->get_num_uregisters (), &m_uregisters[0]);
 
       // We read them all
       m_uregisters_p.fill (true);
@@ -1457,7 +1443,7 @@ cuda_warp::get_upredicate (uint32_t pred)
   if (!(m_upredicates_p & (1 << pred)))
     {
       cuda_debugapi::read_upredicates (dev_idx (), sm_idx (), warp_idx (),
-                                       num_upreds, m_upredicates);
+				       num_upreds, m_upredicates);
       m_upredicates_p = (1 << num_upreds) - 1;
     }
 
@@ -1653,7 +1639,7 @@ cuda_warp::get_cluster_dim ()
   return m_cluster_dim;
 }
 
-cuda_kernel*
+cuda_kernel *
 cuda_warp::get_kernel ()
 {
   if (!m_kernel)
@@ -1731,7 +1717,7 @@ cuda_warp::has_cluster_exception_target_block_idx ()
   return m_cluster_exception_target_block_idx_available;
 }
 
-const CuDim3&
+const CuDim3 &
 cuda_warp::get_cluster_exception_target_block_idx ()
 {
   gdb_assert (has_cluster_exception_target_block_idx ());
@@ -1747,7 +1733,7 @@ cuda_warp::update_warp_resources ()
       // the cuda_debugapi call will return with resources set to 0.
       CUDBGWarpResources resources;
       cuda_debugapi::read_warp_resources (dev_idx (), sm_idx (), warp_idx (),
-    					  &resources);
+					  &resources);
       m_registers_allocated = resources.numRegisters;
       m_shared_mem_size = resources.sharedMemSize;
       m_warp_resources_p = true;
@@ -2134,6 +2120,13 @@ cuda_lane::get_return_address (int32_t level)
 }
 
 void
+cuda_lane::get_cuda_exception_string (char *buf, uint32_t bufSz)
+{
+  cuda_debugapi::get_cuda_exception_string (dev_idx (), sm_idx (), warp_idx (),
+					    lane_idx (), buf, bufSz, nullptr);
+}
+
+void
 cuda_lane::update (const CUDBGLaneState &state)
 {
   CUDA_STATE_TRACE_LANE (
@@ -2260,9 +2253,8 @@ cuda_lane::decode (const CUDBGDeviceInfoSizes &info_sizes,
 
   CUDA_STATE_TRACE_DOMAIN_LANE (
       CUDA_TRACE_STATE_DECODE, this,
-      "Decoded Lane at offset %lu: pc 0x%lx thread (%u, %u, %u)",
-      start_offset, m_pc, m_thread_idx.x, m_thread_idx.y,
-      m_thread_idx.z);
+      "Decoded Lane at offset %lu: pc 0x%lx thread (%u, %u, %u)", start_offset,
+      m_pc, m_thread_idx.x, m_thread_idx.y, m_thread_idx.z);
 }
 
 void

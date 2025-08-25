@@ -2,21 +2,21 @@
  * NVIDIA CUDA Debugger CUDA-GDB
  * Copyright (C) 2007-2025 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 3 as
  * published by the Free Software Foundation.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-/*CUDA COMMAND PARSER
+/* CUDA COMMAND PARSER
  *
  * Entry point for complex CUDA commands not handled by the usual GDB command
  * interface.
@@ -33,8 +33,8 @@
  * each object represents a single request (or condition). A request applies to
  * a single type of coordinates (coord_type_t). It can be the device index, or
  * the blockIdx.x variable for instance. Given that coordinate, the request can
- * be of different types: same or exact. Same means that the value is the one in
- * the current focus. Exact means that the value is the one specified in the
+ * be of different types: same or exact. Same means that the value is the one
+ * in the current focus. Exact means that the value is the one specified in the
  * value field of the request. Finally the cmp field indicates with comparison
  * operator to use for that coordinate, and the next field points to the next
  * request.
@@ -55,71 +55,86 @@
 #ifndef _CUDA_PARSER_H
 #define _CUDA_PARSER_H 1
 
+#include "cuda-tdep.h"
 #include "cudadebugger.h"
 #include "defs.h"
-#include "cuda-tdep.h"
 
-typedef enum {
-  CMP_NONE,       /* ignored */
-  CMP_EQ,         /* == */
-  CMP_NE,         /* != */
-  CMP_LT,         /* < */
-  CMP_GT,         /* > */
-  CMP_LE,         /* <= */
-  CMP_GE,         /* >= */
+typedef enum
+{
+  CMP_NONE, /* ignored */
+  CMP_EQ,   /* == */
+  CMP_NE,   /* != */
+  CMP_LT,   /* < */
+  CMP_GT,   /* > */
+  CMP_LE,   /* <= */
+  CMP_GE,   /* >= */
 } compare_t;
 
-typedef enum {
-  CMD_NONE       = 0x001,    /* ignored */
-  CMD_ERROR      = 0x002,    /* something went wrong */
-  CMD_QUERY      = 0x004,    /* focus query command */
-  CMD_SWITCH     = 0x008,    /* focus switch command */
-  CMD_COND_AND   = 0x010,    /* AND-product of conditions */
-  CMD_COND_OR    = 0x020,    /* OR-sum of hw conditions */
-  CMD_FILTER     = 0x040,    /* filter for coordinates */
-  CMD_FILTER_KERNEL= 0x080,    /* filter for kernel only*/
+typedef enum
+{
+  CMD_NONE = 0x001,	     /* ignored */
+  CMD_ERROR = 0x002,	     /* something went wrong */
+  CMD_QUERY = 0x004,	     /* focus query command */
+  CMD_SWITCH = 0x008,	     /* focus switch command */
+  CMD_COND_AND = 0x010,	     /* AND-product of conditions */
+  CMD_COND_OR = 0x020,	     /* OR-sum of hw conditions */
+  CMD_FILTER = 0x040,	     /* filter for coordinates */
+  CMD_FILTER_KERNEL = 0x080, /* filter for kernel only*/
 } command_t;
 
-typedef enum {
-  FILTER_TYPE_NONE        = 0x0000,    /* ignored */
-  FILTER_TYPE_DEVICE      = 0x0001,    /* the device index */
-  FILTER_TYPE_SM          = 0x0002,    /* the SM index */
-  FILTER_TYPE_WARP        = 0x0004,    /* the warp index */
-  FILTER_TYPE_LANE        = 0x0008,    /* the lane index */
-  FILTER_TYPE_KERNEL      = 0x0010,    /* the kernel index */
-  FILTER_TYPE_GRID        = 0x0020,    /* the grid index */
-  FILTER_TYPE_BLOCK       = 0x0040,    /* the block index (blockIdx) */
-  FILTER_TYPE_THREAD      = 0x0080,    /* the thread index (threadIdx) */
-  FILTER_TYPE_BLOCKIDX_X  = 0x0100,    /* blockIdx.x */
-  FILTER_TYPE_BLOCKIDX_Y  = 0x0200,    /* blockIdx.y */
-  FILTER_TYPE_BLOCKIDX_Z  = 0x0400,    /* blockIdx.z */
-  FILTER_TYPE_THREADIDX_X = 0x0800,    /* threadIdx.x */
-  FILTER_TYPE_THREADIDX_Y = 0x1000,    /* threadIdx.y */
-  FILTER_TYPE_THREADIDX_Z = 0x2000,    /* threadidx.z */
+typedef enum
+{
+  FILTER_TYPE_NONE = 0x000000,	       /* ignored */
+  FILTER_TYPE_DEVICE = 0x000001,       /* the device index */
+  FILTER_TYPE_SM = 0x000002,	       /* the SM index */
+  FILTER_TYPE_WARP = 0x000004,	       /* the warp index */
+  FILTER_TYPE_LANE = 0x000008,	       /* the lane index */
+  FILTER_TYPE_KERNEL = 0x000010,       /* the kernel index */
+  FILTER_TYPE_GRID = 0x000020,	       /* the grid index */
+  FILTER_TYPE_CLUSTERDIM = 0x000040,   /* the cluster dimension */
+  FILTER_TYPE_CLUSTER = 0x000080,      /* the cluster index */
+  FILTER_TYPE_BLOCK = 0x000100,	       /* the block index (blockIdx) */
+  FILTER_TYPE_THREAD = 0x000200,       /* the thread index (threadIdx) */
+  FILTER_TYPE_CLUSTERDIM_X = 0x000400, /* clusterDim.x */
+  FILTER_TYPE_CLUSTERDIM_Y = 0x000800, /* clusterDim.y */
+  FILTER_TYPE_CLUSTERDIM_Z = 0x001000, /* clusterDim.z */
+  FILTER_TYPE_CLUSTERIDX_X = 0x002000, /* clusterIdx.x */
+  FILTER_TYPE_CLUSTERIDX_Y = 0x004000, /* clusterIdx.y */
+  FILTER_TYPE_CLUSTERIDX_Z = 0x008000, /* clusterIdx.z */
+  FILTER_TYPE_BLOCKIDX_X = 0x010000,   /* blockIdx.x */
+  FILTER_TYPE_BLOCKIDX_Y = 0x020000,   /* blockIdx.y */
+  FILTER_TYPE_BLOCKIDX_Z = 0x040000,   /* blockIdx.z */
+  FILTER_TYPE_THREADIDX_X = 0x080000,  /* threadIdx.x */
+  FILTER_TYPE_THREADIDX_Y = 0x100000,  /* threadIdx.y */
+  FILTER_TYPE_THREADIDX_Z = 0x200000,  /* threadidx.z */
 } filter_type_t;
 
-typedef union {
-    uint32_t          scalar;
-    CuDim3            cudim3;
+typedef union
+{
+  uint32_t scalar;
+  CuDim3 cudim3;
 } request_value_t;
 
-typedef struct request_st {
-  filter_type_t       type;          /* the filter type: device, lane,... */
-  request_value_t     value;         /* the request value (~0 means invalid/unspecified) */
-  compare_t           cmp;           /* the comparison operator */
+typedef struct request_st
+{
+  filter_type_t type;	 /* the filter type: device, lane,... */
+  request_value_t value; /* the request value (~0 means invalid/unspecified) */
+  compare_t cmp;	 /* the comparison operator */
 } request_t;
 
-typedef struct {
-  command_t  command;                /* the command type */
-  uint32_t   num_requests;           /* the number of requests */
-  uint32_t   max_requests;           /* the allocated number of requests */
-  request_t *requests;               /* the pointer to the array of requests */
+typedef struct
+{
+  command_t command;	 /* the command type */
+  uint32_t num_requests; /* the number of requests */
+  uint32_t max_requests; /* the allocated number of requests */
+  request_t *requests;	 /* the pointer to the array of requests */
 } cuda_parser_result_t;
 
-extern command_t start_token;        /* Used internally by the parser */
+extern command_t start_token; /* Used internally by the parser */
 
-void cuda_parser (const char * input, command_t command, cuda_parser_result_t **result,
-                  cuda_coords_special_value_t dflt_value);
+void cuda_parser (const char *input, command_t command,
+		  cuda_parser_result_t **result,
+		  cuda_coords_special_value_t dflt_value);
 void cuda_parser_print (cuda_parser_result_t *result);
 
 #endif

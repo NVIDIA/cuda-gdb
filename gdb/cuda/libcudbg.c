@@ -54,7 +54,7 @@ extern void cuda_gdbserver_set_api_version (uint32_t major, uint32_t minor,
 #endif
 
 /* Globals */
-extern CUDBGNotifyNewEventCallback cudbgDebugClientCallback;
+extern CUDBGNotifyNewEventCallback41 cudbgDebugClientCallback;
 
 static CUDBGResult
 cudbgInitialize (void)
@@ -127,7 +127,7 @@ cudbgInitialize (void)
 }
 
 static CUDBGResult
-cudbgSetNotifyNewEventCallback (CUDBGNotifyNewEventCallback callback)
+cudbgSetNotifyNewEventCallback41 (CUDBGNotifyNewEventCallback41 callback)
 {
   cudbgDebugClientCallback = callback;
 
@@ -329,22 +329,10 @@ cudbgReadCodeMemory (uint32_t dev, uint64_t addr, void *buf, uint32_t buf_size)
 }
 
 static CUDBGResult
-cudbgReadConstMemory (uint32_t dev, uint64_t addr, void *buf,
+STUB_cudbgReadConstMemory (uint32_t dev, uint64_t addr, void *buf,
 		      uint32_t buf_size)
 {
-  char *ipc_buf;
-  CUDBGResult result;
-
-  CUDBG_IPC_BEGIN (CUDBGAPIREQ_readConstMemory);
-  CUDBG_IPC_APPEND (&dev, sizeof (dev));
-  CUDBG_IPC_APPEND (&addr, sizeof (addr));
-  CUDBG_IPC_APPEND (&buf_size, sizeof (buf_size));
-
-  CUDBG_IPC_REQUEST ((void **)&ipc_buf);
-  CUDBG_IPC_RECEIVE (&result, &ipc_buf);
-  CUDBG_IPC_RECEIVE_ARRAY (buf, buf_size, &ipc_buf);
-
-  return result;
+  return CUDBG_ERROR_UNKNOWN;
 }
 
 static CUDBGResult
@@ -1221,25 +1209,11 @@ STUB_cudbgGetNextSyncEvent50 (CUDBGEvent50 *event)
 }
 
 static CUDBGResult
-cudbgMemcheckReadErrorAddress (uint32_t dev, uint32_t sm, uint32_t wp,
+STUB_cudbgMemcheckReadErrorAddress (uint32_t dev, uint32_t sm, uint32_t wp,
 			       uint32_t ln, uint64_t *address,
 			       ptxStorageKind *storage)
 {
-  char *ipc_buf;
-  CUDBGResult result;
-
-  CUDBG_IPC_BEGIN (CUDBGAPIREQ_memcheckReadErrorAddress);
-  CUDBG_IPC_APPEND (&dev, sizeof (dev));
-  CUDBG_IPC_APPEND (&sm, sizeof (sm));
-  CUDBG_IPC_APPEND (&wp, sizeof (wp));
-  CUDBG_IPC_APPEND (&ln, sizeof (ln));
-
-  CUDBG_IPC_REQUEST ((void **)&ipc_buf);
-  CUDBG_IPC_RECEIVE (&result, &ipc_buf);
-  CUDBG_IPC_RECEIVE (address, &ipc_buf);
-  CUDBG_IPC_RECEIVE (storage, &ipc_buf);
-
-  return result;
+  return CUDBG_ERROR_UNKNOWN;
 }
 
 static CUDBGResult
@@ -2272,7 +2246,7 @@ cudbgGetClusterDim (uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 *clusterDim)
 
 static CUDBGResult
 cudbgReadWarpState127 (uint32_t devId, uint32_t sm, uint32_t wp,
-		    CUDBGWarpState127 *state)
+		       CUDBGWarpState127 *state)
 {
   char *ipc_buf;
   CUDBGResult result;
@@ -2375,8 +2349,8 @@ cudbgReadWarpState (uint32_t devId, uint32_t sm, uint32_t wp,
 }
 
 static CUDBGResult
-cudbgConsumeCudaLogs (CUDBGCudaLogMessage* logMessages, uint32_t numMessages,
-		      uint32_t* numConsumed)
+cudbgConsumeCudaLogs (CUDBGCudaLogMessage *logMessages, uint32_t numMessages,
+		      uint32_t *numConsumed)
 {
   char *ipc_buf;
   CUDBGResult result;
@@ -2390,14 +2364,16 @@ cudbgConsumeCudaLogs (CUDBGCudaLogMessage* logMessages, uint32_t numMessages,
   gdb_assert (*numConsumed <= numMessages);
   if (result == CUDBG_SUCCESS)
     {
-      CUDBG_IPC_RECEIVE_ARRAY (logMessages, std::min (*numConsumed, numMessages), &ipc_buf);
+      CUDBG_IPC_RECEIVE_ARRAY (logMessages,
+			       std::min (*numConsumed, numMessages), &ipc_buf);
     }
 
   return result;
 }
 
 static CUDBGResult
-cudbgReadCPUCallStack (uint32_t dev, uint64_t gridId64, uint64_t *addrs, uint32_t numAddrs, uint32_t* totalNumAddrs)
+cudbgReadCPUCallStack (uint32_t dev, uint64_t gridId64, uint64_t *addrs,
+		       uint32_t numAddrs, uint32_t *totalNumAddrs)
 {
   char *ipc_buf;
   CUDBGResult result;
@@ -2409,228 +2385,205 @@ cudbgReadCPUCallStack (uint32_t dev, uint64_t gridId64, uint64_t *addrs, uint32_
   CUDBG_IPC_REQUEST ((void **)&ipc_buf);
   CUDBG_IPC_RECEIVE (&result, &ipc_buf);
   CUDBG_IPC_RECEIVE (totalNumAddrs, &ipc_buf);
-  CUDBG_IPC_RECEIVE_ARRAY (addrs, std::min(numAddrs, *totalNumAddrs), &ipc_buf);
+  CUDBG_IPC_RECEIVE_ARRAY (addrs, std::min (numAddrs, *totalNumAddrs),
+			   &ipc_buf);
 
   return result;
 }
 
-template<typename ...T>
-inline constexpr size_t numberOfArgs(T ... a) { return sizeof...(a); }
+static CUDBGResult
+cudbgGetCudaExceptionString (uint32_t dev, uint32_t sm, uint32_t wp,
+			     uint32_t ln, char *buf, uint32_t bufSz,
+			     uint32_t *msgSz)
+{
+  char *ipc_buf;
+  CUDBGResult result;
+  uint32_t msg_size;
+  uint32_t copied_size;
 
-#define DEFINE_CUDBGAPI(name, ...)											\
-  static_assert(numberOfArgs(__VA_ARGS__) == sizeof(struct CUDBGAPI_st) / sizeof(void *), "Not all fields initialized");\
+  CUDBG_IPC_BEGIN (CUDBGAPIREQ_getCudaExceptionString);
+  CUDBG_IPC_APPEND (&dev, sizeof (dev));
+  CUDBG_IPC_APPEND (&sm, sizeof (sm));
+  CUDBG_IPC_APPEND (&wp, sizeof (wp));
+  CUDBG_IPC_APPEND (&ln, sizeof (ln));
+  CUDBG_IPC_APPEND (&bufSz, sizeof (bufSz));
+
+  CUDBG_IPC_REQUEST ((void **)&ipc_buf);
+  CUDBG_IPC_RECEIVE (&result, &ipc_buf);
+  CUDBG_IPC_RECEIVE (&msg_size, &ipc_buf);
+
+  if (result != CUDBG_SUCCESS)
+    msg_size = 0;
+
+  copied_size = std::min (bufSz, msg_size);
+
+  CUDBG_IPC_RECEIVE_ARRAY (buf, copied_size, &ipc_buf);
+
+  if (msgSz)
+    *msgSz = msg_size;
+
+  buf[copied_size ? copied_size - 1 : 0] = 0;
+
+  return result;
+}
+
+static CUDBGResult
+STUB_cudbgSetNotifyNewEventCallback (CUDBGNotifyNewEventCallback callback, void* data)
+{
+  return CUDBG_ERROR_UNKNOWN;
+}
+
+template <typename... T>
+inline constexpr size_t
+numberOfArgs (T... a)
+{
+  return sizeof...(a);
+}
+
+#define DEFINE_CUDBGAPI(name, ...)                                            \
+  static_assert (numberOfArgs (__VA_ARGS__)                                   \
+		     == sizeof (struct CUDBGAPI_st) / sizeof (void *),        \
+		 "Not all fields initialized");                               \
   static const struct CUDBGAPI_st name = { __VA_ARGS__ }
 
-DEFINE_CUDBGAPI(cudbgCurrentApi,
-  /* Initialization */
-  cudbgInitialize,
-  cudbgFinalize,
+DEFINE_CUDBGAPI (
+    cudbgCurrentApi,
+    /* Initialization */
+    cudbgInitialize, cudbgFinalize,
 
-  /* Device Execution Control */
-  cudbgSuspendDevice,
-  cudbgResumeDevice,
-  STUB_cudbgSingleStepWarp40,
+    /* Device Execution Control */
+    cudbgSuspendDevice, cudbgResumeDevice, STUB_cudbgSingleStepWarp40,
 
-  /* Breakpoints */
-  STUB_cudbgSetBreakpoint31,
-  STUB_cudbgUnsetBreakpoint31,
+    /* Breakpoints */
+    STUB_cudbgSetBreakpoint31, STUB_cudbgUnsetBreakpoint31,
 
-  /* Device State Inspection */
-  STUB_cudbgReadGridId50,
-  STUB_cudbgReadBlockIdx32,
-  cudbgReadThreadIdx,
-  cudbgReadBrokenWarps,
-  cudbgReadValidWarps,
-  cudbgReadValidLanes,
-  cudbgReadActiveLanes,
-  cudbgReadCodeMemory,
-  cudbgReadConstMemory,
-  STUB_cudbgReadGlobalMemory31,
-  cudbgReadParamMemory,
-  cudbgReadSharedMemory,
-  cudbgReadLocalMemory,
-  cudbgReadRegister,
-  cudbgReadPC,
-  cudbgReadVirtualPC,
-  cudbgReadLaneStatus,
+    /* Device State Inspection */
+    STUB_cudbgReadGridId50, STUB_cudbgReadBlockIdx32, cudbgReadThreadIdx,
+    cudbgReadBrokenWarps, cudbgReadValidWarps, cudbgReadValidLanes,
+    cudbgReadActiveLanes, cudbgReadCodeMemory, STUB_cudbgReadConstMemory,
+    STUB_cudbgReadGlobalMemory31, cudbgReadParamMemory, cudbgReadSharedMemory,
+    cudbgReadLocalMemory, cudbgReadRegister, cudbgReadPC, cudbgReadVirtualPC,
+    cudbgReadLaneStatus,
 
-  /* Device State Alteration */
-  STUB_cudbgWriteGlobalMemory31,
-  cudbgWriteParamMemory,
-  cudbgWriteSharedMemory,
-  cudbgWriteLocalMemory,
-  cudbgWriteRegister,
+    /* Device State Alteration */
+    STUB_cudbgWriteGlobalMemory31, cudbgWriteParamMemory,
+    cudbgWriteSharedMemory, cudbgWriteLocalMemory, cudbgWriteRegister,
 
-  /* Grid Properties */
-  STUB_cudbgGetGridDim32,
-  cudbgGetBlockDim,
-  cudbgGetTID,
-  STUB_cudbgGetElfImage32,
+    /* Grid Properties */
+    STUB_cudbgGetGridDim32, cudbgGetBlockDim, cudbgGetTID,
+    STUB_cudbgGetElfImage32,
 
-  /* Device Properties */
-  cudbgGetDeviceType,
-  cudbgGetSmType,
-  cudbgGetNumDevices,
-  cudbgGetNumSMs,
-  cudbgGetNumWarps,
-  cudbgGetNumLanes,
-  cudbgGetNumRegisters,
+    /* Device Properties */
+    cudbgGetDeviceType, cudbgGetSmType, cudbgGetNumDevices, cudbgGetNumSMs,
+    cudbgGetNumWarps, cudbgGetNumLanes, cudbgGetNumRegisters,
 
-  /* DWARF-related routines */
-  STUB_cudbgGetPhysicalRegister30,
-  cudbgDisassemble,
-  STUB_cudbgIsDeviceCodeAddress55,
-  STUB_cudbgLookupDeviceCodeSymbol,
+    /* DWARF-related routines */
+    STUB_cudbgGetPhysicalRegister30, cudbgDisassemble,
+    STUB_cudbgIsDeviceCodeAddress55, STUB_cudbgLookupDeviceCodeSymbol,
 
-  /* Events */
-  STUB_cudbgSetNotifyNewEventCallback31,
-  STUB_cudbgGetNextEvent30,
-  STUB_cudbgAcknowledgeEvent30,
+    /* Events */
+    STUB_cudbgSetNotifyNewEventCallback31, STUB_cudbgGetNextEvent30,
+    STUB_cudbgAcknowledgeEvent30,
 
-  /* 3.1 Extensions */
-  cudbgGetGridAttribute,
-  STUB_cudbgGetGridAttributes,
-  STUB_cudbgGetPhysicalRegister40,
-  cudbgReadLaneException,
-  STUB_cudbgGetNextEvent32,
-  STUB_cudbgAcknowledgeEvents42,
+    /* 3.1 Extensions */
+    cudbgGetGridAttribute, STUB_cudbgGetGridAttributes,
+    STUB_cudbgGetPhysicalRegister40, cudbgReadLaneException,
+    STUB_cudbgGetNextEvent32, STUB_cudbgAcknowledgeEvents42,
 
-  /* 3.1 - ABI */
-  STUB_cudbgReadCallDepth32,
-  STUB_cudbgReadReturnAddress32,
-  STUB_cudbgReadVirtualReturnAddress32,
+    /* 3.1 - ABI */
+    STUB_cudbgReadCallDepth32, STUB_cudbgReadReturnAddress32,
+    STUB_cudbgReadVirtualReturnAddress32,
 
-  /* 3.2 Extensions */
-  STUB_cudbgReadGlobalMemory55,
-  STUB_cudbgWriteGlobalMemory55,
-  STUB_cudbgReadPinnedMemory,
-  STUB_cudbgWritePinnedMemory,
-  cudbgSetBreakpoint,
-  cudbgUnsetBreakpoint,
-  STUB_cudbgSetNotifyNewEventCallback40,
+    /* 3.2 Extensions */
+    STUB_cudbgReadGlobalMemory55, STUB_cudbgWriteGlobalMemory55,
+    STUB_cudbgReadPinnedMemory, STUB_cudbgWritePinnedMemory,
+    cudbgSetBreakpoint, cudbgUnsetBreakpoint,
+    STUB_cudbgSetNotifyNewEventCallback40,
 
-  /* 4.0 Extensions */
-  STUB_cudbgGetNextEvent42,
-  STUB_cudbgReadTextureMemory,
-  cudbgReadBlockIdx,
-  cudbgGetGridDim,
-  cudbgReadCallDepth,
-  cudbgReadReturnAddress,
-  cudbgReadVirtualReturnAddress,
-  STUB_cudbgGetElfImage,
+    /* 4.0 Extensions */
+    STUB_cudbgGetNextEvent42, STUB_cudbgReadTextureMemory, cudbgReadBlockIdx,
+    cudbgGetGridDim, cudbgReadCallDepth, cudbgReadReturnAddress,
+    cudbgReadVirtualReturnAddress, STUB_cudbgGetElfImage,
 
-  /* 4.1 Extensions */
-  cudbgGetHostAddrFromDeviceAddr,
-  cudbgSingleStepWarp41,
-  cudbgSetNotifyNewEventCallback,
-  cudbgReadSyscallCallDepth,
+    /* 4.1 Extensions */
+    cudbgGetHostAddrFromDeviceAddr, cudbgSingleStepWarp41,
+    cudbgSetNotifyNewEventCallback41, cudbgReadSyscallCallDepth,
 
-  /* 4.2 Extensions */
-  STUB_cudbgReadTextureMemoryBindless,
+    /* 4.2 Extensions */
+    STUB_cudbgReadTextureMemoryBindless,
 
-  /* 5.0 Extensions */
-  cudbgClearAttachState,
-  STUB_cudbgGetNextSyncEvent50,
-  cudbgMemcheckReadErrorAddress,
-  cudbgAcknowledgeSyncEvents,
-  STUB_cudbgGetNextAsyncEvent50,
-  STUB_cudbgRequestCleanupOnDetach55,
-  cudbgInitializeAttachStub,
-  STUB_cudbgGetGridStatus50,
+    /* 5.0 Extensions */
+    cudbgClearAttachState, STUB_cudbgGetNextSyncEvent50,
+    STUB_cudbgMemcheckReadErrorAddress, cudbgAcknowledgeSyncEvents,
+    STUB_cudbgGetNextAsyncEvent50, STUB_cudbgRequestCleanupOnDetach55,
+    cudbgInitializeAttachStub, STUB_cudbgGetGridStatus50,
 
-  /* 5.5 Extensions */
-  STUB_cudbgGetNextSyncEvent55,
-  STUB_cudbgGetNextAsyncEvent55,
-  STUB_cudbgGetGridInfo55,
-  cudbgReadGridId,
-  cudbgGetGridStatus,
-  cudbgSetKernelLaunchNotificationMode,
-  cudbgGetDevicePCIBusInfo,
-  cudbgReadDeviceExceptionState80,
+    /* 5.5 Extensions */
+    STUB_cudbgGetNextSyncEvent55, STUB_cudbgGetNextAsyncEvent55,
+    STUB_cudbgGetGridInfo55, cudbgReadGridId, cudbgGetGridStatus,
+    cudbgSetKernelLaunchNotificationMode, cudbgGetDevicePCIBusInfo,
+    cudbgReadDeviceExceptionState80,
 
-  /* 6.0 Extensions */
-  cudbgGetAdjustedCodeAddress,
-  cudbgReadErrorPC,
-  cudbgGetNextEvent,
-  cudbgGetElfImageByHandle,
-  cudbgResumeWarpsUntilPC,
-  STUB_cudbgReadWarpState60,
-  cudbgReadRegisterRange,
-  cudbgReadGenericMemory,
-  cudbgWriteGenericMemory,
-  cudbgReadGlobalMemory,
-  cudbgWriteGlobalMemory,
-  cudbgGetManagedMemoryRegionInfo,
-  STUB_cudbgIsDeviceCodeAddress,
-  cudbgRequestCleanupOnDetach,
+    /* 6.0 Extensions */
+    cudbgGetAdjustedCodeAddress, cudbgReadErrorPC, cudbgGetNextEvent,
+    cudbgGetElfImageByHandle, cudbgResumeWarpsUntilPC,
+    STUB_cudbgReadWarpState60, cudbgReadRegisterRange, cudbgReadGenericMemory,
+    cudbgWriteGenericMemory, cudbgReadGlobalMemory, cudbgWriteGlobalMemory,
+    cudbgGetManagedMemoryRegionInfo, STUB_cudbgIsDeviceCodeAddress,
+    cudbgRequestCleanupOnDetach,
 
-  /* 6.5 Extensions */
-  cudbgReadPredicates,
-  cudbgWritePredicates,
-  cudbgGetNumPredicates,
-  cudbgReadCCRegister,
-  cudbgWriteCCRegister,
+    /* 6.5 Extensions */
+    cudbgReadPredicates, cudbgWritePredicates, cudbgGetNumPredicates,
+    cudbgReadCCRegister, cudbgWriteCCRegister,
 
-  cudbgGetDeviceName,
-  cudbgSingleStepWarp65,
+    cudbgGetDeviceName, cudbgSingleStepWarp65,
 
-  /* 9.0 Extensions */
-  cudbgReadDeviceExceptionState,
+    /* 9.0 Extensions */
+    cudbgReadDeviceExceptionState,
 
-  /* 10.0 Extensions */
-  cudbgGetNumUniformRegisters,
-  cudbgReadUniformRegisterRange,
-  cudbgWriteUniformRegister,
-  cudbgGetNumUniformPredicates,
-  cudbgReadUniformPredicates,
-  cudbgWriteUniformPredicates,
+    /* 10.0 Extensions */
+    cudbgGetNumUniformRegisters, cudbgReadUniformRegisterRange,
+    cudbgWriteUniformRegister, cudbgGetNumUniformPredicates,
+    cudbgReadUniformPredicates, cudbgWriteUniformPredicates,
 
-  /* 11.8 Extensions */
-  cudbgGetLoadedFunctionInfo118,
+    /* 11.8 Extensions */
+    cudbgGetLoadedFunctionInfo118,
 
-  /* 12.0 Extensions */
-  cudbgGetGridInfo120,
-  cudbgGetClusterDim120,
-  cudbgReadWarpState120,
-  cudbgReadClusterIdx,
+    /* 12.0 Extensions */
+    cudbgGetGridInfo120, cudbgGetClusterDim120, cudbgReadWarpState120,
+    cudbgReadClusterIdx,
 
-  /* 12.2 Extensions */
-  cudbgGetErrorStringEx,
+    /* 12.2 Extensions */
+    cudbgGetErrorStringEx,
 
-  /* 12.3 Extensions */
-  cudbgGetLoadedFunctionInfo,
-  cudbgGenerateCoredump,
-  cudbgGetConstBankAddress123,
+    /* 12.3 Extensions */
+    cudbgGetLoadedFunctionInfo, cudbgGenerateCoredump,
+    cudbgGetConstBankAddress123,
 
-  /* 12.4 Extensions */
-  cudbgGetDeviceInfoSizes,
-  cudbgGetDeviceInfo,
-  cudbgGetConstBankAddress,
-  cudbgSingleStepWarp,
+    /* 12.4 Extensions */
+    cudbgGetDeviceInfoSizes, cudbgGetDeviceInfo, cudbgGetConstBankAddress,
+    cudbgSingleStepWarp,
 
-  /* 12.5 Extensions */
-  cudbgReadAllVirtualReturnAddresses,
-  cudbgGetSupportedDebuggerCapabilities,
-  cudbgReadSmException,
+    /* 12.5 Extensions */
+    cudbgReadAllVirtualReturnAddresses, cudbgGetSupportedDebuggerCapabilities,
+    cudbgReadSmException,
 
-  /* 12.6 Extensions */
-  cudbgExecuteInternalCommand,
+    /* 12.6 Extensions */
+    cudbgExecuteInternalCommand,
 
-  /* 12.7 Extensions */
-  cudbgGetGridInfo,
-  cudbgGetClusterDim,
-  cudbgReadWarpState127,
-  cudbgGetClusterExceptionTargetBlock,
+    /* 12.7 Extensions */
+    cudbgGetGridInfo, cudbgGetClusterDim, cudbgReadWarpState127,
+    cudbgGetClusterExceptionTargetBlock,
 
-  /* 12.8 Extensions */
-  cudbgReadWarpResources,
+    /* 12.8 Extensions */
+    cudbgReadWarpResources,
 
-  /* 12.9 Extensions */
-  cudbgGetCbuWarpState,
-  cudbgReadWarpState,
-  cudbgConsumeCudaLogs,
-  cudbgReadCPUCallStack
-);
+    /* 12.9 Extensions */
+    cudbgGetCbuWarpState, cudbgReadWarpState, cudbgConsumeCudaLogs,
+    cudbgReadCPUCallStack,
+
+    /* 13.0 Extensions */
+    cudbgGetCudaExceptionString, STUB_cudbgSetNotifyNewEventCallback);
 
 CUDBGResult
 cudbgGetAPI (uint32_t major, uint32_t minor, uint32_t rev, CUDBGAPI *api)

@@ -244,11 +244,13 @@ add_builtin_mi_commands ()
 		 &mi_suppress_notification.breakpoint),
   add_mi_cmd_mi ("complete", mi_cmd_complete);
 #ifdef NVIDIA_CUDA_GDB
+  add_mi_cmd_mi ("cuda-info-barriers", mi_cmd_cuda_info_barriers);
   add_mi_cmd_mi ("cuda-info-devices", mi_cmd_cuda_info_devices);
   add_mi_cmd_mi ("cuda-info-sms", mi_cmd_cuda_info_sms);
   add_mi_cmd_mi ("cuda-info-warps", mi_cmd_cuda_info_warps);
   add_mi_cmd_mi ("cuda-info-lanes", mi_cmd_cuda_info_lanes);
   add_mi_cmd_mi ("cuda-info-kernels", mi_cmd_cuda_info_kernels);
+  add_mi_cmd_mi ("cuda-info-clusters", mi_cmd_cuda_info_clusters);
   add_mi_cmd_mi ("cuda-info-blocks", mi_cmd_cuda_info_blocks);
   add_mi_cmd_mi ("cuda-info-threads", mi_cmd_cuda_info_threads);
   add_mi_cmd_mi ("cuda-info-launch-trace", mi_cmd_cuda_info_launch_trace);

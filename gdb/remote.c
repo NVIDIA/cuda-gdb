@@ -712,6 +712,10 @@ class remote_target : public process_stratum_target
 public:
   remote_target () = default;
   ~remote_target () override;
+#ifdef NVIDIA_CUDA_GDB
+  /* Track if this is a remote target */
+  bool is_remote_target () const final override { return true; }
+#endif
 
   const target_info &info () const override
   { return remote_target_info; }
@@ -1351,11 +1355,10 @@ as_remote_target (process_stratum_target *target)
 bool
 is_remote_target (process_stratum_target *target)
 {
-#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
-  /* Allow this to work with qnx target as well */
-  if (as_remote_target (target) != nullptr)
-    return true;
-  return is_qnx_target (target);
+#if defined(NVIDIA_CUDA_GDB)
+  /* This is called along the hot path for cuda-gdb. The dynamic_cast was too
+     expensive for our use case. */
+  return target && target->is_remote_target ();
 #else
   return as_remote_target (target) != nullptr;
 #endif

@@ -100,6 +100,8 @@ lane            { return LANE; }
 
 kernel          { return KERNEL; }
 grid            { return GRID; }
+clusterDim      { return CLUSTERDIM; }
+cluster         { return CLUSTER; }
 block           { return BLOCK; }
 thread          { return THREAD; }
 
@@ -109,6 +111,12 @@ threadIdx\.z    { return THREADIDX_Z; }
 blockIdx\.x     { return BLOCKIDX_X; }
 blockIdx\.y     { return BLOCKIDX_Y; }
 blockIdx\.z     { return BLOCKIDX_Z; }
+clusterDim\.x   { return CLUSTERDIM_X; }
+clusterDim\.y   { return CLUSTERDIM_Y; }
+clusterDim\.z   { return CLUSTERDIM_Z; }
+clusterIdx\.x   { return CLUSTERIDX_X; }
+clusterIdx\.y   { return CLUSTERIDX_Y; }
+clusterIdx\.z   { return CLUSTERIDX_Z; }
 
 {NUM10}         { cuda_parser_lval.value = strtol (yytext, NULL, 10); return VALUE; }
 {NUM16} 	{ cuda_parser_lval.value = strtol (yytext, NULL, 16); return VALUE; }

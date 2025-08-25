@@ -12736,6 +12736,14 @@ read_structure_type (struct die_info *die, struct dwarf2_cu *cu)
 	  || !strcmp (name, "__nv_fp8_e4m3")
 	  || !strcmp (name, "__nv_fp8_e8m0")))
     nv_bits = 8;
+  /* Load Nvidia fp6 structs as float. The min storage size is a byte. */
+  if (name
+      && (!strcmp (name, "__nv_fp6_e3m2")
+	  || !strcmp (name, "__nv_fp6_e2m3")))
+    nv_bits = 8;
+  /* Load Nvidia fp4 structs as float. The min storage size is a byte. */
+  if (name && (!strcmp (name, "__nv_fp4_e2m1")))
+    nv_bits = 8;
   /* Load __half and __nv_bfloat16 structs as float */
   if (name && (!strcmp(name, "__half") || !strcmp(name, "__nv_bfloat16")))
     nv_bits = 16;
@@ -13083,7 +13091,10 @@ process_structure_scope (struct die_info *die, struct dwarf2_cu *cu)
 	  || !strcmp (type_name, "__nv_bfloat16")
 	  || !strcmp (type_name, "__nv_fp8_e5m2")
 	  || !strcmp (type_name, "__nv_fp8_e4m3")
-	  || !strcmp (type_name, "__nv_fp8_e8m0")))
+	  || !strcmp (type_name, "__nv_fp8_e8m0")
+	  || !strcmp (type_name, "__nv_fp6_e3m2")
+	  || !strcmp (type_name, "__nv_fp6_e2m3")
+	  || !strcmp (type_name, "__nv_fp4_e2m1")))
     return;
 #endif
   bool has_template_parameters = false;

@@ -2,16 +2,16 @@
  * NVIDIA CUDA Debugger CUDA-GDB
  * Copyright (C) 2020-2025 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 3 as
  * published by the Free Software Foundation.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
@@ -68,50 +68,53 @@ cudbgTraceIpcResponse ()
   fflush (s_traceFile);
 }
 
-template < typename T > static void
-cudbgTraceValue (T * value)
+template <typename T>
+static void
+cudbgTraceValue (T *value)
 {
   fprintf (s_traceFile, "<missing value printer>");
   fflush (s_traceFile);
 }
 
 static void
-cudbgTraceValue (bool * value)
+cudbgTraceValue (bool *value)
 {
   fprintf (s_traceFile, "%s", *value ? "true" : "false");
   fflush (s_traceFile);
 }
 
 static void
-cudbgTraceValue (uint32_t * value)
+cudbgTraceValue (uint32_t *value)
 {
   fprintf (s_traceFile, "0x%x", *value);
   fflush (s_traceFile);
 }
 
 static void
-cudbgTraceValue (uint64_t * value)
+cudbgTraceValue (uint64_t *value)
 {
-  fprintf (s_traceFile, "0x%llx", (unsigned long long) *value);
+  fprintf (s_traceFile, "0x%llx", (unsigned long long)*value);
   fflush (s_traceFile);
 }
 
 static void
-cudbgTraceValue (CUDBGResult * value)
+cudbgTraceValue (CUDBGResult *value)
 {
   fprintf (s_traceFile, "%s (0x%x)", cudbgGetErrorString (*value),
-	   (uint32_t) * value);
+	   (uint32_t)*value);
   fflush (s_traceFile);
 }
 
-#define CASE_PRINT_ENUM_VALUE(v)                                \
-case v: fprintf (s_traceFile, "%s (0x%x)", #v, ((uint32_t)(v)));
+#define CASE_PRINT_ENUM_VALUE(v)                                              \
+  case v:                                                                     \
+    fprintf (s_traceFile, "%s (0x%x)", #v, ((uint32_t)(v)));
 
-#define CASE_PRINT_ENUM_DEFAULT(v)                              \
-default: fprintf (s_traceFile, "<unknown> (0x%x)", ((uint32_t)(v)));
+#define CASE_PRINT_ENUM_DEFAULT(v)                                            \
+  default:                                                                    \
+    fprintf (s_traceFile, "<unknown> (0x%x)", ((uint32_t)(v)));
 
 static void
-cudbgTraceValue (CUDBGAttribute * value)
+cudbgTraceValue (CUDBGAttribute *value)
 {
   switch (*value)
     {
@@ -123,7 +126,7 @@ cudbgTraceValue (CUDBGAttribute * value)
 }
 
 static void
-cudbgTraceValue (CUDBGGridStatus * value)
+cudbgTraceValue (CUDBGGridStatus *value)
 {
   switch (*value)
     {
@@ -139,7 +142,7 @@ cudbgTraceValue (CUDBGGridStatus * value)
 }
 
 static void
-cudbgTraceValue (CUDBGKernelType * value)
+cudbgTraceValue (CUDBGKernelType *value)
 {
   switch (*value)
     {
@@ -152,7 +155,7 @@ cudbgTraceValue (CUDBGKernelType * value)
 }
 
 static void
-cudbgTraceValue (CUDBGKernelOrigin * value)
+cudbgTraceValue (CUDBGKernelOrigin *value)
 {
   switch (*value)
     {
@@ -164,7 +167,7 @@ cudbgTraceValue (CUDBGKernelOrigin * value)
 }
 
 static void
-cudbgTraceValue (CUDBGKernelLaunchNotifyMode * value)
+cudbgTraceValue (CUDBGKernelLaunchNotifyMode *value)
 {
   switch (*value)
     {
@@ -176,7 +179,7 @@ cudbgTraceValue (CUDBGKernelLaunchNotifyMode * value)
 }
 
 static void
-cudbgTraceValue (CUDBGEventQueueType * value)
+cudbgTraceValue (CUDBGEventQueueType *value)
 {
   switch (*value)
     {
@@ -188,7 +191,7 @@ cudbgTraceValue (CUDBGEventQueueType * value)
 }
 
 static void
-cudbgTraceValue (CUDBGElfImageType * value)
+cudbgTraceValue (CUDBGElfImageType *value)
 {
   switch (*value)
     {
@@ -200,7 +203,7 @@ cudbgTraceValue (CUDBGElfImageType * value)
 }
 
 static void
-cudbgTraceValue (CUDBGAdjAddrAction * value)
+cudbgTraceValue (CUDBGAdjAddrAction *value)
 {
   switch (*value)
     {
@@ -213,7 +216,7 @@ cudbgTraceValue (CUDBGAdjAddrAction * value)
 }
 
 static void
-cudbgTraceValue (CUDBGException_t * value)
+cudbgTraceValue (CUDBGException_t *value)
 {
   switch (*value)
     {
@@ -221,13 +224,15 @@ cudbgTraceValue (CUDBGException_t * value)
       CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_NONE) break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_LANE_ILLEGAL_ADDRESS) break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_LANE_USER_STACK_OVERFLOW) break;
-      CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_DEVICE_HARDWARE_STACK_OVERFLOW) break;
+      CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_DEVICE_HARDWARE_STACK_OVERFLOW)
+      break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_WARP_ILLEGAL_INSTRUCTION) break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_WARP_OUT_OF_RANGE_ADDRESS) break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_WARP_MISALIGNED_ADDRESS) break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_WARP_INVALID_ADDRESS_SPACE) break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_WARP_INVALID_PC) break;
-      CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_WARP_HARDWARE_STACK_OVERFLOW) break;
+      CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_WARP_HARDWARE_STACK_OVERFLOW)
+      break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_DEVICE_ILLEGAL_ADDRESS) break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_LANE_MISALIGNED_ADDRESS) break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_WARP_ASSERT) break;
@@ -237,7 +242,8 @@ cudbgTraceValue (CUDBGException_t * value)
       CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_LANE_INVALID_ATOMSYS) break;
 #if (CUDBG_API_VERSION_REVISION >= 131)
       CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_CLUSTER_BLOCK_NOT_PRESENT) break;
-      CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_CLUSTER_OUT_OF_RANGE_ADDRESS) break;
+      CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_CLUSTER_OUT_OF_RANGE_ADDRESS)
+      break;
 #endif
       CASE_PRINT_ENUM_VALUE (CUDBG_EXCEPTION_WARP_STACK_CANARY) break;
       CASE_PRINT_ENUM_DEFAULT (*value) break;
@@ -246,7 +252,7 @@ cudbgTraceValue (CUDBGException_t * value)
 }
 
 static void
-cudbgTraceValue (ptxStorageKind * value)
+cudbgTraceValue (ptxStorageKind *value)
 {
   switch (*value)
     {
@@ -273,14 +279,15 @@ cudbgTraceValue (ptxStorageKind * value)
 }
 
 static void
-cudbgTraceValue (CuDim3 * value)
+cudbgTraceValue (CuDim3 *value)
 {
   fprintf (s_traceFile, "(0x%x, 0x%x, 0x%x)", value->x, value->y, value->z);
   fflush (s_traceFile);
 }
 
-template < typename T > static void
-cudbgTraceField (const char *name, T * value, uint32_t indentLevel = 2)
+template <typename T>
+static void
+cudbgTraceField (const char *name, T *value, uint32_t indentLevel = 2)
 {
   fprintf (s_traceFile, "\n");
   for (uint32_t i = 0; i < indentLevel; i++)
@@ -292,139 +299,149 @@ cudbgTraceField (const char *name, T * value, uint32_t indentLevel = 2)
   fflush (s_traceFile);
 }
 
-#define PRINT_ATTRIBUTE_VALUE_PAIR_FIELD(pAttributeValuePair, field)    \
-do {                                                                    \
-  cudbgTraceField (#field, &pAttributeValuePair->field);                \
-} while (0)
+#define PRINT_ATTRIBUTE_VALUE_PAIR_FIELD(pAttributeValuePair, field)          \
+  do                                                                          \
+    {                                                                         \
+      cudbgTraceField (#field, &pAttributeValuePair->field);                  \
+    }                                                                         \
+  while (0)
 
 static void
-cudbgTraceValue (CUDBGAttributeValuePair * value)
+cudbgTraceValue (CUDBGAttributeValuePair *value)
 {
   PRINT_ATTRIBUTE_VALUE_PAIR_FIELD (value, attribute);
   PRINT_ATTRIBUTE_VALUE_PAIR_FIELD (value, value);
 }
 
-#define PRINT_EVENT_FIELD(pEvent, case, field)          \
-do {                                                    \
-  cudbgTraceField (#field, &pEvent->cases.case.field);  \
-} while (0)
+#define PRINT_EVENT_FIELD(pEvent, case, field)                                \
+  do                                                                          \
+    {                                                                         \
+      cudbgTraceField (#field, &pEvent->cases.case.field);                    \
+    }                                                                         \
+  while (0)
 
 static void
-cudbgTraceValue (CUDBGEvent * value)
+cudbgTraceValue (CUDBGEvent *value)
 {
   switch (value->kind)
     {
       CASE_PRINT_ENUM_VALUE (CUDBG_EVENT_INVALID)
-	break;
+      break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EVENT_ELF_IMAGE_LOADED)
-	PRINT_EVENT_FIELD (value, elfImageLoaded, dev);
-	PRINT_EVENT_FIELD (value, elfImageLoaded, context);
-	PRINT_EVENT_FIELD (value, elfImageLoaded, module);
-	PRINT_EVENT_FIELD (value, elfImageLoaded, size);
-	PRINT_EVENT_FIELD (value, elfImageLoaded, handle);
-	PRINT_EVENT_FIELD (value, elfImageLoaded, properties);
-	break;
+      PRINT_EVENT_FIELD (value, elfImageLoaded, dev);
+      PRINT_EVENT_FIELD (value, elfImageLoaded, context);
+      PRINT_EVENT_FIELD (value, elfImageLoaded, module);
+      PRINT_EVENT_FIELD (value, elfImageLoaded, size);
+      PRINT_EVENT_FIELD (value, elfImageLoaded, handle);
+      PRINT_EVENT_FIELD (value, elfImageLoaded, properties);
+      break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EVENT_KERNEL_READY)
-	PRINT_EVENT_FIELD (value, kernelReady, dev);
-	PRINT_EVENT_FIELD (value, kernelReady, tid);
-	PRINT_EVENT_FIELD (value, kernelReady, gridId);
-	PRINT_EVENT_FIELD (value, kernelReady, context);
-	PRINT_EVENT_FIELD (value, kernelReady, module);
-	PRINT_EVENT_FIELD (value, kernelReady, function);
-	PRINT_EVENT_FIELD (value, kernelReady, functionEntry);
-	PRINT_EVENT_FIELD (value, kernelReady, gridDim);
-	PRINT_EVENT_FIELD (value, kernelReady, blockDim);
-	PRINT_EVENT_FIELD (value, kernelReady, type);
-	PRINT_EVENT_FIELD (value, kernelReady, parentGridId);
-	PRINT_EVENT_FIELD (value, kernelReady, origin);
-	break;
+      PRINT_EVENT_FIELD (value, kernelReady, dev);
+      PRINT_EVENT_FIELD (value, kernelReady, tid);
+      PRINT_EVENT_FIELD (value, kernelReady, gridId);
+      PRINT_EVENT_FIELD (value, kernelReady, context);
+      PRINT_EVENT_FIELD (value, kernelReady, module);
+      PRINT_EVENT_FIELD (value, kernelReady, function);
+      PRINT_EVENT_FIELD (value, kernelReady, functionEntry);
+      PRINT_EVENT_FIELD (value, kernelReady, gridDim);
+      PRINT_EVENT_FIELD (value, kernelReady, blockDim);
+      PRINT_EVENT_FIELD (value, kernelReady, type);
+      PRINT_EVENT_FIELD (value, kernelReady, parentGridId);
+      PRINT_EVENT_FIELD (value, kernelReady, origin);
+      break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EVENT_KERNEL_FINISHED)
-	PRINT_EVENT_FIELD (value, kernelFinished, dev);
-	PRINT_EVENT_FIELD (value, kernelFinished, tid);
-	PRINT_EVENT_FIELD (value, kernelFinished, context);
-	PRINT_EVENT_FIELD (value, kernelFinished, module);
-	PRINT_EVENT_FIELD (value, kernelFinished, function);
-	PRINT_EVENT_FIELD (value, kernelFinished, functionEntry);
-	PRINT_EVENT_FIELD (value, kernelFinished, gridId);
-	break;
+      PRINT_EVENT_FIELD (value, kernelFinished, dev);
+      PRINT_EVENT_FIELD (value, kernelFinished, tid);
+      PRINT_EVENT_FIELD (value, kernelFinished, context);
+      PRINT_EVENT_FIELD (value, kernelFinished, module);
+      PRINT_EVENT_FIELD (value, kernelFinished, function);
+      PRINT_EVENT_FIELD (value, kernelFinished, functionEntry);
+      PRINT_EVENT_FIELD (value, kernelFinished, gridId);
+      break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EVENT_INTERNAL_ERROR)
-	PRINT_EVENT_FIELD (value, internalError, errorType);
-	break;
+      PRINT_EVENT_FIELD (value, internalError, errorType);
+      break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EVENT_CTX_PUSH)
-	PRINT_EVENT_FIELD (value, contextPush, dev);
-	PRINT_EVENT_FIELD (value, contextPush, tid);
-	PRINT_EVENT_FIELD (value, contextPush, context);
-	break;
+      PRINT_EVENT_FIELD (value, contextPush, dev);
+      PRINT_EVENT_FIELD (value, contextPush, tid);
+      PRINT_EVENT_FIELD (value, contextPush, context);
+      break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EVENT_CTX_POP)
-	PRINT_EVENT_FIELD (value, contextPop, dev);
-	PRINT_EVENT_FIELD (value, contextPop, tid);
-	PRINT_EVENT_FIELD (value, contextPop, context);
-	break;
+      PRINT_EVENT_FIELD (value, contextPop, dev);
+      PRINT_EVENT_FIELD (value, contextPop, tid);
+      PRINT_EVENT_FIELD (value, contextPop, context);
+      break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EVENT_CTX_CREATE)
-	PRINT_EVENT_FIELD (value, contextCreate, dev);
-	PRINT_EVENT_FIELD (value, contextCreate, tid);
-	PRINT_EVENT_FIELD (value, contextCreate, context);
-	break;
+      PRINT_EVENT_FIELD (value, contextCreate, dev);
+      PRINT_EVENT_FIELD (value, contextCreate, tid);
+      PRINT_EVENT_FIELD (value, contextCreate, context);
+      break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EVENT_CTX_DESTROY)
-	PRINT_EVENT_FIELD (value, contextDestroy, dev);
-	PRINT_EVENT_FIELD (value, contextDestroy, tid);
-	PRINT_EVENT_FIELD (value, contextDestroy, context);
-	break;
+      PRINT_EVENT_FIELD (value, contextDestroy, dev);
+      PRINT_EVENT_FIELD (value, contextDestroy, tid);
+      PRINT_EVENT_FIELD (value, contextDestroy, context);
+      break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EVENT_TIMEOUT)
-	break;
+      break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EVENT_ATTACH_COMPLETE)
-	break;
+      break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EVENT_DETACH_COMPLETE)
-	break;
+      break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EVENT_ELF_IMAGE_UNLOADED)
-	PRINT_EVENT_FIELD (value, elfImageUnloaded, dev);
-	PRINT_EVENT_FIELD (value, elfImageUnloaded, context);
-	PRINT_EVENT_FIELD (value, elfImageUnloaded, module);
-	PRINT_EVENT_FIELD (value, elfImageUnloaded, size);
-	PRINT_EVENT_FIELD (value, elfImageUnloaded, handle);
-	break;
+      PRINT_EVENT_FIELD (value, elfImageUnloaded, dev);
+      PRINT_EVENT_FIELD (value, elfImageUnloaded, context);
+      PRINT_EVENT_FIELD (value, elfImageUnloaded, module);
+      PRINT_EVENT_FIELD (value, elfImageUnloaded, size);
+      PRINT_EVENT_FIELD (value, elfImageUnloaded, handle);
+      break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EVENT_FUNCTIONS_LOADED)
-	PRINT_EVENT_FIELD (value, functionsLoaded, dev);
-	PRINT_EVENT_FIELD (value, functionsLoaded, count);
-	PRINT_EVENT_FIELD (value, functionsLoaded, context);
-	PRINT_EVENT_FIELD (value, functionsLoaded, module);
-	break;
+      PRINT_EVENT_FIELD (value, functionsLoaded, dev);
+      PRINT_EVENT_FIELD (value, functionsLoaded, count);
+      PRINT_EVENT_FIELD (value, functionsLoaded, context);
+      PRINT_EVENT_FIELD (value, functionsLoaded, module);
+      break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EVENT_ALL_DEVICES_SUSPENDED)
-	PRINT_EVENT_FIELD (value, allDevicesSuspended, brokenDevicesMask);
-	PRINT_EVENT_FIELD (value, allDevicesSuspended, faultedDevicesMask);
-	break;
+      PRINT_EVENT_FIELD (value, allDevicesSuspended, brokenDevicesMask);
+      PRINT_EVENT_FIELD (value, allDevicesSuspended, faultedDevicesMask);
+      break;
       CASE_PRINT_ENUM_DEFAULT (value->kind) break;
     }
   fflush (s_traceFile);
 }
 
-#define PRINT_CUDBG_LANE_STATE_FIELD(pLaneState, field)         \
-do {                                                            \
-  cudbgTraceField (#field, &pLaneState->field, 3);              \
-} while (0)
+#define PRINT_CUDBG_LANE_STATE_FIELD(pLaneState, field)                       \
+  do                                                                          \
+    {                                                                         \
+      cudbgTraceField (#field, &pLaneState->field, 3);                        \
+    }                                                                         \
+  while (0)
 
 static void
-cudbgTraceValue (CUDBGLaneState * value)
+cudbgTraceValue (CUDBGLaneState *value)
 {
   PRINT_CUDBG_LANE_STATE_FIELD (value, virtualPC);
   PRINT_CUDBG_LANE_STATE_FIELD (value, threadIdx);
   PRINT_CUDBG_LANE_STATE_FIELD (value, exception);
 }
 
-#define PRINT_CUDBG_WARP_LANE_STATE_FIELD(pWarpState, field, i) \
-do {                                                            \
-  char name[256];                                               \
-  sprintf(name, #field "[%d]", i);                              \
-  cudbgTraceField (name, &pWarpState->field[i]);                \
-} while (0)
+#define PRINT_CUDBG_WARP_LANE_STATE_FIELD(pWarpState, field, i)               \
+  do                                                                          \
+    {                                                                         \
+      char name[256];                                                         \
+      sprintf (name, #field "[%d]", i);                                       \
+      cudbgTraceField (name, &pWarpState->field[i]);                          \
+    }                                                                         \
+  while (0)
 
-#define PRINT_CUDBG_WARP_STATE_FIELD(pWarpState, field)         \
-do {                                                            \
-  cudbgTraceField (#field, &pWarpState->field);                 \
-} while (0)
+#define PRINT_CUDBG_WARP_STATE_FIELD(pWarpState, field)                       \
+  do                                                                          \
+    {                                                                         \
+      cudbgTraceField (#field, &pWarpState->field);                           \
+    }                                                                         \
+  while (0)
 
 static void
-cudbgTraceValue (CUDBGWarpState * value)
+cudbgTraceValue (CUDBGWarpState *value)
 {
   PRINT_CUDBG_WARP_STATE_FIELD (value, gridId);
   PRINT_CUDBG_WARP_STATE_FIELD (value, errorPC);
@@ -442,13 +459,15 @@ cudbgTraceValue (CUDBGWarpState * value)
     }
 }
 
-#define PRINT_CUDBG_GRID_INFO_FIELD(pGridInfo, field)           \
-do {                                                            \
-  cudbgTraceField (#field, &pGridInfo->field);                  \
-} while (0)
+#define PRINT_CUDBG_GRID_INFO_FIELD(pGridInfo, field)                         \
+  do                                                                          \
+    {                                                                         \
+      cudbgTraceField (#field, &pGridInfo->field);                            \
+    }                                                                         \
+  while (0)
 
 static void
-cudbgTraceValue (CUDBGGridInfo * value)
+cudbgTraceValue (CUDBGGridInfo *value)
 {
   PRINT_CUDBG_GRID_INFO_FIELD (value, dev);
   PRINT_CUDBG_GRID_INFO_FIELD (value, gridId64);
@@ -465,26 +484,30 @@ cudbgTraceValue (CUDBGGridInfo * value)
   PRINT_CUDBG_GRID_INFO_FIELD (value, clusterDim);
 }
 
-#define PRINT_CUDBG_MEMORY_INFO_FIELD(pMemoryInfo, field)       \
-do {                                                            \
-  cudbgTraceField (#field, &pMemoryInfo->field);                \
-} while (0)
+#define PRINT_CUDBG_MEMORY_INFO_FIELD(pMemoryInfo, field)                     \
+  do                                                                          \
+    {                                                                         \
+      cudbgTraceField (#field, &pMemoryInfo->field);                          \
+    }                                                                         \
+  while (0)
 
 static void
-cudbgTraceValue (CUDBGMemoryInfo * value)
+cudbgTraceValue (CUDBGMemoryInfo *value)
 {
   PRINT_CUDBG_MEMORY_INFO_FIELD (value, startAddress);
   PRINT_CUDBG_MEMORY_INFO_FIELD (value, size);
 }
 
 #if CUDBG_API_VERSION_REVISION >= 132
-#define PRINT_CUDBG_LOADED_FUNCTION_INFO_FIELD(pLoadedFunctionInfo, field)  \
-do {                                                                        \
-  cudbgTraceField (#field, &pLoadedFunctionInfo->field);                    \
-} while (0)
+#define PRINT_CUDBG_LOADED_FUNCTION_INFO_FIELD(pLoadedFunctionInfo, field)    \
+  do                                                                          \
+    {                                                                         \
+      cudbgTraceField (#field, &pLoadedFunctionInfo->field);                  \
+    }                                                                         \
+  while (0)
 
 static void
-cudbgTraceValue (CUDBGLoadedFunctionInfo * value)
+cudbgTraceValue (CUDBGLoadedFunctionInfo *value)
 {
   PRINT_CUDBG_LOADED_FUNCTION_INFO_FIELD (value, sectionIndex);
   PRINT_CUDBG_LOADED_FUNCTION_INFO_FIELD (value, address);
@@ -497,8 +520,9 @@ cudbgTrimAmpersand (const char *name)
   return *name == '&' ? &name[1] : name;
 }
 
-template < typename T > static void
-cudbgTraceIpcArgument (const char *name, T * value)
+template <typename T>
+static void
+cudbgTraceIpcArgument (const char *name, T *value)
 {
   if (!s_isFirstArgument)
     {
@@ -512,16 +536,18 @@ cudbgTraceIpcArgument (const char *name, T * value)
   cudbgTraceValue (value);
 }
 
-template < typename T > static void
-cudbgTraceIpcOutput (const char *name, T * value)
+template <typename T>
+static void
+cudbgTraceIpcOutput (const char *name, T *value)
 {
   fprintf (s_traceFile, "    %s: ", cudbgTrimAmpersand (name));
   cudbgTraceValue (value);
   fprintf (s_traceFile, "\n");
 }
 
-template < typename T > static void
-cudbgTraceIpcOutput (const char *name, T * values, uint32_t size)
+template <typename T>
+static void
+cudbgTraceIpcOutput (const char *name, T *values, uint32_t size)
 {
   fprintf (s_traceFile, "    size: %u\n", size);
 
@@ -541,50 +567,60 @@ cudbgTraceIpcOutput (const char *name, void *bytes, uint32_t size)
   const uint32_t countToPrint = size > 32 ? 32 : size;
   for (uint32_t i = 0; i < countToPrint; i++)
     {
-      fprintf (s_traceFile, " %02X", ((uint8_t *) bytes)[i]);
+      fprintf (s_traceFile, " %02X", ((uint8_t *)bytes)[i]);
     }
   if (countToPrint < size)
     {
       fprintf (s_traceFile, " ...");
     }
 
-  const uint32_t crc = xcrc32 ((const unsigned char*) bytes, size, 0xffffffff);
+  const uint32_t crc = xcrc32 ((const unsigned char *)bytes, size, 0xffffffff);
   fprintf (s_traceFile, " (0x%x bytes, CRC32=%08X)\n", size, crc);
 }
 
 #undef CUDBG_IPC_BEGIN
-#define CUDBG_IPC_BEGIN(cmd)                            \
-do {                                                    \
-  cudbgTraceIpcRequest(#cmd);                           \
-  CUDBG_IPC_BEGIN_(cmd);                                \
-} while (0)
+#define CUDBG_IPC_BEGIN(cmd)                                                  \
+  do                                                                          \
+    {                                                                         \
+      cudbgTraceIpcRequest (#cmd);                                            \
+      CUDBG_IPC_BEGIN_ (cmd);                                                 \
+    }                                                                         \
+  while (0)
 
 #undef CUDBG_IPC_APPEND
-#define CUDBG_IPC_APPEND(d, s)                          \
-do {                                                    \
-  cudbgTraceIpcArgument(#d, d);                         \
-  CUDBG_IPC_APPEND_(d, s);                              \
-} while (0)
+#define CUDBG_IPC_APPEND(d, s)                                                \
+  do                                                                          \
+    {                                                                         \
+      cudbgTraceIpcArgument (#d, d);                                          \
+      CUDBG_IPC_APPEND_ (d, s);                                               \
+    }                                                                         \
+  while (0)
 
 #undef CUDBG_IPC_REQUEST
-#define CUDBG_IPC_REQUEST(d)                            \
-do {                                                    \
-  cudbgTraceIpcResponse();                              \
-  CUDBG_IPC_REQUEST_(d);                                \
-} while (0)
+#define CUDBG_IPC_REQUEST(d)                                                  \
+  do                                                                          \
+    {                                                                         \
+      cudbgTraceIpcResponse ();                                               \
+      CUDBG_IPC_REQUEST_ (d);                                                 \
+    }                                                                         \
+  while (0)
 
 #undef CUDBG_IPC_RECEIVE
-#define CUDBG_IPC_RECEIVE(value, ipc_buf)               \
-do {                                                    \
-  CUDBG_IPC_RECEIVE_(value, ipc_buf);                   \
-  cudbgTraceIpcOutput(#value, value);                   \
-} while (0)
+#define CUDBG_IPC_RECEIVE(value, ipc_buf)                                     \
+  do                                                                          \
+    {                                                                         \
+      CUDBG_IPC_RECEIVE_ (value, ipc_buf);                                    \
+      cudbgTraceIpcOutput (#value, value);                                    \
+    }                                                                         \
+  while (0)
 
 #undef CUDBG_IPC_RECEIVE_ARRAY
-#define CUDBG_IPC_RECEIVE_ARRAY(value, size, ipc_buf)   \
-do {                                                    \
-  CUDBG_IPC_RECEIVE_ARRAY_(value, size, ipc_buf);       \
-  cudbgTraceIpcOutput(#value, value, size);             \
-} while (0)
+#define CUDBG_IPC_RECEIVE_ARRAY(value, size, ipc_buf)                         \
+  do                                                                          \
+    {                                                                         \
+      CUDBG_IPC_RECEIVE_ARRAY_ (value, size, ipc_buf);                        \
+      cudbgTraceIpcOutput (#value, value, size);                              \
+    }                                                                         \
+  while (0)
 
 #endif

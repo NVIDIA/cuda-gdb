@@ -31,7 +31,6 @@
 
 #include "arch-utils.h"
 #include "cuda-commands.h"
-#include "cuda-convvars.h"
 #include "cuda-events.h"
 #include "cuda-exceptions.h"
 #include "cuda-notifications.h"
@@ -62,7 +61,6 @@ template <class BaseTarget> struct cuda_nat_linux : public BaseTarget
 public:
   target_info m_info = { 0 };
   bool m_resumed_from_fatal_exception = false;
-  bool m_send_event_ack = false;
 
   cuda_nat_linux ();
 
@@ -94,8 +92,7 @@ public:
 		       int TARGET_DEBUG_PRINTER (target_debug_print_step) arg1,
 		       enum gdb_signal arg2) override;
 
-  void resume (ptid_t ptid, int sstep, int host_sstep,
-	       enum gdb_signal ts);
+  void resume (ptid_t ptid, int sstep, int host_sstep, enum gdb_signal ts);
 
   virtual ptid_t wait (ptid_t arg0, struct target_waitstatus *arg1,
 		       target_wait_flags arg2) override;

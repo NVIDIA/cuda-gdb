@@ -1433,6 +1433,11 @@ print_frame (const frame_print_options &fp_opts,
 	  ui_out_emit_list list_emitter (uiout, "args");
 	  try
 	    {
+#ifdef NVIDIA_BUGFIX
+	      /* NVIDIA: We rely on get_selected_frame when reading registers. */
+	      scoped_restore_selected_frame restore_selected_frame;
+	      select_frame (frame);
+#endif
 	      print_frame_args (fp_opts, func, frame, numargs, gdb_stdout);
 	    }
 	  catch (const gdb_exception_error &e)

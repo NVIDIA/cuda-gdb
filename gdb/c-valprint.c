@@ -481,14 +481,6 @@ c_value_print_inner (struct value *val, struct ui_file *stream, int recurse,
       generic_value_print (val, stream, recurse, options, &c_decorations);
       break;
     }
-#ifdef NVIDIA_CUDA_GDB
-  /* CUDA - managed variables */
-  if (recurse == 0 && cuda_is_host_address_resident_on_gpu())
-    {
-      gdb_printf (stream, " // Resident on GPU");
-      cuda_set_host_address_resident_on_gpu (false);
-    }
-#endif
 }
 
 

@@ -157,9 +157,8 @@ private:
 class cuda_module_disassembly_cache
 {
 public:
-  cuda_module_disassembly_cache (uint32_t insn_size, bool is_volta_plus)
-      : m_insn_size (insn_size), m_is_volta_plus (is_volta_plus),
-	m_cuobjdump_json (true)
+  cuda_module_disassembly_cache (uint32_t insn_size)
+      : m_insn_size (insn_size), m_cuobjdump_json (true)
   {
   }
 
@@ -210,7 +209,6 @@ private:
   cache_lookup (uint64_t pc, disassembly_source source) const;
 
   uint32_t m_insn_size;
-  bool m_is_volta_plus;
   /* Set to false if cuobjdump doesn't support -json */
   bool m_cuobjdump_json;
 

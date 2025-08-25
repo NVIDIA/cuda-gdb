@@ -149,6 +149,14 @@ extern const struct floatformat floatformat_nv_fp8_e5m2_big;
 extern const struct floatformat floatformat_nv_fp8_e5m2_little;
 extern const struct floatformat floatformat_nv_fp8_e4m3_big;
 extern const struct floatformat floatformat_nv_fp8_e4m3_little;
+/* CUDA - fp6 formats */
+extern const struct floatformat floatformat_nv_fp6_e2m3_big;
+extern const struct floatformat floatformat_nv_fp6_e2m3_little;
+extern const struct floatformat floatformat_nv_fp6_e3m2_big;
+extern const struct floatformat floatformat_nv_fp6_e3m2_little;
+/* CUDA - fp4 formats */
+extern const struct floatformat floatformat_nv_fp4_e2m1_big;
+extern const struct floatformat floatformat_nv_fp4_e2m1_little;
 #endif
 
 /* Convert from FMT to a double.

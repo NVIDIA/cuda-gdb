@@ -46,28 +46,19 @@
 #include <unistd.h>
 
 #include "cuda-defs.h"
+#ifndef GDBSERVER
+#include "cuda-api.h"
+#include "cuda-options.h"
+#endif
 #include "cuda-utils.h"
 #include <fcntl.h>
 
-#define RECORD_FORMAT_MASTER "LOCK:%10d\n"
-#define RECORD_FORMAT_DEVICE "%4d:%10d\n"
-#define RECORD_SIZE 16
-#define RECORD_MASTER 0
-#define RECORD_DEVICE(i) ((i) + 1)
-#define DEVICE_RECORD(i) ((i)-1)
-
-/* Default to false - this mechanism is legacy. */
-bool cuda_use_lockfile = false;
-
-static const char cuda_gdb_lock_file[] = "cuda-gdb.lock";
 static char cuda_gdb_tmp_basedir[CUDA_GDB_TMP_BUF_SIZE] = { 0 };
-static int cuda_gdb_lock_fd = -1;
 static char *cuda_gdb_tmp_dir = NULL;
-static uint64_t dev_mask = 0;
 
 int
 cuda_gdb_dir_create (const char *dir_name, uint32_t permissions,
-                     bool override_umask, bool *dir_exists)
+		     bool override_umask, bool *dir_exists)
 {
   int ret;
   mode_t old_umask = 0;
@@ -80,7 +71,7 @@ cuda_gdb_dir_create (const char *dir_name, uint32_t permissions,
   if ((ret < 0) && (errno == EEXIST))
     {
       /* Preexisting directory (may have lost a race to create it),
-         report dir_exists and success */
+	 report dir_exists and success */
       *dir_exists = true;
       ret = 0;
     }
@@ -103,16 +94,16 @@ cuda_gdb_tmpdir_create_basedir (void)
 
   if (getenv ("TMPDIR"))
     snprintf (cuda_gdb_tmp_basedir, sizeof (cuda_gdb_tmp_basedir),
-              "%s/cuda-dbg", getenv ("TMPDIR"));
+	      "%s/cuda-dbg", getenv ("TMPDIR"));
   else
     snprintf (cuda_gdb_tmp_basedir, sizeof (cuda_gdb_tmp_basedir),
-              "/tmp/cuda-dbg");
+	      "/tmp/cuda-dbg");
 
   ret = cuda_gdb_dir_create (cuda_gdb_tmp_basedir, S_IRWXU | S_IRWXG | S_IRWXO,
-                             override_umask, &dir_exists);
+			     override_umask, &dir_exists);
   if (ret)
     error (_ ("Error creating temporary directory %s\n"),
-           cuda_gdb_tmp_basedir);
+	   cuda_gdb_tmp_basedir);
 }
 
 static char *
@@ -127,7 +118,7 @@ cuda_gdb_get_tmp_basedir (void)
 #ifdef __QNXHOST__
 static int
 fn_cleanup_dir (const char *path, const struct stat *stat, int flag,
-                struct FTW *ftw)
+		struct FTW *ftw)
 {
   switch (flag)
     {
@@ -169,15 +160,15 @@ cuda_gdb_dir_cleanup_files (const char *dirpath)
   while ((dir_ent = readdir (dir)))
     {
       if (!strcmp (dir_ent->d_name, ".") || !strcmp (dir_ent->d_name, ".."))
-        continue;
+	continue;
       snprintf (path, sizeof (path), "%s/%s", dirpath, dir_ent->d_name);
       if (dir_ent->d_type == DT_DIR)
-        {
-          cuda_gdb_dir_cleanup_files (path);
-          rmdir (path);
-        }
+	{
+	  cuda_gdb_dir_cleanup_files (path);
+	  rmdir (path);
+	}
       else
-        unlink (path);
+	unlink (path);
     };
 
   closedir (dir);
@@ -203,257 +194,23 @@ cuda_gdb_tmpdir_cleanup_self (void *unused)
 }
 
 static void
-cuda_gdb_record_write (int record_idx, int pid)
-{
-  char record[CUDA_GDB_TMP_BUF_SIZE];
-  int res;
-
-  if (record_idx == 0)
-    snprintf (record, CUDA_GDB_TMP_BUF_SIZE, RECORD_FORMAT_MASTER, pid);
-  else
-    snprintf (record, CUDA_GDB_TMP_BUF_SIZE, RECORD_FORMAT_DEVICE,
-              DEVICE_RECORD (record_idx), pid);
-
-  res = lseek (cuda_gdb_lock_fd, record_idx * RECORD_SIZE, SEEK_SET);
-  if (res == -1)
-    return;
-
-  res = write (cuda_gdb_lock_fd, record, strlen (record));
-  if (res == -1)
-    return;
-}
-
-static int
-cuda_gdb_record_read (int record_idx)
-{
-
-  char record[CUDA_GDB_TMP_BUF_SIZE] = { 0 };
-  int res;
-  char *colon = NULL;
-  int rc = -1;
-
-  res = lseek (cuda_gdb_lock_fd, record_idx * RECORD_SIZE, SEEK_SET);
-  if (res == -1)
-    return -1;
-
-  res = read (cuda_gdb_lock_fd, record, RECORD_SIZE);
-  if (res == -1)
-    return -1;
-
-  colon = strchr (record, ':');
-  if (!colon || colon[1] == 0)
-    return -1;
-
-  if (sscanf (colon + 1, "%d", &rc) != 1)
-    return -1;
-
-  return rc;
-}
-
-/* Returns true if lock was acquired and false if user decided not to acquire
- * further locks */
-static bool
-cuda_gdb_record_set_lock (int record_idx, bool enable_lock)
-{
-  struct flock lock = { 0 };
-  int e = 0;
-  int pid = -1;
-
-  lock.l_type = enable_lock ? F_WRLCK : F_UNLCK;
-  lock.l_whence = SEEK_SET;
-  lock.l_start = record_idx * RECORD_SIZE;
-  lock.l_len = RECORD_SIZE;
-
-  e = fcntl (cuda_gdb_lock_fd, F_SETLK, &lock);
-
-  /* No further actions is necessary if lock was acquired successfully. */
-  if (e == 0)
-    return true;
-
-  /* Raise an error if received an unexpected errno code */
-  if (errno != EACCES && errno != EAGAIN)
-    error (_ ("Internal error with the cuda-gdb lock file (errno=%d).\n"),
-           errno);
-
-  /* Ask the user if he want to continue */
-  pid = cuda_gdb_record_read (record_idx);
-#ifndef GDBSERVER
-  current_inferior ()->top_target ()->terminal_ours ();
-  if (nquery ("cuda-gdb failed to grab the lock file %s/%s.\n"
-              "Another CUDA debug session (pid %d) could be in progress.\n"
-              "Are you sure you want to continue? ",
-              cuda_gdb_get_tmp_basedir (), cuda_gdb_lock_file, pid))
-    {
-      current_inferior ()->top_target ()->terminal_inferior ();
-      return false;
-    }
-#endif
-
-  if (record_idx != RECORD_MASTER)
-    error (_ ("An instance of cuda-gdb(pid %d) is already using device %d.\n"
-              "If you believe you are seeing this message in error, try "
-              "deleting %s/%s.\n"),
-           pid, DEVICE_RECORD (record_idx), cuda_gdb_get_tmp_basedir (),
-           cuda_gdb_lock_file);
-  else
-    error (_ ("Another cuda-gdb instance is working with the lock file. Try "
-              "again.\n"
-              "If you believe you are seeing this message in error, try "
-              "deleting %s/%s.\n"),
-           cuda_gdb_get_tmp_basedir (), cuda_gdb_lock_file);
-  return false;
-}
-
-static void
-cuda_gdb_lock_file_initialize (void)
-{
-  uint32_t i;
-
-  for (i = 0; i < CUDBG_MAX_DEVICES; i++)
-    {
-      cuda_gdb_record_write (RECORD_DEVICE (i), 0);
-    }
-}
-
-void
-cuda_gdb_record_remove_all (void *unused)
-{
-  int i;
-
-  for (i = 0; i < CUDBG_MAX_DEVICES; i++)
-    {
-      if (dev_mask & (1 << i))
-        {
-          cuda_gdb_record_write (RECORD_DEVICE (i), 0);
-          cuda_gdb_record_set_lock (RECORD_DEVICE (i), false);
-          dev_mask &= ~(1 << i);
-        }
-    }
-
-  if (cuda_gdb_lock_fd != -1)
-    return;
-
-  close (cuda_gdb_lock_fd);
-  cuda_gdb_lock_fd = -1;
-}
-
-/* Check for the presence of the CUDA_VISIBLE_DEVICES variable. If it is
- * present, lock records */
-static void
-cuda_gdb_lock_file_create (void)
-{
-  /* Default == false, can be overriden via a command-line option */
-  if (!cuda_use_lockfile)
-    return;
-
-  struct stat st;
-  /* This needs to fix cuda_gdb_get_tmp_basedir + cuda_gdb_lock_file */
-  char buf[2*CUDA_GDB_TMP_BUF_SIZE];
-  char *visible_devices;
-  uint32_t dev_id, num_devices = 0;
-  int i;
-  bool initialize_lock_file = false;
-  bool grab_lock = true;
-  mode_t old_umask;
-  int my_pid = (int)getpid ();
-
-  snprintf (buf, sizeof (buf), "%s/%s", cuda_gdb_get_tmp_basedir (),
-            cuda_gdb_lock_file);
-
-  visible_devices = getenv ("CUDA_VISIBLE_DEVICES");
-
-  if (stat (buf, &st) || !(S_ISREG (st.st_mode)))
-    initialize_lock_file = true;
-
-  /* Save the old umask and reset it */
-  old_umask = umask (0);
-  cuda_gdb_lock_fd = open (buf, O_CREAT | O_RDWR, S_IRWXU | S_IRWXG | S_IRWXO);
-  /* Restore the old umask */
-  umask (old_umask);
-
-  if (cuda_gdb_lock_fd == -1)
-    error (_ ("Cannot open %s. \n"), buf);
-
-    /* Register cleanup routine */
-    /* No final cleanup chain at server side,
-       cleanup function is called explicitly when server quits */
-#ifndef GDBSERVER
-  make_final_cleanup (cuda_gdb_record_remove_all, NULL);
-#endif
-
-  /* Get the mutex ("work") lock before doing anything */
-  grab_lock = cuda_gdb_record_set_lock (RECORD_MASTER, true);
-  if (!grab_lock)
-    return;
-
-  cuda_gdb_record_write (RECORD_MASTER, my_pid);
-
-  if (initialize_lock_file)
-    cuda_gdb_lock_file_initialize ();
-
-  if (NULL == visible_devices)
-    {
-      /* Lock all devices */
-      for (i = 0; i < CUDBG_MAX_DEVICES; i++)
-        {
-          grab_lock = cuda_gdb_record_set_lock (RECORD_DEVICE (i), true);
-          if (!grab_lock)
-            break;
-          cuda_gdb_record_write (RECORD_DEVICE (i), my_pid);
-          dev_mask |= 1 << i;
-        }
-    }
-  else
-    {
-      /* Copy to local storage to prevent buffer overflows */
-      strncpy (buf, visible_devices, CUDA_GDB_TMP_BUF_SIZE);
-
-      visible_devices = buf;
-
-      do
-        {
-          if (*visible_devices == ',')
-            visible_devices++;
-
-          if ((sscanf (visible_devices, "%u,", &dev_id) > 0)
-              && (++num_devices < CUDBG_MAX_DEVICES)
-              && (dev_id < CUDBG_MAX_DEVICES))
-            {
-              grab_lock
-                  = cuda_gdb_record_set_lock (RECORD_DEVICE (dev_id), true);
-              if (!grab_lock)
-                break;
-              cuda_gdb_record_write (RECORD_DEVICE (dev_id), my_pid);
-              dev_mask |= 1 << dev_id;
-            }
-          else
-            break;
-        }
-      while ((visible_devices = strstr (visible_devices, ",")));
-    }
-
-  cuda_gdb_record_write (RECORD_MASTER, 0);
-  cuda_gdb_record_set_lock (RECORD_MASTER, false);
-}
-
-static void
 cuda_gdb_tmpdir_setup (void)
 {
   /* This needs to fit cuda_gdb_get_tmp_basedir + getpid output */
-  char dirpath[2*CUDA_GDB_TMP_BUF_SIZE];
+  char dirpath[2 * CUDA_GDB_TMP_BUF_SIZE];
   int ret;
   bool dir_exists = false;
   bool override_umask = false;
 
   snprintf (dirpath, sizeof (dirpath), "%s/%u", cuda_gdb_get_tmp_basedir (),
-            getpid ());
+	    getpid ());
 
 #ifdef __QNXHOST__
   cuda_gdb_tmpdir_cleanup_dir (
       dirpath); /* Try to remove the dir if it exists */
-#endif          /* __QNXHOST__ */
+#endif		/* __QNXHOST__ */
   ret = cuda_gdb_dir_create (dirpath, S_IRWXU | S_IRWXG | S_IXOTH,
-                             override_umask, &dir_exists);
+			     override_umask, &dir_exists);
   if (ret)
     error (_ ("Error creating temporary directory %s\n"), dirpath);
 
@@ -494,7 +251,7 @@ cuda_clock_increment (void)
   ++cuda_clock_;
   if (cuda_clock_ == 0)
     warning (_ ("The internal clock counter used for cuda debugging wrapped "
-                "around.\n"));
+		"around.\n"));
 }
 
 #ifndef GDBSERVER
@@ -507,7 +264,7 @@ cuda_nat_save_gdb_signal_handlers (void)
       = { signal_stop_state, signal_print_state, signal_pass_state };
 
   sigs = (unsigned char *)xmalloc (GDB_SIGNAL_LAST
-                                   * ARRAY_SIZE (sighand_savers));
+				   * ARRAY_SIZE (sighand_savers));
 
   for (i = 0; i < ARRAY_SIZE (sighand_savers); i++)
     for (j = 0; j < GDB_SIGNAL_LAST; j++)
@@ -539,16 +296,16 @@ unsigned char *
 cuda_gdb_bypass_signals (void)
 {
   unsigned char *sigs;
-  unsigned cuda_stop_signal = cuda_options_stop_signal ();
+  constexpr unsigned cuda_stop_signal = GDB_SIGNAL_URG;
   int i;
 
   sigs = cuda_nat_save_gdb_signal_handlers ();
   for (i = 0; i < GDB_SIGNAL_LAST; i++)
     {
       if (i == cuda_stop_signal || i == GDB_SIGNAL_TRAP || i == GDB_SIGNAL_KILL
-          || i == GDB_SIGNAL_STOP || i == GDB_SIGNAL_CHLD
-          || i >= GDB_SIGNAL_CUDA_UNKNOWN_EXCEPTION)
-        continue;
+	  || i == GDB_SIGNAL_STOP || i == GDB_SIGNAL_CHLD
+	  || i >= GDB_SIGNAL_CUDA_UNKNOWN_EXCEPTION)
+	continue;
       signal_stop_update (i, 0);
       signal_pass_update (i, 1);
       signal_print_update (i, 1);
@@ -584,7 +341,7 @@ cuda_ptx_cache_find_element (struct frame_id frame_id, int dwarf_regnum)
   for (auto it = cuda_ptx_register_cache.begin ();
        it != cuda_ptx_register_cache.end (); ++it)
     if ((coords == it->coords) && (frame_id == it->frame_id)
-        && (dwarf_regnum == it->dwarf_regnum))
+	&& (dwarf_regnum == it->dwarf_regnum))
       return it;
 
   return cuda_ptx_register_cache.end ();
@@ -597,7 +354,7 @@ cuda_ptx_cache_find_element (struct frame_id frame_id, int dwarf_regnum)
  */
 void
 cuda_ptx_cache_store_register (frame_info_ptr frame, int dwarf_regnum,
-                               struct value *value)
+			       struct value *value)
 {
   struct cuda_ptx_cache_element new_elem;
 
@@ -637,14 +394,15 @@ cuda_ptx_cache_store_register (frame_info_ptr frame, int dwarf_regnum,
 
 struct value *
 cuda_ptx_cache_get_register (frame_info_ptr frame, int dwarf_regnum,
-                             struct type *type)
+			     struct type *type)
 {
   struct value *retval;
 
   retval = value::allocate (type);
 
   auto elem = cuda_ptx_cache_find_element (get_frame_id (frame), dwarf_regnum);
-  if ((elem == cuda_ptx_register_cache.end ()) || (elem->len != type->length ())
+  if ((elem == cuda_ptx_register_cache.end ())
+      || (elem->len != type->length ())
       || !cuda_options_variable_value_cache_enabled ())
     {
       retval->set_lval (not_lval);
@@ -676,7 +434,10 @@ cuda_ptx_cache_update_local_vars (void)
   const struct block *block = NULL;
 
   if (!cuda_current_focus::isDevice ()
-      || current_inferior ()->process_target ()->find_thread (inferior_ptid)->executing ())
+      || current_inferior ()
+	     ->process_target ()
+	     ->find_thread (inferior_ptid)
+	     ->executing ())
     return;
   cb_data.m_frame = get_current_frame ();
   if (!cb_data.m_frame)
@@ -703,10 +464,10 @@ cuda_ptx_cache_refresh (void)
       const auto &coords = cuda_current_focus::get ();
       /* If focus is still on the same lane - keep the cache intact */
       if (coords != elem->coords
-          || !cuda_options_variable_value_cache_enabled ())
-        {
-          cuda_ptx_register_cache.clear ();
-        }
+	  || !cuda_options_variable_value_cache_enabled ())
+	{
+	  cuda_ptx_register_cache.clear ();
+	}
     }
 
   if (!cuda_options_variable_value_cache_enabled ())
@@ -725,16 +486,16 @@ cuda_managed_msymbol_p (struct bound_minimal_symbol &bmsym)
     return false;
 
   return gdbarch_bfd_arch_info (arch)->arch == bfd_arch_m68k
-             ?
-             /* If this a device symbol MSYMBOL_TARGET_FLAG indicates if it is
-                managed */
-             (bmsym.minsym->target_flag_1 () != 0)
-             :
-             /* Managed host symbols must be located in __nv_managed_data__
-                section */
-             (section->the_bfd_section != NULL
-              && strcmp (section->the_bfd_section->name, "__nv_managed_data__")
-                     == 0);
+	     ?
+	     /* If this a device symbol MSYMBOL_TARGET_FLAG indicates if it is
+		managed */
+	     (bmsym.minsym->target_flag_1 () != 0)
+	     :
+	     /* Managed host symbols must be located in __nv_managed_data__
+		section */
+	     (section->the_bfd_section != NULL
+	      && strcmp (section->the_bfd_section->name, "__nv_managed_data__")
+		     == 0);
 }
 
 /* CUDA managed memory region list */
@@ -772,24 +533,25 @@ cuda_managed_memory_populate_regions (void)
   uint32_t cnt;
   uint64_t start_addr = 0;
 
-  /* Check if information about managed memory regions has been queried already */
+  /* Check if information about managed memory regions has been queried already
+   */
   if (cuda_managed_memory_regions_populated)
     return;
 
   do
     {
       cuda_debugapi::get_managed_memory_region_info (
-          start_addr, regions, ARRAY_SIZE (regions), &regions_returned);
+	  start_addr, regions, ARRAY_SIZE (regions), &regions_returned);
       if (regions_returned == 0)
-        return;
+	return;
       /* Add fetched queries to the list and updated start address*/
       for (cnt = 0; cnt < regions_returned; cnt++)
-        {
-          end = regions[cnt].startAddress + regions[cnt].size;
-          if (start_addr < end)
-            start_addr = end;
-          cuda_managed_memory_add_region (regions[cnt].startAddress, end);
-        }
+	{
+	  end = regions[cnt].startAddress + regions[cnt].size;
+	  if (start_addr < end)
+	    start_addr = end;
+	  cuda_managed_memory_add_region (regions[cnt].startAddress, end);
+	}
     }
   while (regions_returned == ARRAY_SIZE (regions));
   cuda_managed_memory_regions_populated = true;
@@ -819,12 +581,12 @@ cuda_is_value_managed_pointer (struct value *value)
   try
     {
       result = cuda_managed_address_p (
-          unpack_pointer (type, value->contents_for_printing ().data ()));
+	  unpack_pointer (type, value->contents_for_printing ().data ()));
     }
   catch (const gdb_exception_error &e)
     {
       if (e.reason != 0)
-        return false;
+	return false;
     }
 
   return result;
@@ -847,9 +609,9 @@ cuda_gdb_uid_from_pid (int pid)
   while (fgets (buffer, MAXPATHLEN, procfile) != NULL)
     {
       if (strncmp (buffer, "Uid:\t", 5) != 0)
-        continue;
+	continue;
       if (sscanf (buffer + 5, "%d", &uid) != 1)
-        uid = -1;
+	uid = -1;
       break;
     }
   fclose (procfile);
@@ -870,20 +632,6 @@ cuda_gdb_chown_to_pid_uid (int pid, const char *path)
     return true;
 
   return chown (path, uid, -1) == 0;
-}
-
-static bool cuda_host_address_resident_on_gpu = false;
-
-void
-cuda_set_host_address_resident_on_gpu (bool val)
-{
-  cuda_host_address_resident_on_gpu = val;
-}
-
-bool
-cuda_is_host_address_resident_on_gpu (void)
-{
-  return cuda_host_address_resident_on_gpu;
 }
 
 static bool cuda_app_uses_uvm = false;
@@ -921,11 +669,60 @@ _initialize_cuda_utils ()
   /* Create the base temporary directory */
   cuda_gdb_tmpdir_create_basedir ();
 
-  /* Create a lockfile to prevent multiple instances of cuda-gdb from
-   * interfering with each other */
-  cuda_gdb_lock_file_create ();
-
   /* Populate the temporary directory with a unique subdirectory for this
    * instance. */
   cuda_gdb_tmpdir_setup ();
 }
+
+#ifndef GDBSERVER
+/* Drain the CUDA log queue from the backend and print all logs
+ * according to the current log level setting. This should be called
+ * whenever we need to consume logs from the backend.
+ */
+void
+cuda_consume_and_print_driver_logs (void)
+{
+  CUDBGCudaLogMessage logMessages[cuda_debugapi::CudaLogMessagesFetchLimit];
+  uint32_t num_consumed = 0;
+  // Keep fetching logs until no more are available
+  do
+  {
+    cuda_debugapi::consume_cuda_logs(
+        logMessages, cuda_debugapi::CudaLogMessagesFetchLimit, &num_consumed);
+
+    for (uint32_t i = 0; i < num_consumed; i++)
+    {
+      bool drop_log_record = false;
+      const auto output_log_level = cuda_options_driver_log_level();
+      const char *log_level_str;
+      switch (logMessages[i].logLevel)
+      {
+      case CUDBG_CUDA_LOG_LEVEL_ERROR:
+        log_level_str = "error";
+        break;
+      case CUDBG_CUDA_LOG_LEVEL_WARNING:
+        log_level_str = "warning";
+        if (output_log_level == cuda_log_level_t::CUDA_LOG_LEVEL_ERROR)
+          drop_log_record = true;
+        break;
+      default:
+        log_level_str = "unknown";
+        if (output_log_level != cuda_log_level_t::CUDA_LOG_LEVEL_EXTRA)
+          drop_log_record = true;
+        break;
+      }
+      if (drop_log_record)
+        continue;
+      // Print the log message prefix
+      printf_unfiltered(_("warning: Cuda Driver %s detected"), log_level_str);
+      // print the log timestamp and thread id when driver_log_level is extra
+      if (output_log_level == cuda_log_level_t::CUDA_LOG_LEVEL_EXTRA)
+        printf_unfiltered(_(" (thread=0x%x timestamp_ns=%llu)"),
+                          logMessages[i].osThreadId,
+                          (unsigned long long)logMessages[i].unixTimestampNs);
+      // print the log message
+      printf_unfiltered(_(": %s\n"), logMessages[i].message);
+    }
+  } while (num_consumed > 0);
+}
+#endif /* GDBSERVER */

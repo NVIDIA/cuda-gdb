@@ -94,7 +94,6 @@
 #include "cuda/cuda-asm.h"
 #include "cuda/cuda-autostep.h"
 #include "cuda/cuda-context.h"
-#include "cuda/cuda-convvars.h"
 #include "cuda/cuda-coord-set.h"
 #include "cuda/cuda-linux-nat.h"
 #include "cuda/cuda-modules.h"
@@ -6522,6 +6521,8 @@ bpstat_what (bpstat *bs_head)
 	/* CUDA - breakpoint for error reporting */
 	case bp_cuda_api_error:
 	  {
+      /* Fetch and print CUDA driver logs from the backend */
+      cuda_consume_and_print_driver_logs ();
 	    if (cuda_options_api_failures_stop ())
 	      {
 		/* Stop and show info about the error. */
@@ -6571,6 +6572,8 @@ bpstat_what (bpstat *bs_head)
 	    break;
 	  }
 	case bp_cuda_internal_error:
+    /* Fetch and print CUDA driver logs from the backend */
+    cuda_consume_and_print_driver_logs ();
 	  /* Stop and show info about the error. */
 	  this_action = BPSTAT_WHAT_STOP_NOISY;
 	  break;

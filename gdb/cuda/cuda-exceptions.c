@@ -152,31 +152,22 @@ cuda_exception::print_exception_name () const
   current_uiout->text ("\n");
 }
 
-/* Cluster exceptions are imprecise and lack an errorpc. We don't have
-attributable line information to the offending instruction. As a result, we
-print limited information about the exception.
-*/
 void
-cuda_exception::print_cluster_exception_origin () const
+cuda_exception::print_cuda_exception_string () const
 {
-  CuDim3 targetBlockIdx;
+  gdb_assert (m_valid);
 
   const auto &c = m_coord.physical ();
+  constexpr size_t ExceptionStringMaxLength = 512;
+  std::array<char, ExceptionStringMaxLength> buf;
 
-  if (c.wp () == CUDA_WILDCARD)
+  cuda_state::lane_get_cuda_exception_string (
+      c.dev (), c.sm (), c.wp (), c.ln (), buf.data (), buf.size ());
+
+  if (buf[0] == '\0')
     return;
 
-  if (!cuda_state::warp_has_cluster_exception_target_block_idx (
-	  c.dev (), c.sm (), c.wp ()))
-    return;
-
-  targetBlockIdx = cuda_state::warp_get_cluster_exception_target_block_idx (
-      c.dev (), c.sm (), c.wp ());
-  current_uiout->text (
-      "The imprecise exception was triggered by a thread in cluster");
-  current_uiout->text (" for access to shared memory for target blockIdx");
-  current_uiout->field_fmt ("blockIdx", "(%u,%u,%u)", targetBlockIdx.x,
-			    targetBlockIdx.y, targetBlockIdx.z);
+  current_uiout->field_string ("message", buf.data ());
   current_uiout->text ("\n");
 }
 
@@ -191,10 +182,6 @@ cuda_exception::printMessage () const
       print_assert_message ();
       print_exception_origin ();
       break;
-    case GDB_SIGNAL_CUDA_LANE_ILLEGAL_ADDRESS:
-    case GDB_SIGNAL_CUDA_LANE_NONMIGRATABLE_ATOMSYS:
-      print_exception_origin ();
-      break;
     case GDB_SIGNAL_CUDA_DEVICE_ILLEGAL_ADDRESS:
     case GDB_SIGNAL_CUDA_DEVICE_HARDWARE_STACK_OVERFLOW:
       print_exception_name ();
@@ -207,22 +194,26 @@ cuda_exception::printMessage () const
     case GDB_SIGNAL_CUDA_WARP_INVALID_PC:
     case GDB_SIGNAL_CUDA_WARP_HARDWARE_STACK_OVERFLOW:
     case GDB_SIGNAL_CUDA_WARP_ILLEGAL_ADDRESS:
-    case GDB_SIGNAL_CUDA_LANE_SYSCALL_ERROR:
     case GDB_SIGNAL_CUDA_LANE_USER_STACK_OVERFLOW:
+    case GDB_SIGNAL_CUDA_CLUSTER_OUT_OF_RANGE_ADDRESS:
+    case GDB_SIGNAL_CUDA_CLUSTER_BLOCK_NOT_PRESENT:
     case GDB_SIGNAL_CUDA_WARP_STACK_CANARY:
+    case GDB_SIGNAL_CUDA_WARP_TMEM_ACCESS_CHECK:
+    case GDB_SIGNAL_CUDA_WARP_TMEM_LEAK:
+    case GDB_SIGNAL_CUDA_WARP_CALL_REQUIRES_NEWER_DRIVER:
       print_exception_name ();
       print_exception_origin ();
       break;
-    case GDB_SIGNAL_CUDA_CLUSTER_OUT_OF_RANGE_ADDRESS:
-    case GDB_SIGNAL_CUDA_CLUSTER_BLOCK_NOT_PRESENT:
-      print_exception_name ();
-      print_cluster_exception_origin ();
-      break;
     case GDB_SIGNAL_CUDA_UNKNOWN_EXCEPTION:
+    case GDB_SIGNAL_CUDA_DEPRECATED_1:
+    case GDB_SIGNAL_CUDA_DEPRECATED_11:
+    case GDB_SIGNAL_CUDA_DEPRECATED_13:
+    case GDB_SIGNAL_CUDA_DEPRECATED_16:
     default:
       print_exception_name ();
       break;
     }
+    print_cuda_exception_string();
 }
 
 cuda_exception::cuda_exception ()
@@ -238,20 +229,14 @@ cuda_exception::cuda_exception ()
   if (cuda_sstep_is_active ())
     {
       dev = cuda_sstep_dev_id ();
-      /* Performance optimization below is not applicable if software
-	 preemption is enabled, since physical coordinates can change
-	 between the steps, so the debugger must have to iterate over the
-	 whole device in order to find the exception */
-      if (!cuda_options_software_preemption ())
-	{
-	  sm = cuda_sstep_sm_id ();
-	  /* If only one bit is set in warp mask limit iteration to it */
-	  cuda_api_warpmask tmp;
-	  cuda_api_clear_mask (&tmp);
-	  cuda_api_set_bit (&tmp, cuda_sstep_wp_id (), 1);
-	  if (tmp == cuda_sstep_wp_mask ())
-	    wp = cuda_sstep_wp_id ();
-	}
+      /* Performance optimization - Look at the coord we were single stepping */
+      sm = cuda_sstep_sm_id ();
+      /* If only one bit is set in warp mask limit iteration to it */
+      cuda_api_warpmask tmp;
+      cuda_api_clear_mask (&tmp);
+      cuda_api_set_bit (&tmp, cuda_sstep_wp_id (), 1);
+      if (tmp == cuda_sstep_wp_mask ())
+	wp = cuda_sstep_wp_id ();
     }
 
   bool foundException = false;
@@ -284,6 +269,7 @@ cuda_exception::cuda_exception ()
 			  CUDA_WILDCARD,
 			  CUDA_WILDCARD_DIM,
 			  CUDA_WILDCARD_DIM,
+			  CUDA_WILDCARD_DIM,
 			  CUDA_WILDCARD_DIM };
 
       cuda_coord_set<cuda_coord_set_type::threads,
@@ -311,6 +297,7 @@ cuda_exception::cuda_exception ()
 			  CUDA_WILDCARD,
 			  CUDA_WILDCARD_DIM,
 			  CUDA_WILDCARD_DIM,
+			  CUDA_WILDCARD_DIM,
 			  CUDA_WILDCARD_DIM };
 
       cuda_coord_set<cuda_coord_set_type::sms,
@@ -327,11 +314,6 @@ cuda_exception::cuda_exception ()
 
   switch (exception)
     {
-    case CUDBG_EXCEPTION_LANE_ILLEGAL_ADDRESS:
-      m_gdb_sig = GDB_SIGNAL_CUDA_LANE_ILLEGAL_ADDRESS;
-      m_valid = true;
-      m_recoverable = false;
-      break;
     case CUDBG_EXCEPTION_LANE_USER_STACK_OVERFLOW:
       m_gdb_sig = GDB_SIGNAL_CUDA_LANE_USER_STACK_OVERFLOW;
       m_valid = true;
@@ -382,18 +364,8 @@ cuda_exception::cuda_exception ()
       m_valid = true;
       m_recoverable = true;
       break;
-    case CUDBG_EXCEPTION_LANE_SYSCALL_ERROR:
-      m_gdb_sig = GDB_SIGNAL_CUDA_LANE_SYSCALL_ERROR;
-      m_valid = true;
-      m_recoverable = false;
-      break;
     case CUDBG_EXCEPTION_WARP_ILLEGAL_ADDRESS:
       m_gdb_sig = GDB_SIGNAL_CUDA_WARP_ILLEGAL_ADDRESS;
-      m_valid = true;
-      m_recoverable = false;
-      break;
-    case CUDBG_EXCEPTION_LANE_NONMIGRATABLE_ATOMSYS:
-      m_gdb_sig = GDB_SIGNAL_CUDA_LANE_NONMIGRATABLE_ATOMSYS;
       m_valid = true;
       m_recoverable = false;
       break;
@@ -411,6 +383,21 @@ cuda_exception::cuda_exception ()
 #endif
     case CUDBG_EXCEPTION_WARP_STACK_CANARY:
       m_gdb_sig = GDB_SIGNAL_CUDA_WARP_STACK_CANARY;
+      m_valid = true;
+      m_recoverable = false;
+      break;
+    case CUDBG_EXCEPTION_WARP_TMEM_ACCESS_CHECK:
+      m_gdb_sig = GDB_SIGNAL_CUDA_WARP_TMEM_ACCESS_CHECK;
+      m_valid = true;
+      m_recoverable = false;
+      break;
+    case CUDBG_EXCEPTION_WARP_TMEM_LEAK:
+      m_gdb_sig = GDB_SIGNAL_CUDA_WARP_TMEM_LEAK;
+      m_valid = true;
+      m_recoverable = false;
+      break;
+    case CUDBG_EXCEPTION_WARP_CALL_REQUIRES_NEWER_DRIVER:
+      m_gdb_sig = GDB_SIGNAL_CUDA_WARP_CALL_REQUIRES_NEWER_DRIVER;
       m_valid = true;
       m_recoverable = false;
       break;
@@ -442,8 +429,6 @@ cuda_exception::type_to_name (CUDBGException_t type)
 {
   switch (type)
     {
-    case CUDBG_EXCEPTION_LANE_ILLEGAL_ADDRESS:
-      return gdb_signal_to_string (GDB_SIGNAL_CUDA_LANE_ILLEGAL_ADDRESS);
     case CUDBG_EXCEPTION_LANE_USER_STACK_OVERFLOW:
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_LANE_USER_STACK_OVERFLOW);
     case CUDBG_EXCEPTION_DEVICE_HARDWARE_STACK_OVERFLOW:
@@ -466,12 +451,8 @@ cuda_exception::type_to_name (CUDBGException_t type)
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_DEVICE_ILLEGAL_ADDRESS);
     case CUDBG_EXCEPTION_WARP_ASSERT:
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_WARP_ASSERT);
-    case CUDBG_EXCEPTION_LANE_SYSCALL_ERROR:
-      return gdb_signal_to_string (GDB_SIGNAL_CUDA_LANE_SYSCALL_ERROR);
     case CUDBG_EXCEPTION_WARP_ILLEGAL_ADDRESS:
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_WARP_ILLEGAL_ADDRESS);
-    case CUDBG_EXCEPTION_LANE_NONMIGRATABLE_ATOMSYS:
-      return gdb_signal_to_string (GDB_SIGNAL_CUDA_LANE_NONMIGRATABLE_ATOMSYS);
 #if (CUDBG_API_VERSION_REVISION >= 131)
     case CUDBG_EXCEPTION_CLUSTER_BLOCK_NOT_PRESENT:
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_CLUSTER_BLOCK_NOT_PRESENT);
@@ -481,6 +462,12 @@ cuda_exception::type_to_name (CUDBGException_t type)
 #endif
     case CUDBG_EXCEPTION_WARP_STACK_CANARY:
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_WARP_STACK_CANARY);
+    case CUDBG_EXCEPTION_WARP_TMEM_ACCESS_CHECK:
+      return gdb_signal_to_string (GDB_SIGNAL_CUDA_WARP_TMEM_ACCESS_CHECK);
+    case CUDBG_EXCEPTION_WARP_TMEM_LEAK:
+      return gdb_signal_to_string (GDB_SIGNAL_CUDA_WARP_TMEM_LEAK);
+    case CUDBG_EXCEPTION_WARP_CALL_REQUIRES_NEWER_DRIVER:
+      return gdb_signal_to_string (GDB_SIGNAL_CUDA_WARP_CALL_REQUIRES_NEWER_DRIVER);
     default:
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_UNKNOWN_EXCEPTION);
     }

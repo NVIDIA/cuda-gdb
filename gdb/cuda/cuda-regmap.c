@@ -56,11 +56,11 @@
  */
 
 /* Raw value decoding */
-#define REGMAP_CLASS(x)   ((x) >> 24)
-#define REGMAP_REG(x)     ((x) & 0x00ffffff)
-#define REGMAP_PRED(x)    ((x) & 0x07)
-#define REGMAP_OFST(x)    ((x) & 0x00ffffff)
-#define REGMAP_SP_REG(x)  (((x) >> 16) & 0xff)
+#define REGMAP_CLASS(x) ((x) >> 24)
+#define REGMAP_REG(x) ((x) & 0x00ffffff)
+#define REGMAP_PRED(x) ((x) & 0x07)
+#define REGMAP_OFST(x) ((x) & 0x00ffffff)
+#define REGMAP_SP_REG(x) (((x) >> 16) & 0xff)
 #define REGMAP_SP_OFST(x) ((x) & 0x0000ffff)
 
 /* Structure/global variables for storing search results*/
@@ -72,16 +72,16 @@ struct regmap_st
   {
     const char *func_name; /* the kernel name */
     const char *reg_name;  /* the PTX register name */
-    uint64_t addr;         /* the kernel-relative PC address */
+    uint64_t addr;	   /* the kernel-relative PC address */
   } input;
   struct
   {
-    uint32_t num_entries;           /* # entries in the other fields */
+    uint32_t num_entries;	    /* # entries in the other fields */
     uint32_t num_entries_allocated; /* number of entries allocated for
 				       raw_value[] */
-    uint32_t *raw_value;            /* see REGMAP_* macros above */
+    uint32_t *raw_value;	    /* see REGMAP_* macros above */
     uint32_t max_location_index;    /* max loc index across all addrs */
-    uint32_t *location_index;       /* location index for raw value */
+    uint32_t *location_index;	    /* location index for raw value */
     bool extrapolated; /* Indicates that regmap was extrapolated */
   } output;
 };
@@ -546,7 +546,7 @@ regmap_extend_liverange (regmap_func_t *func)
   uint32_t max_entries = 0;
   uint32_t compares = 0;
 
-  const auto start {std::chrono::high_resolution_clock::now ()};
+  const auto start{ std::chrono::high_resolution_clock::now () };
 
   std::unordered_map<uint64_t, std::vector<regmap_map_t *>> reg_to_map;
 
@@ -563,17 +563,17 @@ regmap_extend_liverange (regmap_func_t *func)
     }
 
   // Scan all the register map entries
-  for (const auto& reg_vector : reg_to_map) 
+  for (const auto &reg_vector : reg_to_map)
     {
       // For this register, compare all the mappings with each other,
       // extending ranges as necessary
-      for (auto& map : reg_vector.second)
+      for (auto &map : reg_vector.second)
 	{
 	  // Initialize the extended end to be the end of the function
 	  map->extended_end = end_max;
 
 	  // Compare all the "other" mappings against this mapping
-	  for (const auto& map1 : reg_vector.second)
+	  for (const auto &map1 : reg_vector.second)
 	    {
 	      compares++;
 	      // Nothing to do for comparing a map entry with itself.
@@ -585,38 +585,39 @@ regmap_extend_liverange (regmap_func_t *func)
 		  // against, update map->extended_end to cover the
 		  // gap
 		  map->extended_end
-		    = (map1->start < map->extended_end ? map1->start
-		       : map->extended_end);
+		      = (map1->start < map->extended_end ? map1->start
+							 : map->extended_end);
 		}
 	      else if (map1->end > map->end)
 		{
-		  // Overlapping range with an end further out, don't extend our range
+		  // Overlapping range with an end further out, don't extend
+		  // our range
 		  map->extended_end = map->end;
 		  break;
 		}
 	    }
 	}
       // Update min/max counts
-      const auto entries = reg_vector.second.size();
+      const auto entries = reg_vector.second.size ();
       if (max_entries < entries)
 	max_entries = entries;
       if (!min_entries || (min_entries > entries))
 	min_entries = entries;
     }
 
-  if (cuda_options_trace_domain_enabled (CUDA_TRACE_GENERAL) && reg_to_map.size ())
+  if (cuda_options_trace_domain_enabled (CUDA_TRACE_GENERAL)
+      && reg_to_map.size ())
     {
-      const auto end {std::chrono::high_resolution_clock::now ()};
-      const std::chrono::duration<double> elapsed_seconds {end - start};
-      const auto microseconds = std::chrono::duration_cast<std::chrono::microseconds> (elapsed_seconds).count ();
-      cuda_trace ("%s: %u maps %lu regs (min %u / max %u / avg %lu) %u compares (%lu us)",
-		  func->name,
-		  func->maps_no,
-		  reg_to_map.size (),
-		  min_entries,
-		  max_entries,
-		  func->maps_no / reg_to_map.size (),
-		  compares,
+      const auto end{ std::chrono::high_resolution_clock::now () };
+      const std::chrono::duration<double> elapsed_seconds{ end - start };
+      const auto microseconds
+	  = std::chrono::duration_cast<std::chrono::microseconds> (
+		elapsed_seconds)
+		.count ();
+      cuda_trace ("%s: %u maps %lu regs (min %u / max %u / avg %lu) %u "
+		  "compares (%lu us)",
+		  func->name, func->maps_no, reg_to_map.size (), min_entries,
+		  max_entries, func->maps_no / reg_to_map.size (), compares,
 		  microseconds);
     }
 }

@@ -202,6 +202,9 @@ static void c_print_token (FILE *file, int type, YYSTYPE value);
 %token <tsval> STRING
 %token <sval> NSSTRING		/* ObjC Foundation "NSString" literal */
 %token SELECTOR			/* ObjC "@selector" pseudo-operator   */
+/* CUDA */
+%token <ssym> CUDA_ADDRESS_SPACE_IDENTIFIER
+/* end CUDA */
 %token <tsval> CHAR
 %token <ssym> NAME /* BLOCKNAME defined below to give it higher precedence. */
 %token <ssym> UNKNOWN_CPP_NAME
@@ -1337,10 +1340,10 @@ single_qualifier:
 	/* We support address space identifiers in typecasts via @global, @generic,
 	   @local etc. We need to handle the case where the address space identifier
 	   conflicts with a typename in the inferior. */
-	|	'@' TYPENAME
+	|	CUDA_ADDRESS_SPACE_IDENTIFIER
 		{
 		  cpstate->type_stack.insert (pstate,
-					      copy_name ($2.stoken).c_str ());
+					      copy_name ($1.stoken).c_str ());
 		}
 /* END CUDA */
 	;
@@ -2627,6 +2630,16 @@ static const struct c_token ident_tokens[] =
     {"typeid", TYPEID, OP_TYPEID, FLAG_CXX}
   };
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - Address space identifiers */
+static const std::vector<std::string> cuda_address_space_identifiers =
+  {
+    "generic",
+    "global",
+    "local",
+    "shared",
+  };
+#endif
 
 static void
 scan_macro_expansion (const char *expansion)
@@ -2908,6 +2921,24 @@ lex_one_token (struct parser_state *par_state, bool *is_quoted_name)
 	    else if (*p == '"')
 	      goto parse_string;
 	  }
+#ifdef NVIDIA_CUDA_GDB
+	/* CUDA - Support for address space qualifiers in expressions.
+		  Qualifiers start with '@' and are followed by an address
+		  space keyword. */
+	if (cuda_current_focus::isDevice ())
+	  for (auto& str : cuda_address_space_identifiers)
+	    if (str.compare (0, str.length (), p, str.length ()) == 0)
+	      {
+		pstate->lexptr = p + str.length ();
+		yylval.sval.ptr = p;
+		yylval.sval.length = str.length ();
+		yylval.ssym.stoken = yylval.sval;
+		yylval.ssym.sym.symbol = NULL;
+		yylval.ssym.sym.block = NULL;
+		yylval.ssym.is_a_field_of_this = 0;
+		return CUDA_ADDRESS_SPACE_IDENTIFIER;
+	      }
+#endif
 
 	while (ISSPACE (*p))
 	  p++;

@@ -2,22 +2,21 @@
  * NVIDIA CUDA Debugger CUDA-GDB
  * Copyright (C) 2007-2025 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 3 as
  * published by the Free Software Foundation.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-
-/*-------------------------------------- Notifications -------------------------------------
+/*--------------------- Notifications ---------------------
  *
  * A notification is send by the CUDA debugger API (the producer or sender) and
  * handled by GDB (the consumer or recipient). Three booleans are used to mark
@@ -52,46 +51,52 @@
  * cuda_notification_info has already been initialized, and 'blocked'. When
  * 'blocked', a notification cannot be sent, and will be marked as (producer)
  * pending if no notification has been sent yet. The notification will be then
- * sent later, when notifications become unblocked, and the notification will go
- * from (producer) pending state to (producer) sent state.
- * Additionally, if a notification is received before a previous event has been
- * serviced, it is marked as an aliased_event, and an attempt is made to service
- * it before the inferior is resumed. No new stop signal is sent for an aliased_event.
+ * sent later, when notifications become unblocked, and the notification will
+ * go from (producer) pending state to (producer) sent state. Additionally, if
+ * a notification is received before a previous event has been serviced, it is
+ * marked as an aliased_event, and an attempt is made to service it before the
+ * inferior is resumed. No new stop signal is sent for an aliased_event.
  */
 
 #ifdef GDBSERVER
-#include "server.h"
 #include "cuda-tdep-server.h"
+#include "server.h"
 #else
 #include "defs.h"
-#include "cuda-options.h"
-#include "cuda-tdep.h"
+
 #include "cuda-api.h"
+#include "cuda-options.h"
+#include "cuda-packet-manager.h"
+#include "cuda-tdep.h"
 #include "gdbthread.h"
 #include "inferior.h"
 #include "remote.h"
-#include "cuda-packet-manager.h"
 #endif
 
 #include "cuda-notifications.h"
-#include <unistd.h>
 #include <ctype.h>
 #include <pthread.h>
 #include <signal.h>
+#include <unistd.h>
 #ifndef __QNXHOST__
-# include <sys/syscall.h>
+#include <sys/syscall.h>
 #endif
 
-static struct {
-  bool initialized;       /* True if the mutex is initialized */
-  bool blocked;           /* When blocked, stop signal will be marked pending and handled later. */
-  bool pending_send;      /* True if a stop signal was received while blocked was true. */
-  bool aliased_event;     /* True if a stop signal was received while a previous event was being processed. */
-  bool sent;              /* If already sent, do not send duplicates. */
-  bool received;          /* True if the stop signal has been received. */
-  uint32_t tid;           /* The thread id of the thread to which the stop signal was sent to. */
-  pthread_mutex_t mutex;  /* Mutex for the cuda_notification_* functions */
-  CUDBGEventCallbackData pending_send_data;
+static struct
+{
+  bool initialized; /* True if the mutex is initialized */
+  bool blocked; /* When blocked, stop signal will be marked pending and handled
+		   later. */
+  bool pending_send;  /* True if a stop signal was received while blocked was
+			 true. */
+  bool aliased_event; /* True if a stop signal was received while a previous
+			 event was being processed. */
+  bool sent;	      /* If already sent, do not send duplicates. */
+  bool received;      /* True if the stop signal has been received. */
+  uint32_t tid; /* The thread id of the thread to which the stop signal was
+		   sent to. */
+  pthread_mutex_t mutex; /* Mutex for the cuda_notification_* functions */
+  CUDBGEventCallbackData41 pending_send_data;
 } cuda_notification_info;
 
 #if __QNXHOST__
@@ -106,12 +111,12 @@ cuda_notification_trace (const char *fmt, ...)
 #endif
   va_list ap;
 
-  if (!cuda_options_debug_notifications())
+  if (!cuda_options_debug_notifications ())
     return;
 
   va_start (ap, fmt);
 #ifdef GDBSERVER
-  msg = (struct cuda_trace_msg *) xmalloc (sizeof (*msg));
+  msg = (struct cuda_trace_msg *)xmalloc (sizeof (*msg));
   if (!cuda_first_trace_msg)
     cuda_first_trace_msg = msg;
   else
@@ -132,11 +137,11 @@ void
 cuda_notification_reset (void)
 {
   gdb_assert (cuda_notification_info.initialized);
-  cuda_notification_info.blocked      = false;
+  cuda_notification_info.blocked = false;
   cuda_notification_info.pending_send = false;
-  cuda_notification_info.sent         = false;
-  cuda_notification_info.received     = false;
-  cuda_notification_info.tid          = false;
+  cuda_notification_info.sent = false;
+  cuda_notification_info.received = false;
+  cuda_notification_info.tid = false;
 }
 
 static void
@@ -168,7 +173,7 @@ cuda_notification_notify_thread (int tid)
      For details see bug 1986383. */
   signal = signals[sig++ % 2];
 #else
-  signal = cuda_options_stop_signal () == GDB_SIGNAL_URG ? SIGURG : SIGTRAP;
+  signal = SIGURG;
 #endif
 #ifdef __linux__
   {
@@ -176,13 +181,13 @@ cuda_notification_notify_thread (int tid)
 
     if (!tkill_failed)
       {
-        int ret;
+	int ret;
 
-        errno = 0;
-        ret = syscall (__NR_tkill, tid, signal);
-        if (errno != ENOSYS)
-          return ret;
-        tkill_failed = 1;
+	errno = 0;
+	ret = syscall (__NR_tkill, tid, signal);
+	if (errno != ENOSYS)
+	  return ret;
+	tkill_failed = 1;
       }
   }
 #endif
@@ -197,8 +202,9 @@ cuda_notification_notify_specific_thread (uint32_t tid)
 
   err = cuda_notification_notify_thread (tid);
 
-  cuda_notification_trace ("sent specifically to the given host thread: tid %d -> %s",
-                           tid, err ? "FAILED" : "success");
+  cuda_notification_trace (
+      "sent specifically to the given host thread: tid %d -> %s", tid,
+      err ? "FAILED" : "success");
 
   return err;
 }
@@ -243,13 +249,14 @@ find_and_notify_first_valid_thread (struct thread_info *tp, void *data)
 static int
 cmp_thread_tid (const void *tid1, const void *tid2)
 {
-  return ((*(int*)tid1) > (*(int*)tid2));
+  return ((*(int *)tid1) > (*(int *)tid2));
 }
 
 #define MAX_YOUNG_THREADS 128
-typedef struct {
-  int   num;
-  int   tid[MAX_YOUNG_THREADS];
+typedef struct
+{
+  int num;
+  int tid[MAX_YOUNG_THREADS];
 } youngest_threads_t;
 
 #ifdef GDBSERVER
@@ -290,14 +297,14 @@ cuda_notification_notify_youngest_thread (void)
 
 #ifdef GDBSERVER
   for_each_process ([&youngest_threads] (process_info *process) {
-      build_threads (process, &youngest_threads);
-    });
+    build_threads (process, &youngest_threads);
+  });
 #else
   iterate_over_threads (build_threads, &youngest_threads);
 #endif
 
   qsort (youngest_threads.tid, youngest_threads.num,
-         sizeof *youngest_threads.tid, cmp_thread_tid);
+	 sizeof *youngest_threads.tid, cmp_thread_tid);
 
   for (i = 0; err && i < youngest_threads.num; ++i)
     {
@@ -315,8 +322,8 @@ cuda_notification_notify_first_valid_thread (void)
 
 #ifdef GDBSERVER
   process_info *tp = find_process ([] (process_info *process) {
-      return find_and_notify_first_valid_thread (process);
-    });
+    return find_and_notify_first_valid_thread (process);
+  });
   tid = tp ? tp->pid : 0;
 #else
   struct thread_info *tp;
@@ -325,14 +332,14 @@ cuda_notification_notify_first_valid_thread (void)
 #endif
 
   cuda_notification_trace ("sent to the first valid thread: tid %ld -> %s",
-                           (long) tid, tid ? "success" : "FAILED");
+			   (long)tid, tid ? "success" : "FAILED");
 
   return tid;
 }
 #endif /* !__QNX_HOST__ */
 
 static void
-cuda_notification_send (CUDBGEventCallbackData *data)
+cuda_notification_send (CUDBGEventCallbackData41 *data)
 {
   uint32_t tid = 0;
   int err = 1;
@@ -342,7 +349,7 @@ cuda_notification_send (CUDBGEventCallbackData *data)
     {
       err = cuda_notification_notify_specific_thread (data->tid);
       if (!err)
-        tid = data->tid;
+	tid = data->tid;
     }
 
 #ifdef __QNXHOST__
@@ -391,7 +398,8 @@ cuda_notification_accept (void)
       cuda_notification_trace ("accept: sending pending notification");
       cuda_notification_send (&cuda_notification_info.pending_send_data);
       cuda_notification_info.pending_send = false;
-      memset (&cuda_notification_info.pending_send_data, 0, sizeof cuda_notification_info.pending_send_data);
+      memset (&cuda_notification_info.pending_send_data, 0,
+	      sizeof cuda_notification_info.pending_send_data);
     }
 
   cuda_notification_release_lock ();
@@ -408,7 +416,7 @@ cuda_notification_block (void)
 }
 
 void
-cuda_notification_notify (CUDBGEventCallbackData *data)
+cuda_notification_notify (CUDBGEventCallbackData41 *data)
 {
   cuda_notification_acquire_lock ();
 
@@ -416,10 +424,10 @@ cuda_notification_notify (CUDBGEventCallbackData *data)
     {
       /* Was there a timeout waiting for a response? */
       if (cuda_notification_info.sent && !cuda_notification_info.received)
-        {
-          cuda_notification_trace ("timeout: resending notification");
-          cuda_notification_send (data);
-        }
+	{
+	  cuda_notification_trace ("timeout: resending notification");
+	  cuda_notification_send (data);
+	}
     }
   else if (cuda_notification_info.sent)
     {
@@ -427,10 +435,12 @@ cuda_notification_notify (CUDBGEventCallbackData *data)
       cuda_notification_info.aliased_event = true;
     }
   else if (cuda_notification_info.pending_send)
-    cuda_notification_trace ("ignoring: another notification is already pending");
+    cuda_notification_trace (
+	"ignoring: another notification is already pending");
   else if (cuda_notification_info.blocked)
     {
-      cuda_notification_trace ("blocked: marking notification as pending_send");
+      cuda_notification_trace (
+	  "blocked: marking notification as pending_send");
       cuda_notification_info.pending_send = true;
       cuda_notification_info.pending_send_data = *data;
     }
@@ -508,7 +518,8 @@ cuda_notification_received (void)
 }
 
 void
-cuda_notification_analyze (ptid_t ptid, struct target_waitstatus *ws, int trap_expected)
+cuda_notification_analyze (ptid_t ptid, struct target_waitstatus *ws,
+			   int trap_expected)
 {
 #ifndef GDBSERVER
   if (is_remote_target (current_inferior ()->process_target ()))
@@ -522,18 +533,18 @@ cuda_notification_analyze (ptid_t ptid, struct target_waitstatus *ws, int trap_e
 
   /* A notification is deemed received when its corresponding signal is the
      reason we stopped. */
-  if (cuda_notification_info.sent &&
-      cuda_notification_info.tid == cuda_gdb_get_tid_or_pid (ptid) &&
-      ws->kind () == TARGET_WAITKIND_STOPPED &&
-      (ws->sig() == GDB_SIGNAL_URG ||
+  if (cuda_notification_info.sent
+      && cuda_notification_info.tid == cuda_gdb_get_tid_or_pid (ptid)
+      && ws->kind () == TARGET_WAITKIND_STOPPED
+      && (ws->sig () == GDB_SIGNAL_URG ||
 #ifdef __QNXHOST__
-       ws->sig () == GDB_SIGNAL_EMT ||
-       ws->sig () == GDB_SIGNAL_ILL ||
+	  ws->sig () == GDB_SIGNAL_EMT || ws->sig () == GDB_SIGNAL_ILL ||
 #endif
-       ws->sig () == GDB_SIGNAL_TRAP) &&
-      !trap_expected)
+	  ws->sig () == GDB_SIGNAL_TRAP)
+      && !trap_expected)
     {
-      cuda_notification_trace ("received notification to thread %d", cuda_notification_info.tid);
+      cuda_notification_trace ("received notification to thread %d",
+			       cuda_notification_info.tid);
       cuda_notification_info.received = true;
     }
 
@@ -555,7 +566,8 @@ cuda_notification_mark_consumed (void)
 
   if (cuda_notification_info.received)
     {
-      cuda_notification_trace ("consuming notification to thread %d", cuda_notification_info.tid);
+      cuda_notification_trace ("consuming notification to thread %d",
+			       cuda_notification_info.tid);
       cuda_notification_info.sent = false;
       cuda_notification_info.received = false;
       cuda_notification_info.tid = 0;
@@ -586,4 +598,3 @@ _initialize_cuda_notification ()
   pthread_mutex_init (&cuda_notification_info.mutex, NULL);
   cuda_notification_info.initialized = true;
 }
-

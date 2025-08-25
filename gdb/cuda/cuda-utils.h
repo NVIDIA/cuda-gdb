@@ -76,8 +76,6 @@ void cuda_ptx_cache_local_vars_iterator (const char *, struct symbol *, frame_in
 
 /* CUDA - managed variables */
 struct minimal_symbol;
-void cuda_set_host_address_resident_on_gpu (bool);
-bool cuda_is_host_address_resident_on_gpu (void);
 void cuda_managed_memory_clean_regions (void);
 bool cuda_is_value_managed_pointer (struct value *value);
 bool cuda_is_device_launch_used (void);
@@ -93,5 +91,8 @@ static inline void cuda_write_bool (CORE_ADDR addr, bool val)
 }
 bool cuda_managed_address_p (CORE_ADDR addr);
 void cuda_managed_memory_add_region (CORE_ADDR begin, CORE_ADDR end);
+
+/* Consume and print CUDA driver logs from the backend */
+void cuda_consume_and_print_driver_logs (void);
 #endif
 #endif

@@ -32,7 +32,6 @@
 #include "buildsym.h"
 #include "command.h"
 #include "cuda-commands.h"
-#include "cuda-convvars.h"
 #include "cuda-events.h"
 #include "cuda-exceptions.h"
 #include "cuda-kernel.h"
@@ -58,9 +57,9 @@
 #include "cuda-linux-nat.h"
 #include "event-top.h"
 #include "inf-child.h"
-#include "top.h"
-#include "remote.h"
 #include "remote-cuda.h"
+#include "remote.h"
+#include "top.h"
 
 template <class BaseTarget> cuda_nat_linux<BaseTarget>::cuda_nat_linux ()
 {
@@ -228,8 +227,7 @@ cuda_nat_linux<BaseTarget>::kill (void)
      dispatcher thread, then free resources in gdb (cuda_cleanup). OR do one
      initialize/finalize of the API per gdb run. */
   cuda_cleanup ();
-  
-  m_send_event_ack = false;
+
   m_resumed_from_fatal_exception = false;
 
   BaseTarget::kill ();
@@ -248,8 +246,7 @@ cuda_nat_linux<BaseTarget>::mourn_inferior ()
   mark_breakpoints_out ();
 
   cuda_cleanup ();
-  
-  m_send_event_ack = false;
+
   m_resumed_from_fatal_exception = false;
 
   BaseTarget::mourn_inferior ();
@@ -331,8 +328,6 @@ void
 cuda_nat_linux<BaseTarget>::resume (ptid_t ptid, int sstep, int host_sstep,
 				    enum gdb_signal ts)
 {
-  uint32_t dev;
-
   cuda_trace ("%s ssteps %d host_sstep %d device focus %u", __FUNCTION__,
 	      sstep, host_sstep, cuda_current_focus::isDevice ());
 
@@ -343,7 +338,7 @@ cuda_nat_linux<BaseTarget>::resume (ptid_t ptid, int sstep, int host_sstep,
     {
       // If not sstep - resume devices
       if (!host_sstep)
-	for (dev = 0; dev < cuda_state::get_num_devices (); ++dev)
+	for (auto dev = 0; dev < cuda_state::get_num_devices (); ++dev)
 	  cuda_state::device_resume (dev);
 
       // resume the host
@@ -357,7 +352,7 @@ cuda_nat_linux<BaseTarget>::resume (ptid_t ptid, int sstep, int host_sstep,
       /* Note we need to use inferior_ptid here. The passed in ptid might have
        * RESUME_ALL set which we don't support. */
       if (cuda_sstep_execute (inferior_ptid))
-        {
+	{
 #ifndef __QNXTARGET__
 	  /* On QNX this workaround does not seem to be required */
 	  /* The following is needed because, even though we are dealing with
@@ -374,21 +369,6 @@ cuda_nat_linux<BaseTarget>::resume (ptid_t ptid, int sstep, int host_sstep,
 #endif
 	  return;
 	}
-
-      /* If single stepping failed, plant a temporary breakpoint
-	 at the previous frame and resume the device */
-      if (cuda_options_software_preemption ())
-	{
-	  cuda_trace ("%s: SW Preemption workaround", __FUNCTION__);
-	  /* Physical coordinates might change even if API call has failed
-	   * if software preemption is enabled */
-
-	  /* Invalidate current coordinates as well as device cache */
-	  cuda_current_focus::invalidate ();
-
-	  // Update the coords to find the updated physical coords
-	  cuda_current_focus::update ();
-	}
       cuda_sstep_reset (false);
       cuda_insert_step_resume_breakpoint_at_caller (get_current_frame ());
       insert_breakpoints ();
@@ -400,7 +380,7 @@ cuda_nat_linux<BaseTarget>::resume (ptid_t ptid, int sstep, int host_sstep,
 
   // resume other devices
   if (!cuda_notification_pending ())
-    for (dev = 0; dev < cuda_state::get_num_devices (); ++dev)
+    for (auto dev = 0; dev < cuda_state::get_num_devices (); ++dev)
       if (dev != cur.dev ())
 	cuda_state::device_resume (dev);
 
@@ -415,9 +395,7 @@ template <class BaseTarget>
 void
 cuda_nat_linux<BaseTarget>::resume (ptid_t ptid, int sstep, enum gdb_signal ts)
 {
-  bool cuda_event_found = false;
   int host_want_sstep = cuda_host_want_singlestep;
-  CUDBGEvent event;
 
   cuda_trace ("cuda_resume: sstep %d", sstep);
   cuda_host_want_singlestep = 0;
@@ -477,21 +455,7 @@ cuda_nat_linux<BaseTarget>::resume (ptid_t ptid, int sstep, enum gdb_signal ts)
   if (cuda_notification_aliased_event ())
     {
       cuda_notification_reset_aliased_event ();
-      cuda_debugapi::get_next_sync_event (&event);
-      cuda_event_found = event.kind != CUDBG_EVENT_INVALID;
-
-      if (cuda_event_found)
-	{
-	  cuda_process_events (&event, CUDA_EVENT_SYNC);
-	  m_send_event_ack = true;
-	}
-    }
-
-  /* Acknowledge the CUDA debugger API (for synchronous events) */
-  if (m_send_event_ack)
-    {
-      cuda_debugapi::acknowledge_sync_events ();
-      m_send_event_ack = false;
+      cuda_process_events (CUDA_EVENT_SYNC);
     }
 
   resume (ptid, sstep, host_want_sstep, ts);
@@ -525,8 +489,6 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
 				  target_wait_flags target_options)
 {
   ptid_t r = null_ptid;
-  bool cuda_event_found = false;
-  CUDBGEvent event, asyncEvent;
 
   cuda_trace ("cuda_wait");
 
@@ -589,19 +551,17 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
 		  cuda_trace ("cuda_wait: single-stepped to kernel exit");
 		  /* Only destroy the kernel that has been stepped to its exit
 		   */
-		  cuda_state::destroy_kernel (cuda_sstep_dev_id (), cuda_sstep_grid_id ());
+		  cuda_state::destroy_kernel (cuda_sstep_dev_id (),
+					      cuda_sstep_grid_id ());
 
 		  /* Consume any asynchronous events, if necessary.  We need to
 		   * do this explicitly here, since we're taking the quick path
 		   * out of this routine (and bypassing the normal check for
 		   * API events). */
-		  cuda_debugapi::get_next_async_event (&asyncEvent);
-		  if (asyncEvent.kind != CUDBG_EVENT_INVALID)
-		    cuda_process_events (&asyncEvent, CUDA_EVENT_ASYNC);
+		  cuda_process_events (CUDA_EVENT_ASYNC);
 
 		  /* Update device state/kernels */
 		  cuda_state::update_kernels_terminated ();
-		  cuda_update_convenience_variables ();
 
 		  struct thread_info *tp = this->find_thread (r);
 		  gdb_assert (tp);
@@ -697,106 +657,193 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
   cuda_trace ("cuda_wait: initialize CUDA done %d %d", cuda_initialized,
 	      current_inferior ()->cuda_initialized);
 
-  /* Suspend all the CUDA devices. */
-  cuda_trace ("cuda_wait: suspend devices");
-  for (auto dev = 0; dev < cuda_state::get_num_devices (); ++dev)
-    cuda_state::device_suspend (dev);
-
   if (is_remote_target (this))
     cuda_remote_query_trace_message ();
+
+  /* Used to track if a suspend event was received. */
+  bool devices_suspended = false;
+  uint64_t broken_devices = 0;
+  uint64_t faulted_devices = 0;
+  auto handle_suspended_event = [&] (const CUDBGEvent &event) {
+    switch (event.kind)
+      {
+      case CUDBG_EVENT_ALL_DEVICES_SUSPENDED:
+	{
+	  cuda_trace ("cuda_wait: received suspend event");
+	  devices_suspended = true;
+	  broken_devices = event.cases.allDevicesSuspended.brokenDevicesMask;
+	  faulted_devices
+	      = event.cases.allDevicesSuspended.faultedDevicesMask;
+	  /* This ensures that cuda_state recognizes that the devices have been
+	   * suspended. */
+	  for (auto dev = 0; dev < cuda_state::get_num_devices (); ++dev)
+	    cuda_state::set_suspended_devices_mask (dev);
+	  cuda_state::update_all_state (CUDBG_RESPONSE_TYPE_UPDATE);
+	  return false;
+	}
+      default:
+	/* Do nothing */
+	break;
+      }
+    return true;
+  };
 
   /* Check for asynchronous events.  These events do not require
      acknowledgement to the debug API, and may arrive at any time
      without an explicit notification. */
-  cuda_debugapi::get_next_async_event (&asyncEvent);
-  if (asyncEvent.kind != CUDBG_EVENT_INVALID)
-    cuda_process_events (&asyncEvent, CUDA_EVENT_ASYNC);
+  bool handled_events = cuda_process_events (CUDA_EVENT_ASYNC, handle_suspended_event);
 
   /* Analyze notifications.  Only check for new events if we've
      we've received a notification, or if we're single stepping
      the device (since if we're stepping we wouldn't receive an
      explicit notification). */
   cuda_notification_analyze (r, ws, tp->control.trap_expected);
-  if (cuda_notification_received ())
-    {
-      /* Check if there is any CUDA event to be processed */
-      cuda_debugapi::get_next_sync_event (&event);
-      cuda_event_found = event.kind != CUDBG_EVENT_INVALID;
-    }
 
   /* Handle all the CUDA events immediately.  In particular, for
      GPU events that may happen without prior notification (GPU
      grid launches, for example), API events will be packed
      alongside of them, so we need to process the API event first. */
-  if (cuda_event_found)
-    {
-      cuda_process_events (&event, CUDA_EVENT_SYNC);
-      m_send_event_ack = true;
-    }
+  if (cuda_notification_received ())
+    handled_events |= cuda_process_events (CUDA_EVENT_SYNC, handle_suspended_event);
 
-  /* Update the info about the kernels */
-  cuda_state::update_kernels_terminated ();
+  /* CUDA - managed memory */
+  auto update_managed_memory = [&] () {
+    if ((ws->kind () == TARGET_WAITKIND_STOPPED
+	 || ws->kind () == TARGET_WAITKIND_SIGNALLED)
+	&& (ws->sig () == GDB_SIGNAL_BUS || ws->sig () == GDB_SIGNAL_SEGV)
+	&& tp)
+      {
+	uint64_t addr = 0;
+	struct gdbarch *arch = get_current_arch ();
+	int arch_ptr_size = gdbarch_ptr_bit (arch) / 8;
+	LONGEST len = arch_ptr_size;
+	LONGEST offset = arch_ptr_size == 8 ? 0x10 : 0x0c;
+	LONGEST read = 0;
+	gdb_byte *buf = (gdb_byte *)&addr;
+	bool inf_exec;
 
-  /* Decide which thread/kernel to switch focus to.
-   * c is passed by reference and filled out by several
-   * functions below.
-   * We start by creating an exception
-   * object and checking if its valid denoting we hit an
-   * exception.
-   */
-  cuda_coords c;
-  /* Constructing the cuda_exception will query cuda state. */
-  cuda_exception exp;
-  if (exp.valid ())
+	inf_exec = tp->executing ();
+
+	/* Mark inferior_ptid as not executing while reading object signal
+	 * info*/
+	set_executing (this, r, false);
+	read = target_read (this, TARGET_OBJECT_SIGNAL_INFO, NULL, buf, offset,
+			    len);
+	set_executing (this, r, inf_exec);
+
+	/* Check the results */
+	if (read == len && cuda_managed_address_p (addr))
+	  {
+	    if (ws->kind () == TARGET_WAITKIND_STOPPED)
+	      ws->set_stopped (GDB_SIGNAL_CUDA_INVALID_MANAGED_MEMORY_ACCESS);
+	    else
+	      ws->set_signalled (
+		  GDB_SIGNAL_CUDA_INVALID_MANAGED_MEMORY_ACCESS);
+	    cuda_set_signo (GDB_SIGNAL_CUDA_INVALID_MANAGED_MEMORY_ACCESS);
+	  }
+      }
+    cuda_managed_memory_clean_regions ();
+  };
+
+  auto force_suspend = [] () {
+    for (auto dev = 0; dev < cuda_state::get_num_devices (); ++dev)
+      cuda_state::device_suspend (dev);
+  };
+
+  auto handle_exception = [&] (cuda_exception &exp) {
+    cuda_trace ("cuda_wait: stopped because of an exception");
+    gdb_assert (exp.valid ());
+    exp.printMessage ();
+    ws->set_stopped (exp.gdbSignal ());
+    cuda_set_signo (exp.gdbSignal ());
+    if (exp.has_coords ())
+      {
+	tp->need_cuda_context_switch = true;
+	tp->new_cuda_coords = exp.coords ();
+      }
+  };
+
+  /* Special case single stepping. */
+  if (cuda_sstep_is_active ())
     {
-      cuda_trace ("cuda_wait: stopped because of an exception");
-      exp.printMessage ();
-      ws->set_stopped (exp.gdbSignal ());
-      cuda_set_signo (exp.gdbSignal ());
-      if (exp.has_coords ())
+      /* Update the info about the kernels */
+      cuda_state::update_kernels_terminated ();
+      /* Always check for an exception. We don't get suspend events while
+	 single stepping. Constructing the cuda_exception will query cuda
+	 state. */
+      cuda_exception exp;
+      if (exp.valid ())
+	handle_exception (exp);
+      else
 	{
-	  tp->need_cuda_context_switch = true;
-	  tp->new_cuda_coords = exp.coords ();
+	  cuda_trace ("cuda_wait: stopped because we are single-stepping");
+	  tp->need_cuda_updated_focus = true;
 	}
+      update_managed_memory ();
     }
-  /* We are done processing if we are single stepping. */
-  else if (cuda_sstep_is_active ())
+  /* Handle the case where the devices have been suspended. */
+  else if (devices_suspended)
     {
-      cuda_trace ("cuda_wait: stopped because we are single-stepping");
-      tp->need_cuda_updated_focus = true;
+      /* Update the info about the kernels */
+      cuda_state::update_kernels_terminated ();
+
+      /* Handle exceptions. */
+      // TODO: Check the exception based on the device mask
+      if (faulted_devices)
+	{
+	  /* Constructing the cuda_exception will query cuda state. */
+	  cuda_exception exp;
+	  if (exp.valid ())
+	    handle_exception (exp);
+	}
+      /* Handle breakpoints */
+      else if (broken_devices)
+	{
+	  if (cuda_breakpoint_hit_p (tp->new_cuda_coords))
+	    {
+	      cuda_trace ("cuda_wait: stopped because of a breakpoint");
+	      gdb_assert (tp->new_cuda_coords.valid ());
+	      /* Alias received signal to SIGTRAP when hitting a breakpoint */
+	      cuda_set_signo (GDB_SIGNAL_TRAP);
+	      ws->set_stopped (GDB_SIGNAL_TRAP);
+	      tp->need_cuda_context_switch = true;
+	    }
+	  else if (cuda_state::broken (tp->new_cuda_coords))
+	    {
+	      cuda_trace ("cuda_wait: stopped because there are broken warps "
+			  "(induced trap?)");
+	      gdb_assert (tp->new_cuda_coords.valid ());
+	      /* Alias received signal to SIGTRAP when hitting a breakpoint */
+	      cuda_set_signo (GDB_SIGNAL_TRAP);
+	      ws->set_stopped (GDB_SIGNAL_TRAP);
+	      tp->need_cuda_context_switch = true;
+	    }
+	}
+      cuda_adjust_host_pc (r);
+      update_managed_memory ();
     }
-  /* The coords c is passed in as a reference */
-  else if (cuda_breakpoint_hit_p (c))
-    {
-      cuda_trace ("cuda_wait: stopped because of a breakpoint");
-      /* Alias received signal to SIGTRAP when hitting a trap */
-      cuda_set_signo (GDB_SIGNAL_TRAP);
-      ws->set_stopped (GDB_SIGNAL_TRAP);
-      tp->need_cuda_context_switch = true;
-      tp->new_cuda_coords = c;
-    }
-  /* The coords c is passed in as a reference */
-  else if (cuda_state::broken (c))
-    {
-      cuda_trace (
-	  "cuda_wait: stopped because there are broken warps (induced trap?)");
-      /* Alias received signal to SIGTRAP when hitting a breakpoint */
-      cuda_set_signo (GDB_SIGNAL_TRAP);
-      ws->set_stopped (GDB_SIGNAL_TRAP);
-      tp->need_cuda_context_switch = true;
-      tp->new_cuda_coords = c;
-    }
+  /* Handle the case for everything else */
   else if (cuda_debugapi::get_attach_state () == CUDA_ATTACH_STATE_APP_READY)
     {
       /* Finished attaching to the CUDA app.
 	 Preferably switch focus to a device if possible */
-      struct inferior *inf = find_inferior_pid (this, r.pid ());
       cuda_trace ("cuda_wait: stopped because we attached to the CUDA app");
-      cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_COMPLETE);
-      inf->control.stop_soon = STOP_QUIETLY;
-      tp->need_cuda_updated_focus = true;
-      ws->set_stopped (GDB_SIGNAL_0);
-      cuda_set_signo (GDB_SIGNAL_0);
+      /* Always force suspend on initial attach. */
+      force_suspend ();
+      /* Check for an exception first. */
+      cuda_exception exp;
+      if (exp.valid ())
+	handle_exception (exp);
+      else
+	{
+	  /* Attempt to switch focus if possible. */
+	  struct inferior *inf = find_inferior_pid (this, r.pid ());
+	  cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_COMPLETE);
+	  inf->control.stop_soon = STOP_QUIETLY;
+	  tp->need_cuda_updated_focus = true;
+	  ws->set_stopped (GDB_SIGNAL_0);
+	  cuda_set_signo (GDB_SIGNAL_0);
+	}
     }
   else if (cuda_debugapi::get_attach_state ()
 	   == CUDA_ATTACH_STATE_DETACH_COMPLETE)
@@ -813,6 +860,7 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
     {
       /* CTRL-C was hit. Preferably switch focus to a device if possible */
       cuda_trace ("cuda_wait: stopped because a SIGINT was received.");
+      force_suspend ();
       cuda_set_signo (GDB_SIGNAL_INT);
       tp->need_cuda_updated_focus = true;
     }
@@ -821,80 +869,34 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
       /* cuda-gdb received sigint, probably Nsight tries to stop the app. */
       cuda_trace (
 	  "cuda_wait: stopped because SIGINT was received by debugger.");
+      force_suspend ();
       ws->set_stopped (GDB_SIGNAL_INT);
       cuda_set_signo (GDB_SIGNAL_INT);
       tp->need_cuda_updated_focus = true;
     }
-  else if (cuda_event_found)
+  else if (handled_events)
+    cuda_trace ("cuda_wait: waited for handling CUDA events.");
+  else if (ws->kind () == TARGET_WAITKIND_STOPPED
+	   || ws->kind () == TARGET_WAITKIND_SIGNALLED)
     {
-      cuda_trace ("cuda_wait: stopped because of a CUDA event");
-      cuda_sigtrap_set_silent ();
-      tp->need_cuda_updated_focus = true;
-    }
-  else if (cuda_notification_received ())
-    {
-      /* No reason found when actual reason was consumed in a previous
-       * iteration (timeout,...) */
-      cuda_trace ("cuda_wait: stopped for no visible CUDA reason.");
-      cuda_set_signo (
-	  GDB_SIGNAL_TRAP); /* Dummy signal. We stopped after all. */
-      cuda_current_focus::invalidate ();
+      /* We are stopped for a non-CUDA reason. When the host
+	 stops, we need to ensure we halt the device. */
+      cuda_trace ("cuda_wait: stopped for a non-CUDA reason.");
+      force_suspend ();
+      /* FIXME: We need to ensure we update the cuda global tracking signo
+         so that we overwrite it later on. This should be reworked as it
+	 isn't a good idea to force siginfo when switching focus between
+	 host and device. */
+      cuda_set_signo (ws->sig());
     }
   else
-    {
-      cuda_trace ("cuda_wait: stopped for a non-CUDA reason.");
-      cuda_set_signo (GDB_SIGNAL_TRAP);
-      cuda_current_focus::invalidate ();
-    }
-
-  cuda_adjust_host_pc (r);
-
-  /* CUDA - managed memory */
-  if ((ws->kind () == TARGET_WAITKIND_STOPPED
-       || ws->kind () == TARGET_WAITKIND_SIGNALLED)
-      && (ws->sig () == GDB_SIGNAL_BUS || ws->sig () == GDB_SIGNAL_SEGV)
-      && tp)
-    {
-      uint64_t addr = 0;
-      struct gdbarch *arch = get_current_arch ();
-      int arch_ptr_size = gdbarch_ptr_bit (arch) / 8;
-      LONGEST len = arch_ptr_size;
-      LONGEST offset = arch_ptr_size == 8 ? 0x10 : 0x0c;
-      LONGEST read = 0;
-      gdb_byte *buf = (gdb_byte *)&addr;
-      bool inf_exec;
-
-      inf_exec = tp->executing ();
-
-      /* Mark inferior_ptid as not executing while reading object signal info*/
-      set_executing (this, r, false);
-      read = target_read (this, TARGET_OBJECT_SIGNAL_INFO, NULL, buf, offset,
-			  len);
-      set_executing (this, r, inf_exec);
-
-      /* Check the results */
-      if (read == len && cuda_managed_address_p (addr))
-	{
-	  if (ws->kind () == TARGET_WAITKIND_STOPPED)
-	    ws->set_stopped (GDB_SIGNAL_CUDA_INVALID_MANAGED_MEMORY_ACCESS);
-	  else
-	    ws->set_signalled (GDB_SIGNAL_CUDA_INVALID_MANAGED_MEMORY_ACCESS);
-	  cuda_set_signo (GDB_SIGNAL_CUDA_INVALID_MANAGED_MEMORY_ACCESS);
-	}
-    }
-  cuda_managed_memory_clean_regions ();
+    cuda_trace ("cuda_wait: waited for a non-CUDA reason.");
 
   /* If we didn't explicitly request a thread to focus on, we still need
    * to ensure that we update the current thread state. */
   if (cuda_current_focus::isDevice () && !tp->need_cuda_context_switch)
     {
       tp->need_cuda_updated_focus = true;
-    }
-  /* The host side may still need to access CUDA convenience variables.
-   * Update them since we won't be switching to a CUDA thread. */
-  else
-    {
-      cuda_update_convenience_variables ();
     }
 
   cuda_trace ("cuda_wait: done");
@@ -923,7 +925,7 @@ cuda_nat_linux<BaseTarget>::fetch_registers (struct regcache *regcache,
     {
       cuda_register_read (gdbarch, regcache, gdbarch_pc_regnum (gdbarch));
       if (regno != -1)
-        return;
+	return;
     }
 
   // Always try to get the ErrorPC (but it may be unavailable)
@@ -932,7 +934,7 @@ cuda_nat_linux<BaseTarget>::fetch_registers (struct regcache *regcache,
       const auto tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
       cuda_register_read (gdbarch, regcache, tdep->error_pc_regnum);
       if (regno != -1)
-        return;
+	return;
     }
 
   // Get the host registers if requested
@@ -972,18 +974,28 @@ int
 cuda_nat_linux<BaseTarget>::insert_breakpoint (struct gdbarch *gdbarch,
 					       struct bp_target_info *bp_tgt)
 {
-  uint32_t dev;
-  bool inserted;
-
   /* Make sure we switch to the target gdbarch here */
   if (!cuda_is_device_code_address (bp_tgt->reqstd_address))
     return BaseTarget::insert_breakpoint (target_gdbarch (), bp_tgt);
 
   /* Insert the breakpoint on whatever device accepts it (valid address). */
-  inserted = false;
-  for (dev = 0; dev < cuda_state::get_num_devices (); ++dev)
+  bool inserted = false;
+  for (auto dev = 0; dev < cuda_state::get_num_devices (); ++dev)
     {
+      /* If the device is currently executing, we want to halt it temporarily
+	 in order to insert the breakpoint. Resume immediately. We don't want
+	 to update the state object when we do this since we will be
+	 temporarily halting execution. */
+      bool need_resume = false;
+      if (!cuda_state::device_suspended (dev))
+	{
+	  /* We need to stop the device to insert the breakpoint */
+	  need_resume = true;
+	  cuda_debugapi::suspend_device (dev);
+	}
       inserted |= cuda_debugapi::set_breakpoint (dev, bp_tgt->reqstd_address);
+      if (need_resume)
+	cuda_debugapi::resume_device (dev);
     }
 
   /* Make sure we save the address where the actual breakpoint was placed.  */
@@ -999,20 +1011,29 @@ cuda_nat_linux<BaseTarget>::remove_breakpoint (struct gdbarch *gdbarch,
 					       struct bp_target_info *bp_tgt,
 					       enum remove_bp_reason reason)
 {
-  uint32_t dev;
-  bool removed;
-
   /* Make sure we switch to the target gdbarch here */
   if (!cuda_is_device_code_address (bp_tgt->placed_address))
     return BaseTarget::remove_breakpoint (target_gdbarch (), bp_tgt, reason);
 
   /* Removed the breakpoint on whatever device accepts it (valid address). */
-  removed = false;
-  for (dev = 0; dev < cuda_state::get_num_devices (); ++dev)
+  bool removed = false;
+  for (auto dev = 0; dev < cuda_state::get_num_devices (); ++dev)
     {
-      /* We need to remove breakpoints even if no kernels remain on the device
-       */
+      /* If the device is currently executing, we want to halt it temporarily
+	 in order to remove the breakpoint. Resume immediately. We don't want
+	 to update the state object when we do this since we will be
+	 temporarily halting execution. */
+      bool need_resume = false;
+      if (!cuda_state::device_suspended (dev))
+	{
+	  /* We need to stop the device to remove the breakpoint */
+	  need_resume = true;
+	  cuda_debugapi::suspend_device (dev);
+	}
+      /* We need to remove breakpoints even if no kernels remain on the device */
       removed |= cuda_debugapi::unset_breakpoint (dev, bp_tgt->placed_address);
+      if (need_resume)
+	cuda_debugapi::resume_device (dev);
     }
   return !removed;
 }

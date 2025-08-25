@@ -73,7 +73,7 @@ cuda_frame_inlined_p (frame_info_ptr next_frame)
     {
       frame_type = get_frame_type (frame);
       if (frame_type != INLINE_FRAME)
-        break;
+	break;
       ++num_inlined_frames;
     }
 
@@ -84,11 +84,11 @@ cuda_frame_inlined_p (frame_info_ptr next_frame)
   for (block = block_for_pc (pc); block; block = block->superblock ())
     {
       if (!block->function ())
-        continue;
+	continue;
 
       --num_inlined_frames;
       if (num_inlined_frames == -1)
-        this_frame_block = block;
+	this_frame_block = block;
 
       outermost_block = block;
     }
@@ -131,22 +131,22 @@ cuda_abi_frame_outermost_p (frame_info_ptr next_frame)
     {
       frame_type = get_frame_type (frame);
       switch (frame_type)
-        {
-        case INLINE_FRAME:
-          continue;
-        case NORMAL_FRAME:
-          ++normal_frame_depth;
-          continue;
-        default:
-          break;
-        }
+	{
+	case INLINE_FRAME:
+	  continue;
+	case NORMAL_FRAME:
+	  ++normal_frame_depth;
+	  continue;
+	default:
+	  break;
+	}
     }
 
   /* The syscall frames must be taken into account, even if they are hidden. */
   if (cuda_options_hide_internal_frames ())
     {
       syscall_call_depth = cuda_state::lane_get_syscall_call_depth (
-          c.dev (), c.sm (), c.wp (), c.ln ());
+	  c.dev (), c.sm (), c.wp (), c.ln ());
       normal_frame_depth += syscall_call_depth;
     }
   if (normal_frame_depth)
@@ -243,7 +243,7 @@ cuda_frame_base_address (frame_info_ptr this_frame, void **this_cache)
 
 static struct frame_id
 cuda_abi_frame_id_build (frame_info_ptr this_frame, void **this_cache,
-                         struct frame_id *this_id)
+			 struct frame_id *this_id)
 {
   struct cuda_frame_cache *cache;
   int call_depth = 0;
@@ -263,15 +263,15 @@ cuda_abi_frame_id_build (frame_info_ptr this_frame, void **this_cache,
   if (this_level < call_depth)
     {
       /* When we have syscall frames, we will build them as special frames,
-         as the API will always return only the PC to the first non syscall
-         frame. Thus all frames less the syscall_call_depth will be identical
-         to the frame at the syscall call depth */
+	 as the API will always return only the PC to the first non syscall
+	 frame. Thus all frames less the syscall_call_depth will be identical
+	 to the frame at the syscall call depth */
       if ((this_level < syscall_call_depth)
-          && !cuda_options_hide_internal_frames ())
-        return frame_id_build_special (cache->base, cache->pc,
-                                       syscall_call_depth + this_level);
+	  && !cuda_options_hide_internal_frames ())
+	return frame_id_build_special (cache->base, cache->pc,
+				       syscall_call_depth + this_level);
       else
-        return frame_id_build (cache->base, cache->pc);
+	return frame_id_build (cache->base, cache->pc);
     }
   else
     return frame_id_build_special (cache->base, cache->pc, 1);
@@ -279,7 +279,7 @@ cuda_abi_frame_id_build (frame_info_ptr this_frame, void **this_cache,
 
 static struct frame_id
 cuda_noabi_frame_id_build (frame_info_ptr this_frame, void **this_cache,
-                           struct frame_id *this_id)
+			   struct frame_id *this_id)
 {
   struct cuda_frame_cache *cache;
   struct frame_id frame_id;
@@ -291,8 +291,7 @@ cuda_noabi_frame_id_build (frame_info_ptr this_frame, void **this_cache,
 }
 
 static enum unwind_stop_reason
-cuda_frame_unwind_stop_reason (frame_info_ptr this_frame,
-                               void **this_cache)
+cuda_frame_unwind_stop_reason (frame_info_ptr this_frame, void **this_cache)
 {
   /*NS: TODO*/
   return UNWIND_NO_REASON;
@@ -300,7 +299,7 @@ cuda_frame_unwind_stop_reason (frame_info_ptr this_frame,
 
 static void
 cuda_frame_this_id (frame_info_ptr this_frame, void **this_cache,
-                    struct frame_id *this_id)
+		    struct frame_id *this_id)
 {
   int this_level = frame_relative_level (this_frame);
 
@@ -312,7 +311,7 @@ cuda_frame_this_id (frame_info_ptr this_frame, void **this_cache,
     *this_id = cuda_noabi_frame_id_build (this_frame, this_cache, this_id);
 
   frame_debug_printf ("{ cuda_frame_this_id (frame=%d) -> this_id=%s }",
-                      this_level, this_id->to_string ().c_str ());
+		      this_level, this_id->to_string ().c_str ());
 }
 
 static CORE_ADDR
@@ -336,15 +335,15 @@ cuda_abi_frame_prev_pc (frame_info_ptr next_frame)
     {
       frame_type = get_frame_type (frame);
       switch (frame_type)
-        {
-        case INLINE_FRAME:
-          continue;
-        case NORMAL_FRAME:
-          ++num_normal_frames;
-          continue;
-        default:
-          break;
-        }
+	{
+	case INLINE_FRAME:
+	  continue;
+	case NORMAL_FRAME:
+	  ++num_normal_frames;
+	  continue;
+	default:
+	  break;
+	}
     }
   level += num_normal_frames;
 
@@ -352,15 +351,15 @@ cuda_abi_frame_prev_pc (frame_info_ptr next_frame)
   if (cuda_options_hide_internal_frames ())
     {
       syscall_call_depth = cuda_state::lane_get_syscall_call_depth (
-          c.dev (), c.sm (), c.wp (), c.ln ());
+	  c.dev (), c.sm (), c.wp (), c.ln ());
       level += syscall_call_depth;
     }
 
   if (level == 0)
     pc = cuda_state::lane_get_pc (c.dev (), c.sm (), c.wp (), c.ln ());
   else if (level <= call_depth)
-    pc = cuda_state::lane_get_return_address (
-        c.dev (), c.sm (), c.wp (), c.ln (), level - 1);
+    pc = cuda_state::lane_get_return_address (c.dev (), c.sm (), c.wp (),
+					      c.ln (), level - 1);
   else
     pc = 0;
 
@@ -371,8 +370,7 @@ static CORE_ADDR
 cuda_noabi_frame_prev_pc (frame_info_ptr next_frame)
 {
   const auto &c = cuda_current_focus::get ().physical ();
-  uint64_t pc
-      = cuda_state::lane_get_pc (c.dev (), c.sm (), c.wp (), c.ln ());
+  uint64_t pc = cuda_state::lane_get_pc (c.dev (), c.sm (), c.wp (), c.ln ());
 
   return (CORE_ADDR)pc;
 }
@@ -392,7 +390,7 @@ cuda_frame_prev_pc (frame_info_ptr next_frame)
    this function to hook in the dwarf2 frame unwind routines. */
 static struct value *
 cuda_abi_hook_dwarf2_frame_prev_register (frame_info_ptr next_frame,
-                                          void **this_cache, int regnum)
+					  void **this_cache, int regnum)
 {
   struct gdbarch *gdbarch = get_frame_arch (next_frame);
   int sp_regnum = cuda_abi_sp_regnum (gdbarch);
@@ -407,21 +405,21 @@ cuda_abi_hook_dwarf2_frame_prev_register (frame_info_ptr next_frame,
   if (regnum == sp_regnum)
     {
       dwarf2_base_finder
-          = (struct frame_base *)dwarf2_frame_base_sniffer (next_frame);
+	  = (struct frame_base *)dwarf2_frame_base_sniffer (next_frame);
       if (dwarf2_base_finder)
-        {
-          sp = dwarf2_base_finder->this_base (next_frame, &dwarfcache);
-          value = frame_unwind_got_address (next_frame, regnum, sp);
-        }
+	{
+	  sp = dwarf2_base_finder->this_base (next_frame, &dwarfcache);
+	  value = frame_unwind_got_address (next_frame, regnum, sp);
+	}
     }
 
   /* If we have a dwarf2 unwinder, then we will use it to know where to look
      for the value of all CUDA registers.  See dwarf2-frame.c */
   dwarf2 = dwarf2_frame_unwind.sniffer (&dwarf2_frame_unwind, next_frame,
-                                        (void **)&dwarfcache);
+					(void **)&dwarfcache);
   if (!value && dwarf2)
     value = dwarf2_frame_unwind.prev_register (next_frame,
-                                               (void **)&dwarfcache, regnum);
+					       (void **)&dwarfcache, regnum);
 
   return value;
 }
@@ -434,7 +432,7 @@ cuda_abi_hook_dwarf2_frame_prev_register (frame_info_ptr next_frame,
    stack. */
 static struct value *
 cuda_abi_frame_prev_register (frame_info_ptr next_frame, void **this_cache,
-                              int regnum)
+			      int regnum)
 {
   struct gdbarch *gdbarch = get_frame_arch (next_frame);
   uint32_t pc_regnum = gdbarch_pc_regnum (gdbarch);
@@ -451,10 +449,10 @@ cuda_abi_frame_prev_register (frame_info_ptr next_frame, void **this_cache,
     {
       frame_type = get_frame_type (frame);
       if (frame_type != INLINE_FRAME)
-        {
-          read_register_from_device = false;
-          break;
-        }
+	{
+	  read_register_from_device = false;
+	  break;
+	}
     }
 
   if (regnum == pc_regnum)
@@ -468,16 +466,17 @@ cuda_abi_frame_prev_register (frame_info_ptr next_frame, void **this_cache,
    * of syscall user stubs, fallback on directly reading from the inner frame
    * in this case */
   else if (!get_frame_id_p (next_frame)
-           || !get_frame_id (next_frame).special_addr_p
-           || get_frame_id (next_frame).special_addr != 1)
+	   || !get_frame_id (next_frame).special_addr_p
+	   || get_frame_id (next_frame).special_addr != 1)
     value = cuda_abi_hook_dwarf2_frame_prev_register (next_frame, this_cache,
-                                                      regnum);
+						      regnum);
 
   /* Try to fetch the register value from the inner frame.  */
   if (!value)
     value = get_frame_register_value (next_frame, regnum);
 
-  /* Last resort: if no value found, use the register for the innermost frame. */
+  /* Last resort: if no value found, use the register for the innermost frame.
+   */
   if (!value)
     value = frame_unwind_got_register (get_next_frame (frame), regnum, regnum);
 
@@ -488,8 +487,8 @@ cuda_abi_frame_prev_register (frame_info_ptr next_frame, void **this_cache,
    the register file (with the exception of PC, which requires special
    handling for inserted dummy frames) */
 static struct value *
-cuda_noabi_frame_prev_register (frame_info_ptr next_frame,
-                                void **this_cache, int regnum)
+cuda_noabi_frame_prev_register (frame_info_ptr next_frame, void **this_cache,
+				int regnum)
 {
   struct gdbarch *gdbarch = get_frame_arch (next_frame);
   uint32_t pc_regnum = gdbarch_pc_regnum (gdbarch);
@@ -506,7 +505,7 @@ cuda_noabi_frame_prev_register (frame_info_ptr next_frame,
 
 static struct value *
 cuda_frame_prev_register (frame_info_ptr next_frame, void **this_cache,
-                          int regnum)
+			  int regnum)
 {
   int next_level = frame_relative_level (next_frame);
   struct gdbarch *gdbarch = get_frame_arch (next_frame);
@@ -520,23 +519,23 @@ cuda_frame_prev_register (frame_info_ptr next_frame, void **this_cache,
   if (frame_debug)
     {
       gdb_printf (gdb_stdlog,
-                          "{ cuda_frame_prev_register "
-                          "(frame=%d,regnum=%d(%s),...) ",
-                          next_level, regnum,
-                          user_reg_map_regnum_to_name (gdbarch, regnum));
+		  "{ cuda_frame_prev_register "
+		  "(frame=%d,regnum=%d(%s),...) ",
+		  next_level, regnum,
+		  user_reg_map_regnum_to_name (gdbarch, regnum));
       gdb_printf (gdb_stdlog, "->");
       gdb_printf (gdb_stdlog, " *bufferp=");
       if (value == NULL)
-        gdb_printf (gdb_stdlog, "<NULL>");
+	gdb_printf (gdb_stdlog, "<NULL>");
       else
-        {
-          int i;
-          gdb::array_view<const gdb_byte> buf = value->contents ();
-          gdb_printf (gdb_stdlog, "[");
-          for (i = 0; i < register_size (gdbarch, regnum); i++)
-            gdb_printf (gdb_stdlog, "%02x", buf[i]);
-          gdb_printf (gdb_stdlog, "]");
-        }
+	{
+	  int i;
+	  gdb::array_view<const gdb_byte> buf = value->contents ();
+	  gdb_printf (gdb_stdlog, "[");
+	  for (i = 0; i < register_size (gdbarch, regnum); i++)
+	    gdb_printf (gdb_stdlog, "%02x", buf[i]);
+	  gdb_printf (gdb_stdlog, "]");
+	}
       gdb_printf (gdb_stdlog, " }\n");
     }
 
@@ -548,8 +547,8 @@ cuda_frame_prev_register (frame_info_ptr next_frame, void **this_cache,
    switching internally within each of the frame functions. */
 static int
 cuda_frame_sniffer_check (const struct frame_unwind *self,
-                          frame_info_ptr next_frame,
-                          void **this_prologue_cache)
+			  frame_info_ptr next_frame,
+			  void **this_prologue_cache)
 {
   bool is_cuda_frame;
   int next_level = frame_relative_level (next_frame);
@@ -558,9 +557,9 @@ cuda_frame_sniffer_check (const struct frame_unwind *self,
 
   if (frame_debug)
     gdb_printf (gdb_stdlog,
-                        "{ cuda_frame_sniffer_check "
-                        "(frame = %d) -> %d }\n",
-                        next_level, is_cuda_frame);
+		"{ cuda_frame_sniffer_check "
+		"(frame = %d) -> %d }\n",
+		next_level, is_cuda_frame);
   return is_cuda_frame;
 }
 
@@ -575,9 +574,9 @@ cuda_frame_base_sniffer (frame_info_ptr next_frame)
 
   if (frame_debug)
     gdb_printf (gdb_stdlog,
-                        "{ cuda_frame_base_sniffer "
-                        "(frame=%d) -> %d }\n",
-                        next_level, !!base);
+		"{ cuda_frame_base_sniffer "
+		"(frame=%d) -> %d }\n",
+		next_level, !!base);
 
   return base;
 }
@@ -592,9 +591,8 @@ cuda_frame_sniffer (frame_info_ptr next_frame)
     unwind = &cuda_frame_unwind;
 
   if (frame_debug)
-    gdb_printf (gdb_stdlog,
-                        "{ cuda_frame_sniffer (frame=%d) -> %d }\n",
-                        next_level, !!unwind);
+    gdb_printf (gdb_stdlog, "{ cuda_frame_sniffer (frame=%d) -> %d }\n",
+		next_level, !!unwind);
 
   return unwind;
 }
@@ -607,7 +605,7 @@ cuda_unwind_pc (struct gdbarch *gdbarch, frame_info_ptr next_frame)
   pc = cuda_frame_prev_pc (next_frame);
 
   frame_debug_printf ("{ cuda_unwind_pc (next_frame=n/a) -> %s }",
-                      hex_string (pc));
+		      hex_string (pc));
 
   return pc;
 }
@@ -626,4 +624,4 @@ const struct frame_unwind cuda_frame_unwind = {
 
 const struct frame_base cuda_frame_base
     = { &cuda_frame_unwind, cuda_frame_base_address, cuda_frame_base_address,
-        cuda_frame_base_address };
+	cuda_frame_base_address };

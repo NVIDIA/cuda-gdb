@@ -3006,8 +3006,7 @@ linux_nat_filter_event (int lwpid, int status)
 
 #ifdef NVIDIA_CUDA_GDB
       /* CUDA - Check if we have received an urgent message (aka sync event) */
-      if (cuda_notification_received () && cuda_options_stop_signal() == GDB_SIGNAL_URG
-          && WSTOPSIG(status) == SIGURG)
+      if (cuda_notification_received () && WSTOPSIG(status) == SIGURG)
         {
           lp->stopped = 1;
         }

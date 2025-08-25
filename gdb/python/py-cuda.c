@@ -305,6 +305,13 @@ gdbpy_cuda_cu_dim3_richcompare (PyObject *self, PyObject *other, int opid)
       PyErr_SetString (PyExc_TypeError, "Invalid comparison");
       return nullptr;
     }
+  if (other == Py_None)
+    {
+      if (opid == Py_EQ)
+	Py_RETURN_FALSE;
+      if (opid == Py_NE)
+	Py_RETURN_TRUE;
+    }
   if (!PyObject_TypeCheck (self, &gdbpy_cuda_cu_dim3_type))
     {
       PyErr_SetString (PyExc_TypeError, "Invalid type");
@@ -770,6 +777,13 @@ gdbpy_cuda_device_method_richcompare (PyObject *self, PyObject *other,
       PyErr_SetString (PyExc_TypeError, "Invalid comparison");
       return nullptr;
     }
+  if (other == Py_None)
+    {
+      if (opid == Py_EQ)
+	Py_RETURN_FALSE;
+      if (opid == Py_NE)
+	Py_RETURN_TRUE;
+    }
 
   const auto obj_self = gdbpy_cuda_device (self);
   if (obj_self == nullptr)
@@ -940,6 +954,13 @@ gdbpy_cuda_sm_method_richcompare (PyObject *self, PyObject *other, int opid)
     {
       PyErr_SetString (PyExc_TypeError, "Invalid comparison");
       return nullptr;
+    }
+  if (other == Py_None)
+    {
+      if (opid == Py_EQ)
+	Py_RETURN_FALSE;
+      if (opid == Py_NE)
+	Py_RETURN_TRUE;
     }
 
   const auto obj_self = gdbpy_cuda_sm (self);
@@ -1252,6 +1273,13 @@ gdbpy_cuda_warp_method_richcompare (PyObject *self, PyObject *other, int opid)
       PyErr_SetString (PyExc_TypeError, "Invalid comparison");
       return nullptr;
     }
+  if (other == Py_None)
+    {
+      if (opid == Py_EQ)
+	Py_RETURN_FALSE;
+      if (opid == Py_NE)
+	Py_RETURN_TRUE;
+    }
 
   const auto obj_self = gdbpy_cuda_warp (self);
   if (obj_self == nullptr)
@@ -1438,6 +1466,13 @@ gdbpy_cuda_lane_method_richcompare (PyObject *self, PyObject *other, int opid)
       PyErr_SetString (PyExc_TypeError, "Invalid comparison");
       return nullptr;
     }
+  if (other == Py_None)
+    {
+      if (opid == Py_EQ)
+	Py_RETURN_FALSE;
+      if (opid == Py_NE)
+	Py_RETURN_TRUE;
+    }
 
   const auto obj_self = gdbpy_cuda_lane (self);
   if (obj_self == nullptr)
@@ -1553,6 +1588,7 @@ gdbpy_cuda_lane_method_logical (PyObject *self, PyObject *args)
 				CUDA_WILDCARD,
 				CUDA_WILDCARD_DIM,
 				CUDA_WILDCARD_DIM,
+				CUDA_WILDCARD_DIM,
 				CUDA_WILDCARD_DIM };
 	    cuda_coord_set<cuda_coord_set_type::threads,
 			   select_valid | select_sngl>
@@ -1587,6 +1623,7 @@ gdbpy_cuda_lane_method_physical (PyObject *self, PyObject *args)
 				ln,
 				CUDA_WILDCARD,
 				CUDA_WILDCARD,
+				CUDA_WILDCARD_DIM,
 				CUDA_WILDCARD_DIM,
 				CUDA_WILDCARD_DIM,
 				CUDA_WILDCARD_DIM };
@@ -1751,6 +1788,13 @@ gdbpy_cuda_coords_physical_richcompare (PyObject *self, PyObject *other,
       PyErr_SetString (PyExc_TypeError, "Invalid comparison");
       return nullptr;
     }
+  if (other == Py_None)
+    {
+      if (opid == Py_EQ)
+	Py_RETURN_FALSE;
+      if (opid == Py_NE)
+	Py_RETURN_TRUE;
+    }
   if (!PyObject_TypeCheck (self, &gdbpy_cuda_coords_physical_type))
     {
       PyErr_SetString (PyExc_TypeError, "Invalid type");
@@ -1837,6 +1881,7 @@ typedef struct
   uint32_t dev_id;
   uint64_t grid_id;
   PyObject *cluster_idx;
+  PyObject *cluster_dim;
   PyObject *block_idx;
   PyObject *thread_idx;
 } gdbpy_cuda_coords_logical_object;
@@ -1875,6 +1920,15 @@ gdbpy_cuda_coords_logical_get_cluster_idx (PyObject *self, void *closure)
 }
 
 static PyObject *
+gdbpy_cuda_coords_logical_get_cluster_dim (PyObject *self, void *closure)
+{
+  const auto coords = (gdbpy_cuda_coords_logical_object *)self;
+
+  Py_INCREF (coords->cluster_dim);
+  return coords->cluster_dim;
+}
+
+static PyObject *
 gdbpy_cuda_coords_logical_get_block_idx (PyObject *self, void *closure)
 {
   const auto coords = (gdbpy_cuda_coords_logical_object *)self;
@@ -1897,6 +1951,8 @@ static gdb_PyGetSetDef gdbpy_cuda_coords_logical_getset[] = {
     "Block Index", nullptr },
   { "cluster_idx", gdbpy_cuda_coords_logical_get_cluster_idx, nullptr,
     "Cluster Index", nullptr },
+  { "cluster_dim", gdbpy_cuda_coords_logical_get_cluster_dim, nullptr,
+    "Cluster Dimension", nullptr },
   { "dev_id", gdbpy_cuda_coords_logical_get_dev_id, nullptr, "Grid ID",
     nullptr },
   { "grid_id", gdbpy_cuda_coords_logical_get_grid_id, nullptr, "Grid ID",
@@ -1919,6 +1975,13 @@ gdbpy_cuda_coords_logical_richcompare (PyObject *self, PyObject *other,
     {
       PyErr_SetString (PyExc_TypeError, "Invalid comparison");
       return nullptr;
+    }
+  if (other == Py_None)
+    {
+      if (opid == Py_EQ)
+	Py_RETURN_FALSE;
+      if (opid == Py_NE)
+	Py_RETURN_TRUE;
     }
   if (!PyObject_TypeCheck (self, &gdbpy_cuda_coords_logical_type))
     {
@@ -1949,6 +2012,11 @@ gdbpy_cuda_coords_logical_richcompare (PyObject *self, PyObject *other,
   if ((cluster_idx_p == nullptr) || (cluster_idx_p == Py_False))
     return cluster_idx_p;
 
+  auto cluster_dim_p
+      = gdbpy_cuda_cu_dim3_richcompare (a->cluster_dim, b->cluster_dim, opid);
+  if ((cluster_dim_p == nullptr) || (cluster_dim_p == Py_False))
+    return cluster_dim_p;
+
   Py_RETURN_RICHCOMPARE ((a->kernel_id == b->kernel_id)
 			     && (a->grid_id == b->grid_id),
 			 true, opid);
@@ -1961,6 +2029,8 @@ gdbpy_cuda_coords_logical_repr (PyObject *self)
 
   const auto cluster = (gdbpy_cuda_cu_dim3_object *)lcoords->cluster_idx;
   gdb_assert (cluster);
+  const auto cluster_dim = (gdbpy_cuda_cu_dim3_object *)lcoords->cluster_dim;
+  gdb_assert (cluster_dim);
   const auto block = (gdbpy_cuda_cu_dim3_object *)lcoords->block_idx;
   gdb_assert (block);
   const auto thread = (gdbpy_cuda_cu_dim3_object *)lcoords->thread_idx;
@@ -1973,6 +2043,7 @@ gdbpy_cuda_coords_logical_repr (PyObject *self)
 		     lcoords->kernel_id,
 		     lcoords->grid_id,
 		     CuDim3{ cluster->x, cluster->y, cluster->z },
+		     CuDim3{ cluster_dim->x, cluster_dim->y, cluster_dim->z },
 		     CuDim3{ block->x, block->y, block->z },
 		     CuDim3{ thread->x, thread->y, thread->z } };
 
@@ -2000,6 +2071,7 @@ gdbpy_cuda_coords_logical_create (const cuda_coords_logical &coords)
   self->dev_id = kernel->dev_id ();
   self->grid_id = kernel->grid_id ();
   self->cluster_idx = gdbpy_cuda_cu_dim3_create (coords.clusterIdx ());
+  self->cluster_dim = gdbpy_cuda_cu_dim3_create (coords.clusterDim ());
   self->block_idx = gdbpy_cuda_cu_dim3_create (coords.blockIdx ());
   self->thread_idx = gdbpy_cuda_cu_dim3_create (coords.threadIdx ());
 
@@ -2018,6 +2090,7 @@ gdbpy_cuda_coords_logical_finalize (PyObject *self)
   Py_XDECREF (coords->thread_idx);
   Py_XDECREF (coords->block_idx);
   Py_XDECREF (coords->cluster_idx);
+  Py_XDECREF (coords->cluster_dim);
 
   /* Restore the saved exception. */
   PyErr_Restore (error_type, error_value, error_traceback);
@@ -2112,7 +2185,7 @@ gdbpy_cuda_set_focus_physical (PyObject *self, PyObject *args)
 			  pcoords->wp,	     pcoords->ln,
 			  CUDA_WILDCARD,     CUDA_WILDCARD,
 			  CUDA_WILDCARD_DIM, CUDA_WILDCARD_DIM,
-			  CUDA_WILDCARD_DIM };
+			  CUDA_WILDCARD_DIM, CUDA_WILDCARD_DIM };
       cuda_coord_set<cuda_coord_set_type::threads, select_valid | select_sngl>
 	  coord{ filter };
       if (coord.size () == 0)
@@ -2159,6 +2232,8 @@ gdbpy_cuda_set_focus_logical (PyObject *self, PyObject *args)
 
       const auto cluster = (gdbpy_cuda_cu_dim3_object *)lcoords->cluster_idx;
       gdb_assert (cluster);
+      const auto cluster_dim = (gdbpy_cuda_cu_dim3_object *)lcoords->cluster_dim;
+      gdb_assert (cluster_dim);
       const auto block = (gdbpy_cuda_cu_dim3_object *)lcoords->block_idx;
       gdb_assert (block);
       const auto thread = (gdbpy_cuda_cu_dim3_object *)lcoords->thread_idx;
@@ -2171,6 +2246,7 @@ gdbpy_cuda_set_focus_logical (PyObject *self, PyObject *args)
 			  lcoords->kernel_id,
 			  lcoords->grid_id,
 			  CuDim3{ cluster->x, cluster->y, cluster->z },
+			  CuDim3{ cluster_dim->x, cluster_dim->y, cluster_dim->z },
 			  CuDim3{ block->x, block->y, block->z },
 			  CuDim3{ thread->x, thread->y, thread->z } };
       cuda_coord_set<cuda_coord_set_type::threads, select_valid | select_sngl>

@@ -1387,6 +1387,26 @@ namespace eval Dwarf {
 		    _op .sleb128 [lindex $line 1]
 		}
 
+		DW_OP_LLVM_offset_constu {
+		    _op .uleb128 [lindex $line 1]
+		}
+
+		DW_OP_LLVM_extend {
+		    _op .uleb128 [lindex $line 1]
+		    _op .uleb128 [lindex $line 2]
+		}
+
+		DW_OP_LLVM_select_bit_piece {
+		    _op .uleb128 [lindex $line 1]
+		    _op .uleb128 [lindex $line 2]
+		}
+
+		DW_OP_LLVM_aspace_bregx {
+		    _get_args $line $opcode register offset
+		    _op .uleb128 $argvec(register)
+		    _op .sleb128 $argvec(offset)
+		}
+
 		default {
 		    if {[llength $line] > 1} {
 			error "Unimplemented: operands in location for $opcode"

@@ -277,13 +277,13 @@ SUBDIR_CUDA_SRCS = \
 	cuda/cuda-bitset.c \
 	cuda/cuda-commands.c \
 	cuda/cuda-context.c \
-	cuda/cuda-convvars.c \
 	cuda/cuda-coords.c \
 	cuda/cuda-corelow.c \
 	cuda/cuda-env-vars.c \
 	cuda/cuda-events.c \
 	cuda/cuda-exceptions.c \
 	cuda/cuda-frame.c \
+	cuda/cuda-internal-vars.c \
 	cuda/cuda-kernel.c \
 	cuda/cuda-lang.c \
 	cuda/cuda-linux-nat.c \
@@ -1400,7 +1400,6 @@ HFILES_NO_SRCDIR = \
 	cuda/cuda-bitset.h \
 	cuda/cuda-commands.h \
 	cuda/cuda-context.h \
-	cuda/cuda-convvars.h \
 	cuda/cuda-coords.h \
 	cuda/cuda-coord-set.h \
 	cuda/cuda-corelow.h \

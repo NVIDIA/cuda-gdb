@@ -125,8 +125,7 @@ if { [prepare_for_testing "failed to prepare" ${testfile} \
 }
 
 gdb_test "p s1" " = {a = 1, b = 0}"
-gdb_test "p s2" \
-    "access outside bounds of object referenced via synthetic pointer"
+gdb_test "p s2" " = {a = 1, b = 0}"
 
 # When fetching a lazy value, GDB typically tries to fetch the 'full'
 # object based on the enclosing type.  GDB does not support the reading

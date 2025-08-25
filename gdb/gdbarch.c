@@ -75,6 +75,24 @@ struct gdbarch
 #ifdef NVIDIA_CUDA_GDB
   const struct floatformat ** nv_fp8_e4m3_format = 0;
 #endif
+#ifdef NVIDIA_CUDA_GDB
+  int nv_fp6_e2m3_bit = TARGET_CHAR_BIT;
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  const struct floatformat ** nv_fp6_e2m3_format = 0;
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  int nv_fp6_e3m2_bit = TARGET_CHAR_BIT;
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  const struct floatformat ** nv_fp6_e3m2_format = 0;
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  int nv_fp4_e2m1_bit = TARGET_CHAR_BIT;
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  const struct floatformat ** nv_fp4_e2m1_format = 0;
+#endif
   int bfloat16_bit = 2*TARGET_CHAR_BIT;
   const struct floatformat ** bfloat16_format = floatformats_bfloat16;
   int half_bit = 2*TARGET_CHAR_BIT;
@@ -346,6 +364,30 @@ verify_gdbarch (struct gdbarch *gdbarch)
   if (gdbarch->nv_fp8_e4m3_format == 0)
     gdbarch->nv_fp8_e4m3_format = floatformats_nv_fp8_e4m3;
   /* Skip verify of nv_fp8_e4m3_format, invalid_p == 0 */
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  /* Skip verify of nv_fp6_e2m3_bit, invalid_p == 0 */
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  if (gdbarch->nv_fp6_e2m3_format == 0)
+    gdbarch->nv_fp6_e2m3_format = floatformats_nv_fp6_e2m3;
+  /* Skip verify of nv_fp6_e2m3_format, invalid_p == 0 */
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  /* Skip verify of nv_fp6_e3m2_bit, invalid_p == 0 */
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  if (gdbarch->nv_fp6_e3m2_format == 0)
+    gdbarch->nv_fp6_e3m2_format = floatformats_nv_fp6_e3m2;
+  /* Skip verify of nv_fp6_e3m2_format, invalid_p == 0 */
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  /* Skip verify of nv_fp4_e2m1_bit, invalid_p == 0 */
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  if (gdbarch->nv_fp4_e2m1_format == 0)
+    gdbarch->nv_fp4_e2m1_format = floatformats_nv_fp4_e2m1;
+  /* Skip verify of nv_fp4_e2m1_format, invalid_p == 0 */
 #endif
   /* Skip verify of bfloat16_bit, invalid_p == 0 */
   /* Skip verify of bfloat16_format, invalid_p == 0 */
@@ -647,6 +689,36 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: nv_fp8_e4m3_format = %s\n",
 	      pformat (gdbarch, gdbarch->nv_fp8_e4m3_format));
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  gdb_printf (file,
+	      "gdbarch_dump: nv_fp6_e2m3_bit = %s\n",
+	      plongest (gdbarch->nv_fp6_e2m3_bit));
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  gdb_printf (file,
+	      "gdbarch_dump: nv_fp6_e2m3_format = %s\n",
+	      pformat (gdbarch, gdbarch->nv_fp6_e2m3_format));
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  gdb_printf (file,
+	      "gdbarch_dump: nv_fp6_e3m2_bit = %s\n",
+	      plongest (gdbarch->nv_fp6_e3m2_bit));
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  gdb_printf (file,
+	      "gdbarch_dump: nv_fp6_e3m2_format = %s\n",
+	      pformat (gdbarch, gdbarch->nv_fp6_e3m2_format));
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  gdb_printf (file,
+	      "gdbarch_dump: nv_fp4_e2m1_bit = %s\n",
+	      plongest (gdbarch->nv_fp4_e2m1_bit));
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  gdb_printf (file,
+	      "gdbarch_dump: nv_fp4_e2m1_format = %s\n",
+	      pformat (gdbarch, gdbarch->nv_fp4_e2m1_format));
 #endif
   gdb_printf (file,
 	      "gdbarch_dump: bfloat16_bit = %s\n",
@@ -1687,6 +1759,123 @@ set_gdbarch_nv_fp8_e4m3_format (struct gdbarch *gdbarch,
 				const struct floatformat ** nv_fp8_e4m3_format)
 {
   gdbarch->nv_fp8_e4m3_format = nv_fp8_e4m3_format;
+}
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
+int
+gdbarch_nv_fp6_e2m3_bit (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of nv_fp6_e2m3_bit, invalid_p == 0 */
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_nv_fp6_e2m3_bit called\n");
+  return gdbarch->nv_fp6_e2m3_bit;
+}
+
+void
+set_gdbarch_nv_fp6_e2m3_bit (struct gdbarch *gdbarch,
+			     int nv_fp6_e2m3_bit)
+{
+  gdbarch->nv_fp6_e2m3_bit = nv_fp6_e2m3_bit;
+}
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
+const struct floatformat **
+gdbarch_nv_fp6_e2m3_format (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Check variable changed from its initial value.  */
+  gdb_assert (gdbarch->nv_fp6_e2m3_format != 0);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_nv_fp6_e2m3_format called\n");
+  return gdbarch->nv_fp6_e2m3_format;
+}
+
+void
+set_gdbarch_nv_fp6_e2m3_format (struct gdbarch *gdbarch,
+				const struct floatformat ** nv_fp6_e2m3_format)
+{
+  gdbarch->nv_fp6_e2m3_format = nv_fp6_e2m3_format;
+}
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
+int
+gdbarch_nv_fp6_e3m2_bit (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of nv_fp6_e3m2_bit, invalid_p == 0 */
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_nv_fp6_e3m2_bit called\n");
+  return gdbarch->nv_fp6_e3m2_bit;
+}
+
+void
+set_gdbarch_nv_fp6_e3m2_bit (struct gdbarch *gdbarch,
+			     int nv_fp6_e3m2_bit)
+{
+  gdbarch->nv_fp6_e3m2_bit = nv_fp6_e3m2_bit;
+}
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
+const struct floatformat **
+gdbarch_nv_fp6_e3m2_format (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Check variable changed from its initial value.  */
+  gdb_assert (gdbarch->nv_fp6_e3m2_format != 0);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_nv_fp6_e3m2_format called\n");
+  return gdbarch->nv_fp6_e3m2_format;
+}
+
+void
+set_gdbarch_nv_fp6_e3m2_format (struct gdbarch *gdbarch,
+				const struct floatformat ** nv_fp6_e3m2_format)
+{
+  gdbarch->nv_fp6_e3m2_format = nv_fp6_e3m2_format;
+}
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
+int
+gdbarch_nv_fp4_e2m1_bit (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of nv_fp4_e2m1_bit, invalid_p == 0 */
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_nv_fp4_e2m1_bit called\n");
+  return gdbarch->nv_fp4_e2m1_bit;
+}
+
+void
+set_gdbarch_nv_fp4_e2m1_bit (struct gdbarch *gdbarch,
+			     int nv_fp4_e2m1_bit)
+{
+  gdbarch->nv_fp4_e2m1_bit = nv_fp4_e2m1_bit;
+}
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
+const struct floatformat **
+gdbarch_nv_fp4_e2m1_format (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Check variable changed from its initial value.  */
+  gdb_assert (gdbarch->nv_fp4_e2m1_format != 0);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_nv_fp4_e2m1_format called\n");
+  return gdbarch->nv_fp4_e2m1_format;
+}
+
+void
+set_gdbarch_nv_fp4_e2m1_format (struct gdbarch *gdbarch,
+				const struct floatformat ** nv_fp4_e2m1_format)
+{
+  gdbarch->nv_fp4_e2m1_format = nv_fp4_e2m1_format;
 }
 #endif
 

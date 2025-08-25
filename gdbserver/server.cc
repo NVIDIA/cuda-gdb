@@ -183,11 +183,6 @@ get_client_state ()
   return cs;
 }
 
-#ifdef NVIDIA_CUDA_GDB
-/* Whether cuda-gdb should create a global lock file */
-extern bool cuda_use_lockfile;
-#endif
-
 /* Put a stop reply to the stop reply queue.  */
 
 static void
@@ -3465,14 +3460,6 @@ gdbserver_usage (FILE *stream)
 	   "  --help                Print this message and then exit.\n"
 	   "  --version             Display version information and exit.\n"
 	   "\n"
-#ifdef NVIDIA_CUDA_GDB
-	   "CUDA-specific options:\n"
-	   "\n"
-	   "  --cuda-use-lockfile=VALUE\n"
-	   "                     If VALUE == 1, create a lock file for cuda-gdb.\n"
-	   "                     Default behavior is not to create a lock file.\n"
-	   "\n"
-#endif
 	   "Other options:\n"
 	   "\n"
 	   "  --wrapper WRAPPER --  Run WRAPPER to start new programs.\n"
@@ -3884,15 +3871,6 @@ captured_main (int argc, char *argv[])
 	  selftest_filters.push_back (filter);
 #endif
 	}
-#ifdef NVIDIA_CUDA_GDB
-      else if (strncmp (*next_arg,
-			"--cuda-use-lockfile=",
-			sizeof ("--cuda-use-lockfile=") - 1) == 0)
-	{
-	  *next_arg += sizeof ("--cuda-use-lockfile=") - 1;
-	  cuda_use_lockfile = (atoi (*next_arg) != 0);
-	}
-#endif
       else
 	{
 	  fprintf (stderr, "Unknown argument: %s\n", *next_arg);
@@ -4125,7 +4103,6 @@ void
 cuda_final_cleanup (void)
 {
   cuda_gdb_tmpdir_cleanup_self (NULL);
-  cuda_gdb_record_remove_all (NULL);
   cuda_cleanup_trace_messages ();
 }
 #endif

@@ -2,16 +2,16 @@
  * NVIDIA CUDA Debugger CUDA-GDB
  * Copyright (C) 2007-2025 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 3 as
  * published by the Free Software Foundation.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
@@ -21,23 +21,23 @@
 #include "cuda-api.h"
 #include "cuda-coords.h"
 #include "cuda-special-register.h"
-#include "cuda-tdep.h"
 #include "cuda-state.h"
+#include "cuda-tdep.h"
 
 static void cuda_special_register_read_entry (regmap_t regmap,
-                                              uint32_t entry_idx,
-                                              uint32_t *buf);
+					      uint32_t entry_idx,
+					      uint32_t *buf);
 static void cuda_special_register_write_entry (regmap_t regmap,
-                                               uint32_t entry_idx,
-                                               const uint32_t *buf);
+					       uint32_t entry_idx,
+					       const uint32_t *buf);
 
 /* Returns true if the contents of regmap have matching values.
- 
+
    There may be more than one instance per location index.  All those
    locations contain the same value. This is the expected behavior when the
    application is compiled with -G. Otherwise, anything is possible and we
    must bail out.
-  
+
    When there are multiple locations for the same value, we read & write all
    of them to keep things consistent.
  */
@@ -62,33 +62,34 @@ cuda_special_register_has_matching_values (regmap_t regmap)
     {
       location_index = regmap_get_location_index (regmap, i);
       if (max_location_index == ~0U || location_index > max_location_index)
-        max_location_index = location_index;
+	max_location_index = location_index;
     }
   gdb_assert (max_location_index != ~0U);
 
   /* Check all the values with the same location index are identical */
-  for (location_index = 0; location_index <= max_location_index; ++location_index)
+  for (location_index = 0; location_index <= max_location_index;
+       ++location_index)
     {
       ref_raw_value_available = false;
 
       for (i = 0; i < num_entries; ++i)
-        {
-          if (regmap_get_location_index (regmap, i) != location_index)
-            continue;
+	{
+	  if (regmap_get_location_index (regmap, i) != location_index)
+	    continue;
 
-          if (!ref_raw_value_available)
-            {
-              ref_raw_value = 0U;
-              cuda_special_register_read_entry (regmap, i, &ref_raw_value);
-              ref_raw_value_available = true;
-              continue;
-            }
+	  if (!ref_raw_value_available)
+	    {
+	      ref_raw_value = 0U;
+	      cuda_special_register_read_entry (regmap, i, &ref_raw_value);
+	      ref_raw_value_available = true;
+	      continue;
+	    }
 
-          raw_value = 0U;
-          cuda_special_register_read_entry (regmap, i, &raw_value);
-          if (raw_value != ref_raw_value)
-            return false;
-        }
+	  raw_value = 0U;
+	  cuda_special_register_read_entry (regmap, i, &raw_value);
+	  if (raw_value != ref_raw_value)
+	    return false;
+	}
     }
 
   return true;
@@ -104,7 +105,8 @@ cuda_special_register_p (regmap_t regmap)
   if (num_regs == 0)
     return false;
 
-  /* Only 1 full register does not require using the special register framework */
+  /* Only 1 full register does not require using the special register framework
+   */
   if (num_regs == 1)
     {
       const auto reg_class = regmap_get_class (regmap, 0);
@@ -124,9 +126,8 @@ cuda_special_register_p (regmap_t regmap)
 }
 
 static void
-cuda_special_register_read_entry (regmap_t regmap,
-                                  uint32_t entry_idx,
-                                  uint32_t *buf)
+cuda_special_register_read_entry (regmap_t regmap, uint32_t entry_idx,
+				  uint32_t *buf)
 {
   uint32_t stack_addr, offset, sz, regnum;
   int sp_regnum, tmp;
@@ -136,22 +137,23 @@ cuda_special_register_read_entry (regmap_t regmap,
   gdb_assert (buf);
   gdb_assert (regmap_is_readable (regmap));
 
-  const auto& c = cuda_current_focus::get ().physical ();
+  const auto &c = cuda_current_focus::get ().physical ();
 
   sz = sizeof *buf;
 
   switch (regmap_get_class (regmap, entry_idx))
-  {
+    {
     case REG_CLASS_REG_FULL:
       regnum = regmap_get_register (regmap, entry_idx);
-      *buf = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (), regnum);
+      *buf = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (),
+					    c.ln (), regnum);
       break;
 
     case REG_CLASS_MEM_LOCAL:
       gdb_assert (!cuda_current_active_elf_image_uses_abi ());
       offset = regmap_get_offset (regmap, entry_idx);
-      if (!cuda_debugapi::read_local_memory (c.dev (), c.sm (), c.wp (), c.ln (),
-					     offset, buf, sz))
+      if (!cuda_debugapi::read_local_memory (c.dev (), c.sm (), c.wp (),
+					     c.ln (), offset, buf, sz))
 	error ("%s: Could not read local memory address 0x%x size %u",
 	       __FUNCTION__, offset, sz);
       break;
@@ -160,55 +162,61 @@ cuda_special_register_read_entry (regmap_t regmap,
       gdb_assert (cuda_current_active_elf_image_uses_abi ());
       sp_regnum = regmap_get_sp_register (regmap, entry_idx);
       offset = regmap_get_sp_offset (regmap, entry_idx);
-      stack_addr = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (), sp_regnum);
-      if (!cuda_debugapi::read_local_memory (c.dev (), c.sm (), c.wp (), c.ln (),
-					     stack_addr + offset, buf, sz))
+      stack_addr = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (),
+						  c.ln (), sp_regnum);
+      if (!cuda_debugapi::read_local_memory (c.dev (), c.sm (), c.wp (),
+					     c.ln (), stack_addr + offset, buf,
+					     sz))
 	error ("%s: Could not read local memory address 0x%x size %u",
 	       __FUNCTION__, stack_addr + offset, sz);
       break;
 
     case REG_CLASS_REG_HALF:
       regnum = regmap_get_half_register (regmap, entry_idx, &high);
-      tmp = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (), regnum);
+      tmp = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (),
+					   regnum);
       *buf = high ? tmp >> 16 : tmp & 0xffff;
       break;
 
     case REG_CLASS_REG_PRED:
       regnum = regmap_get_predicate (regmap, entry_idx);
-      *buf = cuda_state::lane_get_predicate (c.dev (), c.sm (), c.wp (), c.ln (), regnum);
+      *buf = cuda_state::lane_get_predicate (c.dev (), c.sm (), c.wp (),
+					     c.ln (), regnum);
       break;
 
     case REG_CLASS_UREG_FULL:
       regnum = regmap_get_uregister (regmap, entry_idx);
-      *buf = cuda_state::warp_get_uregister (c.dev (), c.sm (), c.wp (), regnum);
+      *buf = cuda_state::warp_get_uregister (c.dev (), c.sm (), c.wp (),
+					     regnum);
       break;
 
     case REG_CLASS_UREG_HALF:
       regnum = regmap_get_half_uregister (regmap, entry_idx, &high);
-      tmp = cuda_state::warp_get_uregister (c.dev (), c.sm (), c.wp (), regnum);
+      tmp = cuda_state::warp_get_uregister (c.dev (), c.sm (), c.wp (),
+					    regnum);
       *buf = high ? tmp >> 16 : tmp & 0xffff;
       break;
 
     case REG_CLASS_UREG_PRED:
       regnum = regmap_get_upredicate (regmap, entry_idx);
-      *buf = cuda_state::warp_get_upredicate (c.dev (), c.sm (), c.wp (), regnum);
+      *buf = cuda_state::warp_get_upredicate (c.dev (), c.sm (), c.wp (),
+					      regnum);
       break;
 
     case REG_CLASS_REG_CC:
     case REG_CLASS_REG_ADDR:
-      error (_("CUDA Register Class 0x%x not supported yet."),
-             regmap_get_class (regmap, entry_idx));
+      error (_ ("CUDA Register Class 0x%x not supported yet."),
+	     regmap_get_class (regmap, entry_idx));
       break;
 
     default:
       gdb_assert (0);
-  }
+    }
 }
 
 static void
-cuda_special_register_write_entry (regmap_t regmap,
-                                   uint32_t entry_idx,
-                                   const uint32_t *buf)
+cuda_special_register_write_entry (regmap_t regmap, uint32_t entry_idx,
+				   const uint32_t *buf)
 {
   uint32_t stack_addr, offset, sz, old_val, new_val, regnum;
   void *ptr;
@@ -218,17 +226,18 @@ cuda_special_register_write_entry (regmap_t regmap,
   gdb_assert (regmap);
   gdb_assert (buf);
 
-  const auto& c = cuda_current_focus::get ().physical ();
+  const auto &c = cuda_current_focus::get ().physical ();
 
-  ptr = (void*)buf;
+  ptr = (void *)buf;
   sz = sizeof *buf;
 
   switch (regmap_get_class (regmap, entry_idx))
-  {
+    {
     case REG_CLASS_MEM_LOCAL:
       gdb_assert (!cuda_current_active_elf_image_uses_abi ());
       offset = regmap_get_offset (regmap, entry_idx);
-      if (!cuda_debugapi::write_local_memory (c.dev (), c.sm (), c.wp (), c.ln (), offset, ptr, sz))
+      if (!cuda_debugapi::write_local_memory (c.dev (), c.sm (), c.wp (),
+					      c.ln (), offset, ptr, sz))
 	error ("%s: Could not write local memory address 0x%x size %u",
 	       __FUNCTION__, offset, sz);
       break;
@@ -237,62 +246,72 @@ cuda_special_register_write_entry (regmap_t regmap,
       gdb_assert (cuda_current_active_elf_image_uses_abi ());
       sp_regnum = regmap_get_sp_register (regmap, entry_idx);
       offset = regmap_get_sp_offset (regmap, entry_idx);
-      stack_addr = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (), sp_regnum);
-      if (!cuda_debugapi::write_local_memory (c.dev (), c.sm (), c.wp (), c.ln (),
-					      stack_addr + offset, ptr, sz))
+      stack_addr = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (),
+						  c.ln (), sp_regnum);
+      if (!cuda_debugapi::write_local_memory (c.dev (), c.sm (), c.wp (),
+					      c.ln (), stack_addr + offset,
+					      ptr, sz))
 	error ("%s: Could not write local memory address 0x%x size %u",
 	       __FUNCTION__, stack_addr + offset, sz);
       break;
 
     case REG_CLASS_REG_FULL:
       regnum = regmap_get_register (regmap, entry_idx);
-      cuda_state::lane_set_register (c.dev (), c.sm (), c.wp (), c.ln (), regnum, *buf);
+      cuda_state::lane_set_register (c.dev (), c.sm (), c.wp (), c.ln (),
+				     regnum, *buf);
       break;
 
     case REG_CLASS_REG_HALF:
       regnum = regmap_get_half_register (regmap, entry_idx, &high);
-      old_val = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (), c.ln (), regnum);
+      old_val = cuda_state::lane_get_register (c.dev (), c.sm (), c.wp (),
+					       c.ln (), regnum);
       if (high)
-        new_val = (*buf << 16) | (old_val & 0x0000ffff);
+	new_val = (*buf << 16) | (old_val & 0x0000ffff);
       else
-        new_val = (old_val & 0xffff0000) | (*buf);
-      cuda_state::lane_set_register (c.dev (), c.sm (), c.wp (), c.ln (), regnum, new_val);
+	new_val = (old_val & 0xffff0000) | (*buf);
+      cuda_state::lane_set_register (c.dev (), c.sm (), c.wp (), c.ln (),
+				     regnum, new_val);
       break;
 
     case REG_CLASS_REG_PRED:
       regnum = regmap_get_predicate (regmap, entry_idx);
-      cuda_state::lane_set_predicate (c.dev (), c.sm (), c.wp (), c.ln (), regnum, *buf);
+      cuda_state::lane_set_predicate (c.dev (), c.sm (), c.wp (), c.ln (),
+				      regnum, *buf);
       break;
 
     case REG_CLASS_UREG_FULL:
       regnum = regmap_get_uregister (regmap, entry_idx);
-      cuda_state::warp_set_uregister (c.dev (), c.sm (), c.wp (), regnum, *buf);
+      cuda_state::warp_set_uregister (c.dev (), c.sm (), c.wp (), regnum,
+				      *buf);
       break;
 
     case REG_CLASS_UREG_HALF:
       regnum = regmap_get_half_uregister (regmap, entry_idx, &high);
-      old_val = cuda_state::warp_get_uregister (c.dev (), c.sm (), c.wp (), regnum);
+      old_val = cuda_state::warp_get_uregister (c.dev (), c.sm (), c.wp (),
+						regnum);
       if (high)
-        new_val = (*buf << 16) | (old_val & 0x0000ffff);
+	new_val = (*buf << 16) | (old_val & 0x0000ffff);
       else
-        new_val = (old_val & 0xffff0000) | (*buf);
-      cuda_state::warp_set_uregister (c.dev (), c.sm (), c.wp (), regnum, new_val);
+	new_val = (old_val & 0xffff0000) | (*buf);
+      cuda_state::warp_set_uregister (c.dev (), c.sm (), c.wp (), regnum,
+				      new_val);
       break;
 
     case REG_CLASS_UREG_PRED:
       regnum = regmap_get_upredicate (regmap, entry_idx);
-      cuda_state::warp_set_upredicate (c.dev (), c.sm (), c.wp (), regnum, *buf);
+      cuda_state::warp_set_upredicate (c.dev (), c.sm (), c.wp (), regnum,
+				       *buf);
       break;
 
     case REG_CLASS_REG_CC:
     case REG_CLASS_REG_ADDR:
-      error (_("CUDA Register Class 0x%x not supported yet."),
-             regmap_get_class (regmap, entry_idx));
+      error (_ ("CUDA Register Class 0x%x not supported yet."),
+	     regmap_get_class (regmap, entry_idx));
       break;
 
     default:
       gdb_assert (0);
-  }
+    }
 }
 
 void
@@ -302,12 +321,12 @@ cuda_special_register_read (regmap_t regmap, gdb_byte *buf)
   gdb_assert (buf);
 
   if (!regmap_is_readable (regmap))
-    error (_("Read request impossible. Insufficient debug information."));
+    error (_ ("Read request impossible. Insufficient debug information."));
 
   for (auto i = 0; i < regmap_get_num_entries (regmap); ++i)
     {
       const auto idx = regmap_get_location_index (regmap, i);
-      auto ptr = &((uint32_t*)buf)[idx];
+      auto ptr = &((uint32_t *)buf)[idx];
       cuda_special_register_read_entry (regmap, i, ptr);
     }
 }
@@ -319,19 +338,19 @@ cuda_special_register_write (regmap_t regmap, const gdb_byte *buf)
   gdb_assert (buf);
 
   if (!regmap_is_writable (regmap))
-    error (_("Write request impossible. Insufficient debug information."));
+    error (_ ("Write request impossible. Insufficient debug information."));
 
   for (auto i = 0; i < regmap_get_num_entries (regmap); ++i)
     {
       const auto idx = regmap_get_location_index (regmap, i);
-      auto ptr = &((uint32_t*)buf)[idx];
+      auto ptr = &((uint32_t *)buf)[idx];
       cuda_special_register_write_entry (regmap, i, ptr);
     }
 }
 
 void
 cuda_special_register_to_value (regmap_t regmap, frame_info_ptr frame,
-                                gdb_byte *to)
+				gdb_byte *to)
 {
   int i = 0, regnum = 0;
   bool high = false;
@@ -343,7 +362,7 @@ cuda_special_register_to_value (regmap_t regmap, frame_info_ptr frame,
   gdb_assert (to);
   gdb_assert (regmap_is_readable (regmap));
 
-  const auto& c = cuda_current_focus::get ().physical ();
+  const auto &c = cuda_current_focus::get ().physical ();
   const auto tdep = gdbarch_tdep<cuda_gdbarch_tdep> (cuda_get_gdbarch ());
 
   for (i = 0; i < regmap_get_num_entries (regmap); ++i)
@@ -351,74 +370,82 @@ cuda_special_register_to_value (regmap_t regmap, frame_info_ptr frame,
       idx = regmap_get_location_index (regmap, i);
 
       switch (regmap_get_class (regmap, i))
-        {
-          case REG_CLASS_MEM_LOCAL:
-            offset = regmap_get_offset (regmap, i);
-            if (!cuda_debugapi::read_local_memory (c.dev (), c.sm (), c.wp (), c.ln (),
-						   offset,
-						   (void*)&p[idx], sizeof (p[idx])))
-	      error ("%s: Could not read local memory address 0x%x size %u",
-		     __FUNCTION__, offset, (uint32_t)sizeof (p[idx]));
-            break;
+	{
+	case REG_CLASS_MEM_LOCAL:
+	  offset = regmap_get_offset (regmap, i);
+	  if (!cuda_debugapi::read_local_memory (
+		  c.dev (), c.sm (), c.wp (), c.ln (), offset, (void *)&p[idx],
+		  sizeof (p[idx])))
+	    error ("%s: Could not read local memory address 0x%x size %u",
+		   __FUNCTION__, offset, (uint32_t)sizeof (p[idx]));
+	  break;
 
-          case REG_CLASS_LMEM_REG_OFFSET:
-            sp_regnum = regmap_get_sp_register (regmap, i);
-            offset = regmap_get_sp_offset (regmap, i);
-            get_frame_register (frame, sp_regnum  + tdep->first_regnum, (gdb_byte*)&stack_addr);
-            if (!cuda_debugapi::read_local_memory (c.dev (), c.sm (), c.wp (), c.ln (),
-						   stack_addr + offset,
-						   (void*)&p[idx], sizeof (p[idx])))
-	      error ("%s: Could not read local memory address 0x%x size %u",
-		     __FUNCTION__, stack_addr + offset, (uint32_t)sizeof (p[idx]));
-            break;
+	case REG_CLASS_LMEM_REG_OFFSET:
+	  sp_regnum = regmap_get_sp_register (regmap, i);
+	  offset = regmap_get_sp_offset (regmap, i);
+	  get_frame_register (frame, sp_regnum + tdep->first_regnum,
+			      (gdb_byte *)&stack_addr);
+	  if (!cuda_debugapi::read_local_memory (
+		  c.dev (), c.sm (), c.wp (), c.ln (), stack_addr + offset,
+		  (void *)&p[idx], sizeof (p[idx])))
+	    error ("%s: Could not read local memory address 0x%x size %u",
+		   __FUNCTION__, stack_addr + offset,
+		   (uint32_t)sizeof (p[idx]));
+	  break;
 
-          case REG_CLASS_REG_FULL:
-            regnum = regmap_get_register (regmap, i);
-            get_frame_register (frame, regnum + tdep->first_regnum, (gdb_byte*)&p[idx]);
-            break;
+	case REG_CLASS_REG_FULL:
+	  regnum = regmap_get_register (regmap, i);
+	  get_frame_register (frame, regnum + tdep->first_regnum,
+			      (gdb_byte *)&p[idx]);
+	  break;
 
-          case REG_CLASS_REG_HALF:
-            regnum = regmap_get_half_register (regmap, i, &high);
-            get_frame_register (frame, regnum + tdep->first_regnum, (gdb_byte*)&val32);
-            p[idx] = high ? val32 >> 16 : val32 & 0xffff;
-            break;
+	case REG_CLASS_REG_HALF:
+	  regnum = regmap_get_half_register (regmap, i, &high);
+	  get_frame_register (frame, regnum + tdep->first_regnum,
+			      (gdb_byte *)&val32);
+	  p[idx] = high ? val32 >> 16 : val32 & 0xffff;
+	  break;
 
-          case REG_CLASS_REG_PRED:
-            regnum = regmap_get_predicate (regmap, i);
-            get_frame_register (frame, regnum + tdep->first_pred_regnum, (gdb_byte*)&p[idx]);
-            break;
+	case REG_CLASS_REG_PRED:
+	  regnum = regmap_get_predicate (regmap, i);
+	  get_frame_register (frame, regnum + tdep->first_pred_regnum,
+			      (gdb_byte *)&p[idx]);
+	  break;
 
-          case REG_CLASS_UREG_FULL:
-            regnum = regmap_get_uregister (regmap, i);
-            get_frame_register (frame, regnum + tdep->first_uregnum, (gdb_byte*)&p[idx]);
-            break;
+	case REG_CLASS_UREG_FULL:
+	  regnum = regmap_get_uregister (regmap, i);
+	  get_frame_register (frame, regnum + tdep->first_uregnum,
+			      (gdb_byte *)&p[idx]);
+	  break;
 
-          case REG_CLASS_UREG_HALF:
-            regnum = regmap_get_half_uregister (regmap, i, &high);
-            get_frame_register (frame, regnum + tdep->first_uregnum, (gdb_byte*)&val32);
-            p[idx] = high ? val32 >> 16 : val32 & 0xffff;
-            break;
+	case REG_CLASS_UREG_HALF:
+	  regnum = regmap_get_half_uregister (regmap, i, &high);
+	  get_frame_register (frame, regnum + tdep->first_uregnum,
+			      (gdb_byte *)&val32);
+	  p[idx] = high ? val32 >> 16 : val32 & 0xffff;
+	  break;
 
-          case REG_CLASS_UREG_PRED:
-            regnum = regmap_get_upredicate (regmap, i);
-            get_frame_register (frame, regnum + tdep->first_upred_regnum, (gdb_byte*)&p[idx]);
-            break;
+	case REG_CLASS_UREG_PRED:
+	  regnum = regmap_get_upredicate (regmap, i);
+	  get_frame_register (frame, regnum + tdep->first_upred_regnum,
+			      (gdb_byte *)&p[idx]);
+	  break;
 
-          case REG_CLASS_REG_CC:
-          case REG_CLASS_REG_ADDR:
-            error (_("CUDA Register Class 0x%x not supported yet."),
-                   regmap_get_class (regmap, i));
-            break;
+	case REG_CLASS_REG_CC:
+	case REG_CLASS_REG_ADDR:
+	  error (_ ("CUDA Register Class 0x%x not supported yet."),
+		 regmap_get_class (regmap, i));
+	  break;
 
-          default:
-            gdb_assert (0);
-        }
+	default:
+	  gdb_assert (0);
+	}
     }
 }
 
 void
 cuda_value_to_special_register (regmap_t regmap, frame_info_ptr frame,
-                                const gdb_byte *from)
+				const gdb_byte *from)
 {
   int i = 0, regnum = 0;
   bool high = false;
@@ -430,9 +457,9 @@ cuda_value_to_special_register (regmap_t regmap, frame_info_ptr frame,
   gdb_assert (from);
 
   if (!regmap_is_writable (regmap))
-    error (_("Write request impossible. Insufficient debug information."));
+    error (_ ("Write request impossible. Insufficient debug information."));
 
-  const auto& c = cuda_current_focus::get ().physical ();
+  const auto &c = cuda_current_focus::get ().physical ();
   const auto tdep = gdbarch_tdep<cuda_gdbarch_tdep> (cuda_get_gdbarch ());
 
   for (i = 0; i < regmap_get_num_entries (regmap); ++i)
@@ -440,72 +467,82 @@ cuda_value_to_special_register (regmap_t regmap, frame_info_ptr frame,
       idx = regmap_get_location_index (regmap, i);
 
       switch (regmap_get_class (regmap, i))
-        {
-          case REG_CLASS_MEM_LOCAL:
-            offset = regmap_get_offset (regmap, i);
-            if (!cuda_debugapi::write_local_memory (c.dev (), c.sm (), c.wp (), c.ln (),
-						    offset,
-						    (void*)&p[idx], sizeof (p[idx])))
-	      error ("%s: Could not write local memory address 0x%x size %u",
-		     __FUNCTION__, offset, (uint32_t)sizeof (p[idx]));
-            break;
+	{
+	case REG_CLASS_MEM_LOCAL:
+	  offset = regmap_get_offset (regmap, i);
+	  if (!cuda_debugapi::write_local_memory (
+		  c.dev (), c.sm (), c.wp (), c.ln (), offset, (void *)&p[idx],
+		  sizeof (p[idx])))
+	    error ("%s: Could not write local memory address 0x%x size %u",
+		   __FUNCTION__, offset, (uint32_t)sizeof (p[idx]));
+	  break;
 
-          case REG_CLASS_LMEM_REG_OFFSET:
-            sp_regnum = regmap_get_sp_register (regmap, i);
-            offset = regmap_get_sp_offset (regmap, i);
-            get_frame_register (frame, sp_regnum + tdep->first_regnum, (gdb_byte*)&stack_addr);
-            if (!cuda_debugapi::write_local_memory (c.dev (), c.sm (), c.wp (), c.ln (),
-						    stack_addr + offset,
-						    (void*)&p[idx], sizeof (p[idx])))
-	      error ("%s: Could not write local memory address 0x%x size %u",
-		     __FUNCTION__, stack_addr + offset, (uint32_t)sizeof (p[idx]));
-            break;
+	case REG_CLASS_LMEM_REG_OFFSET:
+	  sp_regnum = regmap_get_sp_register (regmap, i);
+	  offset = regmap_get_sp_offset (regmap, i);
+	  get_frame_register (frame, sp_regnum + tdep->first_regnum,
+			      (gdb_byte *)&stack_addr);
+	  if (!cuda_debugapi::write_local_memory (
+		  c.dev (), c.sm (), c.wp (), c.ln (), stack_addr + offset,
+		  (void *)&p[idx], sizeof (p[idx])))
+	    error ("%s: Could not write local memory address 0x%x size %u",
+		   __FUNCTION__, stack_addr + offset,
+		   (uint32_t)sizeof (p[idx]));
+	  break;
 
-          case REG_CLASS_REG_FULL:
-            regnum = regmap_get_register (regmap, i);
-            put_frame_register (frame, regnum + tdep->first_regnum, (gdb_byte*)&p[idx]);
-            break;
+	case REG_CLASS_REG_FULL:
+	  regnum = regmap_get_register (regmap, i);
+	  put_frame_register (frame, regnum + tdep->first_regnum,
+			      (gdb_byte *)&p[idx]);
+	  break;
 
-          case REG_CLASS_REG_HALF:
-            regnum = regmap_get_half_register (regmap, i, &high);
-            get_frame_register (frame, regnum + tdep->first_regnum, (gdb_byte*)&val32);
-            val32 = high ? (val32 & 0xffff)     | (p[idx] << 16)
-                         : (val32 & 0xffff0000) | (p[idx] & 0xffff);
-            put_frame_register (frame, regnum + tdep->first_regnum, (gdb_byte*)&val32);
-            break;
+	case REG_CLASS_REG_HALF:
+	  regnum = regmap_get_half_register (regmap, i, &high);
+	  get_frame_register (frame, regnum + tdep->first_regnum,
+			      (gdb_byte *)&val32);
+	  val32 = high ? (val32 & 0xffff) | (p[idx] << 16)
+		       : (val32 & 0xffff0000) | (p[idx] & 0xffff);
+	  put_frame_register (frame, regnum + tdep->first_regnum,
+			      (gdb_byte *)&val32);
+	  break;
 
-          case REG_CLASS_REG_PRED:
-            regnum = regmap_get_predicate (regmap, i);
-            put_frame_register (frame, regnum + tdep->first_pred_regnum, (gdb_byte*)&p[idx]);
-            break;
+	case REG_CLASS_REG_PRED:
+	  regnum = regmap_get_predicate (regmap, i);
+	  put_frame_register (frame, regnum + tdep->first_pred_regnum,
+			      (gdb_byte *)&p[idx]);
+	  break;
 
-          case REG_CLASS_UREG_FULL:
-            regnum = regmap_get_uregister (regmap, i);
-            put_frame_register (frame, regnum + tdep->first_uregnum, (gdb_byte*)&p[idx]);
-            break;
+	case REG_CLASS_UREG_FULL:
+	  regnum = regmap_get_uregister (regmap, i);
+	  put_frame_register (frame, regnum + tdep->first_uregnum,
+			      (gdb_byte *)&p[idx]);
+	  break;
 
-          case REG_CLASS_UREG_HALF:
-            regnum = regmap_get_half_uregister (regmap, i, &high);
-            get_frame_register (frame, regnum + tdep->first_uregnum, (gdb_byte*)&val32);
-            val32 = high ? (val32 & 0xffff)     | (p[idx] << 16)
-                         : (val32 & 0xffff0000) | (p[idx] & 0xffff);
-            put_frame_register (frame, regnum + tdep->first_uregnum, (gdb_byte*)&val32);
-            break;
+	case REG_CLASS_UREG_HALF:
+	  regnum = regmap_get_half_uregister (regmap, i, &high);
+	  get_frame_register (frame, regnum + tdep->first_uregnum,
+			      (gdb_byte *)&val32);
+	  val32 = high ? (val32 & 0xffff) | (p[idx] << 16)
+		       : (val32 & 0xffff0000) | (p[idx] & 0xffff);
+	  put_frame_register (frame, regnum + tdep->first_uregnum,
+			      (gdb_byte *)&val32);
+	  break;
 
-          case REG_CLASS_UREG_PRED:
-            regnum = regmap_get_upredicate (regmap, i);
-            put_frame_register (frame, regnum + tdep->first_upred_regnum, (gdb_byte*)&p[idx]);
-            break;
+	case REG_CLASS_UREG_PRED:
+	  regnum = regmap_get_upredicate (regmap, i);
+	  put_frame_register (frame, regnum + tdep->first_upred_regnum,
+			      (gdb_byte *)&p[idx]);
+	  break;
 
-          case REG_CLASS_REG_CC:
-          case REG_CLASS_REG_ADDR:
-            error (_("CUDA Register Class 0x%x not supported yet."),
-                   regmap_get_class (regmap, i));
-            break;
+	case REG_CLASS_REG_CC:
+	case REG_CLASS_REG_ADDR:
+	  error (_ ("CUDA Register Class 0x%x not supported yet."),
+		 regmap_get_class (regmap, i));
+	  break;
 
-          default:
-            gdb_assert (0);
-        }
+	default:
+	  gdb_assert (0);
+	}
     }
 }
 
@@ -534,60 +571,62 @@ cuda_special_register_name (regmap_t regmap, char *buf, const int size)
   for (auto i = 0; i < regmap_get_num_entries (regmap); ++i)
     {
       if (i > 0)
-        d += snprintf (buf + d, size - 1 - d, "/$");
+	d += snprintf (buf + d, size - 1 - d, "/$");
 
       switch (regmap_get_class (regmap, regs[i]))
-        {
-          case REG_CLASS_MEM_LOCAL:
-            offset = regmap_get_offset (regmap, regs[i]);
-            d += snprintf (buf + d, size - 1 - d, "(spilled @ 0x%x)", offset);
-            break;
+	{
+	case REG_CLASS_MEM_LOCAL:
+	  offset = regmap_get_offset (regmap, regs[i]);
+	  d += snprintf (buf + d, size - 1 - d, "(spilled @ 0x%x)", offset);
+	  break;
 
-          case REG_CLASS_LMEM_REG_OFFSET:
-            sp_regnum = regmap_get_sp_register (regmap, regs[i]);
-            offset = regmap_get_sp_offset (regmap, regs[i]);
-            d += snprintf (buf + d, size - 1 - d, "(spilled @ [R%d]+0x%x)",
-                           sp_regnum, offset);
-            break;
+	case REG_CLASS_LMEM_REG_OFFSET:
+	  sp_regnum = regmap_get_sp_register (regmap, regs[i]);
+	  offset = regmap_get_sp_offset (regmap, regs[i]);
+	  d += snprintf (buf + d, size - 1 - d, "(spilled @ [R%d]+0x%x)",
+			 sp_regnum, offset);
+	  break;
 
-          case REG_CLASS_REG_FULL:
-            regnum = regmap_get_register (regmap, regs[i]);
-            d += snprintf (buf + d, size - 1 - d, "R%d", regnum);
-            break;
+	case REG_CLASS_REG_FULL:
+	  regnum = regmap_get_register (regmap, regs[i]);
+	  d += snprintf (buf + d, size - 1 - d, "R%d", regnum);
+	  break;
 
-          case REG_CLASS_REG_HALF:
-            regnum = regmap_get_half_register (regmap, regs[i], &high);
-            d += snprintf (buf + d, size - 1 - d, "R%d.%s", regnum, high ? "hi" : "lo");
-            break;
+	case REG_CLASS_REG_HALF:
+	  regnum = regmap_get_half_register (regmap, regs[i], &high);
+	  d += snprintf (buf + d, size - 1 - d, "R%d.%s", regnum,
+			 high ? "hi" : "lo");
+	  break;
 
-          case REG_CLASS_REG_PRED:
-            regnum = regmap_get_predicate (regmap, regs[i]);
-            d += snprintf (buf + d, size - 1 - d, "P%d", regnum);
-            break;
+	case REG_CLASS_REG_PRED:
+	  regnum = regmap_get_predicate (regmap, regs[i]);
+	  d += snprintf (buf + d, size - 1 - d, "P%d", regnum);
+	  break;
 
-          case REG_CLASS_UREG_FULL:
-            regnum = regmap_get_uregister (regmap, regs[i]);
-            d += snprintf (buf + d, size - 1 - d, "UR%d", regnum);
-            break;
+	case REG_CLASS_UREG_FULL:
+	  regnum = regmap_get_uregister (regmap, regs[i]);
+	  d += snprintf (buf + d, size - 1 - d, "UR%d", regnum);
+	  break;
 
-          case REG_CLASS_UREG_HALF:
-            regnum = regmap_get_half_uregister (regmap, regs[i], &high);
-            d += snprintf (buf + d, size - 1 - d, "UR%d.%s", regnum, high ? "hi" : "lo");
-            break;
+	case REG_CLASS_UREG_HALF:
+	  regnum = regmap_get_half_uregister (regmap, regs[i], &high);
+	  d += snprintf (buf + d, size - 1 - d, "UR%d.%s", regnum,
+			 high ? "hi" : "lo");
+	  break;
 
-          case REG_CLASS_UREG_PRED:
-            regnum = regmap_get_upredicate (regmap, regs[i]);
-            d += snprintf (buf + d, size - 1 - d, "UP%d", regnum);
-            break;
+	case REG_CLASS_UREG_PRED:
+	  regnum = regmap_get_upredicate (regmap, regs[i]);
+	  d += snprintf (buf + d, size - 1 - d, "UP%d", regnum);
+	  break;
 
-          case REG_CLASS_REG_CC:
-          case REG_CLASS_REG_ADDR:
-            error (_("CUDA Register Class 0x%x not supported yet."),
-                   regmap_get_class (regmap, regs[i]));
-            break;
+	case REG_CLASS_REG_CC:
+	case REG_CLASS_REG_ADDR:
+	  error (_ ("CUDA Register Class 0x%x not supported yet."),
+		 regmap_get_class (regmap, regs[i]));
+	  break;
 
-          default:
-            gdb_assert (0);
-        }
+	default:
+	  gdb_assert (0);
+	}
     }
 }

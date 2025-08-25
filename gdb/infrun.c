@@ -7373,9 +7373,7 @@ process_event_stop_test (struct execution_control_state *ecs)
        * be capturing previous_cuda_coords and instead rely on coords stored
        * in the ecs thread. */
       const auto& cur = cuda_current_focus::get ();
-      bool new_coords = cuda_options_software_preemption ()
-	      ? cur.logical () != previous_cuda_coords.logical () :
-	        cur != previous_cuda_coords;
+      bool new_coords = (cur != previous_cuda_coords);
       if (new_coords)
 	{
 	  end_stepping_range (ecs);

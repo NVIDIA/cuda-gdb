@@ -20,6 +20,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "defs.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -170,7 +175,11 @@ fortran_bounds_all_dims (bool lbound_p,
       gdb_assert (dst_offset + v->type ()->length ()
 		  <= result->type ()->length ());
       gdb_assert (v->type ()->length () == elm_len);
+#ifdef NVIDIA_CHERRY_PICK
+      v->contents_copy (result, dst_offset, 0, 0, elm_len);
+#else
       v->contents_copy (result, dst_offset, 0, elm_len);
+#endif
 
       /* Peel another dimension of the array.  */
       array_type = array_type->target_type ();
@@ -292,7 +301,11 @@ protected:
      available offset.  */
   void copy_element_to_dest (struct value *elt)
   {
+#ifdef NVIDIA_CHERRY_PICK
+    elt->contents_copy (m_dest, m_dest_offset, 0, 0,
+#else
     elt->contents_copy (m_dest, m_dest_offset, 0,
+#endif
 			elt->type ()->length ());
     m_dest_offset += elt->type ()->length ();
   }
@@ -755,7 +768,11 @@ fortran_array_shape (struct gdbarch *gdbarch, const language_defn *lang,
       gdb_assert (dst_offset + v->type ()->length ()
 		  <= result->type ()->length ());
       gdb_assert (v->type ()->length () == elm_len);
+#ifdef NVIDIA_CHERRY_PICK
+      v->contents_copy (result, dst_offset, 0, 0, elm_len);
+#else
       v->contents_copy (result, dst_offset, 0, elm_len);
+#endif
 
       /* Peel another dimension of the array.  */
       val_type = val_type->target_type ();

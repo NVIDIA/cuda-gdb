@@ -19,9 +19,9 @@
 #ifndef _CUDA_TDEP_H
 #define _CUDA_TDEP_H 1
 
-#include "gdbarch.h"
 #include "cuda-api.h"
 #include "cuda-coords.h"
+#include "gdbarch.h"
 
 #include <vector>
 
@@ -32,32 +32,32 @@ struct gdbarch;
 
 #define EV_CURRENT 1
 #define ELFOSABI_CUDA 0x33
-#define CUDA_ELFOSABIV_16BIT   0 /* 16-bit ctaid.x size */
-#define CUDA_ELFOSABIV_32BIT   1 /* 32-bit ctaid.x size */
-#define CUDA_ELFOSABIV_RELOC   2 /* ELFOSABIV_32BIT + All relocators in DWARF*/
-#define CUDA_ELFOSABIV_ABI     3   /* ELFOSABIV_RELOC + Calling Convention */
-#define CUDA_ELFOSABIV_SYSCALL 4 /* ELFOSABIV_ABI + Improved syscall relocation */
-#define CUDA_ELFOSABIV_SEPCOMP 5 /* ELFOSABIV_SYSCALL + new caller-callee save conventions */
-#define CUDA_ELFOSABIV_ABI3    6 /* ELFOSABIV_SEPCOMP + fixes */
-#define CUDA_ELFOSABIV_ABI4    7 /* ELFOSABIV_ABI3 + runtime JIT link */
+#define CUDA_ELFOSABIV_16BIT 0	 /* 16-bit ctaid.x size */
+#define CUDA_ELFOSABIV_32BIT 1	 /* 32-bit ctaid.x size */
+#define CUDA_ELFOSABIV_RELOC 2	 /* All relocators in DWARF*/
+#define CUDA_ELFOSABIV_ABI 3	 /* Calling Convention */
+#define CUDA_ELFOSABIV_SYSCALL 4 /* Improved syscall relocation */
+#define CUDA_ELFOSABIV_SEPCOMP 5 /* New caller-callee save conventions */
+#define CUDA_ELFOSABIV_ABI3 6	 /* various fixes */
+#define CUDA_ELFOSABIV_ABI4 7	 /* runtime JIT link */
 #define CUDA_ELFOSABIV_STD_ELF 8 /* Standard ELF revision */
-#define CUDA_ELFOSABIV_LATEST  CUDA_ELFOSABIV_STD_ELF
+#define CUDA_ELFOSABIV_LATEST CUDA_ELFOSABIV_STD_ELF
 
 #define CUDA_ELF_TEXT_PREFIX                                                  \
   ".text." /* CUDA ELF text section format: ".text.KERNEL" */
 
 // Maximum numbers of registers and predicates, both regular and uniform
 // Do not count the "virtual" zero register as a regular register
-#define CUDA_REG_MAX_REGISTERS  255u
-#define CUDA_REG_ZERO_REGISTER  255u
+#define CUDA_REG_MAX_REGISTERS 255u
+#define CUDA_REG_ZERO_REGISTER 255u
 #define CUDA_REG_MAX_PREDICATES 8u
 
 // Do not count the "virtual" zero register as a uniform register
-#define CUDA_UREG_MAX_REGISTERS  255u
+#define CUDA_UREG_MAX_REGISTERS 255u
 #define CUDA_UREG_MAX_PREDICATES 8u
 
 // Encoded register for the zero register
-#define CUDA_UREG_ZERO_REGISTER  255u
+#define CUDA_UREG_ZERO_REGISTER 255u
 
 /*Return values that exceed 384-bits in size are returned in memory.
    (R4-R15 = 12 4-byte registers = 48-bytes = 384-bits that can be
@@ -65,7 +65,7 @@ struct gdbarch;
 #define CUDA_ABI_MAX_REG_RV_SIZE 48 /* Size in bytes */
 
 #define CUDA_REG_CLASS_AND_REGNO(cl, regnum)                                  \
-  (((cl) << 24) | ((regnum)&0x00ffffff))
+  (((cl) << 24) | ((regnum) & 0x00ffffff))
 
 /* Used to convert dwarf2 regno to identifier that fits inside INT_MAX. This is
  * a gdb upstream requirement for DW_OP_regx. */
@@ -112,25 +112,31 @@ struct cuda_gdbarch_tdep : gdbarch_tdep_base
 
   // PC
   static constexpr int pc_regnum = 0;
-  
+
   // ErrorPC register
   static constexpr int error_pc_regnum = pc_regnum + 1;
 
   // Regular registers
   static constexpr int first_regnum = error_pc_regnum + 1;
-  static constexpr int last_regnum = first_regnum + (CUDA_REG_MAX_REGISTERS - 1);
+  static constexpr int last_regnum
+      = first_regnum + (CUDA_REG_MAX_REGISTERS - 1);
   static constexpr int zero_regnum = last_regnum + 1;
 
   // Predicate Registers
   static constexpr int first_pred_regnum = zero_regnum + 1;
-  static constexpr int last_pred_regnum = first_pred_regnum + (CUDA_REG_MAX_PREDICATES - 1);
+  static constexpr int last_pred_regnum
+      = first_pred_regnum + (CUDA_REG_MAX_PREDICATES - 1);
+  static constexpr int true_pred_regnum = last_pred_regnum;
 
   // Uniform Registers
   static constexpr int first_uregnum = last_pred_regnum + 1;
-  static constexpr int last_uregnum = first_uregnum + (CUDA_UREG_MAX_REGISTERS - 1);
+  static constexpr int last_uregnum
+      = first_uregnum + (CUDA_UREG_MAX_REGISTERS - 1);
   static constexpr int zero_uregnum = last_uregnum + 1;
   static constexpr int first_upred_regnum = zero_uregnum + 1;
-  static constexpr int last_upred_regnum = first_upred_regnum + (CUDA_UREG_MAX_PREDICATES - 1);
+  static constexpr int last_upred_regnum
+      = first_upred_regnum + (CUDA_UREG_MAX_PREDICATES - 1);
+  static constexpr int true_upred_regnum = last_upred_regnum;
 
   // CC register
   static constexpr int cc_regnum = last_upred_regnum + 1;
@@ -156,13 +162,19 @@ struct cuda_gdbarch_tdep : gdbarch_tdep_base
   static constexpr int last_pseudo_regnum = invalid_hi_regnum;
 
   // Pseudo reg count
-  static constexpr int num_pseudo_regs = last_pseudo_regnum - first_pseudo_regnum + 1;
+  static constexpr int num_pseudo_regs
+      = last_pseudo_regnum - first_pseudo_regnum + 1;
 
   // ABI only
-  static constexpr int sp_regnum = first_regnum + 1;       // ABI only, SP is in R1
-  static constexpr int first_rv_regnum = first_regnum + 4; // ABI only, First RV is in R4, also used to pass args
-  static constexpr int last_rv_regnum = first_regnum + 15; // ABI only, Last RV is in R15, also used to pass args
-  static constexpr int max_reg_rv_size = (last_rv_regnum - first_rv_regnum + 1) * 4;
+  static constexpr int sp_regnum = first_regnum + 1; // ABI only, SP is in R1
+  static constexpr int first_rv_regnum
+      = first_regnum
+	+ 4; // ABI only, First RV is in R4, also used to pass args
+  static constexpr int last_rv_regnum
+      = first_regnum
+	+ 15; // ABI only, Last RV is in R15, also used to pass args
+  static constexpr int max_reg_rv_size
+      = (last_rv_regnum - first_rv_regnum + 1) * 4;
 };
 
 /* Predicates for checking if register belongs to specified register group */
@@ -192,7 +204,7 @@ cuda_invalid_regnum_p (struct gdbarch *gdbarch, int regnum)
 {
   cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
   return regnum == tdep->invalid_lo_regnum
-         || regnum == tdep->invalid_hi_regnum;
+	 || regnum == tdep->invalid_hi_regnum;
 }
 
 static inline bool
@@ -209,11 +221,25 @@ cuda_pred_regnum_p (struct gdbarch *gdbarch, int regnum)
 }
 
 static inline bool
+cuda_pred_true_regnum_p (struct gdbarch *gdbarch, int regnum)
+{
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+  return regnum == tdep->true_pred_regnum;
+}
+
+static inline bool
+cuda_upred_true_regnum_p (struct gdbarch *gdbarch, int regnum)
+{
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+  return regnum == tdep->true_upred_regnum;
+}
+
+static inline bool
 cuda_upred_regnum_p (struct gdbarch *gdbarch, int regnum)
 {
   cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
   return regnum >= tdep->first_upred_regnum
-         && regnum <= tdep->last_upred_regnum;
+	 && regnum <= tdep->last_upred_regnum;
 }
 
 static inline bool
@@ -298,15 +324,17 @@ void cuda_final_cleanup (void *unused);
 bool cuda_initialize_target (void);
 void cuda_initialize (void);
 bool cuda_inferior_in_debug_mode (void);
+void cuda_set_driver_log_capability (bool enable);
 void cuda_load_device_info (char *, struct partial_symtab *);
 void cuda_signals_initialize (void);
 void cuda_update_report_driver_api_error_flags (void);
 
 gdb::unique_xmalloc_ptr<char> cuda_find_function_name_from_pc (CORE_ADDR pc,
-                                                               bool demangle);
+							       bool demangle);
 bool cuda_breakpoint_hit_p (cuda_coords &coords);
 
 uint64_t cuda_get_last_driver_api_error_code (void);
+uint64_t cuda_get_last_driver_api_error_func_name_size (void);
 void cuda_get_last_driver_api_error_func_name (char **name);
 bool cuda_get_last_driver_api_error_source_name (std::string &source);
 bool cuda_get_last_driver_api_error_name (std::string &name);
@@ -353,19 +381,21 @@ bool cuda_sstep_kernel_has_terminated (void);
 
 /*Registers */
 uint64_t cuda_check_dwarf2_reg_ptx_virtual_register (uint64_t dwarf2_reg);
-uint64_t cuda_check_dwarf2_reg_ascii_encoded_register (struct gdbarch *gdbarch, uint64_t dwarf2_reg);
-int cuda_reg_to_regnum_extrapolated (struct gdbarch *gdbarch, int reg);
+uint64_t cuda_check_dwarf2_reg_ascii_encoded_register (struct gdbarch *gdbarch,
+						       uint64_t dwarf2_reg);
+int cuda_reg_to_regnum_extrapolated (struct gdbarch *gdbarch,
+				     frame_info_ptr frame, int reg);
 
 int cuda_reg_to_regnum (struct gdbarch *gdbarch, int reg);
 int cuda_regnum_to_reg (struct gdbarch *gdbarch, uint32_t regnum);
 bool cuda_is_regnum_valid (struct gdbarch *gdbarch, int regnum);
 enum register_status cuda_pseudo_register_read (struct gdbarch *gdbarch,
-                                                readable_regcache *regcache,
-                                                int regnum, gdb_byte *buf);
+						readable_regcache *regcache,
+						int regnum, gdb_byte *buf);
 void cuda_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
-                         int regnum);
+			 int regnum);
 void cuda_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
-                          int regnum, const gdb_byte *buf);
+			  int regnum, const gdb_byte *buf);
 
 /*Storage addresses and names */
 void cuda_print_lmem_address_type (void);
@@ -385,24 +415,22 @@ int cuda_read_memory (CORE_ADDR address, type_instance_flags flags,
 		      gdb_byte *buf, int len);
 
 int cuda_read_memory (CORE_ADDR address, struct value *val, struct type *type,
-                      int len);
+		      int len);
 
-int cuda_write_memory_partial (CORE_ADDR address, const gdb_byte *buf,
-                               struct type *type);
-void cuda_write_memory (CORE_ADDR address, const gdb_byte *buf,
-                        struct type *type);
+int cuda_write_memory (CORE_ADDR address, type_instance_flags flags,
+		       const gdb_byte *buf, int len);
 
 /*Breakpoints */
 int cuda_breakpoint_address_match (struct gdbarch *gdbarch,
-                                   const address_space *aspace1,
-                                   CORE_ADDR addr1,
-                                   const address_space *aspace2,
-                                   CORE_ADDR addr2);
+				   const address_space *aspace1,
+				   CORE_ADDR addr1,
+				   const address_space *aspace2,
+				   CORE_ADDR addr2);
 void cuda_adjust_host_pc (ptid_t r);
 void cuda_adjust_device_code_address (CORE_ADDR original_addr,
-                                      CORE_ADDR *adjusted_addr);
+				      CORE_ADDR *adjusted_addr);
 void cuda_next_device_code_address (CORE_ADDR original_addr,
-                                    CORE_ADDR *adjusted_addr);
+				    CORE_ADDR *adjusted_addr);
 bool cuda_find_next_control_flow_instruction (
     uint64_t pc, uint64_t range_start_pc, uint64_t range_end_pc,
     bool skip_subroutines, uint64_t &end_pc, uint32_t &inst_size);

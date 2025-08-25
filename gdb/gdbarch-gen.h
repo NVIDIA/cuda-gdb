@@ -72,8 +72,9 @@ extern void set_gdbarch_long_bit (struct gdbarch *gdbarch, int long_bit);
 extern int gdbarch_long_long_bit (struct gdbarch *gdbarch);
 extern void set_gdbarch_long_long_bit (struct gdbarch *gdbarch, int long_long_bit);
 
-/* The ABI default bit-size and format for "nv_fp8", "bfloat16", "half", "float",
-   "double", and "long double".  These bit/format pairs should eventually be combined
+/* The ABI default bit-size and format for "nv_fp8", "nv_fp6", "nv_fp4",
+   "bfloat16", "half", "float", "double", and "long double".
+   These bit/format pairs should eventually be combined
    into a single object.  For the moment, just initialize them as a pair.
    Each format describes both the big and little endian layouts (if
    useful). */
@@ -106,6 +107,36 @@ extern void set_gdbarch_nv_fp8_e4m3_bit (struct gdbarch *gdbarch, int nv_fp8_e4m
 #ifdef NVIDIA_CUDA_GDB
 extern const struct floatformat ** gdbarch_nv_fp8_e4m3_format (struct gdbarch *gdbarch);
 extern void set_gdbarch_nv_fp8_e4m3_format (struct gdbarch *gdbarch, const struct floatformat ** nv_fp8_e4m3_format);
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
+extern int gdbarch_nv_fp6_e2m3_bit (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp6_e2m3_bit (struct gdbarch *gdbarch, int nv_fp6_e2m3_bit);
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
+extern const struct floatformat ** gdbarch_nv_fp6_e2m3_format (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp6_e2m3_format (struct gdbarch *gdbarch, const struct floatformat ** nv_fp6_e2m3_format);
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
+extern int gdbarch_nv_fp6_e3m2_bit (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp6_e3m2_bit (struct gdbarch *gdbarch, int nv_fp6_e3m2_bit);
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
+extern const struct floatformat ** gdbarch_nv_fp6_e3m2_format (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp6_e3m2_format (struct gdbarch *gdbarch, const struct floatformat ** nv_fp6_e3m2_format);
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
+extern int gdbarch_nv_fp4_e2m1_bit (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp4_e2m1_bit (struct gdbarch *gdbarch, int nv_fp4_e2m1_bit);
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
+extern const struct floatformat ** gdbarch_nv_fp4_e2m1_format (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp4_e2m1_format (struct gdbarch *gdbarch, const struct floatformat ** nv_fp4_e2m1_format);
 #endif
 
 extern int gdbarch_bfloat16_bit (struct gdbarch *gdbarch);

@@ -1178,9 +1178,18 @@ value::ranges_copy_adjusted (struct value *dst, int dst_bit_offset,
 
 void
 value::contents_copy_raw (struct value *dst, LONGEST dst_offset,
+#ifdef NVIDIA_CHERRY_PICK
+			  LONGEST src_offset, LONGEST src_bit_offset,
+			  LONGEST length)
+#else
 			  LONGEST src_offset, LONGEST length)
+#endif
 {
+#ifdef NVIDIA_CHERRY_PICK
+  LONGEST src_total_bit_offset, dst_total_bit_offset, bit_length;
+#else
   LONGEST src_bit_offset, dst_bit_offset, bit_length;
+#endif
   int unit_size = gdbarch_addressable_memory_unit_size (arch ());
 
   /* A lazy DST would make that this copy operation useless, since as
@@ -1201,11 +1210,41 @@ value::contents_copy_raw (struct value *dst, LONGEST dst_offset,
   gdb_assert (!dst->bits_any_optimized_out (TARGET_CHAR_BIT * dst_offset,
 					    TARGET_CHAR_BIT * length));
 
+#ifdef NVIDIA_CHERRY_PICK
+  if ((src_offset + copy_length) * unit_size > enclosing_type ()-> length ())
+    error (_("access outside bounds of object"));
+
+  bit_length = length * unit_size * HOST_CHAR_BIT;
+#endif
+
   /* Copy the data.  */
+#ifdef NVIDIA_CHERRY_PICK
   gdb::array_view<gdb_byte> dst_contents
     = dst->contents_all_raw ().slice (dst_offset * unit_size,
 				      copy_length * unit_size);
   gdb::array_view<const gdb_byte> src_contents
+    = this->contents_all_raw ().slice (src_offset * unit_size,
+				       copy_length * unit_size);
+
+  if (src_bit_offset)
+    {
+      bool big_endian = type_byte_order (dst->type ()) == BFD_ENDIAN_BIG;
+
+      copy_bitwise (dst_contents.data (), 0, src_contents.data (),
+		    src_bit_offset, bit_length, big_endian);
+    }
+  else
+    gdb::copy (src_contents, dst_contents);
+
+  /* Copy the meta-data, adjusted.  */
+  src_total_bit_offset = src_offset * unit_size * HOST_CHAR_BIT
+			 + src_bit_offset;
+  dst_total_bit_offset = dst_offset * unit_size * HOST_CHAR_BIT;
+
+  ranges_copy_adjusted (dst, dst_total_bit_offset, src_total_bit_offset,
+			bit_length);
+#else
+  gdb::array_view<gdb_byte> dst_contents
     = contents_all_raw ().slice (src_offset * unit_size,
 				 copy_length * unit_size);
   gdb::copy (src_contents, dst_contents);
@@ -1217,6 +1256,7 @@ value::contents_copy_raw (struct value *dst, LONGEST dst_offset,
 
   ranges_copy_adjusted (dst, dst_bit_offset,
 			src_bit_offset, bit_length);
+#endif
 }
 
 /* See value.h.  */
@@ -1263,12 +1303,22 @@ value::contents_copy_raw_bitwise (struct value *dst, LONGEST dst_bit_offset,
 
 void
 value::contents_copy (struct value *dst, LONGEST dst_offset,
+#ifdef NVIDIA_CHERRY_PICK
+		      LONGEST src_offset, LONGEST src_bit_offset,
+		      LONGEST length)
+#else
 		      LONGEST src_offset, LONGEST length)
+#endif
 {
   if (m_lazy)
     fetch_lazy ();
 
+#ifdef NVIDIA_CHERRY_PICK
+  contents_copy_raw (dst, dst_offset, src_offset,
+		     src_bit_offset, length);
+#else
   contents_copy_raw (dst, dst_offset, src_offset, length);
+#endif
 }
 
 gdb::array_view<const gdb_byte>
@@ -3015,7 +3065,11 @@ value::primitive_field (LONGEST offset, int fieldno, struct type *arg_type)
       else
 	{
 	  v = value::allocate (enclosing_type ());
+#ifdef NVIDIA_CHERRY_PICK
+	  contents_copy_raw (v, 0, 0, 0, enclosing_type ()->length ());
+#else
 	  contents_copy_raw (v, 0, 0, enclosing_type ()->length ());
+#endif
 	}
       v->deprecated_set_type (type);
       v->set_offset (this->offset ());
@@ -3048,7 +3102,11 @@ value::primitive_field (LONGEST offset, int fieldno, struct type *arg_type)
 	{
 	  v = value::allocate (type);
 	  contents_copy_raw (v, v->embedded_offset (),
+#ifdef NVIDIA_CHERRY_PICK
+			     embedded_offset () + offset, 0,
+#else
 			     embedded_offset () + offset,
+#endif
 			     type_length_units (type));
 	}
       v->set_offset (this->offset () + offset + embedded_offset ());
@@ -3386,7 +3444,11 @@ pack_long (gdb_byte *buf, struct type *type, LONGEST num)
 
 /* Pack NUM into BUF using a target format of TYPE.  */
 
+#ifdef NVIDIA_CHERRY_PICK
+void
+#else
 static void
+#endif
 pack_unsigned_long (gdb_byte *buf, struct type *type, ULONGEST num)
 {
   LONGEST len;
@@ -3677,7 +3739,11 @@ value_from_component (struct value *whole, struct type *type, LONGEST offset)
     {
       v = value::allocate (type);
       whole->contents_copy (v, v->embedded_offset (),
+#ifdef NVIDIA_CHERRY_PICK
+			    whole->embedded_offset () + offset, 0,
+#else
 			    whole->embedded_offset () + offset,
+#endif
 			    type_length_units (type));
     }
   v->set_offset (whole->offset () + offset + whole->embedded_offset ());
@@ -3888,8 +3954,13 @@ value::fetch_lazy_memory ()
   gdb_assert (len >= 0);
 
   if (len > 0)
+#ifdef NVIDIA_CHERRY_PICK
+    read_value_memory (this, bitpos (), stack (),
+		       addr, contents_all_raw ().data (), len);
+#else
     read_value_memory (this, 0, stack (), addr,
 		       contents_all_raw ().data (), len);
+#endif
 }
 
 /* See value.h.  */
@@ -3960,8 +4031,13 @@ value::fetch_lazy_register ()
      meta-data from NEW_VAL to VAL.  */
   set_lazy (false);
   new_val->contents_copy (this, embedded_offset (),
+#ifdef NVIDIA_CHERRY_PICK
+			  new_val->embedded_offset () + offset (),
+			  bitpos (), type_length_units (type));
+#else
 			  new_val->embedded_offset (),
 			  type_length_units (type));
+#endif
 
   if (frame_debug)
     {

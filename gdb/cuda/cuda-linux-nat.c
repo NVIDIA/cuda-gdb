@@ -33,7 +33,6 @@
 #include "buildsym-legacy.h"
 #include "command.h"
 #include "cuda-commands.h"
-#include "cuda-convvars.h"
 #include "cuda-events.h"
 #include "cuda-exceptions.h"
 #include "cuda-notifications.h"
@@ -59,13 +58,13 @@
 #include "event-top.h"
 #include "inf-child.h"
 #include "inf-loop.h"
-#include "top.h"
-#include "remote.h"
 #include "remote-cuda.h"
+#include "remote.h"
+#include "top.h"
 
 bool cuda_debugging_enabled = false;
 
-static struct objfile * cuda_cudart_symbols;
+static struct objfile *cuda_cudart_symbols;
 static struct cuda_signal_info_st cuda_sigtrap_info;
 
 static struct objfile *cuda_create_builtins_objfile (void);
@@ -107,7 +106,7 @@ cuda_signal_set_silent (int sig, struct cuda_signal_info_st *save)
 
   gdb_assert (save);
   gdb_assert (gdb_sig != GDB_SIGNAL_UNKNOWN);
-  gdb_assert (cuda_options_stop_signal () != gdb_sig);
+  gdb_assert (GDB_SIGNAL_URG != gdb_sig);
 
   save->stop = signal_stop_state (gdb_sig);
   save->print = signal_print_state (gdb_sig);
@@ -124,7 +123,7 @@ cuda_signal_restore_settings (int sig, struct cuda_signal_info_st *save)
 
   gdb_assert (save);
   gdb_assert (gdb_sig != GDB_SIGNAL_UNKNOWN);
-  gdb_assert (cuda_options_stop_signal () != gdb_sig);
+  gdb_assert (GDB_SIGNAL_URG != gdb_sig);
 
   if (save->saved)
     {
@@ -241,7 +240,8 @@ cuda_nat_attach (inferior *inf)
       if (!sessionIdAddr)
 	return;
 
-      /* TODO: This isn't actually used. Do we need to continue reading this value? */
+      /* TODO: This isn't actually used. Do we need to continue reading this
+       * value? */
       uint32_t sessionId = 0;
       target_read_memory (sessionIdAddr, (gdb_byte *)&sessionId,
 			  sizeof (sessionId));
@@ -270,15 +270,6 @@ cuda_nat_attach (inferior *inf)
 	  cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_NOT_STARTED);
 	  return;
 	}
-    }
-
-  /* If the CUDA driver has been loaded but software preemption has been turned
-     on, stop the attach process. */
-  if (cuda_options_software_preemption ())
-    {
-      cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_NOT_STARTED);
-      error (_ ("Attaching to a running CUDA process with software preemption "
-		"enabled in the debugger is not supported."));
     }
 
   if (!lookup_cmd_composition ("call", &alias, &prefix_cmd, &cmd))
@@ -316,8 +307,7 @@ cuda_nat_attach (inferior *inf)
 
 	  /* Get control back */
 	  cuda_wait_for_inferior ();
-	  set_running (inf->process_target (), minus_one_ptid,
-		       0);
+	  set_running (inf->process_target (), minus_one_ptid, 0);
 
 	  retry_count++;
 	}
@@ -332,16 +322,10 @@ cuda_nat_attach (inferior *inf)
 	      "Please verify that software preemption is disabled "
 	      "and that nvidia-cuda-mps-server is not running."));
 
-  if ((unsigned int)internal_error_code
-      == CUDBG_ERROR_SOME_DEVICES_WATCHDOGGED)
-    error (
-	_ ("Attaching to process running on watchdogged GPU is not possible.\n"
-	   "Please repeat the attempt in console mode or "
-	   "restart the process with CUDA_VISIBLE_DEVICES environment "
-	   "variable set."));
   if (internal_error_code)
-    error (_ ("Attach failed due to the internal driver error: CUresult=%llu\n"),
-	   (unsigned long long)internal_error_code);
+    error (
+	_ ("Attach failed due to the internal driver error: CUresult=%llu\n"),
+	(unsigned long long)internal_error_code);
 
   debugFlagAddr = cuda_get_symbol_address (_STRING_ (CUDBG_IPC_FLAG_NAME));
   resumeAppOnAttachFlagAddr
@@ -374,8 +358,18 @@ cuda_nat_attach (inferior *inf)
       cuda_trace_domain (
 	  CUDA_TRACE_GENERAL,
 	  "requesting no context push / pop events be delivered\n");
-      capabilities
-	  |= CUDBG_DEBUGGER_CAPABILITY_NO_CONTEXT_PUSH_POP_EVENTS;
+      capabilities |= CUDBG_DEBUGGER_CAPABILITY_NO_CONTEXT_PUSH_POP_EVENTS;
+
+      cuda_trace_domain (CUDA_TRACE_GENERAL,
+			 "requesting CUDA suspend events\n");
+      capabilities |= CUDBG_DEBUGGER_CAPABILITY_SUSPEND_EVENTS;
+
+      if (cuda_options_driver_logs_enabled ())
+        {
+          cuda_trace_domain (CUDA_TRACE_GENERAL,
+                           "requesting CUDA UMD logs collection\n");
+          capabilities |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
+        }
 
       target_write_memory (capability_addr, (const gdb_byte *)&capabilities,
 			   sizeof (capabilities));
@@ -389,7 +383,8 @@ cuda_nat_attach (inferior *inf)
 	  if (timeElapsed < timeOut)
 	    usleep (sleepTime * 1000);
 	  else
-	    error (_ ("Timed out waiting for the CUDA remote target to initialize."));
+	    error (_ ("Timed out waiting for the CUDA remote target to "
+		      "initialize."));
 
 	  timeElapsed += sleepTime;
 	}
@@ -406,7 +401,8 @@ cuda_nat_attach (inferior *inf)
 		  "Please verify that software preemption is disabled "
 		  "and that nvidia-cuda-mps-server is not running."));
       if (internal_error_code)
-	error (_ ("Attach failed due to the internal driver error: CUresult=%llu\n"),
+	error (_ ("Attach failed due to the internal driver error: "
+		  "CUresult=%llu\n"),
 	       (unsigned long long)internal_error_code);
 
       if (timeElapsed < timeOut)
@@ -441,13 +437,17 @@ cuda_nat_attach (inferior *inf)
 	  bool resumed_state = false;
 	  if (is_remote_target (inf->process_target ()))
 	    {
-	      resumed_state = current_inferior ()->process_target ()->commit_resumed_state;
-	      current_inferior ()->process_target ()->commit_resumed_state = false;
+	      resumed_state = current_inferior ()
+				  ->process_target ()
+				  ->commit_resumed_state;
+	      current_inferior ()->process_target ()->commit_resumed_state
+		  = false;
 	    }
 	  cuda_wait_for_inferior ();
 	  if (is_remote_target (inf->process_target ()))
 	    {
-	      current_inferior ()->process_target ()->commit_resumed_state = resumed_state;
+	      current_inferior ()->process_target ()->commit_resumed_state
+		  = resumed_state;
 	    }
 	  /* infrun's async_event_handler is in the "ready" state after running
 	     `continue_1` above. Since we've waited for inferior above, we now
@@ -533,12 +533,13 @@ cuda_do_detach (inferior *inf)
     }
 
   /* This is a bit of a hack. We are about to tear down the debug API so future
-   * calls would fail. But if there are any breakpoints set, those usually would
-   * be removed after detach completes. A bug was found with the debug API where
-   * if breakpoints are not removed, they would not get cleaned up on detach
-   * correctly and left set. We were masking this bug in previous implementations
-   * of CUDA-GDB. To work around this, always try to delete breakpoints belonging
-   * to the inferiors program space before we tear down the debug API. */
+   * calls would fail. But if there are any breakpoints set, those usually
+   * would be removed after detach completes. A bug was found with the debug
+   * API where if breakpoints are not removed, they would not get cleaned up on
+   * detach correctly and left set. We were masking this bug in previous
+   * implementations of CUDA-GDB. To work around this, always try to delete
+   * breakpoints belonging to the inferiors program space before we tear down
+   * the debug API. */
   cuda_options_disable_break_on_launch ();
   breakpoint_program_space_exit (inf->pspace);
 
@@ -653,8 +654,6 @@ switch_to_cuda_thread (const cuda_coords &coords)
   if (thr)
     {
       switch_to_thread_keep_cuda_focus (thr);
-
-      cuda_update_convenience_variables ();
 
       if (coords.isValidOnDevice ())
 	pc = cuda_state::lane_get_pc (

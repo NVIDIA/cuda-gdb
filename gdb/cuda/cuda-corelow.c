@@ -139,18 +139,18 @@ cuda_core_target::fetch_registers (struct regcache *regcache, int regno)
 void
 cuda_core_fetch_registers (struct regcache *regcache, int regno)
 {
-  if (!cuda_is_cuda_gdbarch(regcache->arch ()) && regno >= 0)
-  {
-    /* Wrong architecture, this is likely the fake host thread
-       being "restored" and we're "reading" its stop PC.
-       cuda_core_target doesn't support cross-arch reg fetch,
-       unlike its counterpart cuda_nat_linux which can pass it
-       to its parent(native target)'s method.
-       Just invalidate the regno cache as REG_UNAVAILABLE.
-       Note: This won't work if all regs are requested (-1) */
-    regcache->raw_supply(regno, nullptr);
-    return;
-  }
+  if (!cuda_is_cuda_gdbarch (regcache->arch ()) && regno >= 0)
+    {
+      /* Wrong architecture, this is likely the fake host thread
+	 being "restored" and we're "reading" its stop PC.
+	 cuda_core_target doesn't support cross-arch reg fetch,
+	 unlike its counterpart cuda_nat_linux which can pass it
+	 to its parent(native target)'s method.
+	 Just invalidate the regno cache as REG_UNAVAILABLE.
+	 Note: This won't work if all regs are requested (-1) */
+      regcache->raw_supply (regno, nullptr);
+      return;
+    }
 
   if (!cuda_current_focus::isDevice ())
     return;
@@ -224,8 +224,6 @@ cuda_core_free (void)
 void
 cuda_core_initialize_events_exceptions (void)
 {
-  CUDBGEvent event;
-
   /* Flush registers cache */
   registers_changed ();
 
@@ -233,23 +231,25 @@ cuda_core_initialize_events_exceptions (void)
   if (cuda_gdb_session_create ())
     error ("Failed to create session directory");
 
-  /* Drain the event queue */
-  while (true)
-    {
-      // This loop will take a very long time on corefiles
-      // with 1,000+ cubins. Give the user the oppertunity to CTRL-C
-      QUIT;
-      
-      cuda_debugapi::get_next_sync_event (&event);
+  auto handle_ctx_create_event = [] (const CUDBGEvent &event) {
+    // This loop will take a very long time on corefiles
+    // with 1,000+ cubins. Give the user the opportunity to CTRL-C
+    QUIT;
 
-      if (event.kind == CUDBG_EVENT_INVALID)
-	break;
-
-      if (event.kind == CUDBG_EVENT_CTX_CREATE)
+    switch (event.kind)
+      {
+      case CUDBG_EVENT_CTX_CREATE:
 	cuda_core_register_tid (event.cases.contextCreate.tid);
+	break;
+      default:
+	/* Do nothing */
+	break;
+      }
+    return true;
+  };
 
-      cuda_process_event (&event);
-    }
+  /* Drain the event queue */
+  cuda_process_events (CUDA_EVENT_SYNC, handle_ctx_create_event);
 
   // Read in all device state
   cuda_state::update_all_state (CUDBG_RESPONSE_TYPE_FULL);
@@ -357,7 +357,7 @@ cuda_core_target_open (const char *filename, int from_tty)
 	      cuda_current_focus::invalidate ();
 	      warning ("No CUDA focus could be set");
 	      if (old_gdbarch != nullptr)
-	        set_target_gdbarch (old_gdbarch);
+		set_target_gdbarch (old_gdbarch);
 	    }
 	}
 

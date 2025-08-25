@@ -1565,8 +1565,13 @@ get_frame_register_bytes (frame_info_ptr frame, int regnum,
 	      return false;
 	    }
 
+#ifdef NVIDIA_CHERRY_PICK
+	  memcpy (myaddr, value->contents_all ().data ()
+		  + value->offset () + offset, curr_len);
+#else
 	  memcpy (myaddr, value->contents_all ().data () + offset,
 		  curr_len);
+#endif
 	  release_value (value);
 	}
 
@@ -1600,22 +1605,66 @@ put_frame_register_bytes (frame_info_ptr frame, int regnum,
   /* Copy the data.  */
   while (len > 0)
     {
+#ifdef NVIDIA_CHERRY_PICK
+      struct value *value
+	= frame_unwind_register_value (frame_info_ptr (frame->next),
+				       regnum);
+      /* Need to account the unwind register offset too.  */
+      offset += value == NULL ? 0 : value->offset ();
+
+      if (offset >= register_size (gdbarch, regnum))
+	{
+	  offset -= register_size (gdbarch, regnum);
+	  regnum++;
+	  continue;
+	}
+#endif
+
       int curr_len = register_size (gdbarch, regnum) - offset;
 
       if (curr_len > len)
 	curr_len = len;
 
       const gdb_byte *myaddr = buffer.data ();
+
+#ifdef NVIDIA_CHERRY_PICK
+      /*  Computed value is a special case.  The computed callback
+	  mechanism requires a strut value argument, so we need to
+	  make one.  */
+      if (value != nullptr && value->lval () == lval_computed)
+	{
+	  const lval_funcs *funcs = value->computed_funcs ();
+
+	  if (funcs->write == nullptr)
+	    error (_("Attempt to assign to an unmodifiable value."));
+
+	  type * reg_type = register_type (gdbarch, regnum);
+
+	  struct value *from_value = value::allocate (reg_type);
+	  memcpy (from_value->contents_raw ().data (), myaddr,
+		  reg_type->length ());
+
+	  value->set_offset (offset);
+	  funcs->write (value, from_value);
+	  release_value (from_value);
+	}
+      else if (curr_len == register_size (gdbarch, regnum))
+#else
       if (curr_len == register_size (gdbarch, regnum))
+#endif
 	{
 	  put_frame_register (frame, regnum, myaddr);
 	}
       else
 	{
+#ifdef NVIDIA_CHERRY_PICK
+	  gdb_assert (value != nullptr);
+#else
 	  struct value *value
 	    = frame_unwind_register_value (frame_info_ptr (frame->next),
 					   regnum);
 	  gdb_assert (value != NULL);
+#endif
 
 	  memcpy ((char *) value->contents_writeable ().data () + offset,
 		  myaddr, curr_len);

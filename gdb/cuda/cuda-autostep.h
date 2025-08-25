@@ -44,10 +44,11 @@ struct device_astep_t
   /* Coordinates from the current iteration.  */
   cuda_coords cur_coords;
   /* Warp coord set data.  */
-  cuda_coord_set<cuda_coord_set_type::threads, select_bkpt | select_valid> iter;
+  cuda_coord_set<cuda_coord_set_type::threads, select_bkpt | select_valid>
+      iter;
   /* Warp coord set current pos */
   cuda_coord_set<cuda_coord_set_type::threads,
-                select_bkpt | select_valid>::iterator iter_pos;
+		 select_bkpt | select_valid>::iterator iter_pos;
   /* The current lane.  */
   int cur_ln;
   /* Lines information.  */

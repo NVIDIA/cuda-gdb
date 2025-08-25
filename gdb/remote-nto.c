@@ -216,6 +216,10 @@ public:
 
   pdebug_target () = default;
   ~pdebug_target () override;
+#ifdef NVIDIA_CUDA_GDB
+  /* Track if this is a remote target */
+  bool is_remote_target () const final override { return true; }
+#endif
 
   const target_info &info () const override
   { return pdebug_target_info; }

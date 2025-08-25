@@ -53,7 +53,7 @@ typedef enum
   CUDBGAPIREQ_readValidLanes,
   CUDBGAPIREQ_readActiveLanes,
   CUDBGAPIREQ_readCodeMemory,
-  CUDBGAPIREQ_readConstMemory,
+  CUDBGAPIREQ_STUB_readConstMemory,
   CUDBGAPIREQ_readParamMemory,
   CUDBGAPIREQ_readSharedMemory,
   CUDBGAPIREQ_readLocalMemory,
@@ -111,7 +111,7 @@ typedef enum
   /* 4.1 Extensions */
   CUDBGAPIREQ_getHostAddrFromDeviceAddr,
   CUDBGAPIREQ_singleStepWarp41,
-  CUDBGAPIREQ_setNotifyNewEventCallback,
+  CUDBGAPIREQ_setNotifyNewEventCallback41,
   CUDBGAPIREQ_readSyscallCallDepth,
 
   /* 4.2 Extensions */
@@ -214,20 +214,25 @@ typedef enum
   CUDBGAPIREQ_consumeCudaLogs,
   CUDBGAPIREQ_readCPUCallStack,
 
+  /* 13.0 Extensions */
+  CUDBGAPIREQ_getCudaExceptionString,
+  CUDBGAPIREQ_setNotifyNewEventCallback,
 } CUDBGAPIREQ_t;
 
-typedef enum {
-    LIBCUDBG_PIPE_ENDPOINT_RPCD = 999,
-    LIBCUDBG_PIPE_ENDPOINT_DEBUG_CLIENT,
-    LIBCUDBG_PIPE_ENDPOINT_RPCD_CB,
-    LIBCUDBG_PIPE_ENDPOINT_DEBUG_CLIENT_CB,
+typedef enum
+{
+  LIBCUDBG_PIPE_ENDPOINT_RPCD = 999,
+  LIBCUDBG_PIPE_ENDPOINT_DEBUG_CLIENT,
+  LIBCUDBG_PIPE_ENDPOINT_RPCD_CB,
+  LIBCUDBG_PIPE_ENDPOINT_DEBUG_CLIENT_CB,
 } libcudbg_pipe_endpoint_t;
 
-#pragma pack(push,1)
-typedef struct  {
-    uint32_t tid;
-    uint32_t terminate;
-    uint32_t timeout;
+#pragma pack(push, 1)
+typedef struct
+{
+  uint32_t tid;
+  uint32_t terminate;
+  uint32_t timeout;
 } CUDBGCBMSG_t;
 #pragma pack(pop)
 

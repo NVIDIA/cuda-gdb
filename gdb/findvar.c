@@ -803,6 +803,9 @@ read_frame_register_value (struct value *value, frame_info_ptr frame)
   struct gdbarch *gdbarch = get_frame_arch (frame);
   LONGEST offset = 0;
   LONGEST reg_offset = value->offset ();
+#ifdef NVIDIA_CHERRY_PICK
+  LONGEST bit_offset = value->bitpos ();
+#endif
   int regnum = VALUE_REGNUM (value);
   int len = type_length_units (check_typedef (value->type ()));
 
@@ -831,7 +834,12 @@ read_frame_register_value (struct value *value, frame_info_ptr frame)
       if (reg_len > len)
 	reg_len = len;
 
+#ifdef NVIDIA_CHERRY_PICK
+      regval->contents_copy (value, offset, reg_offset,
+			     bit_offset, reg_len);
+#else
       regval->contents_copy (value, offset, reg_offset, reg_len);
+#endif
 
       offset += reg_len;
       len -= reg_len;

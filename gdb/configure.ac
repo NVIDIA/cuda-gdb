@@ -343,12 +343,15 @@ AS_HELP_STRING([--disable-cuda], [disable CUDA support (cuda-gdb)]),
   [enable_cuda=yes])
 if test x"$enable_cuda" = xyes; then
   AC_DEFINE(NVIDIA_CUDA_GDB, 1, [Define if building with NVIDIA CUDA support.])
+  AC_DEFINE(NVIDIA_CHERRY_PICK, 1, [Define to include added code from other gdb repositories.])
   AC_DEFINE(NVIDIA_BUGFIX, 1, [Define if building with NVIDIA bugfixes.])
   LIBCUDACORE="\$(top_builddir)/../libcudacore/libcudacore.a"
   CONFIG_OBS="$CONFIG_OBS \$(SUBDIR_CUDA_OBS)"
   CONFIG_DEPS="$CONFIG_DEPS \$(SUBDIR_CUDA_DEPS)"
   CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_CUDA_SRCS)"
   ENABLE_CFLAGS="$ENABLE_CFLAGS \$(SUBDIR_CUDA_CFLAGS)"
+else
+  AC_DEFINE(NVIDIA_CHERRY_PICK, 1, [Define to include added code from other gdb repositories.])
 fi
 AC_SUBST(LIBCUDACORE)
 AM_CONDITIONAL(ENABLE_CUDA, [test x"$enable_cuda" = xyes])

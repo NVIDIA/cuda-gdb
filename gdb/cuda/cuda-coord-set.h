@@ -199,7 +199,7 @@ class cuda_coord_set
 private:
   cuda_coord_compare<order> m_compare;
   std::set<cuda_coords,
-	   std::function<bool (const cuda_coords &, const cuda_coords &)> >
+	   std::function<bool (const cuda_coords &, const cuda_coords &)>>
       m_coord_set;
 
   constexpr bool
@@ -352,7 +352,7 @@ public:
 
     // For logical coord sets, we only want to store unique entries
     std::unordered_set<uint64_t> foundKernels;
-    std::unordered_map<uint64_t, std::unordered_set<CuDim3, cudim3_hash> >
+    std::unordered_map<uint64_t, std::unordered_set<CuDim3, cudim3_hash>>
 	foundBlocks;
 
     // Check select mask options
@@ -429,21 +429,29 @@ public:
 		// Get the coord info
 		uint64_t kernelId = CUDA_INVALID;
 		CuDim3 clusterIdx = CUDA_INVALID_DIM;
+		CuDim3 clusterDim = CUDA_INVALID_DIM;
 		if (validWarp)
 		  {
-		    const auto kernel = cuda_state::warp_get_kernel (dev, sm, wp);
+		    const auto kernel
+			= cuda_state::warp_get_kernel (dev, sm, wp);
 		    gdb_assert (kernel);
 		    kernelId = kernel->id ();
-		    const auto& clusterDim = kernel->cluster_dim ();
-		    if ((clusterDim.x != 0) && (clusterDim.y != 0)
-			&& (clusterDim.z != 0))
+		    /* Check the default cluster size. If it is non-zero, we
+		       need to get the per warp clusterIdx and clusterDim. */
+		    const auto &default_clusterDim = kernel->cluster_dim_default ();
+		    if ((default_clusterDim.x != 0)
+			&& (default_clusterDim.y != 0)
+			&& (default_clusterDim.z != 0))
 		      {
 			clusterIdx
 			    = cuda_state::warp_get_cluster_idx (dev, sm, wp);
+			clusterDim
+			    = cuda_state::warp_get_cluster_dim (dev, sm, wp);
 		      }
 		    else
 		      {
 			clusterIdx = CUDA_IGNORE_DIM;
+			clusterDim = CUDA_IGNORE_DIM;
 		      }
 		  }
 
@@ -460,7 +468,11 @@ public:
 					kernelId)
 		    || !cuda_coord_equals (filter.logical ().gridId (), gridId)
 		    || !cuda_coord_equals (filter.logical ().blockIdx (),
-					   blockIdx))
+					   blockIdx)
+		    || !cuda_coord_equals (filter.logical ().clusterIdx (),
+					   clusterIdx)
+		    || !cuda_coord_equals (filter.logical ().clusterDim (),
+					   clusterDim))
 		  continue;
 
 		// The follow are used for kernel and block coord sets only
@@ -587,6 +599,8 @@ public:
 			= storeKernel () ? gridId : CUDA_WILDCARD;
 		    const CuDim3 c_clusterIdx
 			= storeBlock () ? clusterIdx : CUDA_WILDCARD_DIM;
+		    const CuDim3 c_clusterDim
+			= storeBlock () ? clusterDim : CUDA_WILDCARD_DIM;
 		    const CuDim3 c_blockIdx
 			= storeBlock () ? blockIdx : CUDA_WILDCARD_DIM;
 		    const CuDim3 c_threadIdx
@@ -594,8 +608,8 @@ public:
 
 		    // Add the coord to the set
 		    m_coord_set.emplace (c_dev, c_sm, c_wp, c_ln, c_kernelId,
-					 c_gridId, c_clusterIdx, c_blockIdx,
-					 c_threadIdx);
+					 c_gridId, c_clusterIdx, c_clusterDim,
+					 c_blockIdx, c_threadIdx);
 
 		    // Skip if only storing a single entry
 		    if (single)

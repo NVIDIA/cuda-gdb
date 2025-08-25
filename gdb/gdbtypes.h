@@ -2172,9 +2172,15 @@ struct builtin_type
   struct type *builtin_unsigned_int = nullptr;
   struct type *builtin_unsigned_long = nullptr;
 #ifdef NVIDIA_CUDA_GDB
+  /* CUDA - fp8 formats */
   struct type *builtin_nv_fp8_e8m0 = nullptr;
   struct type *builtin_nv_fp8_e5m2 = nullptr;
   struct type *builtin_nv_fp8_e4m3 = nullptr;
+  /* CUDA - fp6 formats */
+  struct type *builtin_nv_fp6_e2m3 = nullptr;
+  struct type *builtin_nv_fp6_e3m2 = nullptr;
+  /* CUDA - fp4 formats */
+  struct type *builtin_nv_fp4_e2m1 = nullptr;
 #endif
   struct type *builtin_bfloat16 = nullptr;
   struct type *builtin_half = nullptr;
@@ -2290,9 +2296,15 @@ extern const struct floatformat *floatformats_vax_d[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_ibm_long_double[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_bfloat16[BFD_ENDIAN_UNKNOWN];
 #ifdef NVIDIA_CUDA_GDB
+/* CUDA - fp8 formats */
 extern const struct floatformat *floatformats_nv_fp8_e8m0[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_nv_fp8_e5m2[BFD_ENDIAN_UNKNOWN];
 extern const struct floatformat *floatformats_nv_fp8_e4m3[BFD_ENDIAN_UNKNOWN];
+/* CUDA - fp6 formats */
+extern const struct floatformat *floatformats_nv_fp6_e2m3[BFD_ENDIAN_UNKNOWN];
+extern const struct floatformat *floatformats_nv_fp6_e3m2[BFD_ENDIAN_UNKNOWN];
+/* CUDA - fp4 formats */
+extern const struct floatformat *floatformats_nv_fp4_e2m1[BFD_ENDIAN_UNKNOWN];
 #endif
 
 /* Allocate space for storing data associated with a particular

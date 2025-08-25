@@ -32,7 +32,6 @@
 #include "remote-nto.h"
 #endif
 
-#include "cuda-convvars.h"
 #include "cuda-events.h"
 #include "cuda-exceptions.h"
 #include "cuda-notifications.h"
@@ -108,8 +107,7 @@ cuda_remote_initialize_target ()
   if (!qnx_symbols_are_set)
     {
       /* First assume cuda-gdbserver is backwards compatible */
-      cuda_remote_set_symbols (true,
-			       &qnx_symbols_are_set);
+      cuda_remote_set_symbols (true, &qnx_symbols_are_set);
       if (!qnx_symbols_are_set)
 	{
 	  warning (
@@ -117,8 +115,7 @@ cuda_remote_initialize_target ()
 		 "solib-search-path. CUDA debugging will not be available."));
 	  /* If the above failed, assume it's incompatible and only send
 	     the core symbols */
-	  cuda_remote_set_symbols (false,
-				   &qnx_symbols_are_set);
+	  cuda_remote_set_symbols (false, &qnx_symbols_are_set);
 	  if (!qnx_symbols_are_set)
 	    {
 	      return false;
@@ -131,11 +128,10 @@ cuda_remote_initialize_target ()
   uint32_t debugapi_major = 0;
   uint32_t debugapi_minor = 0;
   uint32_t debugapi_revision = 0;
-  cuda_remote_initialize (&get_debugger_api_res, &set_callback_api_res,
-			  &api_initialize_res, &cuda_initialized,
-			  &cuda_debugging_enabled, &driver_is_compatible,
-			  &debugapi_major, &debugapi_minor,
-			  &debugapi_revision);
+  cuda_remote_initialize (
+      &get_debugger_api_res, &set_callback_api_res, &api_initialize_res,
+      &cuda_initialized, &cuda_debugging_enabled, &driver_is_compatible,
+      &debugapi_major, &debugapi_minor, &debugapi_revision);
 
   cuda_debugapi::print_get_api_error (get_debugger_api_res);
   cuda_debugapi::handle_initialization_error (api_initialize_res);
@@ -150,13 +146,12 @@ cuda_remote_initialize_target ()
 		"compatible."));
     }
 
-  //FIXME: WAR for DTCGDB-3482
+  // FIXME: WAR for DTCGDB-3482
   //--------------------------------------------------------
   CUDBGAPI api = nullptr;
-  CUDBGResult res = cudbgGetAPI (CUDBG_API_VERSION_MAJOR,
-                                 CUDBG_API_VERSION_MINOR,
-                                 CUDBG_API_VERSION_REVISION,
-                                 &api);
+  CUDBGResult res
+      = cudbgGetAPI (CUDBG_API_VERSION_MAJOR, CUDBG_API_VERSION_MINOR,
+		     CUDBG_API_VERSION_REVISION, &api);
   if (res == CUDBG_SUCCESS)
     cuda_debugapi::set_api (api);
   else
@@ -170,9 +165,8 @@ cuda_remote_initialize_target ()
   cuda_state::initialize ();
   for (dev_id = 0; dev_id < cuda_state::get_num_devices (); dev_id++)
     {
-      cuda_remote_query_device_spec (dev_id, &num_sms, &num_warps,
-				     &num_lanes, &num_registers, &dev_type,
-				     &sm_type);
+      cuda_remote_query_device_spec (dev_id, &num_sms, &num_warps, &num_lanes,
+				     &num_registers, &dev_type, &sm_type);
       cuda_state::set_device_spec (dev_id, num_sms, num_warps, num_lanes,
 				   num_registers, dev_type, sm_type);
     }

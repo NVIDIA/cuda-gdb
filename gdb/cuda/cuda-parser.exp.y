@@ -71,7 +71,9 @@ void cuda_parser_reset_lexer (void);
 
 %token START_QUERY_OR_SWITCH START_CONDITIONS START_FILTER START_FILTER_KERNEL
 %token DEVICE SM WARP LANE
-%token KERNEL GRID BLOCK THREAD
+%token KERNEL GRID CLUSTERDIM CLUSTER BLOCK THREAD
+%token CLUSTERDIM_X CLUSTERDIM_Y CLUSTERDIM_Z
+%token CLUSTERIDX_X CLUSTERIDX_Y CLUSTERIDX_Z
 %token BLOCKIDX_X BLOCKIDX_Y BLOCKIDX_Z
 %token THREADIDX_X THREADIDX_Y THREADIDX_Z
 %token CURRENT WILDCARD
@@ -102,6 +104,8 @@ filter : device
        | lane 
        | kernel
        | grid
+       | cluster
+       | clusterDim
        | block
        | thread
        ;
@@ -118,6 +122,10 @@ kernel     : KERNEL scalar           { handle_filter (FILTER_TYPE_KERNEL); }
            ;
 grid       : GRID scalar             { handle_filter (FILTER_TYPE_GRID); }
            ;
+clusterDim : CLUSTERDIM cudim3       { handle_filter (FILTER_TYPE_CLUSTERDIM); }
+	   ;
+cluster    : CLUSTER cudim3          { handle_filter (FILTER_TYPE_CLUSTER); }
+	   ;
 block      : BLOCK cudim3            { handle_filter (FILTER_TYPE_BLOCK); }
            ;
 thread     : THREAD cudim3           { handle_filter (FILTER_TYPE_THREAD); }
@@ -133,6 +141,8 @@ query : DEVICE            { handle_query (FILTER_TYPE_DEVICE); }
       | LANE              { handle_query (FILTER_TYPE_LANE); }
       | KERNEL            { handle_query (FILTER_TYPE_KERNEL); }
       | GRID              { handle_query (FILTER_TYPE_GRID); }
+      | CLUSTERDIM        { handle_query (FILTER_TYPE_CLUSTERDIM); }
+      | CLUSTER           { handle_query (FILTER_TYPE_CLUSTER); }
       | BLOCK             { handle_query (FILTER_TYPE_BLOCK); }
       | THREAD            { handle_query (FILTER_TYPE_THREAD); }
       ;
@@ -145,7 +155,13 @@ or_conditions : condition LOGICAL_OR condition
               | or_conditions LOGICAL_OR condition
               :
 
-condition : BLOCKIDX_X CMP scalar     { handle_condition (FILTER_TYPE_BLOCKIDX_X, $2); }
+condition : CLUSTERDIM_X CMP scalar     { handle_condition (FILTER_TYPE_CLUSTERDIM_X, $2); }
+          | CLUSTERDIM_Y CMP scalar     { handle_condition (FILTER_TYPE_CLUSTERDIM_Y, $2); }
+          | CLUSTERDIM_Z CMP scalar     { handle_condition (FILTER_TYPE_CLUSTERDIM_Z, $2); }
+	  | CLUSTERIDX_X CMP scalar     { handle_condition (FILTER_TYPE_CLUSTERIDX_X, $2); }
+          | CLUSTERIDX_Y CMP scalar     { handle_condition (FILTER_TYPE_CLUSTERIDX_Y, $2); }
+          | CLUSTERIDX_Z CMP scalar     { handle_condition (FILTER_TYPE_CLUSTERIDX_Z, $2); }
+	  | BLOCKIDX_X CMP scalar     { handle_condition (FILTER_TYPE_BLOCKIDX_X, $2); }
           | BLOCKIDX_Y CMP scalar     { handle_condition (FILTER_TYPE_BLOCKIDX_Y, $2); }
           | BLOCKIDX_Z CMP scalar     { handle_condition (FILTER_TYPE_BLOCKIDX_Z, $2); }
           | THREADIDX_X CMP scalar    { handle_condition (FILTER_TYPE_THREADIDX_X, $2); }
@@ -163,6 +179,8 @@ switch : DEVICE scalar           { handle_switch (FILTER_TYPE_DEVICE); }
        | LANE scalar             { handle_switch (FILTER_TYPE_LANE); }
        | KERNEL scalar           { handle_switch (FILTER_TYPE_KERNEL); }
        | GRID scalar             { handle_switch (FILTER_TYPE_GRID); }
+       | CLUSTERDIM cudim3       { handle_switch (FILTER_TYPE_CLUSTERDIM); }
+       | CLUSTER cudim3          { handle_switch (FILTER_TYPE_CLUSTER); }
        | BLOCK cudim3            { handle_switch (FILTER_TYPE_BLOCK); }
        | THREAD cudim3           { handle_switch (FILTER_TYPE_THREAD); }
        ;
@@ -297,20 +315,28 @@ print_coord  (uint32_t value)
 static void
 print_request (request_t *request)
 {
-  if (request->type & FILTER_TYPE_DEVICE) printf ("device");
-  if (request->type & FILTER_TYPE_SM)     printf ("sm");
-  if (request->type & FILTER_TYPE_WARP)   printf ("warp");
-  if (request->type & FILTER_TYPE_LANE)   printf ("lane");
-  if (request->type & FILTER_TYPE_KERNEL) printf ("kernel");
-  if (request->type & FILTER_TYPE_GRID)   printf ("grid");
-  if (request->type & FILTER_TYPE_BLOCK)  printf ("block");
-  if (request->type & FILTER_TYPE_THREAD) printf ("thread");
-  if (request->type & FILTER_TYPE_BLOCKIDX_X)  printf ("blockIdx.x");
-  if (request->type & FILTER_TYPE_BLOCKIDX_Y)  printf ("blockIdx.y");
-  if (request->type & FILTER_TYPE_BLOCKIDX_Z)  printf ("blockIdx.z");
-  if (request->type & FILTER_TYPE_THREADIDX_X) printf ("threadIdx.z");
-  if (request->type & FILTER_TYPE_THREADIDX_Y) printf ("threadIdx.y");
-  if (request->type & FILTER_TYPE_THREADIDX_Z) printf ("threadIdx.z");
+  if (request->type & FILTER_TYPE_DEVICE)  printf ("device");
+  if (request->type & FILTER_TYPE_SM)      printf ("sm");
+  if (request->type & FILTER_TYPE_WARP)    printf ("warp");
+  if (request->type & FILTER_TYPE_LANE)    printf ("lane");
+  if (request->type & FILTER_TYPE_KERNEL)  printf ("kernel");
+  if (request->type & FILTER_TYPE_GRID)    printf ("grid");
+  if (request->type & FILTER_TYPE_CLUSTERDIM) printf ("clusterDim");
+  if (request->type & FILTER_TYPE_CLUSTER) printf ("cluster");
+  if (request->type & FILTER_TYPE_BLOCK)   printf ("block");
+  if (request->type & FILTER_TYPE_THREAD)  printf ("thread");
+  if (request->type & FILTER_TYPE_CLUSTERDIM_X)  printf ("clusterDim.x");
+  if (request->type & FILTER_TYPE_CLUSTERDIM_Y)  printf ("clusterDim.y");
+  if (request->type & FILTER_TYPE_CLUSTERDIM_Z)  printf ("clusterDim.z");
+  if (request->type & FILTER_TYPE_CLUSTERIDX_X)  printf ("clusterIdx.x");
+  if (request->type & FILTER_TYPE_CLUSTERIDX_Y)  printf ("clusterIdx.y");
+  if (request->type & FILTER_TYPE_CLUSTERIDX_Z)  printf ("clusterIdx.z");
+  if (request->type & FILTER_TYPE_BLOCKIDX_X)    printf ("blockIdx.x");
+  if (request->type & FILTER_TYPE_BLOCKIDX_Y)    printf ("blockIdx.y");
+  if (request->type & FILTER_TYPE_BLOCKIDX_Z)    printf ("blockIdx.z");
+  if (request->type & FILTER_TYPE_THREADIDX_X)   printf ("threadIdx.z");
+  if (request->type & FILTER_TYPE_THREADIDX_Y)   printf ("threadIdx.y");
+  if (request->type & FILTER_TYPE_THREADIDX_Z)   printf ("threadIdx.z");
 
   if (request->cmp == CMP_EQ) printf (" == ");
   if (request->cmp == CMP_NE) printf (" != ");
@@ -320,8 +346,10 @@ print_request (request_t *request)
   if (request->cmp == CMP_GE) printf (" >= ");
   if (request->cmp == CMP_NONE) printf (" ");
 
-  if (request->type & FILTER_TYPE_THREAD ||
-      request->type & FILTER_TYPE_BLOCK)
+  if (request->type & FILTER_TYPE_THREAD  ||
+      request->type & FILTER_TYPE_BLOCK   ||
+      request->type & FILTER_TYPE_CLUSTER ||
+      request->type & FILTER_TYPE_CLUSTERDIM)
     {
       printf ("(");
       print_coord (request->value.cudim3.x);

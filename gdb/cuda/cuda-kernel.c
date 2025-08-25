@@ -42,13 +42,19 @@
 cuda_kernel::cuda_kernel (uint64_t kernel_id, uint32_t dev_id,
 			  uint64_t grid_id, uint64_t virt_code_base,
 			  cuda_module *module, const CuDim3 &grid_dim,
-			  const CuDim3 &block_dim, const CuDim3 &cluster_dim,
+			  const CuDim3 &block_dim, const CuDim3 &cluster_dim_default,
+                          const CuDim3 &cluster_dim_preferred,
 			  CUDBGKernelType type, CUDBGKernelOrigin origin,
 			  uint64_t parent_grid_id)
     : m_id (kernel_id), m_dev_id (dev_id), m_grid_id (grid_id),
       m_module (module), m_virt_code_base (virt_code_base),
-      m_grid_dim (grid_dim), m_block_dim (block_dim), m_cluster_dim_p (true),
-      m_cluster_dim (cluster_dim), m_grid_status_p (false),
+      m_grid_dim (grid_dim), m_block_dim (block_dim),
+      /* Kernel-ready event will not report cluster info and pass 0,
+         mark the field as invalid and read it later from the grid info. */
+      m_cluster_dim_default_p (cluster_dim_default.x != 0),
+      m_cluster_dim_default (cluster_dim_default),
+      m_cluster_dim_preferred_p (m_cluster_dim_default_p),
+      m_cluster_dim_preferred (cluster_dim_preferred), m_grid_status_p (false),
       m_grid_status (CUDBG_GRID_STATUS_INVALID), m_type (type),
       m_origin (origin), m_parent_grid_id (parent_grid_id), m_depth_p (false),
       m_depth (0), m_launched (false)
@@ -102,11 +108,16 @@ cuda_kernel::children ()
 void
 cuda_kernel::compute_sms_mask (cuda_bitset &mask)
 {
-  cuda_coords filter{
-    CUDA_WILDCARD, CUDA_WILDCARD, CUDA_WILDCARD,
-    CUDA_WILDCARD, m_id,	  CUDA_WILDCARD,
-    CUDA_WILDCARD_DIM, CUDA_WILDCARD_DIM, CUDA_WILDCARD_DIM
-  };
+  cuda_coords filter{ CUDA_WILDCARD,
+		      CUDA_WILDCARD,
+		      CUDA_WILDCARD,
+		      CUDA_WILDCARD,
+		      m_id,
+		      CUDA_WILDCARD,
+		      CUDA_WILDCARD_DIM,
+		      CUDA_WILDCARD_DIM,
+		      CUDA_WILDCARD_DIM,
+		      CUDA_WILDCARD_DIM };
   cuda_coord_set<cuda_coord_set_type::sms, select_valid,
 		 cuda_coord_compare_type::physical>
       coords{ filter };
@@ -141,7 +152,8 @@ cuda_kernel::invalidate ()
   // also constant for the lifetime of the kernel.
 
   m_grid_status_p = false;
-  m_cluster_dim_p = false;
+  m_cluster_dim_default_p = false;
+  m_cluster_dim_preferred_p = false;
 }
 
 void
@@ -149,15 +161,17 @@ cuda_kernel::populate_args ()
 {
   if (m_args)
     {
-      cuda_trace ("kernel %lu: populate_args (cached): %s",
-      		  m_id, m_args->c_str ());
+      cuda_trace ("kernel %lu: populate_args (cached): %s", m_id,
+		  m_args->c_str ());
       return;
     }
 
   if (!cuda_current_focus::isDevice ()
       || (cuda_current_focus::get ().logical ().kernelId () != m_id))
     {
-      cuda_trace ("kernel %lu: populate_args - skipping due to lack of device focus on kernel", m_id);
+      cuda_trace ("kernel %lu: populate_args - skipping due to lack of device "
+		  "focus on kernel",
+		  m_id);
       return;
     }
 
@@ -199,21 +213,35 @@ cuda_kernel::args ()
   return "";
 }
 
-// This will return the normal cluster size only. If it is all zero,
-// that means no clusters are present and the preferred cluster size
-// is also ignored. This value may differ from the per warp cluster
-// dim sizes.
-const CuDim3 &
-cuda_kernel::cluster_dim ()
+void
+cuda_kernel::get_grid_info ()
 {
-  if (!m_cluster_dim_p)
-    {
-      CUDBGGridInfo grid_info;
-      cuda_debugapi::get_grid_info (m_dev_id, m_grid_id, &grid_info);
-      m_cluster_dim = grid_info.clusterDim;
-      m_cluster_dim_p = true;
-    }
-  return m_cluster_dim;
+  CUDBGGridInfo grid_info;
+  cuda_debugapi::get_grid_info (m_dev_id, m_grid_id, &grid_info);
+  m_cluster_dim_default = grid_info.clusterDim;
+  m_cluster_dim_preferred = grid_info.preferredClusterDim;
+  m_cluster_dim_default_p = true;
+  m_cluster_dim_preferred_p = true;
+}
+
+/* This will return the default cluster size, if it is all zeros
+   that means no clusters are present and both cluster sizes are ignored. */
+const CuDim3 &
+cuda_kernel::cluster_dim_default ()
+{
+  if (!m_cluster_dim_default_p)
+    get_grid_info ();
+
+  return m_cluster_dim_default;
+}
+
+const CuDim3 &
+cuda_kernel::cluster_dim_preferred ()
+{
+  if (!m_cluster_dim_preferred_p)
+    get_grid_info ();
+
+  return m_cluster_dim_preferred;
 }
 
 CUDBGGridStatus

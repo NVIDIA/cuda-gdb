@@ -139,6 +139,7 @@ const struct floatformat *floatformats_bfloat16[BFD_ENDIAN_UNKNOWN] = {
   &floatformat_bfloat16_little
 };
 #ifdef NVIDIA_CUDA_GDB
+/* CUDA - fp8 formats */
 const struct floatformat *floatformats_nv_fp8_e8m0[BFD_ENDIAN_UNKNOWN] = {
   &floatformat_nv_fp8_e8m0_big,
   &floatformat_nv_fp8_e8m0_little
@@ -150,6 +151,20 @@ const struct floatformat *floatformats_nv_fp8_e5m2[BFD_ENDIAN_UNKNOWN] = {
 const struct floatformat *floatformats_nv_fp8_e4m3[BFD_ENDIAN_UNKNOWN] = {
   &floatformat_nv_fp8_e4m3_big,
   &floatformat_nv_fp8_e4m3_little
+};
+/* CUDA - fp6 formats */
+const struct floatformat *floatformats_nv_fp6_e2m3[BFD_ENDIAN_UNKNOWN] = {
+  &floatformat_nv_fp6_e2m3_big,
+  &floatformat_nv_fp6_e2m3_little
+};
+const struct floatformat *floatformats_nv_fp6_e3m2[BFD_ENDIAN_UNKNOWN] = {
+  &floatformat_nv_fp6_e3m2_big,
+  &floatformat_nv_fp6_e3m2_little
+};
+/* CUDA - fp4 formats */
+const struct floatformat *floatformats_nv_fp4_e2m1[BFD_ENDIAN_UNKNOWN] = {
+  &floatformat_nv_fp4_e2m1_big,
+  &floatformat_nv_fp4_e2m1_little
 };
 #endif
 
@@ -6102,6 +6117,7 @@ create_gdbtypes_data (struct gdbarch *gdbarch)
     = init_integer_type (alloc, gdbarch_long_long_bit (gdbarch),
 			 1, "unsigned long long");
 #ifdef NVIDIA_CUDA_GDB
+  /* CUDA - fp8 formats */
   builtin_type->builtin_nv_fp8_e8m0
     = init_float_type (alloc, gdbarch_nv_fp8_e8m0_bit (gdbarch),
 		       "__nv_fp8_e8m0", gdbarch_nv_fp8_e8m0_format (gdbarch));
@@ -6111,6 +6127,17 @@ create_gdbtypes_data (struct gdbarch *gdbarch)
   builtin_type->builtin_nv_fp8_e4m3
     = init_float_type (alloc, gdbarch_nv_fp8_e4m3_bit (gdbarch),
 		       "__nv_fp8_e4m3", gdbarch_nv_fp8_e4m3_format (gdbarch));
+  /* CUDA - fp6 formats */
+  builtin_type->builtin_nv_fp6_e2m3
+    = init_float_type (alloc, gdbarch_nv_fp6_e2m3_bit (gdbarch),
+		       "__nv_fp6_e2m3", gdbarch_nv_fp6_e2m3_format (gdbarch));
+  builtin_type->builtin_nv_fp6_e3m2
+    = init_float_type (alloc, gdbarch_nv_fp6_e3m2_bit (gdbarch),
+		       "__nv_fp6_e3m2", gdbarch_nv_fp6_e3m2_format (gdbarch));
+  /* CUDA - fp4 formats */
+  builtin_type->builtin_nv_fp4_e2m1
+    = init_float_type (alloc, gdbarch_nv_fp4_e2m1_bit (gdbarch),
+		       "__nv_fp4_e2m1", gdbarch_nv_fp4_e2m1_format (gdbarch));
 #endif
   builtin_type->builtin_half
     = init_float_type (alloc, gdbarch_half_bit (gdbarch),

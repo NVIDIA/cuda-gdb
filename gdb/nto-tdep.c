@@ -241,6 +241,12 @@ const char *
 nto_target (void)
 {
   char *p = getenv ("QNX_TARGET");
+#ifdef NVIDIA_CUDA_GDB
+  if (!p && !gdb_sysroot.c_str ())
+    error ("QNX target rootfs directory is not set! "
+           "Please set it via QNX_TARGET environment variable or use "
+           "the \"set sysroot\" command.");
+#endif
 
 #ifdef __CYGWIN__
   static char buf[PATH_MAX];
@@ -1373,9 +1379,20 @@ _initialize_nto_tdep ()
 
   /* this not needed on self hosted platforms */
 #ifndef __QNXNTO__
+#ifdef NVIDIA_CUDA_GDB
+// The QNX_TARGET env var is optional as it defines the QNX rootfs directory that can
+// be set alternatively with `set sysroot`
+// Above in nto_target CUDA GDB will either use the value of QNX_TARGET or the value
+// of sysroot.
+// As a usability enhancement, we don't want to force the QNX_TARGET variable to
+// always be set in CUDA GDB implementation.
+  if (!getenv ("QNX_TARGET"))
+    warning ("QNX_TARGET environment variable is not set!");
+#else
   if( getenv("QNX_TARGET") == NULL ) {
     error("QNX environment is not set!");
   }
+#endif
 #endif
 
   add_setshow_zinteger_cmd ("nto-debug", class_maintenance,

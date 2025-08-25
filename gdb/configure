@@ -18397,6 +18397,7 @@ if test x"$enable_cuda" = xyes; then
 
 $as_echo "#define NVIDIA_CUDA_GDB 1" >>confdefs.h
 
+$as_echo "#define NVIDIA_CHERRY_PICK 1" >>confdefs.h
 
 $as_echo "#define NVIDIA_BUGFIX 1" >>confdefs.h
 
@@ -18405,6 +18406,10 @@ $as_echo "#define NVIDIA_BUGFIX 1" >>confdefs.h
   CONFIG_DEPS="$CONFIG_DEPS \$(SUBDIR_CUDA_DEPS)"
   CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_CUDA_SRCS)"
   ENABLE_CFLAGS="$ENABLE_CFLAGS \$(SUBDIR_CUDA_CFLAGS)"
+else
+
+$as_echo "#define NVIDIA_CUDA_GDB 1" >>confdefs.h
+
 fi
 
  if test x"$enable_cuda" = xyes; then

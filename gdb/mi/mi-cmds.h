@@ -51,11 +51,13 @@ extern mi_cmd_argv_ftype mi_cmd_break_commands;
 extern mi_cmd_argv_ftype mi_cmd_break_passcount;
 extern mi_cmd_argv_ftype mi_cmd_break_watch;
 #ifdef NVIDIA_CUDA_GDB
+extern mi_cmd_argv_ftype mi_cmd_cuda_info_barriers;
 extern mi_cmd_argv_ftype mi_cmd_cuda_info_devices;
 extern mi_cmd_argv_ftype mi_cmd_cuda_info_sms;
 extern mi_cmd_argv_ftype mi_cmd_cuda_info_warps;
 extern mi_cmd_argv_ftype mi_cmd_cuda_info_lanes;
 extern mi_cmd_argv_ftype mi_cmd_cuda_info_kernels;
+extern mi_cmd_argv_ftype mi_cmd_cuda_info_clusters;
 extern mi_cmd_argv_ftype mi_cmd_cuda_info_blocks;
 extern mi_cmd_argv_ftype mi_cmd_cuda_info_threads;
 extern mi_cmd_argv_ftype mi_cmd_cuda_info_launch_trace;

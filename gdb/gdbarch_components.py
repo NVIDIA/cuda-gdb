@@ -190,8 +190,9 @@ machine.
 
 Value(
     comment="""
-The ABI default bit-size and format for "nv_fp8", "bfloat16", "half", "float",
-"double", and "long double".  These bit/format pairs should eventually be combined
+The ABI default bit-size and format for "nv_fp8", "nv_fp6", "nv_fp4",
+"bfloat16", "half", "float", "double", and "long double".
+These bit/format pairs should eventually be combined
 into a single object.  For the moment, just initialize them as a pair.
 Each format describes both the big and little endian layouts (if
 useful).
@@ -243,6 +244,57 @@ Value(
     postdefault="floatformats_nv_fp8_e4m3",
     invalid=False,
     printer="pformat (gdbarch, gdbarch->nv_fp8_e4m3_format)",
+    cudaonly=True,
+)
+
+Value(
+    type="int",
+    name="nv_fp6_e2m3_bit",
+    predefault="TARGET_CHAR_BIT",
+    invalid=False,
+    cudaonly=True,
+)
+
+Value(
+    type="const struct floatformat **",
+    name="nv_fp6_e2m3_format",
+    postdefault="floatformats_nv_fp6_e2m3",
+    invalid=False,
+    printer="pformat (gdbarch, gdbarch->nv_fp6_e2m3_format)",
+    cudaonly=True,
+)
+
+Value(
+    type="int",
+    name="nv_fp6_e3m2_bit",
+    predefault="TARGET_CHAR_BIT",
+    invalid=False,
+    cudaonly=True,
+)
+
+Value(
+    type="const struct floatformat **",
+    name="nv_fp6_e3m2_format",
+    postdefault="floatformats_nv_fp6_e3m2",
+    invalid=False,
+    printer="pformat (gdbarch, gdbarch->nv_fp6_e3m2_format)",
+    cudaonly=True,
+)
+
+Value(
+    type="int",
+    name="nv_fp4_e2m1_bit",
+    predefault="TARGET_CHAR_BIT",
+    invalid=False,
+    cudaonly=True,
+)
+
+Value(
+    type="const struct floatformat **",
+    name="nv_fp4_e2m1_format",
+    postdefault="floatformats_nv_fp4_e2m1",
+    invalid=False,
+    printer="pformat (gdbarch, gdbarch->nv_fp4_e2m1_format)",
     cudaonly=True,
 )
 

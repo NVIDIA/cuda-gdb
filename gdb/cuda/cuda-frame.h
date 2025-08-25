@@ -28,13 +28,11 @@ extern const struct frame_unwind cuda_frame_unwind;
 extern const struct frame_base cuda_frame_base;
 
 const struct frame_unwind *cuda_frame_sniffer (frame_info_ptr next_frame);
-const struct frame_base *
-cuda_frame_base_sniffer (frame_info_ptr next_frame);
+const struct frame_base *cuda_frame_base_sniffer (frame_info_ptr next_frame);
 
 bool cuda_frame_p (frame_info_ptr next_frame);
 bool cuda_frame_outermost_p (frame_info_ptr next_frame);
 
-CORE_ADDR cuda_unwind_pc (struct gdbarch *gdbarch,
-                          frame_info_ptr next_frame);
+CORE_ADDR cuda_unwind_pc (struct gdbarch *gdbarch, frame_info_ptr next_frame);
 
 #endif

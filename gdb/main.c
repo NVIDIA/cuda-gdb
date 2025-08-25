@@ -806,15 +806,7 @@ captured_main_1 (struct captured_main_args *context)
       OPT_EIX,
       OPT_EIEX,
       OPT_READNOW,
-#ifdef NVIDIA_CUDA_GDB
-      OPT_READNEVER,
-      OPT_CUDA_USE_LOCKFILE,
-#ifdef HAVE_PYTHON
-      OPT_CUDA_DISABLE_PYTHON
-#endif
-#else
       OPT_READNEVER
-#endif
     };
     /* This struct requires int* in the struct, but write_files is a bool.
        So use this temporary int that we write back after argument parsing.  */
@@ -890,12 +882,6 @@ captured_main_1 (struct captured_main_args *context)
       {"args", no_argument, &set_args, 1},
       {"l", required_argument, 0, 'l'},
       {"return-child-result", no_argument, &return_child_result, 1},
-#ifdef NVIDIA_CUDA_GDB
-      {"cuda-use-lockfile", required_argument, 0, OPT_CUDA_USE_LOCKFILE},
-#ifdef HAVE_PYTHON
-      {"disable-python", no_argument, 0, OPT_CUDA_DISABLE_PYTHON},
-#endif
-#endif
       {0, no_argument, 0, 0}
     };
 
@@ -953,26 +939,6 @@ captured_main_1 (struct captured_main_args *context)
 	    /* -nw is equivalent to -i=console.  */
 	    interpreter_p = INTERP_CONSOLE;
 	    break;
-#ifdef NVIDIA_CUDA_GDB
-	  case OPT_CUDA_USE_LOCKFILE:
-            {
-              /* Whether cuda-gdb should create a global lock file */
-              extern bool cuda_use_lockfile;
-              cuda_use_lockfile = (atoi (optarg) != 0);
-              break;
-            }
-#ifdef HAVE_PYTHON
-#ifdef NVIDIA_PYTHON_DYNLIB
-	  case OPT_CUDA_DISABLE_PYTHON:
-	    {
-	      /* Whether cuda-gdb should disable dylib python support. */
-	      extern bool cuda_disable_python;
-	      cuda_disable_python = true;
-	      break;
-	    }
-#endif
-#endif
-#endif
 	  case 'f':
 	    annotation_level = 1;
 	    break;
@@ -1554,23 +1520,6 @@ Output and user interface control:\n\n\
   -q, --quiet, --silent\n\
 		     Do not print version number on startup.\n\n\
 "), stream);
-#ifdef NVIDIA_CUDA_GDB
-  gdb_puts (_("\
-CUDA-specific options:\n\n\
-"), stream);
-  gdb_puts (_("\
-  --cuda-use-lockfile=VALUE\n\
-                     If VALUE == 1, create a lock file for cuda-gdb.\n\
-                     Default behavior is not to create a lock file.\n\
-"), stream);
-#ifdef HAVE_PYTHON
-  gdb_puts (_("\
-  --disable-python   Disable python integration.\n\n\
-"), stream);
-#else
-  gdb_puts (_("\n"), stream);
-#endif
-#endif
 #ifdef NVIDIA_CUDA_GDB
   gdb_puts (_("\
 Operating modes:\n\n\

@@ -211,6 +211,20 @@ dwarf2_frame_state::dwarf2_frame_state (CORE_ADDR pc_, struct dwarf2_cie *cie)
 {
 }
 
+#ifdef NVIDIA_CHERRY_PICK
+/* Return the value of register number REG (a DWARF register number),
+   read as an address in a given FRAME.  */
+
+static CORE_ADDR
+read_addr_from_reg (frame_info_ptr frame, int reg)
+{
+  gdbarch *arch = get_frame_arch (frame);
+  int regnum = dwarf_reg_to_regnum_or_error (arch, reg);
+
+  return address_from_register (regnum, frame);
+}
+#endif
+
 /* Execute the required actions for both the DW_CFA_restore and
 DW_CFA_restore_extended instructions.  */
 static void
@@ -242,6 +256,39 @@ register %s (#%d) at %s"),
     }
 }
 
+#ifdef NVIDIA_CHERRY_PICK
+static value *
+execute_stack_op (const gdb_byte *exp, ULONGEST len, int addr_size,
+		  frame_info_ptr this_frame, CORE_ADDR initial,
+		  int initial_in_stack_memory, dwarf2_per_objfile *per_objfile,
+		  bool as_lval = true)
+{
+  scoped_value_mark free_values;
+  struct type *init_type = address_type (per_objfile->objfile->arch (),
+					 addr_size);
+
+  value *init_value = value_at_lazy (init_type, initial);
+  std::vector<value *> init_values;
+
+  init_value->set_stack (initial_in_stack_memory);
+  init_values.push_back (init_value);
+
+  value *result_val
+    = dwarf2_evaluate (exp, len, as_lval, per_objfile, nullptr,
+		       this_frame, addr_size, &init_values, nullptr);
+
+  /* We need to clean up all the values that are not needed any more.
+     The problem with a value_ref_ptr class is that it disconnects the
+     RETVAL from the value garbage collection, so we need to make
+     a copy of that value on the stack to keep everything consistent.
+     The value_ref_ptr will clean up after itself at the end of this block.  */
+  value_ref_ptr value_holder = value_ref_ptr::new_reference (result_val);
+  free_values.free_to_mark ();
+
+  return result_val->copy ();
+}
+
+#else
 static CORE_ADDR
 execute_stack_op (const gdb_byte *exp, ULONGEST len, int addr_size,
 		  frame_info_ptr this_frame, CORE_ADDR initial,
@@ -249,7 +296,6 @@ execute_stack_op (const gdb_byte *exp, ULONGEST len, int addr_size,
 {
   dwarf_expr_context ctx (per_objfile, addr_size);
   scoped_value_mark free_values;
-
   ctx.push_address (initial, initial_in_stack_memory);
   value *result_val = ctx.evaluate (exp, len, true, nullptr, this_frame);
 
@@ -258,8 +304,8 @@ execute_stack_op (const gdb_byte *exp, ULONGEST len, int addr_size,
   else
     return value_as_address (result_val);
 }
-
 
+#endif
 /* Execute FDE program from INSN_PTR possibly up to INSN_END or up to inferior
    PC.  Modify FS state accordingly.  Return current INSN_PTR where the
    execution has stopped, one can resume it on the next call.  */
@@ -1006,10 +1052,21 @@ dwarf2_frame_cache (frame_info_ptr this_frame, void **this_cache)
 	  break;
 
 	case CFA_EXP:
+#ifdef NVIDIA_CHERRY_PICK
+	  {
+	    struct value *value
+	      = execute_stack_op (fs.regs.cfa_exp, fs.regs.cfa_exp_len,
+				  cache->addr_size, this_frame, 0, 0,
+				  cache->per_objfile);
+	    cache->cfa = value->address ();
+	  }
+#else
 	  cache->cfa =
 	    execute_stack_op (fs.regs.cfa_exp, fs.regs.cfa_exp_len,
 			      cache->addr_size, this_frame, 0, 0,
 			      cache->per_objfile);
+#endif
+
 	  break;
 
 	default:
@@ -1207,24 +1264,38 @@ dwarf2_frame_prev_register (frame_info_ptr this_frame, void **this_cache,
       return frame_unwind_got_register (this_frame, regnum, realnum);
 
     case DWARF2_FRAME_REG_SAVED_EXP:
+#ifdef NVIDIA_CHERRY_PICK
+      return execute_stack_op (cache->reg[regnum].loc.exp.start,
+			       cache->reg[regnum].loc.exp.len,
+			       cache->addr_size, this_frame,
+			       cache->cfa, 1, cache->per_objfile);
+#else
       addr = execute_stack_op (cache->reg[regnum].loc.exp.start,
 			       cache->reg[regnum].loc.exp.len,
 			       cache->addr_size,
 			       this_frame, cache->cfa, 1,
 			       cache->per_objfile);
       return frame_unwind_got_memory (this_frame, regnum, addr);
+#endif
 
     case DWARF2_FRAME_REG_SAVED_VAL_OFFSET:
       addr = cache->cfa + cache->reg[regnum].loc.offset;
       return frame_unwind_got_constant (this_frame, regnum, addr);
 
     case DWARF2_FRAME_REG_SAVED_VAL_EXP:
+#ifdef NVIDIA_CHERRY_PICK
+      return execute_stack_op (cache->reg[regnum].loc.exp.start,
+			       cache->reg[regnum].loc.exp.len,
+			       cache->addr_size, this_frame,
+			       cache->cfa, 1, cache->per_objfile, false);
+#else
       addr = execute_stack_op (cache->reg[regnum].loc.exp.start,
 			       cache->reg[regnum].loc.exp.len,
 			       cache->addr_size,
 			       this_frame, cache->cfa, 1,
 			       cache->per_objfile);
       return frame_unwind_got_constant (this_frame, regnum, addr);
+#endif
 
     case DWARF2_FRAME_REG_UNSPECIFIED:
       /* GCC, in its infinite wisdom decided to not provide unwind

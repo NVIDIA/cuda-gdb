@@ -479,18 +479,12 @@ cuda_process_set_symbols (char *buf)
 static void
 cuda_process_initialize_target_packet (char *buf)
 {
-  char *p;
-  bool driver_is_compatible;
-  bool cuda_memcheck;
-
-  extract_bin (NULL, (unsigned char *) &cuda_software_preemption, sizeof (cuda_software_preemption));
-  /* CUDA MEMCHECK support is removed from CUDA GDB: this field is left to maintain
-   * the binary compatibility with legacy CUDA GDB server binaries */
-  extract_bin (NULL, (unsigned char *) &cuda_memcheck, sizeof (cuda_memcheck));
+  /* Extract options that need to be set before initialization */
   extract_bin (NULL, (unsigned char *) &cuda_launch_blocking, sizeof (cuda_launch_blocking));
 
-  driver_is_compatible = cuda_initialize_target ();
+  bool driver_is_compatible = cuda_initialize_target ();
 
+  char *p;
   p = append_bin ((unsigned char *) &get_debugger_api_res, buf, sizeof (get_debugger_api_res), true);
   p = append_bin ((unsigned char *) &set_callback_api_res, p, sizeof (set_callback_api_res), true);
   p = append_bin ((unsigned char *) &api_initialize_res, p, sizeof (api_initialize_res), true);
@@ -914,27 +908,6 @@ cuda_process_read_code_memory_packet (char *buf)
 }
 
 static void
-cuda_process_read_const_memory_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint64_t addr;
-  uint32_t sz;
-  void *value;
-
-  extract_bin (NULL, (unsigned char *) &dev,  sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &addr, sizeof (addr));
-  extract_bin (NULL, (unsigned char *) &sz,   sizeof (sz));
-
-  value = xmalloc (sz);
-  res = cudbgAPI->readConstMemory (dev, addr, value, sz);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) value, p, sz, false);
-  xfree (value);
-}
-
-static void
 cuda_process_read_generic_memory_packet (char *buf)
 {
   CUDBGResult res;
@@ -1224,16 +1197,14 @@ cuda_process_api_request_cleanup_on_detach_packet (char *buf)
 static void
 cuda_process_set_option_packet (char *buf)
 {
-  const char *stop_signal_str = NULL;
   extract_bin (NULL, (unsigned char *) &cuda_debug_general,       sizeof (cuda_debug_general));
   extract_bin (NULL, (unsigned char *) &cuda_debug_libcudbg,      sizeof (cuda_debug_libcudbg));
   extract_bin (NULL, (unsigned char *) &cuda_debug_notifications, sizeof (cuda_debug_notifications));
   extract_bin (NULL, (unsigned char *) &cuda_notify_youngest,     sizeof (cuda_notify_youngest));
+  extract_bin (NULL, (unsigned char *) &cuda_driver_logs,         sizeof (cuda_driver_logs));
 
-  stop_signal_str = extract_string (NULL);
-  /* Be lenient towards older clients: if extra argument was not passed, use SIGTRAP */
-  cuda_stop_signal = (stop_signal_str == NULL || strcmp (stop_signal_str, "SIGTRAP")==0) ?
-                     GDB_SIGNAL_TRAP : GDB_SIGNAL_URG;
+  /* Apply the runtime option */
+  cuda_set_driver_logging (cuda_driver_logs);
 
   append_string ("OK", buf, false);
 }
@@ -1417,9 +1388,6 @@ handle_cuda_packet (char *buf)
     case READ_CODE_MEMORY:
       cuda_process_read_code_memory_packet (buf);
       break;
-    case READ_CONST_MEMORY:
-      cuda_process_read_const_memory_packet (buf);
-      break;
     case READ_GENERIC_MEMORY:
       cuda_process_read_generic_memory_packet (buf);
       break;
@@ -1482,11 +1450,6 @@ handle_cuda_packet (char *buf)
       break;
     case DISASSEMBLE:
       cuda_process_disassemble_packet (buf);
-      break;
-    /* CUDA MEMCHECK support is removed from CUDA GDB: this field is left
-     * to maintain the binary compatibility with legacy CUDA GDB server
-     * binaries */
-    case MEMCHECK_READ_ERROR_ADDRESS:
       break;
     case GET_NUM_DEVICES:
       cuda_process_get_num_devices_packet (buf);
@@ -1599,7 +1562,7 @@ handle_cuda_packet (char *buf)
       cuda_process_single_step_warp_packet (buf);
       break;
     default:
-      error ("unknown cuda packet.\n");
+      error ("unknown cuda packet type: %u\n", (uint32_t) packet_type);
       break;
     }
 }

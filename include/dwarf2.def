@@ -68,6 +68,11 @@
    
    DW_END_TAG - Invoked at the end of the DW_TAG constants.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 DW_FIRST_TAG (DW_TAG_padding, 0x00)
 DW_TAG (DW_TAG_array_type, 0x01)
 DW_TAG (DW_TAG_class_type, 0x02)
@@ -704,6 +709,18 @@ DW_OP (DW_OP_PGI_omp_thread_num, 0xf8)
    to 0 except explicitly documented for one action.  Please refer AArch64 DWARF
    ABI documentation for details.  */
 DW_OP (DW_OP_AARCH64_operation, 0xea)
+/* LLVM extensions for heterogeneous targets */
+DW_OP_DUP (DW_OP_LLVM_form_aspace_address, 0xe1)
+DW_OP_DUP (DW_OP_LLVM_offset, 0xe3)
+DW_OP_DUP (DW_OP_LLVM_offset_constu, 0xe4)
+DW_OP_DUP (DW_OP_LLVM_bit_offset, 0xe5)
+DW_OP (DW_OP_LLVM_undefined, 0xe7)
+DW_OP (DW_OP_LLVM_aspace_bregx, 0xe8)
+DW_OP_DUP (DW_OP_LLVM_piece_end, 0xea)
+DW_OP (DW_OP_LLVM_extend, 0xeb)
+DW_OP (DW_OP_LLVM_select_bit_piece, 0xec)
+DW_OP (DW_OP_LLVM_bit_overlay, 0xed)
+DW_OP (DW_OP_LLVM_overlay, 0xee)
 DW_END_OP
 
 DW_FIRST_ATE (DW_ATE_void, 0x0)

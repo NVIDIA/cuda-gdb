@@ -136,9 +136,10 @@ cuda_instruction::eval_is_control_flow (const bool skip_subroutines)
 
   const char *inst_str = m_opcode.c_str ();
 
-  /* Maxwell+:
-   * https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#maxwell-pascal
-   */
+  /* Turing+:
+   * https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#turing */
+  /* BRXU - covered with BRX */
+  /* JMXU - covered with JMX */
   if (strstr (inst_str, "BRA") != 0)
     return true;
   if (strstr (inst_str, "BRX") != 0)
@@ -166,8 +167,6 @@ cuda_instruction::eval_is_control_flow (const bool skip_subroutines)
     return true;
   if (strstr (inst_str, "SYNC") != 0)
     return true;
-  /* Volta+:
-   * https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#volta */
   if (strstr (inst_str, "BREAK") != 0)
     return true;
   /* BSYNC - covered with SYNC */
@@ -186,10 +185,6 @@ cuda_instruction::eval_is_control_flow (const bool skip_subroutines)
     return true;
   if (strstr (inst_str, "RPCMOV") != 0)
     return true;
-  /* Turing+:
-   * https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#turing */
-  /* BRXU - covered with BRX */
-  /* JMXU - covered with JMX */
   /* Hopper+:
    * https://docs.nvidia.com/cuda/cuda-binary-utilities/index.html#hopper */
   if (strstr (inst_str, "ACQBULK") != 0)
@@ -219,8 +214,9 @@ gdb::optional<cuda_instruction>
 cuda_module_disassembly_cache::disassemble_instruction (uint64_t pc)
 {
   /* Check the setting of disassemble_from */
-  auto source = cuda_options_disassemble_from_elf_image () ? disassembly_source::ELF
-							   : disassembly_source::DEVICE;
+  auto source = cuda_options_disassemble_from_elf_image ()
+		    ? disassembly_source::ELF
+		    : disassembly_source::DEVICE;
   /* Disassemble the instruction */
   auto insn = disassemble_instruction (pc, source);
 
@@ -311,7 +307,9 @@ class cuobjdump_process
 
   /* Set up a spawn process to replace the target fd with a supplied pipe.
      Returns the read-end of that pipe. */
-  int set_up_fd_redirect (posix_spawn_file_actions_t *file_actions, int pipe[2], int target_fd)
+  int
+  set_up_fd_redirect (posix_spawn_file_actions_t *file_actions, int pipe[2],
+		      int target_fd)
   {
     int rfd = pipe[0];
     int wfd = pipe[1];
@@ -319,32 +317,28 @@ class cuobjdump_process
     /* Close read-end in child process */
     int ret = posix_spawn_file_actions_addclose (file_actions, rfd);
     CUDA_ERR_IF (ret != 0, CUDA_TRACE_DISASSEMBLER,
-                 "cuobjdump_process: add close failed: %s",
-                 safe_strerror (ret));
+		 "cuobjdump_process: add close failed: %s",
+		 safe_strerror (ret));
 
     /* Redirect target fd to pipe write-end in child process.
        Original target fd will be closed by dup2. */
     ret = posix_spawn_file_actions_adddup2 (file_actions, wfd, target_fd);
     CUDA_ERR_IF (ret != 0, CUDA_TRACE_DISASSEMBLER,
-                 "cuobjdump_process: add dup2 failed: %s",
-                 safe_strerror (ret));
+		 "cuobjdump_process: add dup2 failed: %s",
+		 safe_strerror (ret));
 
     /* Close write-end in child process, since it has been dup2'd
        into the target fd we can close the duplicate one. */
     ret = posix_spawn_file_actions_addclose (file_actions, wfd);
     CUDA_ERR_IF (ret != 0, CUDA_TRACE_DISASSEMBLER,
-                 "cuobjdump_process: add close failed: %s",
-                 safe_strerror (ret));
+		 "cuobjdump_process: add close failed: %s",
+		 safe_strerror (ret));
 
     return rfd;
   }
 
 public:
-  cuobjdump_process ()
-    : m_pid (-1),
-      m_stdout_fd (-1),
-      m_stderr_fd (-1)
-  {}
+  cuobjdump_process () : m_pid (-1), m_stdout_fd (-1), m_stderr_fd (-1) {}
 
   DISABLE_COPY_AND_ASSIGN (cuobjdump_process);
 
@@ -360,28 +354,31 @@ public:
     return m_stderr_fd;
   }
 
-  std::string get_stderr ()
+  std::string
+  get_stderr ()
   {
     const int STDERR_BUFSZ = 512;
     std::string str;
     ssize_t nr;
 
-    gdb::unique_xmalloc_ptr<char> buff((char *)xmalloc (STDERR_BUFSZ));
+    gdb::unique_xmalloc_ptr<char> buff ((char *)xmalloc (STDERR_BUFSZ));
     str.reserve (STDERR_BUFSZ);
 
     do
       {
-        nr = read (m_stderr_fd, buff.get (), STDERR_BUFSZ);
+	nr = read (m_stderr_fd, buff.get (), STDERR_BUFSZ);
 	if (nr < 0)
 	  {
-	    cuda_trace_domain (CUDA_TRACE_DISASSEMBLER, 
-			       "cuobjdump_process: failed to read from stderr: %s",
-			       safe_strerror (errno));
+	    cuda_trace_domain (
+		CUDA_TRACE_DISASSEMBLER,
+		"cuobjdump_process: failed to read from stderr: %s",
+		safe_strerror (errno));
 	    break;
 	  }
-        if (nr > 0)
-            str.append (buff.get (), nr);
-      } while (nr > 0);
+	if (nr > 0)
+	  str.append (buff.get (), nr);
+      }
+    while (nr > 0);
 
     return str;
   }
@@ -409,20 +406,21 @@ public:
 	std::string args;
 	for (auto arg : cuobjdump_args)
 	  {
-	    args.append(" ");
-	    args.append(arg);
+	    args.append (" ");
+	    args.append (arg);
 	  }
 	cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
-			   "disassembler command (ELF): pc 0x%lx: %s", pc, args.c_str ());
+			   "disassembler command (ELF): pc 0x%lx: %s", pc,
+			   args.c_str ());
       }
 
     int stdout_fds[2];
     int stderr_fds[2];
     posix_spawn_file_actions_t file_actions;
 
-    CUDA_ERR_IF (pipe (stdout_fds) == -1 || pipe (stderr_fds) == -1, CUDA_TRACE_DISASSEMBLER,
-                 "cuobjdump_process: pipe failed: %s",
-                 safe_strerror (errno));
+    CUDA_ERR_IF (pipe (stdout_fds) == -1 || pipe (stderr_fds) == -1,
+		 CUDA_TRACE_DISASSEMBLER, "cuobjdump_process: pipe failed: %s",
+		 safe_strerror (errno));
 
     int ret = posix_spawn_file_actions_init (&file_actions);
     CUDA_ERR_IF (
@@ -430,13 +428,14 @@ public:
 	"Failed to spawn cuobjdump. posix_spawn_file_actions_init failed: %s",
 	safe_strerror (ret));
 
-    m_stdout_fd = set_up_fd_redirect (&file_actions, stdout_fds, STDOUT_FILENO);
-    m_stderr_fd = set_up_fd_redirect (&file_actions, stderr_fds, STDERR_FILENO);
+    m_stdout_fd
+	= set_up_fd_redirect (&file_actions, stdout_fds, STDOUT_FILENO);
+    m_stderr_fd
+	= set_up_fd_redirect (&file_actions, stderr_fds, STDERR_FILENO);
 
     auto argv = vector_to_argv (cuobjdump_args);
-    ret = posix_spawnp (&m_pid, cuobjdump_str.c_str (), &file_actions,
-			NULL, const_cast<char *const *> (argv.get ()),
-			environ);
+    ret = posix_spawnp (&m_pid, cuobjdump_str.c_str (), &file_actions, NULL,
+			const_cast<char *const *> (argv.get ()), environ);
     if (ret != 0)
       {
 	const std::string gdb_path = get_gdb_program_name ();
@@ -463,7 +462,8 @@ public:
     posix_spawn_file_actions_destroy (&file_actions);
 
     /* Close write-end in current process, we don't need it.
-       This will also allow the read-end from this process to return EOF if no more data are available. */
+       This will also allow the read-end from this process to return EOF if no
+       more data are available. */
     close (stdout_fds[1]);
     close (stderr_fds[1]);
 
@@ -504,7 +504,9 @@ cuda_module_disassembly_cache::populate_from_elf_image (const uint64_t pc)
       return gdb::optional<cuda_instruction> ();
     }
   const auto filename = module->filename ();
-  cuda_trace_domain (CUDA_TRACE_DISASSEMBLER, "populate (ELF): found pc 0x%lx in %s", pc, filename.c_str ());
+  cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
+		     "populate (ELF): found pc 0x%lx in %s", pc,
+		     filename.c_str ());
 
   /* Generate the dissassembled code by using cuobjdump Can be
      per-function (faster, but may be invoked multiple times for a
@@ -522,7 +524,7 @@ cuda_module_disassembly_cache::populate_from_elf_image (const uint64_t pc)
   if (m_cuobjdump_json)
     {
       cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
-          "Trying to parse cuobjdump json output");
+			 "Trying to parse cuobjdump json output");
 
       proc.exec (pc, filename, function_name.get (), generate_json_output);
 
@@ -534,8 +536,7 @@ cuda_module_disassembly_cache::populate_from_elf_image (const uint64_t pc)
       std::string proc_err = proc.get_stderr ();
       if (!proc_err.empty ())
 	cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
-			   "cuobjdump_process error: %s",
-			   proc_err.c_str ());
+			   "cuobjdump_process error: %s", proc_err.c_str ());
 
       const bool success = (proc.cleanup () == 0);
       if (success)
@@ -553,7 +554,8 @@ cuda_module_disassembly_cache::populate_from_elf_image (const uint64_t pc)
     }
 
   cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
-        "Failed to parse cuobjdump json output, falling back to plaintext disassembly");
+		     "Failed to parse cuobjdump json output, falling back to "
+		     "plaintext disassembly");
 
   proc.exec (pc, filename, function_name.get (), !generate_json_output);
 
@@ -563,9 +565,8 @@ cuda_module_disassembly_cache::populate_from_elf_image (const uint64_t pc)
   /* Dump stderr into trace logs */
   std::string proc_err = proc.get_stderr ();
   if (!proc_err.empty ())
-    cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
-                       "cuobjdump_process error: %s",
-                       proc_err.c_str ());
+    cuda_trace_domain (CUDA_TRACE_DISASSEMBLER, "cuobjdump_process error: %s",
+		       proc_err.c_str ());
 
   CUDA_ERR_IF (!success, CUDA_TRACE_DISASSEMBLER,
 	       "Failed to cleanup cuobjdump");
@@ -735,7 +736,8 @@ parse_next_line (uint64_t &current_offset, std::string &current_insn,
 }
 
 void
-cuda_module_disassembly_cache::parse_disasm_output (const int fd, cuda_module* module)
+cuda_module_disassembly_cache::parse_disasm_output (const int fd,
+						    cuda_module *module)
 {
   FILE *sass = fdopen (fd, "r");
   CUDA_ERR_IF (!sass, CUDA_TRACE_DISASSEMBLER,
@@ -743,9 +745,6 @@ cuda_module_disassembly_cache::parse_disasm_output (const int fd, cuda_module* m
 	       safe_strerror (errno));
   /* instruction encoding-only lines are 8 bytes each */
   const uint32_t disasm_line_size = 8;
-
-  cuda_trace_domain (CUDA_TRACE_DISASSEMBLER, "Volta+: %s",
-		     m_is_volta_plus ? "true" : "false");
 
   /* parse the sass output and insert each instruction found */
   uint64_t last_pc = 0;
@@ -780,7 +779,7 @@ cuda_module_disassembly_cache::parse_disasm_output (const int fd, cuda_module* m
 	      /* Lookup the symbol to get the entry_pc value from the bound
 	       * minimal symbol */
 	      struct bound_minimal_symbol sym = lookup_minimal_symbol (
-		current_func.c_str (), NULL, module->objfile ());
+		  current_func.c_str (), NULL, module->objfile ());
 	      if (sym.minsym == NULL)
 		{
 		  cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
@@ -798,8 +797,6 @@ cuda_module_disassembly_cache::parse_disasm_output (const int fd, cuda_module* m
 		    complaint (
 			_ ("\"%s\" exists in this program but entry_pc == 0"),
 			current_func.c_str ());
-		  else if (!m_is_volta_plus && ((entry_pc & 0x1f) == 0x08))
-		    entry_pc &= ~0x08;
 		  cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
 				     "found \"%s\" at pc 0x%lx",
 				     current_func.c_str (), entry_pc);
@@ -826,8 +823,8 @@ cuda_module_disassembly_cache::parse_disasm_output (const int fd, cuda_module* m
 				 current_section.c_str (), sym_name.c_str ());
 	      /* Lookup the symbol to get the entry_pc value from the bound
 	       * minimal symbol */
-	      struct bound_minimal_symbol sym
-		  = lookup_minimal_symbol (sym_name.c_str (), NULL, module->objfile ());
+	      struct bound_minimal_symbol sym = lookup_minimal_symbol (
+		  sym_name.c_str (), NULL, module->objfile ());
 	      if (sym.minsym == NULL)
 		{
 		  cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
@@ -845,8 +842,6 @@ cuda_module_disassembly_cache::parse_disasm_output (const int fd, cuda_module* m
 		  if (!entry_pc)
 		    complaint ("'%s' exists in this program but entry_pc == 0",
 			       sym_name.c_str ());
-		  else if (!m_is_volta_plus && ((entry_pc & 0x1f) == 0x08))
-		    entry_pc &= ~0x08;
 		  cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
 				     "found '%s' at pc 0x%lx",
 				     sym_name.c_str (), entry_pc);
@@ -866,8 +861,8 @@ cuda_module_disassembly_cache::parse_disasm_output (const int fd, cuda_module* m
 	      pc = entry_pc + current_offset;
 
 	      /* insert the disassembled instruction into the map */
-	      map_insert_or_assign (
-		  m_elf_map, pc, cuda_instruction (current_insn));
+	      map_insert_or_assign (m_elf_map, pc,
+				    cuda_instruction (current_insn));
 	      last_pc = pc;
 	      cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
 				 "offset-insn: cache pc 0x%lx insn: %s", pc,
@@ -886,13 +881,9 @@ cuda_module_disassembly_cache::parse_disasm_output (const int fd, cuda_module* m
 			     disasm_line_size);
 	  if (last_pc)
 	    {
-	      if (m_is_volta_plus)
-		{
-		  /* skip non-offset lines on Volta+, but still count them */
-		  last_pc += disasm_line_size;
-		  continue;
-		}
-	      pc = last_pc + disasm_line_size;
+	      /* skip non-offset lines, but still count them */
+	      last_pc += disasm_line_size;
+	      continue;
 	    }
 	  else
 	    {

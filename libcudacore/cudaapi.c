@@ -433,14 +433,6 @@ DEF_API_CALL(readParamMemory)(uint32_t dev, uint32_t sm, uint32_t wp,
 	return CUDBG_SUCCESS;
 }
 
-DEF_API_CALL(readConstMemory)(uint32_t dev, uint64_t addr, void *buf,
-			      uint32_t sz)
-{
-	TRACE_FUNC("dev=%u addr=0x%llx buf=%p sz=%u", dev, addr, buf, sz);
-
-	return API_CALL(readGenericMemory)(dev, 0, 0, 0, addr, buf, sz);
-}
-
 DEF_API_CALL(getCbuWarpState)(uint32_t devId, uint32_t sm, uint64_t wp_mask,
 			      CUDBGCbuWarpState *state, uint32_t num_states)
 {
@@ -498,6 +490,9 @@ DEF_API_CALL(getCbuWarpState)(uint32_t devId, uint32_t sm, uint64_t wp_mask,
 	    state->collectiveMask = wte->cbuCollectiveLanesMask;
 
 	    /* Fill the conv barrier masks */
+	    GET_TABLE_ENTRY(scn, NULL, CUDBG_ERROR_INVALID_ARGS,
+			    "cbu_bar_dev%u_sm%u_wp%u", devId, sm, wp);
+
 	    if (cuCoreReadSectionData (curcc->e, scn, &data) != 0)
 	      return CUDBG_ERROR_UNKNOWN;
 
@@ -1922,6 +1917,47 @@ DEF_API_CALL(readWarpResources)(uint32_t dev, uint32_t sm, uint32_t wp,
   return CUDBG_SUCCESS;
 }
 
+DEF_API_CALL (getCudaExceptionString)
+(uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, char *buf,
+ uint32_t bufSz, uint32_t *msgSz)
+{
+  CudbgSmTableEntry *ste;
+  size_t steSize;
+  const char *exceptionString;
+
+  VERIFY_ARG (buf);
+
+  TRACE_FUNC ("dev=%u sm=%u wp=%u ln=%u buf=%p bufSz=%u msgSz=%p", dev, sm, wp,
+	      ln, buf, bufSz, msgSz);
+
+  buf[0] = '\0';
+
+  if (msgSz)
+    *msgSz = 0;
+
+  GET_TABLE_ENTRY (ste, &steSize, CUDBG_ERROR_INVALID_SM, "sm%u_dev%u", sm,
+		   dev);
+
+  if (offsetof (CudbgSmTableEntry, exceptionString) >= steSize)
+    return CUDBG_SUCCESS;
+
+  exceptionString = cuCoreGetStrTabByIndex (curcc, ste->exceptionString);
+  if (!exceptionString)
+    return CUDBG_ERROR_UNKNOWN;
+
+  const size_t requiredBufSz = strlen (exceptionString) + 1;
+  if (msgSz)
+    *msgSz = requiredBufSz;
+
+  if (bufSz < requiredBufSz)
+    return CUDBG_ERROR_BUFFER_TOO_SMALL;
+
+  strncpy (buf, exceptionString, bufSz);
+  buf[bufSz - 1] = '\0';
+
+  return CUDBG_SUCCESS;
+}
+
 static const struct CUDBGAPI_st cudbgCoreApi = {
   /* Initialization */
   API_CALL (doNothing),
@@ -1945,7 +1981,7 @@ static const struct CUDBGAPI_st cudbgCoreApi = {
   API_CALL (readValidLanes),
   API_CALL (readActiveLanes),
   API_CALL (readCodeMemory),
-  API_CALL (readConstMemory),
+  API_CALL (notSupported),
   API_CALL (notSupported),
   API_CALL (readParamMemory),
   API_CALL (readSharedMemory),
@@ -2033,7 +2069,7 @@ static const struct CUDBGAPI_st cudbgCoreApi = {
   API_CALL (notSupported),
   API_CALL (notSupported),
   API_CALL (notSupported),
-  API_CALL (notSupported),
+  API_CALL (doNothing),
   API_CALL (notSupported),
   API_CALL (notSupported),
   API_CALL (notSupported),
@@ -2129,7 +2165,12 @@ static const struct CUDBGAPI_st cudbgCoreApi = {
   /* 12.9 Extensions */
   API_CALL (getCbuWarpState),
   API_CALL (readWarpState),
-  API_CALL  (notSupported) /* consumeCudaLogs */
+  API_CALL (notSupported), /* consumeCudaLogs */
+  API_CALL (notSupported), /* readCPUCallStack */
+
+  /* 13.0 Extensions */
+  API_CALL (getCudaExceptionString),
+  API_CALL (notSupported), /* setNotifyNewEventCallback */
 };
 
 CUDBGAPI cuCoreGetApi(CudaCore *cc)

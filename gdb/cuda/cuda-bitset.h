@@ -2,16 +2,16 @@
  * NVIDIA CUDA Debugger CUDA-GDB
  * Copyright (C) 2007-2025 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 3 as
  * published by the Free Software Foundation.
- * 
+ *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.	 See the
  * GNU General Public License for more details.
- * 
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
@@ -29,18 +29,16 @@
 // for compatibility with later debugger backends which may support
 // more in the future.
 
-class cuda_bitset {
+class cuda_bitset
+{
 public:
-  cuda_bitset ()
-    : m_bit_count (0), m_rounding (sizeof (uint8_t))
-  {
-  }
+  cuda_bitset () : m_bit_count (0), m_rounding (sizeof (uint8_t)) {}
 
   cuda_bitset (uint32_t bits, bool default_value = false, uint32_t length = 0)
-    : m_bit_count (bits)
+      : m_bit_count (bits)
   {
     // Can't specify a length shorter than the minimal required
-    gdb_assert (!length || length*bits_per_byte >= m_bit_count);
+    gdb_assert (!length || length * bits_per_byte >= m_bit_count);
 
     // If default length (0) is passed in, set the length to the
     // minimal number of bytes.
@@ -62,11 +60,12 @@ public:
   cuda_bitset &operator= (cuda_bitset &&) = default;
 
   ~cuda_bitset () = default;
-  
+
   // Set the length of the bitset. Old bits are left in place. Follow
   // this call by fill() if the bitset should be reinitialed to all
   // 0's or all 1's
-  void resize (uint32_t bit_count, uint32_t len = 0)
+  void
+  resize (uint32_t bit_count, uint32_t len = 0)
   {
     // Update this first so we can use length()
     m_bit_count = bit_count;
@@ -79,16 +78,23 @@ public:
   }
 
   // How many bits in the bitset
-  uint32_t size () const
-  { return m_bit_count; }
+  uint32_t
+  size () const
+  {
+    return m_bit_count;
+  }
 
   // Pointer to the underlying data
   // Used for cuda_debugapi calls with .vector_length()
-  void *data ()
-  { return m_data.data (); }
+  void *
+  data ()
+  {
+    return m_data.data ();
+  }
 
   // Copy the bits from the provided buffer
-  void read (uint8_t *buffer, size_t len)
+  void
+  read (uint8_t *buffer, size_t len)
   {
     gdb_assert (len <= m_data.size ());
     memcpy (m_data.data (), buffer, len);
@@ -96,35 +102,49 @@ public:
   }
 
   // Copy the bits into the provided buffer
-  void write (uint8_t *buffer, size_t len)
+  void
+  write (uint8_t *buffer, size_t len)
   {
     gdb_assert (len <= m_data.size ());
     memcpy (buffer, m_data.data (), len);
   }
 
   // Minimal number of bytes to store m_bit_count w/o including rounding
-  size_t length () const
-  { return (m_bit_count + bits_per_byte - 1) / bits_per_byte; }
+  size_t
+  length () const
+  {
+    return (m_bit_count + bits_per_byte - 1) / bits_per_byte;
+  }
 
   // Length of the underlying vector in bytes (may be rounded up from
-  // minimal number of bytes to represent m_bit_count bits due to m_rounding > 1).
-  size_t vector_length () const
-  { return m_data.size (); }
+  // minimal number of bytes to represent m_bit_count bits due to m_rounding >
+  // 1).
+  size_t
+  vector_length () const
+  {
+    return m_data.size ();
+  }
 
   // Return the specified bit
-  uint32_t get (uint32_t bit) const
+  uint32_t
+  get (uint32_t bit) const
   {
     gdb_assert (bit < m_bit_count);
     gdb_assert ((bit / bits_per_byte) < m_data.size ());
-    return (m_data[bit / bits_per_byte] & (1ULL << (bit % bits_per_byte))) ? 1 : 0;
+    return (m_data[bit / bits_per_byte] & (1ULL << (bit % bits_per_byte))) ? 1
+									   : 0;
   }
 
   // Alias for .get (bit)
-  const uint32_t operator[] (uint32_t bit) const
-  { return get (bit); }
+  const uint32_t
+  operator[] (uint32_t bit) const
+  {
+    return get (bit);
+  }
 
   // Set the specified bit to 1 or 0
-  void set (uint32_t bit, bool value = true)
+  void
+  set (uint32_t bit, bool value = true)
   {
     gdb_assert (bit < m_bit_count);
     gdb_assert ((bit / bits_per_byte) < m_data.size ());
@@ -138,36 +158,39 @@ public:
   // Set all bits to the specified value
   // If setting to 1's, make sure we don't set any bits beyond m_bit_count.
   // This makes bitset comparisons much easier
-  void fill (bool value)
+  void
+  fill (bool value)
   {
-    if (value)
+      // std::fill() is much faster for char arrays as it directly calls memset()
+      std::fill (m_data.begin (), m_data.end (), value ? static_cast<char>(0xff) : '\0');
+      if (value)
       {
-	std::fill (m_data.begin (), m_data.end (), 0xff);
 	clear_upper_bits ();
       }
-    else
-      std::fill (m_data.begin (), m_data.end (), 0x00);
   }
 
   // Return true if any bits are set, false otherwise
-  bool any () const
+  bool
+  any () const
   {
-    for (const auto& data : m_data)
+    for (const auto &data : m_data)
       if (data)
 	return true;
     return false;
   }
 
   // Return true if no bits are set, false otherwise
-  bool none () const
+  bool
+  none () const
   {
-    for (const auto& data : m_data)
+    for (const auto &data : m_data)
       if (data)
 	return false;
     return true;
   }
 
-  bool operator!=(const cuda_bitset& other)
+  bool
+  operator!= (const cuda_bitset &other)
   {
     if (m_bit_count != other.m_bit_count)
       return true;
@@ -176,7 +199,8 @@ public:
     return false;
   }
 
-  bool operator==(const cuda_bitset& other)
+  bool
+  operator== (const cuda_bitset &other)
   {
     if (m_bit_count != other.m_bit_count)
       return false;
@@ -189,7 +213,8 @@ public:
   std::string to_hex_string () const;
 
 private:
-  void clear_upper_bits ()
+  void
+  clear_upper_bits ()
   {
     // Now 0-out any trailing bits
     for (auto bit = m_bit_count; bit < (m_data.size () * bits_per_byte); bit++)
@@ -197,16 +222,16 @@ private:
   }
 
   // Number of valid bits in the bitset
-  uint32_t              m_bit_count;
+  uint32_t m_bit_count;
 
   // Rounding factor (in bytes)
-  uint32_t              m_rounding;
+  uint32_t m_rounding;
 
   // A vector of uint64_t holding the bits
-  std::vector<uint8_t>	m_data;
+  std::vector<uint8_t> m_data;
 
   // Some helpful constants
-  static constexpr uint32_t bits_per_byte = 8*sizeof (uint8_t);
+  static constexpr uint32_t bits_per_byte = 8 * sizeof (uint8_t);
 };
 
 #endif

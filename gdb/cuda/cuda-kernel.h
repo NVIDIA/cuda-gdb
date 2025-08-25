@@ -19,8 +19,8 @@
 #ifndef _CUDA_KERNEL_H
 #define _CUDA_KERNEL_H 1
 
-#include "cuda-defs.h"
 #include "cuda-context.h"
+#include "cuda-defs.h"
 #include "cuda-modules.h"
 
 #include <string>
@@ -35,8 +35,8 @@ public:
   cuda_kernel (uint64_t kernel_id, uint32_t dev_id, uint64_t grid_id,
 	       uint64_t virt_code_base, cuda_module *module,
 	       const CuDim3 &grid_dim, const CuDim3 &block_dim,
-	       const CuDim3 &cluster_dim, CUDBGKernelType type,
-	       CUDBGKernelOrigin origin, uint64_t parent_grid_id);
+	       const CuDim3 &cluster_dim_default, const CuDim3 &cluster_dim_preferred,
+               CUDBGKernelType type, CUDBGKernelOrigin origin, uint64_t parent_grid_id);
 
   const uint32_t
   dev_id () const
@@ -98,7 +98,8 @@ public:
     return m_block_dim;
   }
 
-  const CuDim3 &cluster_dim ();
+  const CuDim3 &cluster_dim_default ();
+  const CuDim3 &cluster_dim_preferred ();
 
   const std::string &
   dimensions () const
@@ -150,6 +151,8 @@ public:
   void print ();
 
 private:
+  void get_grid_info ();
+
   uint64_t m_id;      // unique kernel id per GDB session
   uint32_t m_dev_id;  // device where the kernel was launched
   uint64_t m_grid_id; // unique kernel id per device
@@ -160,8 +163,11 @@ private:
   CuDim3 m_grid_dim;  // The grid dimensions of the kernel
   CuDim3 m_block_dim; // The block dimensions of the kernel.
 
-  bool m_cluster_dim_p; // Is the cluster dimension valid?
-  CuDim3 m_cluster_dim; // The cluster dimensions of the kernel.
+  bool m_cluster_dim_default_p; // Is the default cluster dimension valid?
+  CuDim3 m_cluster_dim_default; // The default cluster dimension
+
+  bool m_cluster_dim_preferred_p; // Is the preferred cluster dimension valid?
+  CuDim3 m_cluster_dim_preferred; // The preferred cluster dimension
 
   std::string m_name;		     // name of the kernel if available
   std::string m_dimensions;	     // A string repr. of the kernel dimensions

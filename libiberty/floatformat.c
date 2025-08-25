@@ -462,6 +462,54 @@ const struct floatformat floatformat_nv_fp8_e4m3_little =
   floatformat_always_valid,
   NULL
 };
+const struct floatformat floatformat_nv_fp6_e2m3_big =
+{
+  floatformat_big, 6, 0, 1, 2, 1, 3, 3, 3,
+  floatformat_intbit_no,
+  "floatformat_nv_fp6_e2m3_big",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp6_e2m3_little =
+{
+  floatformat_little, 6, 0, 1, 2, 1, 3, 3, 3,
+  floatformat_intbit_no,
+  "floatformat_nv_fp6_e2m3_little",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp6_e3m2_big =
+{
+  floatformat_big, 6, 0, 1, 3, 3, 7, 4, 2,
+  floatformat_intbit_no,
+  "floatformat_nv_fp6_e3m2_big",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp6_e3m2_little =
+{
+  floatformat_little, 6, 0, 1, 3, 3, 7, 4, 2,
+  floatformat_intbit_no,
+  "floatformat_nv_fp6_e3m2_little",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp4_e2m1_big =
+{
+  floatformat_big, 4, 0, 1, 2, 1, 3, 3, 1,
+  floatformat_intbit_no,
+  "floatformat_nv_fp4_e2m1_big",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp4_e2m1_little =
+{
+  floatformat_little, 4, 0, 1, 2, 1, 3, 3, 1,
+  floatformat_intbit_no,
+  "floatformat_nv_fp4_e2m1_little",
+  floatformat_always_valid,
+  NULL
+};
 #endif
 
 #ifndef min

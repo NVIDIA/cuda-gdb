@@ -24,7 +24,8 @@
 #include <string>
 
 static void
-bits_to_hex (std::stringstream &ss, const cuda_bitset& bits, size_t &pos, const int nbits)
+bits_to_hex (std::stringstream &ss, const cuda_bitset &bits, size_t &pos,
+	     const int nbits)
 {
   gdb_assert (nbits <= 8);
 

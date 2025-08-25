@@ -40,7 +40,7 @@ typedef enum : uint32_t
 } cuda_coords_special_value_t;
 
 constexpr CuDim3 CUDA_WILDCARD_DIM{ CUDA_WILDCARD, CUDA_WILDCARD,
-                                    CUDA_WILDCARD };
+				    CUDA_WILDCARD };
 constexpr CuDim3 CUDA_INVALID_DIM{ CUDA_INVALID, CUDA_INVALID, CUDA_INVALID };
 constexpr CuDim3 CUDA_CURRENT_DIM{ CUDA_CURRENT, CUDA_CURRENT, CUDA_CURRENT };
 constexpr CuDim3 CUDA_IGNORE_DIM{ CUDA_IGNORE, CUDA_IGNORE, CUDA_IGNORE };
@@ -111,15 +111,15 @@ inline bool
 cuda_coord_equals (const T &lhs, const T &rhs)
 {
   return (((lhs == CUDA_WILDCARD) || (rhs == CUDA_WILDCARD)
-           || (lhs == CUDA_IGNORE) || (rhs == CUDA_IGNORE))
-          || (lhs == rhs));
+	   || (lhs == CUDA_IGNORE) || (rhs == CUDA_IGNORE))
+	  || (lhs == rhs));
 }
 template <>
 inline bool
 cuda_coord_equals<CuDim3> (const CuDim3 &lhs, const CuDim3 &rhs)
 {
   return cuda_coord_equals (lhs.x, rhs.x) && cuda_coord_equals (lhs.y, rhs.y)
-         && cuda_coord_equals (lhs.z, rhs.z);
+	 && cuda_coord_equals (lhs.z, rhs.z);
 }
 
 /* Comparison operators for CuDim3 */
@@ -151,8 +151,7 @@ operator< (const CuDim3 &lhs, const CuDim3 &rhs)
 }
 
 // std::make_signed_t was added in C++14
-template< class T >
-using make_signed_t = typename std::make_signed<T>::type;
+template <class T> using make_signed_t = typename std::make_signed<T>::type;
 
 /* Used to compare the distance between two coordinates. If the distance is
  * equal it returns false. Otherwise it returns true and sets the lhs < rhs
@@ -165,10 +164,8 @@ cuda_coord_distance (bool &res, const T &origin, const T &lhs, const T &rhs)
   if (cuda_coord_is_special (origin) || (lhs == rhs))
     return false;
 
-  T lhs_dist
-      = std::abs ((make_signed_t<T>)lhs - (make_signed_t<T>)origin);
-  T rhs_dist
-      = std::abs ((make_signed_t<T>)rhs - (make_signed_t<T>)origin);
+  T lhs_dist = std::abs ((make_signed_t<T>)lhs - (make_signed_t<T>)origin);
+  T rhs_dist = std::abs ((make_signed_t<T>)rhs - (make_signed_t<T>)origin);
 
   // Ignore if the calculated distances match
   if (lhs_dist == rhs_dist)
@@ -235,7 +232,7 @@ private:
 public:
   cuda_coords_physical ()
       : m_dev{ CUDA_INVALID }, m_sm{ CUDA_INVALID }, m_wp{ CUDA_INVALID },
-        m_ln{ CUDA_INVALID }
+	m_ln{ CUDA_INVALID }
   {
   }
   cuda_coords_physical (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln);
@@ -277,7 +274,7 @@ public:
   isFullyDefined () const
   {
     return !(cuda_coord_is_special (m_dev) || cuda_coord_is_special (m_sm)
-             || cuda_coord_is_special (m_wp) || cuda_coord_is_special (m_ln));
+	     || cuda_coord_is_special (m_wp) || cuda_coord_is_special (m_ln));
   }
 
   bool isValidOnDevice (const cuda_coords_logical &expected) const;
@@ -306,18 +303,18 @@ public:
   operator== (const cuda_coords_physical &coord) const
   {
     return (cuda_coord_equals (m_dev, coord.m_dev)
-            && cuda_coord_equals (m_sm, coord.m_sm)
-            && cuda_coord_equals (m_wp, coord.m_wp)
-            && cuda_coord_equals (m_ln, coord.m_ln));
+	    && cuda_coord_equals (m_sm, coord.m_sm)
+	    && cuda_coord_equals (m_wp, coord.m_wp)
+	    && cuda_coord_equals (m_ln, coord.m_ln));
   }
 
   bool
   operator!= (const cuda_coords_physical &coord) const
   {
     return (!cuda_coord_equals (m_dev, coord.m_dev)
-            || !cuda_coord_equals (m_sm, coord.m_sm)
-            || !cuda_coord_equals (m_wp, coord.m_wp)
-            || !cuda_coord_equals (m_ln, coord.m_ln));
+	    || !cuda_coord_equals (m_sm, coord.m_sm)
+	    || !cuda_coord_equals (m_wp, coord.m_wp)
+	    || !cuda_coord_equals (m_ln, coord.m_ln));
   }
 };
 
@@ -328,18 +325,19 @@ private:
   uint64_t m_kernelId;
   uint64_t m_gridId;
   CuDim3 m_clusterIdx;
+  CuDim3 m_clusterDim;
   CuDim3 m_blockIdx;
   CuDim3 m_threadIdx;
 
 public:
   cuda_coords_logical ()
       : m_kernelId{ CUDA_INVALID }, m_gridId{ CUDA_INVALID },
-        m_clusterIdx{ CUDA_INVALID_DIM }, m_blockIdx{ CUDA_INVALID_DIM },
-        m_threadIdx{ CUDA_INVALID_DIM }
+	m_clusterIdx{ CUDA_INVALID_DIM }, m_clusterDim{ CUDA_INVALID_DIM },
+	m_blockIdx{ CUDA_INVALID_DIM }, m_threadIdx{ CUDA_INVALID_DIM }
   {
   }
   cuda_coords_logical (uint64_t kernelId, uint64_t gridId, CuDim3 clusterIdx,
-                       CuDim3 blockIdx, CuDim3 threadIdx);
+		       CuDim3 clusterDim, CuDim3 blockIdx, CuDim3 threadIdx);
   cuda_coords_logical (const cuda_coords_logical &) = default;
   cuda_coords_logical (cuda_coords_logical &&) = default;
   ~cuda_coords_logical () = default;
@@ -354,7 +352,7 @@ public:
     return m_kernelId;
   }
 
-  cuda_kernel* kernel () const;
+  cuda_kernel *kernel () const;
 
   uint64_t
   gridId () const
@@ -369,6 +367,12 @@ public:
   }
 
   const CuDim3 &
+  clusterDim () const
+  {
+    return m_clusterDim;
+  }
+
+  const CuDim3 &
   blockIdx () const
   {
     return m_blockIdx;
@@ -380,16 +384,48 @@ public:
     return m_threadIdx;
   }
 
+  CuDim3
+  clusterCtaIdx () const
+  {
+    if (!hasCluster ())
+      return CUDA_INVALID_DIM;
+
+    return { m_blockIdx.x % m_clusterDim.x, m_blockIdx.y % m_clusterDim.y, m_blockIdx.z % m_clusterDim.z};
+  }
+
+  uint32_t
+  clusterCtaRank () const
+  {
+    if (!hasCluster ())
+      return CUDA_INVALID;
+
+    const CuDim3 cc = clusterCtaIdx ();
+
+    return cc.x + (cc.y * m_clusterDim.x) + (cc.z * m_clusterDim.x * m_clusterDim.y);
+  }
+
   /* Methods */
 
   bool
   isFullyDefined () const
   {
     return !(cuda_coord_is_special (m_kernelId)
-             || cuda_coord_is_special (m_gridId)
-             || cuda_coord_is_special (m_clusterIdx)
-             || cuda_coord_is_special (m_blockIdx)
-             || cuda_coord_is_special (m_threadIdx));
+	     || cuda_coord_is_special (m_gridId)
+	     || cuda_coord_is_special (m_clusterIdx)
+	     || cuda_coord_is_special (m_clusterDim)
+	     || cuda_coord_is_special (m_blockIdx)
+	     || cuda_coord_is_special (m_threadIdx));
+  }
+
+  bool
+  hasCluster () const
+  {
+    /* Coordinate cluster dimension will be set to CUDA_IGNORED if not available
+       and equality tester returns true if any of the operand is CUDA_IGNORED,
+       therefore preventing us from testing if the cluster dimension are set or
+       not. Get the cluster dim from the kernel info instead, where it'll be set
+       to zero if no clusters are present. */
+    return kernel ()->cluster_dim_default ().x != 0;
   }
 
   /* Operators */
@@ -417,18 +453,22 @@ public:
   operator== (const cuda_coords_logical &coord) const
   {
     return (cuda_coord_equals (m_kernelId, coord.m_kernelId)
-            && cuda_coord_equals (m_gridId, coord.m_gridId)
-            && cuda_coord_equals (m_blockIdx, coord.m_blockIdx)
-            && cuda_coord_equals (m_threadIdx, coord.m_threadIdx));
+	    && cuda_coord_equals (m_gridId, coord.m_gridId)
+	    && cuda_coord_equals (m_clusterIdx, coord.m_clusterIdx)
+	    && cuda_coord_equals (m_clusterDim, coord.m_clusterDim)
+	    && cuda_coord_equals (m_blockIdx, coord.m_blockIdx)
+	    && cuda_coord_equals (m_threadIdx, coord.m_threadIdx));
   }
 
   bool
   operator!= (const cuda_coords_logical &coord) const
   {
     return (!cuda_coord_equals (m_kernelId, coord.m_kernelId)
-            || !cuda_coord_equals (m_gridId, coord.m_gridId)
-            || !cuda_coord_equals (m_blockIdx, coord.m_blockIdx)
-            || !cuda_coord_equals (m_threadIdx, coord.m_threadIdx));
+	    || !cuda_coord_equals (m_gridId, coord.m_gridId)
+	    || !cuda_coord_equals (m_clusterIdx, coord.m_clusterIdx)
+	    || !cuda_coord_equals (m_clusterDim, coord.m_clusterDim)
+	    || !cuda_coord_equals (m_blockIdx, coord.m_blockIdx)
+	    || !cuda_coord_equals (m_threadIdx, coord.m_threadIdx));
   }
 };
 
@@ -445,10 +485,11 @@ private:
 public:
   cuda_coords () : m_valid{ false }, m_physical{}, m_logical{} {}
   cuda_coords (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln,
-               uint64_t kernelId, uint64_t gridId, CuDim3 clusterIdx,
-               CuDim3 blockIdx, CuDim3 threadIdx)
+	       uint64_t kernelId, uint64_t gridId, CuDim3 clusterIdx,
+	       CuDim3 clusterDim, CuDim3 blockIdx, CuDim3 threadIdx)
       : m_valid{ false }, m_physical{ dev, sm, wp, ln },
-        m_logical{ kernelId, gridId, clusterIdx, blockIdx, threadIdx }
+	m_logical{ kernelId,   gridId,	 clusterIdx,
+		   clusterDim, blockIdx, threadIdx }
   {
     // Check validity
     isValidOnDevice ();
@@ -493,11 +534,11 @@ public:
   static cuda_coords
   wild ()
   {
-    return cuda_coords{
-      CUDA_WILDCARD,     CUDA_WILDCARD,     CUDA_WILDCARD,
-      CUDA_WILDCARD,     CUDA_WILDCARD,     CUDA_WILDCARD,
-      CUDA_WILDCARD_DIM, CUDA_WILDCARD_DIM, CUDA_WILDCARD_DIM
-    };
+    return cuda_coords{ CUDA_WILDCARD,	   CUDA_WILDCARD,
+			CUDA_WILDCARD,	   CUDA_WILDCARD,
+			CUDA_WILDCARD,	   CUDA_WILDCARD,
+			CUDA_WILDCARD_DIM, CUDA_WILDCARD_DIM,
+			CUDA_WILDCARD_DIM, CUDA_WILDCARD_DIM };
   }
 
   void
@@ -505,13 +546,6 @@ public:
   {
     m_valid = false;
   }
-
-  /*
-   * Given the logical coordinates, try to update the physical coordinates as
-   * they may have changed on the device. Needed for Maxwell with software
-   * preemption.
-   */
-  void resetPhysical ();
 
   /* Ensure the physical coords are valid on the device and the logical coords
    * match the physical coords on the device. */
@@ -561,14 +595,14 @@ public:
   operator== (const cuda_coords &coord) const
   {
     return ((m_physical == coord.m_physical)
-            && (m_logical == coord.m_logical));
+	    && (m_logical == coord.m_logical));
   }
 
   bool
   operator!= (const cuda_coords &coord) const
   {
     return ((m_physical != coord.m_physical)
-            || (m_logical != coord.m_logical));
+	    || (m_logical != coord.m_logical));
   }
 };
 
@@ -610,7 +644,8 @@ public:
      can be used to drive debugger behavior. */
   static void invalidate ();
 
-  /* Clear the current focus and invalidate the sticky behavior. Useful during teardown. */
+  /* Clear the current focus and invalidate the sticky behavior. Useful during
+   * teardown. */
   static void clear ();
 
   /*

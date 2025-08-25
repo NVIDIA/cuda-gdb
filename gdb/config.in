@@ -627,6 +627,9 @@
 /* Define if building with NVIDIA CUDA support. */
 #undef NVIDIA_CUDA_GDB
 
+/* Define if building with NVIDIA CUDA support. */
+#undef NVIDIA_CHERRY_PICK
+
 /* Define if building with NVIDIA dlopen python bindings. */
 #undef NVIDIA_PYTHON_DYNLIB
 

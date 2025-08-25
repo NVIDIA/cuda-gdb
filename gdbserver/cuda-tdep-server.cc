@@ -60,10 +60,7 @@ struct cuda_sym cuda_symbol_list[] =
   CUDA_SYM(CUDBG_REPORTED_DRIVER_INTERNAL_ERROR_CODE),
   /* CUDBG_DETACH_SUSPENDED_DEVICES_MASK is deprecated */
   CUDA_SYM(CUDBG_DETACH_SUSPENDED_DEVICES_MASK),
-  /* CUDA MEMCHECK support is removed from CUDA GDB */
-  CUDA_SYM(CUDBG_ENABLE_INTEGRATED_MEMCHECK),
   CUDA_SYM(CUDBG_ENABLE_LAUNCH_BLOCKING),
-  CUDA_SYM(CUDBG_ENABLE_PREEMPTION_DEBUGGING),
   /* This symbol is not exposed through cudadebugger.h yet */
   CUDA_SYM(cudbgInjectionPath),
   CUDA_SYM(CUDBG_DEBUGGER_CAPABILITIES),
@@ -77,12 +74,11 @@ static char cuda_gdb_session_dir[CUDA_GDB_TMP_BUF_SIZE] = {0};
 static uint32_t cuda_gdb_session_id = 0;
 
 bool cuda_launch_blocking;
-bool cuda_software_preemption;
 bool cuda_debug_general;
 bool cuda_debug_libcudbg;
 bool cuda_debug_notifications;
 bool cuda_notify_youngest;
-unsigned cuda_stop_signal = GDB_SIGNAL_URG;
+bool cuda_driver_logs = true;
 struct cuda_trace_msg *cuda_first_trace_msg = NULL;
 struct cuda_trace_msg *cuda_last_trace_msg = NULL;
 
@@ -302,12 +298,6 @@ cuda_options_launch_blocking (void)
 }
 
 bool
-cuda_options_software_preemption (void)
-{
-  return cuda_software_preemption;
-}
-
-bool
 cuda_options_debug_general (void)
 {
   return cuda_debug_general;
@@ -331,10 +321,10 @@ cuda_options_notify_youngest (void)
   return cuda_notify_youngest;
 }
 
-unsigned
-cuda_options_stop_signal (void)
+bool
+cuda_options_driver_logs (void)
 {
-  return cuda_stop_signal;
+  return cuda_driver_logs;
 }
 
 void
@@ -411,24 +401,25 @@ cuda_initialize (void)
   if (cuda_initialized)
     return;
 
-  set_callback_api_res = cudbgAPI->setNotifyNewEventCallback (cuda_notification_notify);
+  set_callback_api_res = cudbgAPI->setNotifyNewEventCallback41 (cuda_notification_notify);
   api_initialize_res = cudbgAPI->initialize ();
-  if (api_initialize_res == CUDBG_SUCCESS ||
-      api_initialize_res == CUDBG_ERROR_SOME_DEVICES_WATCHDOGGED)
+  if (api_initialize_res != CUDBG_SUCCESS)
     {
-      /* Sucessfully initialized */
-      cuda_initialized = true;
-      /* Check to see if we are using UD */
-      CORE_ADDR useExtDebuggerAddr = 0;
-      uint32_t useExtDebugger = 0;
-      useExtDebuggerAddr = cuda_get_symbol_address_from_cache (_STRING_(CUDBG_USE_EXTERNAL_DEBUGGER));
-      if (useExtDebuggerAddr) {
-        target_read_memory (useExtDebuggerAddr, (gdb_byte *)&useExtDebugger, sizeof(useExtDebugger));
-
-        if (!useExtDebugger)
-          printf ("Running on legacy stack.\n");
-      }
+      fprintf (stderr, "CUDA initialize failed with error result: %u\n", (uint32_t) api_initialize_res);
+      return;
     }
+  /* Sucessfully initialized */
+  cuda_initialized = true;
+  /* Check to see if we are using UD */
+  CORE_ADDR useExtDebuggerAddr = 0;
+  uint32_t useExtDebugger = 0;
+  useExtDebuggerAddr = cuda_get_symbol_address_from_cache (_STRING_(CUDBG_USE_EXTERNAL_DEBUGGER));
+  if (useExtDebuggerAddr) {
+    target_read_memory (useExtDebuggerAddr, (gdb_byte *)&useExtDebugger, sizeof(useExtDebugger));
+
+    if (!useExtDebugger)
+      printf ("Running on legacy stack.\n");
+  }
 }
 
 /* Can be removed when exposed through cudadebugger.h */
@@ -439,11 +430,9 @@ cuda_initialize_injection ()
   CORE_ADDR injectionPathAddr;
   char *injectionPathEnv;
   void *injectionLib;
-  const char *forceLegacy;
 
-  forceLegacy = getenv ("CUDBG_USE_LEGACY_DEBUGGER");
   injectionPathEnv = getenv ("CUDBG_INJECTION_PATH");
-  if ((forceLegacy && forceLegacy[0] == '1') || !injectionPathEnv)
+  if (!injectionPathEnv)
     {
       /* No injection - cuda-gdb is the API client */
       return true;
@@ -494,8 +483,6 @@ cuda_initialize_target (void)
   CORE_ADDR apiClientRevAddr;
   CORE_ADDR sessionIdAddr;
   CORE_ADDR launchblockingAddr;
-  CORE_ADDR preemptionAddr;
-
 
   uint32_t pid;
   uint32_t apiClientRev = CUDBG_API_VERSION_REVISION;
@@ -528,10 +515,9 @@ cuda_initialize_target (void)
   apiClientRevAddr = cuda_get_symbol_address_from_cache (_STRING_(CUDBG_APICLIENT_REVISION));
   sessionIdAddr = cuda_get_symbol_address_from_cache (_STRING_(CUDBG_SESSION_ID));
   launchblockingAddr = cuda_get_symbol_address_from_cache (_STRING_(CUDBG_ENABLE_LAUNCH_BLOCKING));
-  preemptionAddr = cuda_get_symbol_address_from_cache (_STRING_(CUDBG_ENABLE_PREEMPTION_DEBUGGING));
 
   if (!(rpcFlagAddr && gdbPidAddr && apiClientRevAddr &&
-      launchblockingAddr && sessionIdAddr && preemptionAddr))
+      launchblockingAddr && sessionIdAddr))
     return false;
 
   if (!cuda_initialize_injection ())
@@ -543,7 +529,6 @@ cuda_initialize_target (void)
   write_memory (rpcFlagAddr, &one, 1);
   write_memory (apiClientRevAddr, (unsigned char*)&apiClientRev, sizeof(apiClientRev));
   write_memory (sessionIdAddr, (unsigned char*)&sessionId, sizeof(sessionId));
-  write_memory (preemptionAddr, cuda_options_software_preemption () ? &one : &zero, 1);
   write_memory (launchblockingAddr, cuda_options_launch_blocking () ? &one : &zero, 1);
 
   /* Setup our desired capabilities for the debugger backend. It is alright
@@ -562,12 +547,48 @@ cuda_initialize_target (void)
       capabilities
 	  |= CUDBG_DEBUGGER_CAPABILITY_REPORT_EXCEPTIONS_IN_EXITED_WARPS;
 
+      cuda_trace ("requesting CUDA suspend events\n");
+      capabilities |= CUDBG_DEBUGGER_CAPABILITY_SUSPEND_EVENTS;
+
+      if (cuda_options_driver_logs ())
+        {
+          cuda_trace ("requesting CUDA driver logging\n");
+          capabilities |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
+        }
+
       write_memory (capability_addr, (const gdb_byte *)&capabilities,
 		    sizeof (capabilities));
     }
 
   inferior_in_debug_mode = true;
   return true;
+}
+
+/* Set the driver logging capability */
+void
+cuda_set_driver_logging (bool enable)
+{
+  CORE_ADDR capability_addr = cuda_get_symbol_address_from_cache (
+      _STRING_ (CUDBG_DEBUGGER_CAPABILITIES));
+  if (capability_addr)
+    {
+      uint32_t capabilities;
+
+      /* Read the current capabilities from the target */
+      target_read_memory (capability_addr, (gdb_byte *)&capabilities, sizeof (capabilities));
+
+      /* Set or clear the driver logging capability */
+      cuda_trace ("%s CUDA driver logging\n", enable ? "enabling" : "disabling");
+
+      if (enable)
+        capabilities |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
+      else
+        capabilities &= ~CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
+      /* Write the new capabilities back to the target */
+      cuda_trace ("setting CUDA debugger capabilities to 0x%x\n", capabilities);
+      write_memory (capability_addr, (const gdb_byte *)&capabilities,
+        sizeof (capabilities));
+    }
 }
 
 /********* Session Management **********/

@@ -586,6 +586,21 @@ public:
 			const gdb_byte *valaddr, LONGEST embedded_offset)
     const;
 
+#ifdef NVIDIA_CHERRY_PICK
+  /* Copy LENGTH bytes of this value's (all) contents
+     (value_contents_all) starting at SRC_OFFSET byte and
+     SRC_BIT_OFFSET bit, into DST value's (all) contents,
+     starting at DST_OFFSET.  If unavailable contents are
+     being copied from this value, the corresponding DST
+     contents are marked unavailable accordingly.  DST must not be
+     lazy.  If this value is lazy, it will be fetched now.
+
+     It is assumed the contents of DST in the [DST_OFFSET,
+     DST_OFFSET+LENGTH) range are wholly available.  */
+  void contents_copy (struct value *dst, LONGEST dst_offset,
+		      LONGEST src_offset, LONGEST src_bit_offset,
+		      LONGEST length);
+#else
   /* Copy LENGTH bytes of this value's (all) contents
      (value_contents_all) starting at SRC_OFFSET byte, into DST
      value's (all) contents, starting at DST_OFFSET.  If unavailable
@@ -597,6 +612,7 @@ public:
      DST_OFFSET+LENGTH) range are wholly available.  */
   void contents_copy (struct value *dst, LONGEST dst_offset,
 		      LONGEST src_offset, LONGEST length);
+#endif
 
   /* Given a value (offset by OFFSET bytes)
      of a struct or union type ARG_TYPE,
@@ -877,7 +893,12 @@ private:
      It is assumed the contents of DST in the [DST_OFFSET,
      DST_OFFSET+LENGTH) range are wholly available.  */
   void contents_copy_raw (struct value *dst, LONGEST dst_offset,
+#ifdef NVIDIA_CHERRY_PICK
+			  LONGEST src_offset, LONGEST src_bit_offset,
+			  LONGEST length);
+#else
 			  LONGEST src_offset, LONGEST length);
+#endif
 
   /* A helper for value_from_component_bitsize that copies bits from
      this value to DEST.  */
@@ -1101,6 +1122,10 @@ extern struct value *value_field_bitfield (struct type *type, int fieldno,
 					   const struct value *val);
 
 extern void pack_long (gdb_byte *buf, struct type *type, LONGEST num);
+#ifdef NVIDIA_CHERRY_PICK
+extern void pack_unsigned_long (gdb_byte *buf, struct type *type,
+				ULONGEST num);
+#endif
 
 extern struct value *value_from_longest (struct type *type, LONGEST num);
 extern struct value *value_from_ulongest (struct type *type, ULONGEST num);

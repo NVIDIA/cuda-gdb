@@ -447,6 +447,10 @@ struct target_ops
        heap allocated, and are thus only deleted on GDB exit.  The
        main teardown entry point is the "close" method, below.  */
     virtual ~target_ops () {}
+#ifdef NVIDIA_CUDA_GDB
+    /* Track if this is a remote target */
+    virtual bool is_remote_target () const { return false; }
+#endif
 
     /* Return a reference to this target's unique target_info
        object.  */

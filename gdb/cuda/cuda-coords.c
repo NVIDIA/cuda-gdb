@@ -24,8 +24,8 @@
 #include "target.h"
 #include "ui-out.h"
 
-#include "cuda-coords.h"
 #include "cuda-coord-set.h"
+#include "cuda-coords.h"
 #include "cuda-options.h"
 #include "cuda-state.h"
 
@@ -37,7 +37,7 @@ cuda_current_focus cuda_current_focus::m_current_focus{};
 
 /* Methods */
 cuda_coords_physical::cuda_coords_physical (uint32_t dev, uint32_t sm,
-                                            uint32_t wp, uint32_t ln)
+					    uint32_t wp, uint32_t ln)
     : m_dev{ dev }, m_sm{ sm }, m_wp{ wp }, m_ln{ ln }
 {
   // Replace CUDA_CURRENT with coords
@@ -82,10 +82,11 @@ cuda_coords_physical::isValidOnDevice (
 }
 
 cuda_coords_logical::cuda_coords_logical (uint64_t kernelId, uint64_t gridId,
-                                          CuDim3 clusterIdx, CuDim3 blockIdx,
-                                          CuDim3 threadIdx)
+					  CuDim3 clusterIdx, CuDim3 clusterDim,
+					  CuDim3 blockIdx, CuDim3 threadIdx)
     : m_kernelId{ kernelId }, m_gridId{ gridId }, m_clusterIdx{ clusterIdx },
-      m_blockIdx{ blockIdx }, m_threadIdx{ threadIdx }
+      m_clusterDim{ clusterDim }, m_blockIdx{ blockIdx },
+      m_threadIdx{ threadIdx }
 {
   // Replace CUDA_CURRENT with coords
   if (cuda_current_focus::isDevice ())
@@ -94,45 +95,16 @@ cuda_coords_logical::cuda_coords_logical (uint64_t kernelId, uint64_t gridId,
       cuda_evaluate_current (m_kernelId, focus.kernelId ());
       cuda_evaluate_current (m_gridId, focus.gridId ());
       cuda_evaluate_current (m_clusterIdx, focus.clusterIdx ());
+      cuda_evaluate_current (m_clusterDim, focus.clusterDim ());
       cuda_evaluate_current (m_blockIdx, focus.blockIdx ());
       cuda_evaluate_current (m_threadIdx, focus.threadIdx ());
     }
 }
 
-cuda_kernel*
+cuda_kernel *
 cuda_coords_logical::kernel () const
 {
   return cuda_state::find_kernel_by_kernel_id (m_kernelId);
-}
-
-void
-cuda_coords::resetPhysical ()
-{
-  /* Reset valid */
-  m_valid = false;
-
-  /* Search for the matching coord given the logical coordinates.
-   * Assume threads cannot migrate between devices. */
-  cuda_coords filter{ m_physical.dev (),       CUDA_WILDCARD,
-                      CUDA_WILDCARD,           CUDA_WILDCARD,
-                      m_logical.kernelId (),   m_logical.gridId (),
-                      m_logical.clusterIdx (), m_logical.blockIdx (),
-                      m_logical.threadIdx () };
-  cuda_coord_set<cuda_coord_set_type::threads, select_valid | select_sngl> coord{
-    filter
-  };
-
-  /* Ensure we found a valid thread - valid is already false if not. */
-  if (!coord.size ())
-    return;
-
-  /*
-   * Reset physical and return.
-   * Coord is valid at this point.
-   */
-  auto itr = coord.begin ();
-  m_physical = itr->physical ();
-  m_valid = true;
 }
 
 /* to string impl for coords */
@@ -140,7 +112,8 @@ template <typename T>
 const std::string
 cuda_coord_to_string (const T &coord)
 {
-  /* Do not expose CUDA_IGNORE - this denotes coords that should never be exposed to the user */
+  /* Do not expose CUDA_IGNORE - this denotes coords that should never be
+   * exposed to the user */
   gdb_assert (coord != CUDA_IGNORE);
   if (coord == CUDA_INVALID)
     return std::string{ "invalid" };
@@ -200,6 +173,12 @@ cuda_coords::to_string () const
       ret += "cluster ";
       ret += cuda_coord_to_string (l.clusterIdx ());
     }
+  if (!cuda_coord_is_ignored (l.clusterDim ()))
+    {
+      sep ();
+      ret += "cluster dim ";
+      ret += cuda_coord_to_string (l.clusterDim ());
+    }
   if ((l.blockIdx ().x != CUDA_INVALID) || (l.blockIdx ().y != CUDA_INVALID)
       || (l.blockIdx ().z != CUDA_INVALID))
     {
@@ -256,15 +235,22 @@ cuda_coords::emit_mi_output () const
   uiout->field_fmt ("sm", "%s", cuda_coord_to_string (p.sm ()).c_str ());
   uiout->field_fmt ("warp", "%s", cuda_coord_to_string (p.wp ()).c_str ());
   uiout->field_fmt ("lane", "%s", cuda_coord_to_string (p.ln ()).c_str ());
-  uiout->field_fmt ("kernel", "%s", cuda_coord_to_string (l.kernelId ()).c_str ());
+  uiout->field_fmt ("kernel", "%s",
+		    cuda_coord_to_string (l.kernelId ()).c_str ());
   uiout->field_fmt ("grid", "%s", cuda_coord_to_string (l.gridId ()).c_str ());
 
   if (!cuda_coord_is_ignored (l.clusterIdx ()))
     uiout->field_fmt ("clusterIdx", "%s",
 		      cuda_coord_to_string (l.clusterIdx ()).c_str ());
 
-  uiout->field_fmt ("blockIdx", "%s", cuda_coord_to_string (l.blockIdx ()).c_str ());
-  uiout->field_fmt ("threadIdx", "%s", cuda_coord_to_string (l.threadIdx ()).c_str ());
+  if (!cuda_coord_is_ignored (l.clusterDim ()))
+    uiout->field_fmt ("clusterDim", "%s",
+		      cuda_coord_to_string (l.clusterDim ()).c_str ());
+
+  uiout->field_fmt ("blockIdx", "%s",
+		    cuda_coord_to_string (l.blockIdx ()).c_str ());
+  uiout->field_fmt ("threadIdx", "%s",
+		    cuda_coord_to_string (l.threadIdx ()).c_str ());
 }
 
 void
@@ -274,14 +260,14 @@ cuda_current_focus::set (const cuda_coords &coords)
 
   if (focus.valid ())
     cuda_trace ("focus changed from %u/%u/%u/%u to %u/%u/%u/%u",
-                focus.physical ().dev (), focus.physical ().sm (),
-                focus.physical ().wp (), focus.physical ().ln (),
-                coords.physical ().dev (), coords.physical ().sm (),
-                coords.physical ().wp (), coords.physical ().ln ());
+		focus.physical ().dev (), focus.physical ().sm (),
+		focus.physical ().wp (), focus.physical ().ln (),
+		coords.physical ().dev (), coords.physical ().sm (),
+		coords.physical ().wp (), coords.physical ().ln ());
   else
     cuda_trace ("focus changed from invalid to %u/%u/%u/%u",
-                coords.physical ().dev (), coords.physical ().sm (),
-                coords.physical ().wp (), coords.physical ().ln ());
+		coords.physical ().dev (), coords.physical ().sm (),
+		coords.physical ().wp (), coords.physical ().ln ());
 
   /* Assign the new coords */
   m_current_focus.m_coords = coords;
@@ -305,8 +291,8 @@ cuda_current_focus::invalidate ()
   const auto &focus = cuda_current_focus::get ();
   if (focus.valid ())
     cuda_trace ("focus changed from %u/%u/%u/%u to invalid",
-                focus.physical ().dev (), focus.physical ().sm (),
-                focus.physical ().wp (), focus.physical ().ln ());
+		focus.physical ().dev (), focus.physical ().sm (),
+		focus.physical ().wp (), focus.physical ().ln ());
   // Invalidate directly
   m_current_focus.m_coords.invalidate ();
 }
@@ -317,7 +303,7 @@ cuda_current_focus::clear ()
 {
   cuda_trace ("focus cleared");
   // Invalidate directly
-  m_current_focus.m_coords = cuda_coords {};
+  m_current_focus.m_coords = cuda_coords{};
 }
 
 /*Update the current coordinates.
@@ -326,11 +312,11 @@ cuda_current_focus::clear ()
  *  (1) Choose the thread that was previously current if it is still
  *      valid and active. (step_divergent_lanes disabled for active)
  *  (2) If the previously current thread is no longer valid/active,
- *      select the nearest neighbor thread. (step_divergent_lanes disabled for active)
- *  (3) If there was no thread, choose either the thread with lowest logical
- *      coordinates (blockIdx/threadIdx) or the thread with the lowest physical
- *      coordinates (dev/sm/wp/ln). The choice is left to the user
- *      a CUDA option. */
+ *      select the nearest neighbor thread. (step_divergent_lanes disabled for
+ * active) (3) If there was no thread, choose either the thread with lowest
+ * logical coordinates (blockIdx/threadIdx) or the thread with the lowest
+ * physical coordinates (dev/sm/wp/ln). The choice is left to the user a CUDA
+ * option. */
 void
 cuda_current_focus::update ()
 {
@@ -360,34 +346,6 @@ cuda_current_focus::update ()
 	      "valid and active neighbor.");
 
   cuda_coords res;
-
-  /* With software preepmtion the physical coords might have changed. */
-  if (cuda_options_software_preemption ())
-    {
-      const auto &l = m_current_focus.m_coords.logical ();
-      cuda_coords filter{ CUDA_WILDCARD,   CUDA_WILDCARD, CUDA_WILDCARD,
-			  CUDA_WILDCARD,   l.kernelId (), l.gridId (),
-			  l.clusterIdx (), l.blockIdx (), l.threadIdx () };
-      cuda_coord_set<cuda_coord_set_type::threads, select_valid | select_sngl>
-	  coord{ filter };
-      if (coord.size ())
-	{
-	  res = *coord.begin ();
-	  const auto &p = res.physical ();
-	  /* If step_divergent_threads is on, we want to lock the focus to the
-	   * current CUDA thread even if it is no longer active. Otherwise
-	   * ensure that the thread is still active. */
-	  if (cuda_options_step_divergent_lanes_enabled ()
-	      || cuda_state::lane_active (p.dev (), p.sm (), p.wp (), p.ln ()))
-	    {
-	      cuda_current_focus::set (res);
-	      cuda_trace ("Software preemption enabled. Found new physical "
-			  "coordinates (%u, %u, %u, %u)",
-			  p.dev (), p.sm (), p.wp (), p.ln ());
-	      return;
-	    }
-	}
-    }
 
   /* Try to sort the coords based on the nearest neighbor if the previous
    * coords are valid. We need to grab a copy before calling isValidOnDevice
@@ -480,9 +438,9 @@ cuda_current_focus::printFocus (bool switching)
     {
       std::string str = m_current_focus.m_coords.to_string ();
       if (switching)
-        gdb_printf (_ ("[Switching focus to CUDA %s]\n"), str.c_str ());
+	gdb_printf (_ ("[Switching focus to CUDA %s]\n"), str.c_str ());
       else
-        gdb_printf (_ ("[Current focus set to CUDA %s]\n"), str.c_str ());
+	gdb_printf (_ ("[Current focus set to CUDA %s]\n"), str.c_str ());
     }
 
   gdb_flush (gdb_stdout);
@@ -501,15 +459,15 @@ cuda_focus_restore::do_restore ()
     {
       m_restored = true;
       if (m_coords.valid ())
-        switch_to_cuda_thread (m_coords);
+	switch_to_cuda_thread (m_coords);
       else
-        {
-          if (m_ptid == minus_one_ptid || m_ptid == null_ptid)
-            return;
-          if (current_inferior ()->process_target ()->find_thread (m_ptid)
-              == nullptr)
-            return;
-          switch_to_thread (current_inferior ()->process_target (), m_ptid);
-        }
+	{
+	  if (m_ptid == minus_one_ptid || m_ptid == null_ptid)
+	    return;
+	  if (current_inferior ()->process_target ()->find_thread (m_ptid)
+	      == nullptr)
+	    return;
+	  switch_to_thread (current_inferior ()->process_target (), m_ptid);
+	}
     }
 }
