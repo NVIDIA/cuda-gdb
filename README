@@ -1,4 +1,4 @@
-		     README for CUDA-GDB release
+README for CUDA-GDB release
 
 This is CUDA-GDB, the NVIDIA CUDA source-level debugger for Linux and Mac OS,
 based on GDB-14.2, the GNU source-level debugger.
@@ -9,21 +9,33 @@ check the GDB home page at http://www.gnu.org/software/gdb
 CUDA-GDB BUILD INSTRUCTIONS (example only, adjust as needed)
 ===========================
 
-First, make sure that libtermcap and other required dependent packages are
-installed (try sudo yum install ncurses-devel). The configure command will
-issue an error if some packages are missing.
+First, make sure that the required library dependencies are installed
+on your system.
+Install the required development packages by running the commands:
+On Ubuntu:
+    sudo apt-get update && \
+    sudo apt-get install libncurses-dev libgmp-dev libmpfr-dev
+On RHEL/CentOS:
+    sudo yum install ncurses-devel gmp-devel mpfr-devel
+The configure command will print an error if required packages are missing.
 
-Please note that the libexpat development headers must be present if CUDA-GDB
+Please note that the libexpat development package must be installed if CUDA-GDB
 is to be used for cross-platform debugging.
 
-Issue the following commands to build CUDA-GDB:
+Note that the value of the CUDA_HOME variable should match the actual CUDA
+Toolkit installation directory.
+
+Run the following commands to build CUDA-GDB:
+    CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}" \
+    CUDA_INC_FLAGS="-I${CUDA_HOME}/include/ -I${CUDA_HOME}/extras/Debugger/include/" \
     ./configure --program-prefix=cuda- \
         --enable-cuda \
-        --enable-targets="x86_64-unknown-linux-gnu,\
-        arm-elf-linux-gnu,m68k-unknown-linux-gnu" \
-        CFLAGS='-I/usr/local/cuda/include' \
-        LDFLAGS='-lpthread'
-    make
+        --enable-targets=x86_64-unknown-linux-gnu,arm-elf-linux-gnu,m68k-unknown-linux-gnu \
+        CFLAGS="${CUDA_INC_FLAGS}" \
+        CXXFLAGS="${CUDA_INC_FLAGS}" \
+        LDFLAGS="-lpthread"
+    make -j$(nproc)
+
 
 USING CUDA-GDB
 ==============
