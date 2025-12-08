@@ -21,6 +21,7 @@
 
 #include "cuda-bitset.h"
 #include "cuda-context.h"
+#include "cuda-coords.h"
 #include "cuda-defs.h"
 #include "cuda-modules.h"
 #include "cuda-options.h"
@@ -73,6 +74,12 @@ public:
     return m_lane_idx;
   }
 
+  const cuda_coords_physical &
+  get_coords_physical () const
+  {
+    return m_coords_physical;
+  }
+
   // Return a pointer to the warp this lane belongs to
   cuda_warp *
   warp () const
@@ -112,14 +119,6 @@ public:
     m_pc = pc;
   }
 
-  const CuDim3 &get_thread_idx ();
-  void
-  set_thread_idx (const CuDim3 &dim)
-  {
-    m_thread_idx_p = true;
-    m_thread_idx = dim;
-  }
-
   CUDBGException_t get_exception ();
   void
   set_exception (CUDBGException_t exception)
@@ -134,19 +133,18 @@ public:
     set_exception (CUDBG_EXCEPTION_NONE);
   }
 
+  const CuDim3 &get_thread_idx ();
+
   // Attributes that are less commonly used, or that are
   // expensive to calculate (like the return address vector)
   uint64_t get_return_address (int32_t level);
 
   uint32_t get_register (uint32_t regno);
-  uint32_t get_cc_register ();
   bool get_predicate (uint32_t predicate);
   void set_register (uint32_t regno, uint32_t value);
   void set_predicate (uint32_t predicate, bool value);
-  void set_cc_register (uint32_t value);
 
   int32_t get_call_depth ();
-  int32_t get_syscall_call_depth ();
 
   void get_cuda_exception_string (char *buf, uint32_t bufSz);
 
@@ -164,6 +162,9 @@ private:
   uint32_t m_lane_idx = ~0;
   cuda_warp *m_warp = nullptr;
 
+  // Coordinates
+  cuda_coords_physical m_coords_physical;
+
   // Time the warp was last updated
   cuda_clock_t m_timestamp = 0;
 
@@ -180,12 +181,6 @@ private:
   // so are only read on demand
   uint32_t m_call_depth = 0;
   bool m_call_depth_p = false;
-
-  uint32_t m_syscall_call_depth = 0;
-  bool m_syscall_call_depth_p = false;
-
-  uint32_t m_cc_register;
-  bool m_cc_register_p;
 
   // return addresses on a per-frame basis, indexed by level
   std::unordered_map<int32_t, uint64_t> m_return_address;
@@ -260,7 +255,6 @@ public:
   void invalidate (bool quietly, bool recurse);
 
   uint64_t get_grid_id ();
-  void set_grid_id (uint64_t grid_id);
 
   bool has_error_pc ();
   uint64_t get_error_pc ();
@@ -269,12 +263,9 @@ public:
   const CuDim3 &get_cluster_exception_target_block_idx ();
 
   const CuDim3 &get_block_idx ();
-  void set_block_idx (const CuDim3 &block_idx);
 
   const CuDim3 &get_cluster_idx ();
-  void set_cluster_idx (const CuDim3 &cluster_idx);
   const CuDim3 &get_cluster_dim ();
-  void set_cluster_dim (const CuDim3 &cluster_dim);
 
   uint32_t get_valid_lanes_mask ();
   uint32_t get_active_lanes_mask ();
@@ -632,7 +623,7 @@ public:
   const CUDBGGridInfo &get_grid_info (uint64_t grid_id);
 
   void print ();
-  void suspend ();
+  bool suspend (bool spurious = false);
   void resume ();
 
   void set_device_spec (uint32_t num_sms, uint32_t num_warps,
@@ -700,6 +691,57 @@ private:
 
   // Vector of cuda_sm pointers
   std::vector<std::unique_ptr<cuda_sm>> m_sms;
+
+  // Execution state watcher
+  bool m_execution_state_watched = false;
+  bool m_watcher_needs_resume = false;
+
+public:
+  // RAII watcher for device execution state
+  class cuda_device_execution_state_watcher
+  {
+  public:
+    explicit cuda_device_execution_state_watcher (cuda_device *dev)
+	: m_this_device (dev), m_active (false)
+    {
+      gdb_assert (m_this_device != nullptr);
+
+      // If this is the first watcher and the device is running, set the
+      // watcher flag
+      if (!m_this_device->m_execution_state_watched
+	  && !m_this_device->suspended ())
+	{
+	  m_active = true;
+	  m_this_device->m_execution_state_watched = true;
+	}
+    }
+    ~cuda_device_execution_state_watcher ()
+    {
+      if (m_active)
+	{
+	  m_active = false;
+	  m_this_device->m_execution_state_watched = false;
+	  if (m_this_device->m_watcher_needs_resume)
+	    {
+	      // If we have a watcher that needs to resume, do it now
+	      m_this_device->m_watcher_needs_resume = false;
+	      cuda_debugapi::resume_device (m_this_device->dev_idx ());
+	    }
+	}
+      m_this_device = nullptr;
+    }
+    // Non-copyable
+    cuda_device_execution_state_watcher (
+	const cuda_device_execution_state_watcher &)
+	= delete;
+    cuda_device_execution_state_watcher &
+    operator= (const cuda_device_execution_state_watcher &)
+	= delete;
+
+  private:
+    cuda_device *m_this_device;
+    bool m_active;
+  };
 };
 
 class cuda_state final
@@ -838,7 +880,8 @@ public:
   create_kernel (uint32_t dev_id, uint64_t grid_id, uint64_t virt_code_base,
 		 uint64_t module_id, CuDim3 grid_dim, CuDim3 block_dim,
 		 CuDim3 cluster_dim_default, CuDim3 cluster_dim_preferred,
-                 CUDBGKernelType type, CUDBGKernelOrigin origin, uint64_t parent_grid_id);
+		 CUDBGKernelType type, CUDBGKernelOrigin origin,
+		 uint64_t parent_grid_id);
   static void destroy_kernel (uint32_t dev_id, uint64_t grid_id);
   static void destroy_kernel (cuda_kernel *kernel);
   static void update_kernel_args ();
@@ -1153,13 +1196,6 @@ public:
     return device (dev_id)->sm (sm_id)->warp (wp_id)->get_block_idx ();
   }
 
-  static void
-  warp_set_block_idx (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
-		      const CuDim3 &block_idx)
-  {
-    device (dev_id)->sm (sm_id)->warp (wp_id)->set_block_idx (block_idx);
-  }
-
   static const CuDim3 &
   warp_get_cluster_idx (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id)
   {
@@ -1235,27 +1271,6 @@ public:
     return warp (dev_id, sm_id, wp_id)->get_cbu_state ();
   }
 
-  static void
-  warp_set_grid_id (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
-		    uint64_t grid_id)
-  {
-    warp (dev_id, sm_id, wp_id)->set_grid_id (grid_id);
-  }
-
-  static void
-  warp_set_cluster_idx (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
-			const CuDim3 &cluster_idx)
-  {
-    warp (dev_id, sm_id, wp_id)->set_cluster_idx (cluster_idx);
-  }
-
-  static void
-  warp_set_cluster_dim (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
-			const CuDim3 &cluster_dim)
-  {
-    warp (dev_id, sm_id, wp_id)->set_cluster_dim (cluster_dim);
-  }
-
   static uint32_t
   warp_get_uregister (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
 		      uint32_t regno)
@@ -1311,6 +1326,13 @@ public:
     return lane (dev_id, sm_id, wp_id, ln_id)->timestamp_valid ();
   }
 
+  static const cuda_coords_physical &
+  lane_get_coords_physical (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
+			    uint32_t ln_id)
+  {
+    return lane (dev_id, sm_id, wp_id, ln_id)->get_coords_physical ();
+  }
+
   static bool
   lane_active (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id, uint32_t ln_id)
   {
@@ -1351,25 +1373,11 @@ public:
     return lane (dev_id, sm_id, wp_id, ln_id)->get_register (regno);
   }
 
-  static uint32_t
-  lane_get_cc_register (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
-			uint32_t ln_id)
-  {
-    return lane (dev_id, sm_id, wp_id, ln_id)->get_cc_register ();
-  }
-
   static bool
   lane_get_predicate (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
 		      uint32_t ln_id, uint32_t pred)
   {
     return lane (dev_id, sm_id, wp_id, ln_id)->get_predicate (pred);
-  }
-
-  static void
-  lane_set_thread_idx (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
-		       uint32_t ln_id, const CuDim3 &dim)
-  {
-    lane (dev_id, sm_id, wp_id, ln_id)->set_thread_idx (dim);
   }
 
   static void
@@ -1386,25 +1394,11 @@ public:
     lane (dev_id, sm_id, wp_id, ln_id)->set_predicate (pred, value);
   }
 
-  static void
-  lane_set_cc_register (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
-			uint32_t ln_id, uint32_t value)
-  {
-    lane (dev_id, sm_id, wp_id, ln_id)->set_cc_register (value);
-  }
-
   static int32_t
   lane_get_call_depth (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
 		       uint32_t ln_id)
   {
     return lane (dev_id, sm_id, wp_id, ln_id)->get_call_depth ();
-  }
-
-  static int32_t
-  lane_get_syscall_call_depth (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
-			       uint32_t ln_id)
-  {
-    return lane (dev_id, sm_id, wp_id, ln_id)->get_syscall_call_depth ();
   }
 
   static uint64_t

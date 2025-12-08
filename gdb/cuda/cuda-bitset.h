@@ -161,9 +161,10 @@ public:
   void
   fill (bool value)
   {
-      // std::fill() is much faster for char arrays as it directly calls memset()
-      std::fill (m_data.begin (), m_data.end (), value ? static_cast<char>(0xff) : '\0');
-      if (value)
+    // std::fill() is much faster for char arrays as it directly calls memset()
+    std::fill (m_data.begin (), m_data.end (),
+	       value ? static_cast<char> (0xff) : '\0');
+    if (value)
       {
 	clear_upper_bits ();
       }

@@ -37,6 +37,24 @@ DEFINE_OBSERVABLE (signal_received);
 DEFINE_OBSERVABLE (target_changed);
 DEFINE_OBSERVABLE (executable_changed);
 DEFINE_OBSERVABLE (inferior_created);
+#ifdef NVIDIA_CUDA_GDB
+/* This hook is run when we detect that the driver has injected
+   and initialized the debugger library after we requested that.
+   We detect this event with an internal breakpoint in
+   CUDBG_REPORT_ATTACH_PROCEDURE_FINISHED.
+
+   After the library has been initialized, we do some more
+   post-injection work, e.g. we intialize the cuda_debugapi, set
+   debugger capabilities etc. */
+DEFINE_OBSERVABLE (cuda_attach_initiated);
+/* The preinitialized hook is called every time before cuda-gdb
+   tries to initialize the target.
+
+   We use it for re-trying the attach procedure in case
+   the user tries to attach to the program very early before
+   the driver has finished initializing. */
+DEFINE_OBSERVABLE (cuda_driver_preinitialized);
+#endif
 DEFINE_OBSERVABLE (inferior_execd);
 DEFINE_OBSERVABLE (inferior_forked);
 DEFINE_OBSERVABLE (solib_loaded);

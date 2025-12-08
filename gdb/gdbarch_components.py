@@ -933,6 +933,50 @@ Method(
     predicate=True,
 )
 
+#ifdef NVIDIA_CUDA_GDB
+Function(
+    comment="""
+Extracts address space from core address.
+TODO: This hook is a quick fix until a proper address space support
+is added and should not be pushed upstream.
+""",
+    type="int",
+    name="address_class_from_core_address",
+    params=[("CORE_ADDR", "address")],
+    postdefault="default_address_class_from_core_address",
+    invalid=False,
+    cudaonly=True,
+)
+
+Function(
+    comment="""
+Extracts segment address from core address.
+TODO: This hook is a quick fix until a proper address space support
+is added and should not be pushed upstream.
+""",
+    type="CORE_ADDR",
+    name="segment_address_from_core_address",
+    params=[("CORE_ADDR", "address")],
+    postdefault="default_segment_address_from_core_address",
+    invalid=False,
+    cudaonly=True,
+)
+
+Function(
+    comment="""
+Converts segment address and address class to core address.
+TODO: This hook is a quick fix until a proper address space support
+is added and should not be pushed upstream.
+""",
+    type="CORE_ADDR",
+    name="segment_address_to_core_address",
+    params=[("int", "address_class"), ("CORE_ADDR", "address")],
+    postdefault="default_segment_address_to_core_address",
+    invalid=False,
+    cudaonly=True,
+)
+#endif
+
 Method(
     comment="""
 Return the return-value convention that will be used by FUNCTION

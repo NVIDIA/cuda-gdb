@@ -61,7 +61,7 @@ concatenate_string (const char *const *argv, int argc)
 
 void
 mi_cmd_cuda_info_barriers (const char *command, const char *const *argv,
-			  int argc)
+			   int argc)
 {
   char *filter = concatenate_string (argv, argc);
 

@@ -1173,12 +1173,14 @@ captured_main_1 (struct captured_main_args *context)
 #endif
 #endif
 #endif
+      do_final_cleanups ();
       exit (0);
     }
 
   if (print_help)
     {
       print_gdb_help (gdb_stdout);
+      do_final_cleanups ();
       exit (0);
     }
 
@@ -1193,6 +1195,7 @@ captured_main_1 (struct captured_main_args *context)
 #endif
 #endif
 #endif
+      do_final_cleanups ();
       exit (0);
     }
 

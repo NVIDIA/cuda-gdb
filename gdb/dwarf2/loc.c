@@ -3207,6 +3207,18 @@ locexpr_regname (struct gdbarch *gdbarch, int dwarf_regnum)
   return gdbarch_register_name (gdbarch, regnum);
 }
 
+#ifdef NVIDIA_CUDA_GDB
+static const std::string
+cuda_locexpr_regname (struct gdbarch *gdbarch, uint64_t dwarf_regnum)
+{
+  /* Use the standard implementation for non-CUDA targets or unencoded
+   * registers */
+  if (!cuda_is_cuda_gdbarch (gdbarch))
+    return locexpr_regname (gdbarch, (int)dwarf_regnum);
+  auto reg_name = cuda_regname_from_dwarf_register (dwarf_regnum);
+  return !reg_name.empty () ? reg_name : std::string ("bad_register_number");
+}
+#endif
 /* Nicely describe a single piece of a location, returning an updated
    position in the bytecode sequence.  This function cannot recognize
    all locations; if a location is not recognized, it simply returns
@@ -3235,8 +3247,15 @@ locexpr_describe_location_piece (struct symbol *symbol, struct ui_file *stream,
       uint64_t reg;
 
       data = safe_read_uleb128 (data + 1, end, &reg);
+
+#ifdef NVIDIA_CUDA_GDB
+      auto reg_name = cuda_locexpr_regname (gdbarch, reg);
+      auto prefix = (!reg_name.empty () && reg_name[0] == '%') ? "" : "$";
+      gdb_printf (stream, _ ("a variable in %s%s"), prefix, reg_name.c_str ());
+#else
       gdb_printf (stream, _("a variable in $%s"),
 		  locexpr_regname (gdbarch, reg));
+#endif
     }
   else if (data[0] == DW_OP_fbreg)
     {
@@ -3517,8 +3536,18 @@ disassemble_dwarf_expression (struct ui_file *stream,
 
 	case DW_OP_regx:
 	  data = safe_read_uleb128 (data, end, &ul);
+#ifdef NVIDIA_CUDA_GDB
+	  {
+	    auto reg_name = cuda_locexpr_regname (arch, ul);
+	    auto prefix
+		= (!reg_name.empty () && reg_name[0] == '%') ? "" : "$";
+	    gdb_printf (stream, " %s [%s%s]", pulongest (ul), prefix,
+			reg_name.c_str ());
+	  }
+#else
 	  gdb_printf (stream, " %s [$%s]", pulongest (ul),
-		      locexpr_regname (arch, (int) ul));
+		      locexpr_regname (arch, (int)ul));
+#endif
 	  break;
 
 	case DW_OP_implicit_value:
@@ -3567,10 +3596,19 @@ disassemble_dwarf_expression (struct ui_file *stream,
 	case DW_OP_bregx:
 	  data = safe_read_uleb128 (data, end, &ul);
 	  data = safe_read_sleb128 (data, end, &l);
-	  gdb_printf (stream, " register %s [$%s] offset %s",
-		      pulongest (ul),
-		      locexpr_regname (arch, (int) ul),
-		      plongest (l));
+#ifdef NVIDIA_CUDA_GDB
+	  {
+	    auto reg_name = cuda_locexpr_regname (arch, ul);
+	    auto prefix
+		= (!reg_name.empty () && reg_name[0] == '%') ? "" : "$";
+	    gdb_printf (stream, " register %s [%s%s] offset %s",
+			pulongest (ul), prefix, reg_name.c_str (),
+			plongest (l));
+	  }
+#else
+	  gdb_printf (stream, " register %s [$%s] offset %s", pulongest (ul),
+		      locexpr_regname (arch, (int)ul), plongest (l));
+#endif
 	  break;
 
 	case DW_OP_fbreg:
@@ -3710,9 +3748,18 @@ disassemble_dwarf_expression (struct ui_file *stream,
 	    type = dwarf2_get_die_type (type_die, per_cu, per_objfile);
 	    gdb_printf (stream, "<");
 	    type_print (type, "", stream, -1);
+#ifdef NVIDIA_CUDA_GDB
+	    auto reg_name = cuda_locexpr_regname (arch, reg);
+	    auto prefix
+		= (!reg_name.empty () && reg_name[0] == '%') ? "" : "$";
+	    gdb_printf (stream, " [0x%s]> [%s%s]",
+			phex_nz (to_underlying (type_die), 0), prefix,
+			reg_name.c_str ());
+#else
 	    gdb_printf (stream, " [0x%s]> [$%s]",
 			phex_nz (to_underlying (type_die), 0),
 			locexpr_regname (arch, reg));
+#endif
 	  }
 	  break;
 
@@ -3784,14 +3831,18 @@ disassemble_dwarf_expression (struct ui_file *stream,
 
 #ifdef NVIDIA_CUDA_GDB
 	case DW_OP_LLVM_aspace_bregx:
-	  data = safe_read_uleb128 (data, end, &ul);
-	  data = safe_read_sleb128 (data, end, &l);
-	  gdb_printf (stream, " register %s [$%s] offset %s",
-			    pulongest (ul),
-			    locexpr_regname (arch, (int) ul),
-			    plongest (l));
-	  break;
+	  {
+	    data = safe_read_uleb128 (data, end, &ul);
+	    data = safe_read_sleb128 (data, end, &l);
+	    auto reg_name = cuda_locexpr_regname (arch, ul);
+	    auto prefix
+		= (!reg_name.empty () && reg_name[0] == '%') ? "" : "$";
+	    gdb_printf (stream, " register %s [%s%s] offset %s",
+			pulongest (ul), prefix, reg_name.c_str (),
+			plongest (l));
+	  }
 #endif
+	  break;
 
 #ifdef NVIDIA_CHERRY_PICK
 	case DW_OP_LLVM_extend:

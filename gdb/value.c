@@ -3576,6 +3576,20 @@ value_from_pointer (struct type *type, CORE_ADDR addr)
 {
   struct value *val = value::allocate (type);
 
+#ifdef NVIDIA_CUDA_GDB
+  struct gdbarch* arch = type->arch ();
+  int addr_class = gdbarch_address_class_from_core_address (arch, addr);
+
+  if (addr_class)
+    {
+      type_instance_flags flags
+	= gdbarch_address_class_type_flags (arch, type->length (), addr_class);
+      type = make_type_with_address_space (type, flags);
+      addr
+	= gdbarch_segment_address_from_core_address (arch, addr);
+    }
+#endif
+
   store_typed_address (val->contents_raw ().data (),
 		       check_typedef (type), addr);
   return val;

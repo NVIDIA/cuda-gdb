@@ -16,8 +16,11 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "cuda-asm.h"
+#include "cuda-modules.h"
 #include "defs.h"
 
+#include <cstdint>
 #include <sys/ptrace.h>
 #include <sys/signal.h>
 #include <sys/stat.h>
@@ -427,7 +430,7 @@ cuda_nat_linux<BaseTarget>::resume (ptid_t ptid, int sstep, enum gdb_signal ts)
      cuda_wait call.
   */
   cuda_exception ex;
-  if (ex.valid ())
+  if (ex.has_exception ())
     {
       if (ex.recoverable ())
 	{
@@ -513,7 +516,7 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
        * This will query cuda state. Devices have been suspended at this
        * point since we are in the special single stepping pathway. */
       cuda_exception ex;
-      if (ex.valid ())
+      if (ex.has_exception ())
 	{
 	  /* We will handle the exception printing below */
 	  cuda_trace ("cuda_wait: single-stepping encountered an exception.");
@@ -631,25 +634,15 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
   switch_to_thread (this, r);
 
   /* Return if cuda has not been initialized yet */
-  try
+  bool res;
+  if (is_remote_target (this))
+    res = cuda_remote_initialize_target ();
+  else
+    res = cuda_initialize_target ();
+  if (!res)
     {
-      bool res;
-      if (is_remote_target (this))
-	res = cuda_remote_initialize_target ();
-      else
-	res = cuda_initialize_target ();
-      if (!res)
-	{
-	  cuda_trace (
-	      "cuda_wait: cuda_initialize_target() failed, return pid %d",
-	      r.pid ());
-	  cuda_current_focus::invalidate ();
-	  return r;
-	}
-    }
-  catch (const gdb_exception_error &e)
-    {
-      cuda_trace ("cuda_wait: ignoring exception during initialize.");
+      cuda_trace ("cuda_wait: cuda_initialize_target() failed, return pid %d",
+		  r.pid ());
       cuda_current_focus::invalidate ();
       return r;
     }
@@ -672,8 +665,7 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
 	  cuda_trace ("cuda_wait: received suspend event");
 	  devices_suspended = true;
 	  broken_devices = event.cases.allDevicesSuspended.brokenDevicesMask;
-	  faulted_devices
-	      = event.cases.allDevicesSuspended.faultedDevicesMask;
+	  faulted_devices = event.cases.allDevicesSuspended.faultedDevicesMask;
 	  /* This ensures that cuda_state recognizes that the devices have been
 	   * suspended. */
 	  for (auto dev = 0; dev < cuda_state::get_num_devices (); ++dev)
@@ -691,7 +683,8 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
   /* Check for asynchronous events.  These events do not require
      acknowledgement to the debug API, and may arrive at any time
      without an explicit notification. */
-  bool handled_events = cuda_process_events (CUDA_EVENT_ASYNC, handle_suspended_event);
+  bool handled_events
+      = cuda_process_events (CUDA_EVENT_ASYNC, handle_suspended_event);
 
   /* Analyze notifications.  Only check for new events if we've
      we've received a notification, or if we're single stepping
@@ -704,7 +697,8 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
      grid launches, for example), API events will be packed
      alongside of them, so we need to process the API event first. */
   if (cuda_notification_received ())
-    handled_events |= cuda_process_events (CUDA_EVENT_SYNC, handle_suspended_event);
+    handled_events
+	|= cuda_process_events (CUDA_EVENT_SYNC, handle_suspended_event);
 
   /* CUDA - managed memory */
   auto update_managed_memory = [&] () {
@@ -752,10 +746,10 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
 
   auto handle_exception = [&] (cuda_exception &exp) {
     cuda_trace ("cuda_wait: stopped because of an exception");
-    gdb_assert (exp.valid ());
-    exp.printMessage ();
-    ws->set_stopped (exp.gdbSignal ());
-    cuda_set_signo (exp.gdbSignal ());
+    gdb_assert (exp.has_exception ());
+    exp.print_message ();
+    ws->set_stopped (exp.gdb_signal ());
+    cuda_set_signo (exp.gdb_signal ());
     if (exp.has_coords ())
       {
 	tp->need_cuda_context_switch = true;
@@ -772,7 +766,7 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
 	 single stepping. Constructing the cuda_exception will query cuda
 	 state. */
       cuda_exception exp;
-      if (exp.valid ())
+      if (exp.has_exception ())
 	handle_exception (exp);
       else
 	{
@@ -793,7 +787,7 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
 	{
 	  /* Constructing the cuda_exception will query cuda state. */
 	  cuda_exception exp;
-	  if (exp.valid ())
+	  if (exp.has_exception ())
 	    handle_exception (exp);
 	}
       /* Handle breakpoints */
@@ -832,7 +826,7 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
       force_suspend ();
       /* Check for an exception first. */
       cuda_exception exp;
-      if (exp.valid ())
+      if (exp.has_exception ())
 	handle_exception (exp);
       else
 	{
@@ -884,10 +878,10 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
       cuda_trace ("cuda_wait: stopped for a non-CUDA reason.");
       force_suspend ();
       /* FIXME: We need to ensure we update the cuda global tracking signo
-         so that we overwrite it later on. This should be reworked as it
+	 so that we overwrite it later on. This should be reworked as it
 	 isn't a good idea to force siginfo when switching focus between
 	 host and device. */
-      cuda_set_signo (ws->sig());
+      cuda_set_signo (ws->sig ());
     }
   else
     cuda_trace ("cuda_wait: waited for a non-CUDA reason.");
@@ -980,22 +974,28 @@ cuda_nat_linux<BaseTarget>::insert_breakpoint (struct gdbarch *gdbarch,
 
   /* Insert the breakpoint on whatever device accepts it (valid address). */
   bool inserted = false;
-  for (auto dev = 0; dev < cuda_state::get_num_devices (); ++dev)
+  cuda_module* module = cuda_module::find_cuda_module_by_address(bp_tgt->reqstd_address);
+  if (module)
     {
+      uint32_t dev_id = module->context()->dev_id();
       /* If the device is currently executing, we want to halt it temporarily
-	 in order to insert the breakpoint. Resume immediately. We don't want
+	 in order to insert the breakpoint. We don't want
 	 to update the state object when we do this since we will be
 	 temporarily halting execution. */
       bool need_resume = false;
-      if (!cuda_state::device_suspended (dev))
+      auto device = cuda_state::device (dev_id);
+      if (!device->suspended ())
 	{
 	  /* We need to stop the device to insert the breakpoint */
 	  need_resume = true;
-	  cuda_debugapi::suspend_device (dev);
+	  /* The device may have already been suspended. In that case,
+	     don't resume. */
+	  if (!device->suspend (true))
+	    need_resume = false;
 	}
-      inserted |= cuda_debugapi::set_breakpoint (dev, bp_tgt->reqstd_address);
+      inserted |= cuda_debugapi::set_breakpoint (dev_id, bp_tgt->reqstd_address);
       if (need_resume)
-	cuda_debugapi::resume_device (dev);
+	device->resume ();
     }
 
   /* Make sure we save the address where the actual breakpoint was placed.  */
@@ -1017,23 +1017,29 @@ cuda_nat_linux<BaseTarget>::remove_breakpoint (struct gdbarch *gdbarch,
 
   /* Removed the breakpoint on whatever device accepts it (valid address). */
   bool removed = false;
-  for (auto dev = 0; dev < cuda_state::get_num_devices (); ++dev)
+  cuda_module* module = cuda_module::find_cuda_module_by_address(bp_tgt->placed_address);
+  if (module)
     {
+      uint32_t dev_id = module->context()->dev_id();
       /* If the device is currently executing, we want to halt it temporarily
-	 in order to remove the breakpoint. Resume immediately. We don't want
+	 in order to remove the breakpoint. We don't want
 	 to update the state object when we do this since we will be
 	 temporarily halting execution. */
       bool need_resume = false;
-      if (!cuda_state::device_suspended (dev))
+      auto device = cuda_state::device (dev_id);
+      if (!device->suspended ())
 	{
 	  /* We need to stop the device to remove the breakpoint */
 	  need_resume = true;
-	  cuda_debugapi::suspend_device (dev);
+	  /* The device may have already been suspended. In that case,
+	     don't resume. */
+	  if (!device->suspend (true))
+	    need_resume = false;
 	}
-      /* We need to remove breakpoints even if no kernels remain on the device */
-      removed |= cuda_debugapi::unset_breakpoint (dev, bp_tgt->placed_address);
+      /* We need to remove breakpoints even if no kernels remain on the device*/
+      removed |= cuda_debugapi::unset_breakpoint (dev_id, bp_tgt->placed_address);
       if (need_resume)
-	cuda_debugapi::resume_device (dev);
+	device->resume ();
     }
   return !removed;
 }

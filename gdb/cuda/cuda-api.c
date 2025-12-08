@@ -25,6 +25,7 @@
 #include "cuda-api.h"
 #include "cuda-options.h"
 #include "cuda-packet-manager.h"
+#include "cuda-stats.h"
 #include "cuda-tdep.h"
 #include "cuda-utils.h"
 #include "cuda/cuda-version.h"
@@ -72,83 +73,20 @@
   cuda_api_error (res, "%s(%u, %u, %u, %u): " fmt, __FUNCTION__, dev, sm, wp, \
 		  ln, ##__VA_ARGS__)
 
-#define CUDA_API_FUNC_OFFSET(func)                                            \
-  (s_api_call_stats[static_cast<std::size_t> (                                \
-      offsetof (std::remove_pointer<CUDBGAPI>::type, func)                    \
-      / sizeof (uintptr_t))])
-
 #define CUDA_API_PROFILE(func)                                                \
-  cuda_api_profiling timer { __FUNCTION__, CUDA_API_FUNC_OFFSET (func) }
+  cuda_statistic::scoped_timer timer (                                        \
+      s_instance.m_api_call_statistics.get_statistic (__FUNCTION__))
 
 // Globals
 cuda_debugapi cuda_debugapi::s_instance;
-decltype (cuda_debugapi::s_api_call_stats) cuda_debugapi::s_api_call_stats;
 
-class cuda_api_profiling
-{
-public:
-  // Assumes the lifetime of function matches the lifetime of
-  // cuda_api_profiling
-  cuda_api_profiling (const char *function, cuda_api_stat &stat)
-      : m_stat (stat), m_func (function)
-  {
-    if (cuda_options_statistics_collection_enabled ())
-      {
-	m_start_time = std::chrono::steady_clock::now ();
-      }
-  }
-  ~cuda_api_profiling ()
-  {
-    if (cuda_options_statistics_collection_enabled ())
-      {
-	const auto end = std::chrono::steady_clock::now ();
-	const std::chrono::microseconds elapsed
-	    = std::chrono::duration_cast<std::chrono::microseconds> (
-		end - m_start_time);
-	if (m_stat.times_called == 0)
-	  {
-	    // First time recording this function
-	    m_stat.name = std::string (m_func);
-	    m_stat.times_called = 1;
-	    m_stat.total_time = elapsed;
-	    m_stat.min_time = elapsed;
-	    m_stat.max_time = elapsed;
-	  }
-	else
-	  {
-	    m_stat.times_called++;
-	    m_stat.total_time += elapsed;
-	    m_stat.min_time = std::min (m_stat.min_time, elapsed);
-	    m_stat.max_time = std::max (m_stat.max_time, elapsed);
-	  }
-      }
-  }
-
-private:
-  cuda_api_stat &m_stat;
-  const char *m_func;
-  std::chrono::steady_clock::time_point m_start_time;
-};
-
-void
-cuda_debugapi::for_each_api_stat (
-    std::function<void (const cuda_api_stat &)> func)
-{
-  for (const auto &stat : s_api_call_stats)
-    func (stat);
-}
-
-void
-cuda_debugapi::reset_api_stat ()
-{
-  std::fill (std::begin (s_api_call_stats), std::end (s_api_call_stats),
-	     cuda_api_stat{});
-}
-
+// cuda_debugapi implementation
 cuda_debugapi::cuda_debugapi ()
     : m_cudbgAPI{ nullptr }, m_api_ptid{ 0 },
       m_api_state{ CUDA_API_STATE_UNINITIALIZED },
-      m_attach_state{ CUDA_ATTACH_STATE_NOT_STARTED }
+      m_attach_state{ CUDA_ATTACH_STATE_NOT_STARTED }, m_api_call_statistics{
+	"DebugAPI Call Statistics"
+      }
 {
 }
 
@@ -605,9 +543,10 @@ cuda_debugapi::read_param_memory (uint32_t dev, uint32_t sm, uint32_t wp,
 	"failed to read param memory at address 0x%lx size %u", addr, sz);
 
   if ((sz == 4) || (sz == 8))
-    CUDA_API_TRACE_DEV_SM_WARP (
-	dev, sm, wp, "address 0x%lx len %u = 0x%lx", addr, sz,
-	(sz == 4) ? (uint64_t)*(uint32_t *)buf : (uint64_t)*(uint64_t *)buf);
+    CUDA_API_TRACE_DEV_SM_WARP (dev, sm, wp, "address 0x%lx len %u = 0x%lx",
+				addr, sz,
+				(sz == 4) ? (uint64_t) * (uint32_t *)buf
+					  : (uint64_t) * (uint64_t *)buf);
   else
     CUDA_API_TRACE_DEV_SM_WARP (dev, sm, wp, "address 0x%lx len %u", addr, sz);
 }
@@ -627,7 +566,8 @@ cuda_debugapi::read_shared_memory (uint32_t dev, uint32_t sm, uint32_t wp,
 
   if (!target_has_execution () && (res == CUDBG_ERROR_MISSING_DATA))
     CUDA_API_ERROR_DEV_SM_WARP (
-	res, dev, sm, wp, "shared memory is not available in this corefile");
+	res, dev, sm, wp,
+	"Shared memory address 0x%lx is not available in this corefile", addr);
 
   if (res != CUDBG_SUCCESS)
     CUDA_API_ERROR_DEV_SM_WARP (
@@ -654,8 +594,7 @@ cuda_debugapi::read_local_memory (uint32_t dev, uint32_t sm, uint32_t wp,
   if (!target_has_execution () && (res == CUDBG_ERROR_MISSING_DATA))
     CUDA_API_ERROR_DEV_SM_WARP_LANE (
 	res, dev, sm, wp, ln,
-	"local memory address 0x%lx len %u is not available in this corefile",
-	addr, sz);
+	"Local memory address 0x%lx is not available in this corefile", addr);
 
   if (res != CUDBG_SUCCESS)
     {
@@ -777,26 +716,6 @@ cuda_debugapi::read_upredicates (uint32_t dev, uint32_t sm, uint32_t wp,
 	  preds |= 1 << i;
       CUDA_API_TRACE_DEV_SM_WARP (dev, sm, wp, "predicates 0x%08x", preds);
     }
-}
-
-void
-cuda_debugapi::read_cc_register (uint32_t dev, uint32_t sm, uint32_t wp,
-				 uint32_t ln, uint32_t *val)
-{
-  if (!api_state_initialized ())
-    return;
-
-  CUDA_API_PROFILE (readCCRegister);
-
-  CUDBGResult res
-      = s_instance.m_cudbgAPI->readCCRegister (dev, sm, wp, ln, val);
-  cuda_api_print_api_call_result (__FUNCTION__, res);
-
-  if (res != CUDBG_SUCCESS)
-    CUDA_API_ERROR_DEV_SM_WARP_LANE (res, dev, sm, wp, ln,
-				     "failed to read CC register");
-
-  CUDA_API_TRACE_DEV_SM_WARP_LANE (dev, sm, wp, ln, "cc 0x%08x", *val);
 }
 
 void
@@ -1116,26 +1035,6 @@ cuda_debugapi::write_upredicates (uint32_t dev, uint32_t sm, uint32_t wp,
   if (res != CUDBG_SUCCESS)
     CUDA_API_ERROR_DEV_SM_WARP (res, dev, sm, wp,
 				"failed to write uniform predicates");
-}
-
-void
-cuda_debugapi::write_cc_register (uint32_t dev, uint32_t sm, uint32_t wp,
-				  uint32_t ln, uint32_t val)
-{
-  if (!api_state_initialized ())
-    return;
-
-  CUDA_API_PROFILE (writeCCRegister);
-
-  CUDBGResult res
-      = s_instance.m_cudbgAPI->writeCCRegister (dev, sm, wp, ln, val);
-  cuda_api_print_api_call_result (__FUNCTION__, res);
-
-  if (res != CUDBG_SUCCESS)
-    CUDA_API_ERROR_DEV_SM_WARP_LANE (res, dev, sm, wp, ln,
-				     "failed to write CC register");
-
-  CUDA_API_TRACE_DEV_SM_WARP_LANE (dev, sm, wp, ln, "cc 0x%08x", val);
 }
 
 void
@@ -1815,7 +1714,9 @@ cuda_debugapi::read_global_memory (uint64_t addr, void *buf, uint32_t buf_size)
 
   if (!target_has_execution () && (res == CUDBG_ERROR_MISSING_DATA))
     {
-      CUDA_API_ERROR (res, "Global memory is not available in this corefile");
+      CUDA_API_ERROR (
+	  res, "Global memory address 0x%lx is not available in this corefile",
+	  addr);
       return;
     }
 
@@ -1868,11 +1769,11 @@ cuda_debugapi::get_managed_memory_region_info (uint64_t start_addr,
   CUDA_API_TRACE ("0x%lx", start_addr);
 }
 
-void
+bool
 cuda_debugapi::suspend_device (uint32_t dev)
 {
   if (!api_state_initialized ())
-    return;
+    return false;
 
   CUDA_API_PROFILE (suspendDevice);
 
@@ -1883,6 +1784,8 @@ cuda_debugapi::suspend_device (uint32_t dev)
     CUDA_API_ERROR_DEV (res, dev, "failed to suspend device");
 
   CUDA_API_TRACE_DEV (dev, "suspended (%s)", cudbgGetErrorString (res));
+
+  return res != CUDBG_ERROR_SUSPENDED_DEVICE;
 }
 
 void
@@ -2115,26 +2018,6 @@ cuda_debugapi::read_call_depth (uint32_t dev, uint32_t sm, uint32_t wp,
   if (res != CUDBG_SUCCESS)
     CUDA_API_ERROR_DEV_SM_WARP_LANE (res, dev, sm, wp, ln,
 				     "failed to read call depth");
-
-  CUDA_API_TRACE_DEV_SM_WARP_LANE (dev, sm, wp, ln, "depth %u", *depth);
-}
-
-void
-cuda_debugapi::read_syscall_call_depth (uint32_t dev, uint32_t sm, uint32_t wp,
-					uint32_t ln, uint32_t *depth)
-{
-  if (!api_state_initialized ())
-    return;
-
-  CUDA_API_PROFILE (readSyscallCallDepth);
-
-  CUDBGResult res
-      = s_instance.m_cudbgAPI->readSyscallCallDepth (dev, sm, wp, ln, depth);
-  cuda_api_print_api_call_result (__FUNCTION__, res);
-
-  if (res != CUDBG_SUCCESS)
-    CUDA_API_ERROR_DEV_SM_WARP_LANE (res, dev, sm, wp, ln,
-				     "failed to read syscall call depth");
 
   CUDA_API_TRACE_DEV_SM_WARP_LANE (dev, sm, wp, ln, "depth %u", *depth);
 }
@@ -2584,5 +2467,42 @@ cuda_debugapi::get_cuda_exception_string (uint32_t dev, uint32_t sm,
 	// couldn't use CUDA_API_ERROR here because it would cause recursion
 	error (_ ("getCudaExceptionString, error=%s.\n"),
 	       cudbgGetErrorString (res));
+    }
+}
+void
+cuda_debugapi::get_hardware_barrier_info(uint32_t dev, uint32_t sm, 
+           uint32_t wp, uint32_t ln, CUDBGBarrierScope *scope, 
+           char *buf, uint32_t bufSz, uint32_t *msgSz)
+{
+
+     gdb_assert(scope);
+     gdb_assert(buf);
+
+     if (!api_state_initialized ())
+      return;
+     
+     buf[0] = '\0';
+     if (msgSz)
+     *msgSz = 0;
+        
+    if (api_version ().m_revision >= 167)
+    {
+
+      CUDA_API_PROFILE (getHardwareBarrierInfo);
+
+      CUDBGResult res = s_instance.m_cudbgAPI->getHardwareBarrierInfo (dev, sm, wp, ln,
+							   scope, buf, bufSz,
+							   msgSz);
+      cuda_api_print_api_call_result (__FUNCTION__, res);
+
+  if (res == CUDBG_SUCCESS)
+	{
+	  CUDA_API_TRACE ("buffer %s", buf);
+	}
+  else
+	{
+	  CUDA_API_ERROR_DEV_SM_WARP (res, dev, sm, wp,
+				"failed to read warp resources");
+	}
     }
 }

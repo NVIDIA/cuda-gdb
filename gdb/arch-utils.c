@@ -1156,6 +1156,33 @@ default_update_call_site_pc (struct gdbarch *gdbarch, CORE_ADDR pc)
   return pc;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+
+/* See arch-utils.h.  */
+int
+default_address_class_from_core_address (CORE_ADDR address)
+{
+  return 0;
+}
+
+/* See arch-utils.h.  */
+CORE_ADDR
+default_segment_address_from_core_address (CORE_ADDR address)
+{
+  return address;
+}
+
+/* See arch-utils.h.  */
+CORE_ADDR
+default_segment_address_to_core_address (int address_class, CORE_ADDR address)
+{
+  if (address_class != 0)
+    warning (_("This architecture doesn't handle \
+non-default address spaces."));
+  return address;
+}
+
+#endif
 /* Non-zero if we want to trace architecture code.  */
 
 #ifndef GDBARCH_DEBUG

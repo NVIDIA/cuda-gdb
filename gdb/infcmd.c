@@ -2810,6 +2810,40 @@ attach_command (const char *args, int from_tty)
 
       if (!target_is_async_p ())
 	mark_infrun_async_event_handler ();
+
+#ifdef NVIDIA_CUDA_GDB
+      {
+	/* Do not return until the attach procedure has finished.
+	   We will run a few iterations of the GDB event loop to let
+	   the continuations run. */
+	using namespace std::chrono;
+	const auto start = system_clock::now ();
+	auto timeout = milliseconds(5000);
+	auto delay = milliseconds(100);
+
+	while (!inferior->cuda_attach_finished && system_clock::now() - start < timeout)
+	  {
+	    try
+	      {
+		gdb_do_one_event (delay.count());
+	      }
+	    catch (const gdb_exception_forced_quit &ex)
+	      {
+		throw;
+	      }
+	    catch (const gdb_exception &ex)
+	      {
+		exception_print (gdb_stderr, ex);
+		break;
+	      }
+	  }
+      }
+
+      if (!inferior->cuda_attach_finished)
+	{
+	  warning (_ ("Failed to attach in time"));
+	}
+#endif
       return;
     }
   else

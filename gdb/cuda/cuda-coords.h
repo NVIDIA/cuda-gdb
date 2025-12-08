@@ -134,7 +134,7 @@ operator!= (const CuDim3 &lhs, const CuDim3 &rhs)
   return ((lhs.x != rhs.x) || (lhs.y != rhs.y) || (lhs.z != rhs.z));
 }
 inline bool
-operator< (const CuDim3 &lhs, const CuDim3 &rhs)
+operator<(const CuDim3 &lhs, const CuDim3 &rhs)
 {
   /* Want to compare slowest to fastest varying dimensions. */
   /* Check z dimension. */
@@ -281,7 +281,7 @@ public:
 
   /* Operators */
   bool
-  operator< (const cuda_coords_physical &coord) const
+  operator<(const cuda_coords_physical &coord) const
   {
     /* Check device */
     if (!cuda_coord_equals (m_dev, coord.m_dev))
@@ -390,7 +390,8 @@ public:
     if (!hasCluster ())
       return CUDA_INVALID_DIM;
 
-    return { m_blockIdx.x % m_clusterDim.x, m_blockIdx.y % m_clusterDim.y, m_blockIdx.z % m_clusterDim.z};
+    return { m_blockIdx.x % m_clusterDim.x, m_blockIdx.y % m_clusterDim.y,
+	     m_blockIdx.z % m_clusterDim.z };
   }
 
   uint32_t
@@ -401,7 +402,8 @@ public:
 
     const CuDim3 cc = clusterCtaIdx ();
 
-    return cc.x + (cc.y * m_clusterDim.x) + (cc.z * m_clusterDim.x * m_clusterDim.y);
+    return cc.x + (cc.y * m_clusterDim.x)
+	   + (cc.z * m_clusterDim.x * m_clusterDim.y);
   }
 
   /* Methods */
@@ -420,18 +422,18 @@ public:
   bool
   hasCluster () const
   {
-    /* Coordinate cluster dimension will be set to CUDA_IGNORED if not available
-       and equality tester returns true if any of the operand is CUDA_IGNORED,
-       therefore preventing us from testing if the cluster dimension are set or
-       not. Get the cluster dim from the kernel info instead, where it'll be set
-       to zero if no clusters are present. */
+    /* Coordinate cluster dimension will be set to CUDA_IGNORED if not
+       available and equality tester returns true if any of the operand is
+       CUDA_IGNORED, therefore preventing us from testing if the cluster
+       dimension are set or not. Get the cluster dim from the kernel info
+       instead, where it'll be set to zero if no clusters are present. */
     return kernel ()->cluster_dim_default ().x != 0;
   }
 
   /* Operators */
 
   bool
-  operator< (const cuda_coords_logical &coord) const
+  operator<(const cuda_coords_logical &coord) const
   {
     /* Check kernel */
     if (!cuda_coord_equals (m_kernelId, coord.m_kernelId))
@@ -487,9 +489,9 @@ public:
   cuda_coords (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln,
 	       uint64_t kernelId, uint64_t gridId, CuDim3 clusterIdx,
 	       CuDim3 clusterDim, CuDim3 blockIdx, CuDim3 threadIdx)
-      : m_valid{ false }, m_physical{ dev, sm, wp, ln },
-	m_logical{ kernelId,   gridId,	 clusterIdx,
-		   clusterDim, blockIdx, threadIdx }
+      : m_valid{ false }, m_physical{ dev, sm, wp, ln }, m_logical{
+	  kernelId, gridId, clusterIdx, clusterDim, blockIdx, threadIdx
+	}
   {
     // Check validity
     isValidOnDevice ();

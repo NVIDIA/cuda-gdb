@@ -68,8 +68,7 @@ extern char **environ;
 // Create an array of char pointers. The strings still own the pointers. Do not
 // free/edit them.
 static std::unique_ptr<const char *[]>
-vector_to_argv (const std::vector<std::string> &args)
-{
+vector_to_argv (const std::vector<std::string> &args) {
   auto argv = std::make_unique<const char *[]> (args.size () + 1);
   const char **p_argv = argv.get ();
   for (size_t i = 0; i < args.size (); ++i)
@@ -81,8 +80,7 @@ vector_to_argv (const std::vector<std::string> &args)
 }
 
 /* Search for executable in PATH, cuda-gdb launch folder or current folder */
-static bool
-exists (const std::string &fname)
+static bool exists (const std::string &fname)
 {
   struct stat buf;
   return stat (fname.c_str (), &buf) == 0;
@@ -113,27 +111,32 @@ cuda_instruction::to_string () const
 }
 
 bool
-cuda_instruction::is_control_flow (const bool skip_subroutines)
+cuda_instruction::is_barrier ()
 {
-  is_control_flow_value &cache_is_control_flow
-      = skip_subroutines ? m_is_control_flow_skipping_subroutines
-			 : m_is_control_flow;
-
-  if (cache_is_control_flow != is_control_flow_value::unset)
-    return cache_is_control_flow == is_control_flow_value::true_value;
-
-  bool control_flow = eval_is_control_flow (skip_subroutines);
-  cache_is_control_flow = control_flow ? is_control_flow_value::true_value
-				       : is_control_flow_value::false_value;
-  return control_flow;
+  if (!m_is_barrier.has_value ())
+    m_is_barrier = eval_is_barrier ();
+  return *m_is_barrier;
 }
 
 bool
-cuda_instruction::eval_is_control_flow (const bool skip_subroutines)
+cuda_instruction::is_control_flow ()
 {
-  if (m_opcode.size () == 0)
-    return true;
+  if (!m_is_control_flow.has_value ())
+    m_is_control_flow = eval_is_control_flow ();
+  return *m_is_control_flow;
+}
 
+bool
+cuda_instruction::is_subroutine_call ()
+{
+  if (!m_is_subroutine_call.has_value ())
+    m_is_subroutine_call = eval_is_subroutine_call ();
+  return *m_is_subroutine_call;
+}
+
+bool
+cuda_instruction::eval_is_control_flow () const
+{
   const char *inst_str = m_opcode.c_str ();
 
   /* Turing+:
@@ -148,9 +151,6 @@ cuda_instruction::eval_is_control_flow (const bool skip_subroutines)
     return true;
   if (strstr (inst_str, "JMX") != 0)
     return true;
-  if (strstr (inst_str, "CAL") != 0 && !skip_subroutines)
-    return true;
-  // JCAL - covered with CAL
   if (strstr (inst_str, "RET") != 0)
     return true;
   if (strstr (inst_str, "BRK") != 0)
@@ -163,14 +163,11 @@ cuda_instruction::eval_is_control_flow (const bool skip_subroutines)
     return true;
   if (strstr (inst_str, "EXIT") != 0)
     return true;
-  if (strstr (inst_str, "BAR") != 0)
-    return true;
   if (strstr (inst_str, "SYNC") != 0)
     return true;
   if (strstr (inst_str, "BREAK") != 0)
     return true;
   /* BSYNC - covered with SYNC */
-  /* CALL - covered with CAL */
   if (strstr (inst_str, "KILL") != 0)
     return true;
   if (strstr (inst_str, "NANOSLEEP") != 0)
@@ -191,7 +188,23 @@ cuda_instruction::eval_is_control_flow (const bool skip_subroutines)
     return true;
   if (strstr (inst_str, "ENDCOLLECTIVE") != 0)
     return true;
-  /* UCGABAR_* - covered with BAR */
+  return false;
+}
+
+bool
+cuda_instruction::eval_is_subroutine_call () const
+{
+  if (strstr (m_opcode.c_str (), "CALL") != 0)
+    return true;
+  return false;
+}
+
+bool
+cuda_instruction::eval_is_barrier () const
+{
+  /* MEMBAR, DEPBAR, UCGABAR_* - covered with BAR */
+  if (strstr (m_opcode.c_str (), "BAR") != 0)
+    return true;
   return false;
 }
 
@@ -299,94 +312,214 @@ cuda_module_disassembly_cache::add_function_to_cache (
     }
 }
 
-class cuobjdump_process
+class posix_spawn_file_actions
 {
-  pid_t m_pid;
-  int m_stdout_fd;
-  int m_stderr_fd;
+  posix_spawn_file_actions_t m_file_actions;
+  bool m_initialized;
 
-  /* Set up a spawn process to replace the target fd with a supplied pipe.
-     Returns the read-end of that pipe. */
-  int
-  set_up_fd_redirect (posix_spawn_file_actions_t *file_actions, int pipe[2],
-		      int target_fd)
+public:
+  posix_spawn_file_actions () : m_initialized (false)
   {
-    int rfd = pipe[0];
-    int wfd = pipe[1];
+    const int ret = posix_spawn_file_actions_init (&m_file_actions);
+    if (ret != 0)
+      error (_ ("Failed to initialize posix_spawn_file_actions: %s"),
+	     safe_strerror (ret));
+    m_initialized = true;
+  }
 
-    /* Close read-end in child process */
-    int ret = posix_spawn_file_actions_addclose (file_actions, rfd);
+  ~posix_spawn_file_actions ()
+  {
+    if (m_initialized)
+      posix_spawn_file_actions_destroy (&m_file_actions);
+  }
+
+  DISABLE_COPY_AND_ASSIGN (posix_spawn_file_actions);
+
+  posix_spawn_file_actions_t *
+  get ()
+  {
+    if (!m_initialized)
+      error (_ ("posix_spawn_file_actions not initialized"));
+    return &m_file_actions;
+  }
+
+  /* Configure redirection of a pipe's write-end to a target FD in the child
+     process, and ensure the unused ends are closed appropriately.
+     Throws gdb_exception_error on failure. */
+  void
+  add_redirect (int child_read_fd, int child_write_fd, int target_fd)
+  {
+    if (!m_initialized)
+      error (_ ("posix_spawn_file_actions not initialized"));
+
+    /* Close parent's read-end in the child process. */
+    int ret
+	= posix_spawn_file_actions_addclose (&m_file_actions, child_read_fd);
     CUDA_ERR_IF (ret != 0, CUDA_TRACE_DISASSEMBLER,
 		 "cuobjdump_process: add close failed: %s",
 		 safe_strerror (ret));
 
-    /* Redirect target fd to pipe write-end in child process.
-       Original target fd will be closed by dup2. */
-    ret = posix_spawn_file_actions_adddup2 (file_actions, wfd, target_fd);
+    /* Duplicate the pipe's write-end onto the requested FD. */
+    ret = posix_spawn_file_actions_adddup2 (&m_file_actions, child_write_fd,
+					    target_fd);
     CUDA_ERR_IF (ret != 0, CUDA_TRACE_DISASSEMBLER,
 		 "cuobjdump_process: add dup2 failed: %s",
 		 safe_strerror (ret));
 
-    /* Close write-end in child process, since it has been dup2'd
-       into the target fd we can close the duplicate one. */
-    ret = posix_spawn_file_actions_addclose (file_actions, wfd);
+    /* Close the original write-end in the child after dup2. */
+    ret = posix_spawn_file_actions_addclose (&m_file_actions, child_write_fd);
     CUDA_ERR_IF (ret != 0, CUDA_TRACE_DISASSEMBLER,
-		 "cuobjdump_process: add close failed: %s",
+		 "cuobjdump_process: addclose failed for write end: %s",
 		 safe_strerror (ret));
+  }
+};
 
-    return rfd;
+class cuobjdump_process
+{
+  pid_t m_pid;
+  int m_stdout_rfd; // Read end for parent (stdout)
+  int m_stderr_rfd; // Read end for parent (stderr)
+  int m_stdout_wfd; // Write end for child (stdout)
+  int m_stderr_wfd; // Write end for child (stderr)
+  posix_spawn_file_actions
+      m_file_actions; // Prepared file actions holding redirections
+
+  /* Safely close a file descriptor */
+  static void
+  safe_close (int &fd)
+  {
+    if (fd != -1)
+      {
+	close (fd);
+	fd = -1;
+      }
   }
 
 public:
-  cuobjdump_process () : m_pid (-1), m_stdout_fd (-1), m_stderr_fd (-1) {}
+  // Constructor: create pipes and pre-configure file actions so that exec()
+  // only has to spawn the process.
+  cuobjdump_process ()
+      : m_pid (-1), m_stdout_rfd (-1), m_stderr_rfd (-1), m_stdout_wfd (-1),
+	m_stderr_wfd (-1), m_file_actions ()
+  {
+    int stdout_fds[2] = { -1, -1 };
+    int stderr_fds[2] = { -1, -1 };
+
+    CUDA_ERR_IF (pipe (stdout_fds) == -1 || pipe (stderr_fds) == -1,
+		 CUDA_TRACE_DISASSEMBLER, "cuobjdump_process: pipe failed: %s",
+		 safe_strerror (errno));
+
+    // Store read/write ends.
+    m_stdout_rfd = stdout_fds[0];
+    m_stdout_wfd = stdout_fds[1];
+    m_stderr_rfd = stderr_fds[0];
+    m_stderr_wfd = stderr_fds[1];
+
+    /* Set up redirection for stdout/stderr for the spawned
+    process. Configures the file actions to dup the write end of the pipe to
+    the target FD in the child and close unused FDs. */
+    m_file_actions.add_redirect (m_stdout_rfd, m_stdout_wfd, STDOUT_FILENO);
+    m_file_actions.add_redirect (m_stderr_rfd, m_stderr_wfd, STDERR_FILENO);
+  }
+
+  // Destructor: Ensures cleanup if wait() wasn't called explicitly
+  ~cuobjdump_process ()
+  {
+    try
+      {
+	if (m_pid > 0)
+	  wait ();
+      }
+    catch (const gdb_exception &e)
+      {
+	cuda_trace_domain (
+	    CUDA_TRACE_DISASSEMBLER,
+	    ("Ignoring exception in cuobjdump_process dtor: %s"), e.what ());
+      }
+
+    safe_close (m_stdout_rfd);
+    safe_close (m_stderr_rfd);
+    safe_close (m_stdout_wfd);
+    safe_close (m_stderr_wfd);
+  }
 
   DISABLE_COPY_AND_ASSIGN (cuobjdump_process);
 
+  /* Returns the file descriptor for reading the child's stdout. */
   int
-  stdout_fd () const
+  stdout_read_fd () const
   {
-    return m_stdout_fd;
+    return m_stdout_rfd;
   }
 
-  int
-  stderr_fd () const
-  {
-    return m_stderr_fd;
-  }
-
+  /* Reads the entire contents of the child's stderr stream.
+     Should be called after the process has likely finished writing stderr,
+     typically before or during wait. */
   std::string
   get_stderr ()
   {
+    if (m_stderr_rfd == -1)
+      return std::string ();
+
     const int STDERR_BUFSZ = 512;
     std::string str;
     ssize_t nr;
+
+    // Use non-blocking read to avoid hanging if stderr is large or process
+    // hangs
+    const int flags = fcntl (m_stderr_rfd, F_GETFL, 0);
+    if (flags != -1)
+      fcntl (m_stderr_rfd, F_SETFL, flags | O_NONBLOCK);
 
     gdb::unique_xmalloc_ptr<char> buff ((char *)xmalloc (STDERR_BUFSZ));
     str.reserve (STDERR_BUFSZ);
 
     do
       {
-	nr = read (m_stderr_fd, buff.get (), STDERR_BUFSZ);
-	if (nr < 0)
-	  {
-	    cuda_trace_domain (
-		CUDA_TRACE_DISASSEMBLER,
-		"cuobjdump_process: failed to read from stderr: %s",
-		safe_strerror (errno));
-	    break;
-	  }
+	nr = read (m_stderr_rfd, buff.get (), STDERR_BUFSZ);
 	if (nr > 0)
 	  str.append (buff.get (), nr);
+	else if (nr < 0)
+	  {
+	    if (errno == EAGAIN || errno == EWOULDBLOCK)
+	      // No more data available right now.
+	      // We assume stderr is fully read if we hit this.
+	      // For a robust solution, might need select/poll before read.
+	      break;
+	    else
+	      {
+		// Actual read error
+		cuda_trace_domain (
+		    CUDA_TRACE_DISASSEMBLER,
+		    "cuobjdump_process: failed to read from stderr: %s",
+		    safe_strerror (errno));
+		break;
+	      }
+	  }
       }
     while (nr > 0);
+
+    // Restore original flags if changed
+    if (flags != -1)
+      fcntl (m_stderr_rfd, F_SETFL, flags);
 
     return str;
   }
 
+  /* Executes cuobjdump with the given parameters. Sets up pipes for
+     stdout/stderr, spawns the process, and closes unnecessary FDs in the
+     parent. Throws gdb_exception_error on failure. */
   void
   exec (uint64_t pc, const std::string &filename, const char *function_name,
 	const bool generate_json)
   {
+    // Check if already active by inspecting pid
+    if (m_pid > 0)
+      error ("cuobjdump_process::exec called on already active object.");
+
+    // Reset pid state only; file descriptors are prepared at construction.
+    m_pid = -1;
+
     std::string cuobjdump_str ("cuobjdump");
     std::vector<std::string> cuobjdump_args
 	= { cuobjdump_str, "--dump-sass", filename };
@@ -402,99 +535,159 @@ public:
 
     if (cuda_options_trace_domain_enabled (CUDA_TRACE_DISASSEMBLER))
       {
-	// Build up and log the cuobjdump invocation command line
-	std::string args;
-	for (auto arg : cuobjdump_args)
+	std::string args_str;
+	for (const auto &arg : cuobjdump_args)
 	  {
-	    args.append (" ");
-	    args.append (arg);
+	    args_str.append (" ");
+	    args_str.append (arg);
 	  }
 	cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
-			   "disassembler command (ELF): pc 0x%lx: %s", pc,
-			   args.c_str ());
+			   "disassembler command (ELF): pc 0x%lx:%s", pc,
+			   args_str.c_str ());
       }
 
-    int stdout_fds[2];
-    int stderr_fds[2];
-    posix_spawn_file_actions_t file_actions;
-
-    CUDA_ERR_IF (pipe (stdout_fds) == -1 || pipe (stderr_fds) == -1,
-		 CUDA_TRACE_DISASSEMBLER, "cuobjdump_process: pipe failed: %s",
-		 safe_strerror (errno));
-
-    int ret = posix_spawn_file_actions_init (&file_actions);
-    CUDA_ERR_IF (
-	ret != 0, CUDA_TRACE_DISASSEMBLER,
-	"Failed to spawn cuobjdump. posix_spawn_file_actions_init failed: %s",
-	safe_strerror (ret));
-
-    m_stdout_fd
-	= set_up_fd_redirect (&file_actions, stdout_fds, STDOUT_FILENO);
-    m_stderr_fd
-	= set_up_fd_redirect (&file_actions, stderr_fds, STDERR_FILENO);
-
-    auto argv = vector_to_argv (cuobjdump_args);
-    ret = posix_spawnp (&m_pid, cuobjdump_str.c_str (), &file_actions, NULL,
-			const_cast<char *const *> (argv.get ()), environ);
-    if (ret != 0)
+    try
       {
-	const std::string gdb_path = get_gdb_program_name ();
-	const auto slash = gdb_path.rfind ("/");
-	CUDA_ERR_IF (slash == std::string::npos, CUDA_TRACE_DISASSEMBLER,
-		     "Failed to spawn cuobjdump. could not find gdb path to "
-		     "retry and posix_spawnp failed: %s",
-		     safe_strerror (ret));
+	auto argv = vector_to_argv (cuobjdump_args);
 
-	const std::string gdb_dir = gdb_path.substr (0, slash);
-	const std::string cuobjdump_path = gdb_dir + "/cuobjdump";
-	bool cuobjdump_exists = exists (cuobjdump_path);
-	CUDA_ERR_IF (!cuobjdump_exists, CUDA_TRACE_DISASSEMBLER,
-		     "Failed to spawn cuobjdump. cuobjdump does not exist in "
-		     "gdb path and posix_spawnp failed: %s",
-		     safe_strerror (ret));
+	// First spawn attempt using PATH
+	int ret = posix_spawnp (
+	    &m_pid, cuobjdump_str.c_str (), m_file_actions.get (), NULL,
+	    const_cast<char *const *> (argv.get ()), environ);
 
-	argv.get ()[0] = cuobjdump_path.c_str ();
-	ret = posix_spawnp (&m_pid, cuobjdump_path.c_str (), &file_actions,
-			    NULL, const_cast<char *const *> (argv.get ()),
-			    environ);
+	if (ret != 0)
+	  {
+	    // Fallback spawn attempt if first failed (e.g., not in PATH)
+	    cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
+			       "posix_spawnp failed for '%s' (errno %d: %s), "
+			       "trying path relative to gdb",
+			       cuobjdump_str.c_str (), ret,
+			       safe_strerror (ret));
+
+	    const std::string gdb_path = get_gdb_program_name ();
+	    const auto slash_idx = gdb_path.rfind ("/");
+	    CUDA_ERR_IF (
+		slash_idx == std::string::npos, CUDA_TRACE_DISASSEMBLER,
+		"Failed to find gdb directory for cuobjdump fallback: %s",
+		gdb_path.c_str ());
+
+	    const std::string gdb_bin_dir = gdb_path.substr (0, slash_idx);
+	    const std::string cuobjdump_path = gdb_bin_dir + "/cuobjdump";
+
+	    // Check existence before attempting spawn with full path
+	    CUDA_ERR_IF (!exists (cuobjdump_path), CUDA_TRACE_DISASSEMBLER,
+			 "cuobjdump not found at '%s' for fallback spawn",
+			 cuobjdump_path.c_str ());
+
+	    cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
+			       "Attempting fallback spawn with path: %s",
+			       cuobjdump_path.c_str ());
+
+	    argv.get ()[0] = cuobjdump_path.c_str ();
+	    // Use posix_spawn, not spawnp, as we have the full path
+	    ret = posix_spawn (
+		&m_pid, cuobjdump_path.c_str (), m_file_actions.get (), NULL,
+		const_cast<char *const *> (argv.get ()), environ);
+	  }
+
+	// Final check after potentially two spawn attempts. If ret != 0, spawn
+	// failed.
+	CUDA_ERR_IF (ret != 0, CUDA_TRACE_DISASSEMBLER,
+		     "Failed to spawn cuobjdump (posix_spawn/p errno %d): %s",
+		     ret, safe_strerror (ret));
+
+	// If spawn succeeded:
+	cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
+			   "cuobjdump spawned with pid %d", (int)m_pid);
+
+	// Close the parent's write ends of the pipes now that spawn is done.
+	// This is crucial - must happen *after* spawn but *before* wait.
+	safe_close (m_stdout_wfd);
+	safe_close (m_stderr_wfd);
+
+	// Note: Parent's read ends (m_stdout_rfd, m_stderr_rfd) remain open
+	// until wait or destructor.
       }
-
-    posix_spawn_file_actions_destroy (&file_actions);
-
-    /* Close write-end in current process, we don't need it.
-       This will also allow the read-end from this process to return EOF if no
-       more data are available. */
-    close (stdout_fds[1]);
-    close (stderr_fds[1]);
-
-    CUDA_ERR_IF (ret != 0, CUDA_TRACE_DISASSEMBLER,
-		 "Failed to spawn cuobjdump. posix_spawnp failed: %s",
-		 safe_strerror (ret));
+    catch (gdb_exception &e)
+      {
+	// Cleanup FDs if an exception occurred during setup
+	cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
+			   "Exception during cuobjdump exec setup: %s",
+			   e.what ());
+	safe_close (m_stdout_rfd);
+	safe_close (m_stdout_wfd);
+	safe_close (m_stderr_rfd);
+	safe_close (m_stderr_wfd);
+	// Ensure state reflects inactivity if exec failed
+	m_pid = -1;
+	// Re-throw the exception
+	throw;
+      }
   }
 
+  /* Waits for the cuobjdump process to terminate, cleans up resources (FDs),
+     and returns the exit status of the process.
+     Returns 0 on normal exit with status 0, non-zero exit status otherwise,
+     returns -1 the process terminated abnormally, or throws an exception if
+     waitpid fails. */
   int
-  cleanup ()
+  wait ()
   {
-    close (m_stdout_fd);
-    close (m_stderr_fd);
+    // Check if inactive (pid <= 0 indicates not started or already
+    // waited/cleaned up)
+    if (m_pid <= 0)
+      error ("cuobjdump_process::wait called on inactive object.");
 
-    int child_status;
-    pid_t wait_ret = waitpid (m_pid, &child_status, 0);
-    CUDA_ERR_IF (wait_ret != m_pid, CUDA_TRACE_DISASSEMBLER,
-		 "Failed to wait for cuobjdump: %s", safe_strerror (errno));
+    cuda_trace_domain (CUDA_TRACE_DISASSEMBLER, "Waiting for cuobjdump pid %d",
+		       (int)m_pid);
 
-    CUDA_ERR_IF (!WIFEXITED (child_status), CUDA_TRACE_DISASSEMBLER,
-		 "cuobjdump did not exit normally, status: %d", child_status);
+    // Close parent's read ends now. This might signal the process if needed,
+    // but primarily cleans up our side. It's safe to do before waitpid.
+    safe_close (m_stdout_rfd);
+    safe_close (m_stderr_rfd);
 
-    return WEXITSTATUS (child_status);
+    int child_status = 0;
+    int exit_status = -1; // Default to error/unknown status
+
+    // Wait for the child process
+    const pid_t wait_ret = waitpid (m_pid, &child_status, 0);
+
+    if (wait_ret == -1)
+      // Error waiting
+      warning ("Failed to wait for cuobjdump pid %d: %s", (int)m_pid,
+	       safe_strerror (errno));
+    else if (wait_ret == m_pid)
+      {
+	// Process terminated
+	if (WIFEXITED (child_status))
+	  {
+	    exit_status = WEXITSTATUS (child_status);
+	    cuda_trace_domain (
+		CUDA_TRACE_DISASSEMBLER,
+		"cuobjdump pid %d exited normally with status %d", (int)m_pid,
+		exit_status);
+	  }
+	else
+	  // Terminated abnormally (signal, etc.)
+	  warning ("cuobjdump pid %d terminated abnormally (status %d)",
+		   (int)m_pid, child_status);
+	// Keep exit_status = -1 for abnormal termination
+      }
+    else
+      // Unexpected return from waitpid
+      warning ("waitpid returned unexpected pid %d (expected %d)",
+	       (int)wait_ret, (int)m_pid);
+
+    // Mark as inactive and cleanup pid
+    m_pid = -1;
+
+    return exit_status;
   }
 };
 
 gdb::optional<cuda_instruction>
 cuda_module_disassembly_cache::populate_from_elf_image (const uint64_t pc)
 {
-  static constexpr bool generate_json_output = true;
-
   // If we couldn't find the cubin, we can't disassemble from the elf
   // image.
   const auto module = cuda_state::find_module_by_address (pc);
@@ -503,75 +696,132 @@ cuda_module_disassembly_cache::populate_from_elf_image (const uint64_t pc)
       warning ("Could not find cubin to disassemble for pc 0x%lx", pc);
       return gdb::optional<cuda_instruction> ();
     }
-  const auto filename = module->filename ();
+  const auto &filename = module->filename (); // Use const ref
   cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
 		     "populate (ELF): found pc 0x%lx in %s", pc,
 		     filename.c_str ());
 
-  /* Generate the dissassembled code by using cuobjdump Can be
-     per-function (faster, but may be invoked multiple times for a
-     given file), or per-file (slower at first, but then
-     faster). Defaults to trying per-function.
-   */
+  /* Determine if disassembly should be per-function */
   gdb::unique_xmalloc_ptr<char> function_name;
   if (cuda_options_disassemble_per_function ())
-    function_name = cuda_find_function_name_from_pc (pc, false);
-
-  cuobjdump_process proc;
-
-  /* The legacy human readable output parser is used as a fallback if the JSON
-     parser fails to parse the cuobjdump output */
-  if (m_cuobjdump_json)
     {
-      cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
-			 "Trying to parse cuobjdump json output");
-
-      proc.exec (pc, filename, function_name.get (), generate_json_output);
-
-      /* parse the json output */
-
-      const bool parsed = parse_disasm_output_json (proc.stdout_fd ());
-
-      /* Dump stderr into trace logs */
-      std::string proc_err = proc.get_stderr ();
-      if (!proc_err.empty ())
+      // Demangling not needed here, use cuda_find_function_name_from_pc
+      function_name = cuda_find_function_name_from_pc (pc, false);
+      if (function_name)
 	cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
-			   "cuobjdump_process error: %s", proc_err.c_str ());
-
-      const bool success = (proc.cleanup () == 0);
-      if (success)
-	{
-	  if (parsed)
-	    return cache_lookup (pc, disassembly_source::ELF);
-
-	  // This should not happen
-	  warning (
-	      "Failed to parse cuobjdump json output but cuobjdump succeeded");
-	}
-
-      /* cache the result and retry without json */
-      m_cuobjdump_json = false;
+			   "Attempting disassembly for function: %s",
+			   function_name.get ());
+      else
+	cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
+			   "Could not find function name for pc 0x%lx, "
+			   "disassembling whole module.",
+			   pc);
     }
 
-  cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
-		     "Failed to parse cuobjdump json output, falling back to "
-		     "plaintext disassembly");
+  bool disassembled_successfully = false;
 
-  proc.exec (pc, filename, function_name.get (), !generate_json_output);
+  /* Try parsing JSON output first if enabled */
+  if (m_cuobjdump_json)
+    {
+      cuobjdump_process proc;
+      try
+	{
+	  cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
+			     "Trying cuobjdump with JSON output");
 
-  parse_disasm_output (proc.stdout_fd (), module);
-  const bool success = (proc.cleanup () == 0);
+	  proc.exec (pc, filename, function_name.get (),
+		     true); // generate_json = true
 
-  /* Dump stderr into trace logs */
-  std::string proc_err = proc.get_stderr ();
-  if (!proc_err.empty ())
-    cuda_trace_domain (CUDA_TRACE_DISASSEMBLER, "cuobjdump_process error: %s",
-		       proc_err.c_str ());
+	  const bool parsed
+	      = parse_disasm_output_json (proc.stdout_read_fd ());
 
-  CUDA_ERR_IF (!success, CUDA_TRACE_DISASSEMBLER,
-	       "Failed to cleanup cuobjdump");
+	  // Read stderr *before* waiting
+	  std::string proc_err = proc.get_stderr ();
+	  if (!proc_err.empty ())
+	    cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
+			       "cuobjdump[JSON] stderr: %s",
+			       proc_err.c_str ());
 
-  return cache_lookup (pc, disassembly_source::ELF);
+	  // Wait for process and check status
+	  const int status = proc.wait ();
+	  if (status == 0 && parsed)
+	    {
+	      cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
+				 "Successfully parsed cuobjdump JSON output.");
+	      disassembled_successfully = true;
+	    }
+	  else
+	    {
+	      warning ("Failed to parse cuobjdump JSON output or cuobjdump "
+		       "failed (status: %d, parsed: %d)",
+		       status, parsed);
+	      // Disable JSON for future attempts if it failed
+	      m_cuobjdump_json = false;
+	    }
+	}
+      catch (const gdb_exception &e) // Catch exceptions during exec/parse/wait
+	{
+	  warning ("Exception during JSON disassembly: %s", e.what ());
+	  m_cuobjdump_json
+	      = false; // Disable JSON on exception
+		       // proc destructor handles cleanup automatically
+	}
+      // proc goes out of scope here, destructor runs if needed
+    }
+
+  /* Fallback to plaintext if JSON is disabled or failed */
+  if (!disassembled_successfully)
+    {
+      cuobjdump_process proc;
+      try
+	{
+	  cuda_trace_domain (
+	      CUDA_TRACE_DISASSEMBLER,
+	      "Trying cuobjdump with plaintext output (JSON disabled)");
+
+	  proc.exec (pc, filename, function_name.get (),
+		     false); // generate_json = false
+
+	  // Pass module needed by plaintext parser
+	  parse_disasm_output (proc.stdout_read_fd (), module);
+
+	  // Read stderr *before* waiting
+	  std::string proc_err = proc.get_stderr ();
+	  if (!proc_err.empty ())
+	    cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
+			       "cuobjdump[plaintext] stderr: %s",
+			       proc_err.c_str ());
+
+	  // Wait for process and check status
+	  const int status = proc.wait ();
+	  if (status == 0)
+	    {
+	      cuda_trace_domain (
+		  CUDA_TRACE_DISASSEMBLER,
+		  "Successfully parsed cuobjdump plaintext output.");
+	      disassembled_successfully = true;
+	    }
+	  else
+	    {
+	      // Use CUDA_ERR_IF to match original fatal error behavior on
+	      // fallback failure
+	      CUDA_ERR_IF (
+		  true, CUDA_TRACE_DISASSEMBLER,
+		  "cuobjdump plaintext disassembly failed with status %d",
+		  status);
+	    }
+	}
+      catch (const gdb_exception &e) // Catch exceptions during exec/parse/wait
+	{
+	  // Match original fatal error behavior
+	  error ("Exception during plaintext disassembly: %s", e.what ());
+	  // proc destructor handles cleanup automatically
+	}
+      // proc goes out of scope here, destructor runs if needed
+    }
+
+  // return nullopt if disassembly failed: the pc is not in the cache
+  return gdb::optional<cuda_instruction> ();
 }
 
 gdb::optional<cuda_instruction>
@@ -621,12 +871,22 @@ cuda_module_disassembly_cache::parse_disasm_output_json (const int fd)
     for (const auto &insn : function.m_instructions)
       {
 	if (insn.m_opt_is_control_flow.has_value ())
-	  instructions.push_back (cuda_instruction (
-	      insn.m_predicate, insn.m_opcode, insn.m_operands, insn.m_extra,
-	      *insn.m_opt_is_control_flow));
+	  if (insn.m_opt_is_subroutine_call.has_value ())
+	    {
+	      instructions.emplace_back (insn.m_predicate, insn.m_opcode,
+					 insn.m_operands, insn.m_extra,
+					 *insn.m_opt_is_control_flow,
+					 *insn.m_opt_is_subroutine_call);
+	    }
+	  else
+	    {
+	      instructions.emplace_back (insn.m_predicate, insn.m_opcode,
+					 insn.m_operands, insn.m_extra,
+					 *insn.m_opt_is_control_flow);
+	    }
 	else
-	  instructions.push_back (cuda_instruction (
-	      insn.m_predicate, insn.m_opcode, insn.m_operands, insn.m_extra));
+	  instructions.emplace_back (insn.m_predicate, insn.m_opcode,
+				     insn.m_operands, insn.m_extra);
       }
 
     add_function_to_cache (cuda_function (function.m_function_name,
@@ -650,7 +910,7 @@ cuda_module_disassembly_cache::parse_disasm_output_json (const int fd)
       if (e.error == errors::NOT_SUPPORTED_ERROR)
 	{
 	  cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
-			     "Failed to parse cuobjdump json output: %s",
+			     "Failed to parse cuobjdump JSON output: %s",
 			     e.what ());
 	  return false;
 	}

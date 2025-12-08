@@ -44,7 +44,7 @@ public:
   cuda_instruction (const std::string &prefix, const std::string &opcode,
 		    const std::string &operands, const std::string &extra)
       : m_predicate (prefix), m_opcode (opcode), m_operands (operands),
-	m_extra (extra), m_is_control_flow (is_control_flow_value::unset)
+	m_extra (extra)
   {
   }
 
@@ -52,17 +52,32 @@ public:
 		    const std::string &operands, const std::string &extra,
 		    bool is_control_flow)
       : m_predicate (prefix), m_opcode (opcode), m_operands (operands),
-	m_extra (extra),
-	m_is_control_flow (is_control_flow
-			       ? is_control_flow_value::true_value
-			       : is_control_flow_value::false_value)
+	m_extra (extra), m_is_control_flow (is_control_flow)
+  {
+  }
+
+  cuda_instruction (const std::string &prefix, const std::string &opcode,
+		    const std::string &operands, const std::string &extra,
+		    bool is_control_flow, bool is_subroutine_call)
+      : m_predicate (prefix), m_opcode (opcode), m_operands (operands),
+	m_extra (extra), m_is_control_flow (is_control_flow),
+	m_is_subroutine_call (is_subroutine_call)
+  {
+  }
+
+  cuda_instruction (const std::string &prefix, const std::string &opcode,
+		    const std::string &operands, const std::string &extra,
+		    bool is_control_flow, bool is_subroutine_call,
+		    bool is_barrier)
+      : m_predicate (prefix), m_opcode (opcode), m_operands (operands),
+	m_extra (extra), m_is_control_flow (is_control_flow),
+	m_is_subroutine_call (is_subroutine_call), m_is_barrier (is_barrier)
   {
   }
 
   /* Constructor for raw instructions from text output */
   cuda_instruction (const std::string &raw_instruction)
-      : m_predicate (), m_opcode (raw_instruction), m_operands (), m_extra (),
-	m_is_control_flow (is_control_flow_value::unset)
+      : m_predicate (), m_opcode (raw_instruction), m_operands (), m_extra ()
   {
   }
 
@@ -82,7 +97,9 @@ public:
      `(urf_kernel_set) ; */
   std::string to_string () const;
 
-  bool is_control_flow (const bool skip_subroutines);
+  bool is_barrier ();
+  bool is_control_flow ();
+  bool is_subroutine_call ();
 
 private:
   /* The instruction offset is not stored in the instruction object as it could
@@ -96,20 +113,16 @@ private:
   std::string m_operands;
   /* instruction annotation */
   std::string m_extra;
-  /* is it a control flow instruction */
-  enum class is_control_flow_value
-  {
-    unset = 0,
-    true_value,
-    false_value
-  };
-  is_control_flow_value m_is_control_flow;
-  is_control_flow_value m_is_control_flow_skipping_subroutines;
+  gdb::optional<bool> m_is_control_flow;
+  gdb::optional<bool> m_is_subroutine_call;
+  gdb::optional<bool> m_is_barrier;
   /* The list and the dictionary of additional string attributes are not stored
      in the instruction object. These string attributes shall be transformed by
      the JSON parser into domain specific fields. */
 
-  bool eval_is_control_flow (const bool skip_subroutines);
+  bool eval_is_control_flow () const;
+  bool eval_is_subroutine_call () const;
+  bool eval_is_barrier () const;
 };
 
 class cuda_function

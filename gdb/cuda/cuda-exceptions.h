@@ -42,7 +42,9 @@ private:
   void print_cuda_exception_string () const;
 
 public:
-  /* CTOR/DTOR */
+  /* Creates an exception object by iterating over devices and checking for SM
+   * exceptions. The object is initialized based on the first detected SM
+   * exception. Exceptions can originate from either active or exited warps. */
   cuda_exception ();
   ~cuda_exception () = default;
   cuda_exception (const cuda_exception &) = default;
@@ -50,7 +52,7 @@ public:
 
   /* Methods */
   bool
-  valid () const
+  has_exception () const
   {
     return m_valid;
   }
@@ -63,7 +65,7 @@ public:
   }
 
   enum gdb_signal
-  gdbSignal () const
+  gdb_signal () const
   {
     gdb_assert (m_valid);
     return m_gdb_sig;
@@ -83,7 +85,7 @@ public:
     return m_coord;
   }
 
-  void printMessage () const;
+  void print_message () const;
   const char *name () const;
 
   static const char *type_to_name (CUDBGException_t type);

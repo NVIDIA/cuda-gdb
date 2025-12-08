@@ -19491,8 +19491,13 @@ new_symbol (struct die_info *die, struct type *type, struct dwarf2_cu *cu,
 #endif
       else
 	{
+#ifdef NVIDIA_CUDA_GDB
+	  if (cu->producer && strstr (cu->producer, "Numba"))
+	    sym->set_demangled_name (name, &objfile->objfile_obstack);
+	  else
+#endif
 	  sym->set_demangled_name (physname, &objfile->objfile_obstack);
-	  sym->set_linkage_name (linkagename);
+	  sym->set_linkage_name (linkagename); 
 	}
 
       /* Handle DW_AT_artificial.  */

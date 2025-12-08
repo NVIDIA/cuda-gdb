@@ -332,10 +332,27 @@ frame_unwind_got_address (frame_info_ptr frame, int regnum,
 {
   struct gdbarch *gdbarch = frame_unwind_arch (frame);
   struct value *reg_val;
+  struct type *type;
 
+#ifdef NVIDIA_CUDA_GDB
+  int addr_class = gdbarch_address_class_from_core_address (gdbarch, addr);
+  type = register_type (gdbarch, regnum);
+
+  if (addr_class)
+    {
+      type = builtin_type (gdbarch)->builtin_data_ptr->target_type ();
+      type = lookup_pointer_type (type);
+      type_instance_flags flags
+	= gdbarch_address_class_type_flags (gdbarch, type->length (), addr_class);
+      type = make_type_with_address_space (type, flags);
+      addr = gdbarch_segment_address_from_core_address (gdbarch, addr);
+    }
+
+  reg_val = value::zero (type, not_lval);
+#else
   reg_val = value::zero (register_type (gdbarch, regnum), not_lval);
-  pack_long (reg_val->contents_writeable ().data (),
-	     register_type (gdbarch, regnum), addr);
+#endif
+  pack_long (reg_val->contents_writeable ().data (), type, addr);
   return reg_val;
 }
 

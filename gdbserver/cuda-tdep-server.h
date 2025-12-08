@@ -51,6 +51,7 @@ extern bool cuda_debug_libcudbg;
 extern bool cuda_debug_notifications;
 extern bool cuda_notify_youngest;
 extern bool cuda_driver_logs;
+extern bool cuda_printf_flushing;
 
 extern ptid_t cuda_last_ptid;
 extern struct target_waitstatus cuda_last_ws;
@@ -106,6 +107,8 @@ bool cuda_options_debug_notifications (void);
 bool cuda_options_notify_youngest (void);
 
 bool cuda_options_driver_logs (void);
+
+bool cuda_options_printf_flushing (void);
 
 bool cuda_check_pending_sigint (ptid_t ptid);
 

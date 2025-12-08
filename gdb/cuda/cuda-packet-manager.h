@@ -127,13 +127,6 @@ void cuda_remote_notification_consume_pending ();
 bool cuda_remote_query_sync_events (void);
 bool cuda_remote_query_async_events (void);
 
-/* Others */
-void cuda_remote_update_grid_id_in_sm (uint32_t dev, uint32_t sm);
-void cuda_remote_update_cluster_idx_in_sm (uint32_t dev, uint32_t sm);
-void cuda_remote_update_cluster_dim_in_sm (uint32_t dev, uint32_t sm);
-void cuda_remote_update_block_idx_in_sm (uint32_t dev, uint32_t sm);
-void cuda_remote_update_thread_idx_in_warp (uint32_t dev, uint32_t sm,
-					    uint32_t wp);
 #ifdef __QNXTARGET__
 void cuda_remote_set_symbols (bool set_extra_symbols, bool *symbols_are_set);
 #endif /* __QNXTARGET__ */

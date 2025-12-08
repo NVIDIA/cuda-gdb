@@ -31,6 +31,7 @@
 
 #include "gdbsupport/traits.h"
 
+#include "cuda-stats.h"
 #include "cudadebugger.h"
 
 typedef enum
@@ -78,16 +79,6 @@ public:
   uint32_t m_major;
   uint32_t m_minor;
   uint32_t m_revision;
-};
-
-// Profiling interface
-struct cuda_api_stat
-{
-  std::string name;
-  uint32_t times_called;
-  std::chrono::microseconds total_time;
-  std::chrono::microseconds min_time;
-  std::chrono::microseconds max_time;
 };
 
 class cuda_debugapi final
@@ -179,7 +170,7 @@ public:
   static void print_get_api_error (CUDBGResult res);
 
   // Device Execution Control
-  static void suspend_device (uint32_t dev);
+  static bool suspend_device (uint32_t dev);
   static void resume_device (uint32_t dev);
 
   static bool single_step_warp (uint32_t dev, uint32_t sm, uint32_t wp,
@@ -207,8 +198,6 @@ public:
   static void read_call_depth (uint32_t dev, uint32_t sm, uint32_t wp,
 			       uint32_t ln, uint32_t *depth);
 
-  static void read_syscall_call_depth (uint32_t dev, uint32_t sm, uint32_t wp,
-				       uint32_t ln, uint32_t *depth);
   static void read_virtual_return_address (uint32_t dev, uint32_t sm,
 					   uint32_t wp, uint32_t ln,
 					   int32_t level, uint64_t *ra);
@@ -288,10 +277,6 @@ public:
   static void write_upredicates (uint32_t dev, uint32_t sm, uint32_t wp,
 				 uint32_t predicates_size,
 				 const uint32_t *predicates);
-  static void read_cc_register (uint32_t dev, uint32_t sm, uint32_t wp,
-				uint32_t ln, uint32_t *val);
-  static void write_cc_register (uint32_t dev, uint32_t sm, uint32_t wp,
-				 uint32_t ln, uint32_t val);
   static void read_pc (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln,
 		       uint64_t *pc);
 
@@ -408,14 +393,19 @@ public:
 						  CuDim3 *blockIdx,
 						  bool *blockIdxValid);
 
-  static void
-  for_each_api_stat (std::function<void (const cuda_api_stat &)> func);
-
   static void get_cuda_exception_string (uint32_t dev, uint32_t sm,
 					 uint32_t wp, uint32_t ln, char *buf,
 					 uint32_t bufSz, uint32_t *msgSz);
 
-  static void reset_api_stat ();
+  static void get_hardware_barrier_info (uint32_t dev, uint32_t sm, 
+           uint32_t wp, uint32_t ln, CUDBGBarrierScope *scope, 
+           char *buf, uint32_t bufSz, uint32_t *msgSz);
+
+  static cuda_statistics_table &
+  api_call_statistics ()
+  {
+    return s_instance.m_api_call_statistics;
+  }
 
 private:
   // Everyone else can use the getters
@@ -444,12 +434,7 @@ private:
   cuda_attach_state_t m_attach_state;
 
   // Profiling interface
-  // Ensure we can use offsetof on CUDBGAPI. This assumes that the struct
-  // CUDBGAPI_st will only have function pointers and no other data members.
-  gdb_static_assert (
-      std::is_trivial<std::remove_pointer<CUDBGAPI>::type>::value == true);
-  static std::array<cuda_api_stat, sizeof (*m_cudbgAPI) / sizeof (uintptr_t)>
-      s_api_call_stats;
+  cuda_statistics_table m_api_call_statistics;
 };
 
 const char *cuda_api_mask_string (const cuda_api_warpmask *m);
@@ -466,9 +451,9 @@ cuda_api_set_bit (cuda_api_mask_t<T> *m, uint32_t i, uint32_t v)
 {
   constexpr std::size_t num_bits = sizeof (T) * CHAR_BIT;
   if (v)
-    m->mask |= (static_cast<T>(1) << (i % num_bits));
+    m->mask |= (static_cast<T> (1) << (i % num_bits));
   else
-    m->mask &= ~(static_cast<T>(1) << (i % num_bits));
+    m->mask &= ~(static_cast<T> (1) << (i % num_bits));
 }
 
 template <typename T>
@@ -476,7 +461,7 @@ bool
 cuda_api_get_bit (const cuda_api_mask_t<T> *m, uint32_t i)
 {
   constexpr std::size_t num_bits = sizeof (T) * CHAR_BIT;
-  return (m->mask & (static_cast<T>(1) << (i % num_bits))) != 0;
+  return (m->mask & (static_cast<T> (1) << (i % num_bits))) != 0;
 }
 
 template <typename T>

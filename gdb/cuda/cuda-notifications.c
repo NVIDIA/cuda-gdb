@@ -74,6 +74,8 @@
 #endif
 
 #include "cuda-notifications.h"
+#include "cuda-stats.h"
+
 #include <ctype.h>
 #include <pthread.h>
 #include <signal.h>
@@ -81,6 +83,13 @@
 #ifndef __QNXHOST__
 #include <sys/syscall.h>
 #endif
+
+cuda_statistic &
+get_cuda_notification_statistics (void)
+{
+  static cuda_statistic notification_statistics;
+  return notification_statistics;
+}
 
 static struct
 {
@@ -161,6 +170,10 @@ cuda_notification_release_lock (void)
 static int
 cuda_notification_notify_thread (int tid)
 {
+  /* Start the global timer in cuda_notification_notify_thread - it will be
+   * stopped in cuda_process_event */
+  get_cuda_notification_statistics ().start_timing ();
+
   unsigned signal;
 #ifdef __QNXHOST__
   static unsigned sig = 0;

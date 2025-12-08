@@ -1419,6 +1419,7 @@ HFILES_NO_SRCDIR = \
 	cuda/cuda-regmap.h \
 	cuda/cuda-sass-json.h \
 	cuda/cuda-special-register.h \
+        cuda/cuda-stats.h \
 	cuda/cuda-state.h \
 	cuda/cuda-tdep.h \
 	cuda/cuda-utils.h \

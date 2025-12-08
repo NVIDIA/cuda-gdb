@@ -85,8 +85,9 @@ cuda_coords_logical::cuda_coords_logical (uint64_t kernelId, uint64_t gridId,
 					  CuDim3 clusterIdx, CuDim3 clusterDim,
 					  CuDim3 blockIdx, CuDim3 threadIdx)
     : m_kernelId{ kernelId }, m_gridId{ gridId }, m_clusterIdx{ clusterIdx },
-      m_clusterDim{ clusterDim }, m_blockIdx{ blockIdx },
-      m_threadIdx{ threadIdx }
+      m_clusterDim{ clusterDim }, m_blockIdx{ blockIdx }, m_threadIdx{
+	threadIdx
+      }
 {
   // Replace CUDA_CURRENT with coords
   if (cuda_current_focus::isDevice ())
@@ -447,8 +448,9 @@ cuda_current_focus::printFocus (bool switching)
 }
 
 cuda_focus_restore::cuda_focus_restore ()
-    : m_restored{ false }, m_ptid{ inferior_ptid },
-      m_coords{ cuda_current_focus::get () }
+    : m_restored{ false }, m_ptid{ inferior_ptid }, m_coords{
+	cuda_current_focus::get ()
+      }
 {
 }
 

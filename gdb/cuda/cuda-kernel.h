@@ -35,8 +35,9 @@ public:
   cuda_kernel (uint64_t kernel_id, uint32_t dev_id, uint64_t grid_id,
 	       uint64_t virt_code_base, cuda_module *module,
 	       const CuDim3 &grid_dim, const CuDim3 &block_dim,
-	       const CuDim3 &cluster_dim_default, const CuDim3 &cluster_dim_preferred,
-               CUDBGKernelType type, CUDBGKernelOrigin origin, uint64_t parent_grid_id);
+	       const CuDim3 &cluster_dim_default,
+	       const CuDim3 &cluster_dim_preferred, CUDBGKernelType type,
+	       CUDBGKernelOrigin origin, uint64_t parent_grid_id);
 
   const uint32_t
   dev_id () const

@@ -45,6 +45,7 @@
 #include "demangle.h"
 #include "dictionary.h"
 #include "gdbcmd.h"
+#include "gdbsupport/scope-exit.h"
 #include "gdbthread.h"
 #include "inferior.h"
 #include "language.h"
@@ -58,9 +59,11 @@
 #include "event-top.h"
 #include "inf-child.h"
 #include "inf-loop.h"
+#include "main.h"
 #include "remote-cuda.h"
 #include "remote.h"
 #include "top.h"
+#include "interps.h"
 
 bool cuda_debugging_enabled = false;
 
@@ -200,27 +203,213 @@ cuda_adjust_host_pc (ptid_t r)
 
 #ifndef __QNXTARGET__
 /* Attach isn't yet supported on QNX */
+
+enum cuda_attach_protocol_support
+{
+  /* The new protocol is not supported at all */
+  v0_only,
+  /* The new protocol is supported and we can immediately proceed with it */
+  v1_supported,
+  /* The new protocol will be supported after we let the driver initialize
+     and set the FD. */
+  v1_supported_later,
+};
+
+/* Check if we have a way to trigger the FD */
+static enum cuda_attach_protocol_support
+cuda_get_attach_protocol_support (inferior *inf)
+{
+  CORE_ADDR symbol_address = 0;
+  int32_t fd = 0;
+  gdb_byte mem[sizeof (fd)];
+  int status = 0;
+
+  if (batch_flag)
+    /* We can't attach with v1 in -batch mode as no event loop is available. */
+    return cuda_attach_protocol_support::v0_only;
+
+  if (is_remote_target (inf->process_target ()))
+    /* For now, use the old protocol for remote targets.
+       There is no reason why it can't be done, but we need to
+       rework the FD signalling mechanism to work properly on remote targets.
+       We currently signal the fd by using /proc on the host machine. */
+    return cuda_attach_protocol_support::v0_only;
+
+  symbol_address = cuda_get_symbol_address (
+      _STRING_ (CUDBG_INITIATE_DEBUGGER_ATTACH_PROCEDURE_FD));
+
+  if (!symbol_address)
+    return cuda_attach_protocol_support::v0_only;
+
+  status = target_read_memory (symbol_address, mem, sizeof (fd));
+
+  if (status != 0)
+    error (_ ("target_read_memory failed"));
+
+  memcpy (&fd, mem, sizeof (fd));
+
+  /* The fd is available but not initialized yet.  This means we're attaching
+    very early before the driver has fully initialized. */
+  if (fd < 0)
+    return cuda_attach_protocol_support::v1_supported_later;
+
+  return cuda_attach_protocol_support::v1_supported;
+}
+
+static bool
+cuda_is_debugger_initialized ()
+{
+  CORE_ADDR initialized_flag_address
+      = cuda_get_symbol_address (_STRING_ (CUDBG_DEBUGGER_INITIALIZED));
+
+  if (!initialized_flag_address)
+    error (_ ("Failed to get initialized flag address."));
+
+  uint32_t initialized_flag = 0;
+  gdb_byte mem[sizeof (initialized_flag)];
+  int status = target_read_memory (initialized_flag_address, mem,
+				   sizeof (initialized_flag));
+
+  if (status != 0)
+    error (_ ("target_read_memory failed"));
+
+  memcpy (&initialized_flag, mem, sizeof (initialized_flag));
+
+  return initialized_flag != 0;
+}
+
 static void
-cuda_nat_attach (inferior *inf)
+cuda_request_safe_library_injection (inferior *inf)
+{
+  CORE_ADDR symbol_address = 0;
+  int32_t fd = 0;
+  gdb_byte mem[sizeof (fd)];
+  int status = 0;
+
+  symbol_address = cuda_get_symbol_address (
+      _STRING_ (CUDBG_INITIATE_DEBUGGER_ATTACH_PROCEDURE_FD));
+
+  if (!symbol_address)
+    error (_ ("Failed to get debug library injection request event fd."));
+
+  status = target_read_memory (symbol_address, mem, sizeof (fd));
+
+  if (status != 0)
+    error (_ ("target_read_memory failed"));
+
+  memcpy (&fd, mem, sizeof (fd));
+
+  if (fd < 0)
+    error (_ ("fd to request library injection is unset"));
+
+  char filename[256];
+  snprintf (filename, sizeof (filename), "/proc/%d/fd/%d", inf->pid, fd);
+
+  int pipe_fd = open (filename, O_WRONLY);
+  if (pipe_fd < 0)
+    error (_ ("Failed to open file to trigger safe library injection"));
+
+  SCOPE_EXIT { close (pipe_fd); };
+
+  uint8_t magic_byte = 0x0;
+  ssize_t written = write (pipe_fd, &magic_byte, sizeof (magic_byte));
+
+  if (written == -1)
+    error (_ ("Failed to write to library injection request event pipe"));
+}
+
+static void
+cuda_inject_debug_library_new (inferior *inf)
+{
+  if (cuda_is_debugger_initialized ())
+    {
+      /* Nothing to inject, let's continue. */
+      gdb::observers::cuda_attach_initiated.notify (inf);
+      return;
+    }
+
+  /* Tell the driver to safely inject the library and initialize it. */
+  cuda_request_safe_library_injection (inf);
+
+  /* At this point we need to continue the target to let it handle
+    the library injection request.  After it does so, we will hit a breakpoint
+    in cudbgReportAttachProcedureFinished. */
+
+  if (inferior_thread ()->state == THREAD_RUNNING)
+    return;
+
+  prepare_execution_command (inf->top_target (), true);
+  continue_1 (true);
+}
+
+static void
+cuda_inject_debug_library_old (inferior *inf)
 {
   struct cmd_list_element *alias = NULL;
   struct cmd_list_element *prefix_cmd = NULL;
   struct cmd_list_element *cmd = NULL;
   const char *cudbgApiAttach = "(void) cudbgApiAttach()";
-  CORE_ADDR debugFlagAddr = 0;
-  CORE_ADDR resumeAppOnAttachFlagAddr = 0;
-  CORE_ADDR attachDataAvailableFlagAddr = 0;
-  unsigned char resumeAppOnAttach = 0;
-  unsigned int timeOut = 5000; // ms
-  unsigned int timeElapsed = 0;
-  unsigned dev = 0;
+  unsigned char *sigs = NULL;
+  uint64_t internal_error_code;
   bool need_retry = 0;
   unsigned retry_count = 0;
   unsigned retry_delay = 100;	    // ms
   unsigned app_init_timeout = 5000; // ms
-  const unsigned int sleepTime = 1; // ms
-  uint64_t internal_error_code;
-  unsigned char *sigs = NULL;
+
+  if (!lookup_cmd_composition ("call", &alias, &prefix_cmd, &cmd))
+    error (_ ("Failed to initiate attach."));
+
+  do
+    {
+      /* Try to init debugger's backend */
+      sigs = cuda_gdb_bypass_signals ();
+      cuda_gdb_bypass_signals_cleanup cleanup (sigs);
+      cmd_func (cmd, cudbgApiAttach, 0);
+      /* Manually cleanup */
+      cleanup.release ();
+      cuda_nat_bypass_signals_cleanup (sigs);
+
+      internal_error_code = cuda_get_last_driver_internal_error_code ();
+
+      /* CUDBG_ERROR_ATTACH_NOT_POSSIBLE can be returned in two scenarios:
+       * 1. Attach is really not possible
+       * 2. Critical section's mutex is taken, attaching would cause a deadlock
+       */
+      need_retry = (unsigned int)internal_error_code
+		   == CUDBG_ERROR_ATTACH_NOT_POSSIBLE;
+
+      if (need_retry)
+	{
+	  /* Resume the target */
+	  prepare_execution_command (inf->top_target (), true);
+	  continue_1 (true);
+
+	  usleep (retry_delay * 1000);
+
+	  /* Trigger the future wait() */
+	  interrupt_target_1 (true);
+
+	  /* Get control back */
+	  cuda_wait_for_inferior ();
+	  set_running (inf->process_target (), minus_one_ptid, 0);
+
+	  retry_count++;
+	}
+    }
+  while (need_retry && (retry_count * retry_delay < app_init_timeout));
+
+  gdb::observers::cuda_attach_initiated.notify (inf);
+}
+
+static void cuda_nat_attach_post_library_injection (inferior *inf);
+
+static void
+cuda_nat_attach (inferior *inf)
+{
+  CORE_ADDR attachDataAvailableFlagAddr = 0;
+
+  gdb::observers::cuda_driver_preinitialized.detach (
+      inf->cuda_preinitialization_hook_observer_token);
 
   if (is_remote_target (inf->process_target ()))
     {
@@ -272,64 +461,52 @@ cuda_nat_attach (inferior *inf)
 	}
     }
 
-  if (!lookup_cmd_composition ("call", &alias, &prefix_cmd, &cmd))
-    error (_ ("Failed to initiate attach."));
-
-  do
+  switch (cuda_get_attach_protocol_support (inf))
     {
-      /* Try to init debugger's backend */
-      sigs = cuda_gdb_bypass_signals ();
-      cuda_gdb_bypass_signals_cleanup cleanup (sigs);
-      cmd_func (cmd, cudbgApiAttach, 0);
-      /* Manually cleanup */
-      cleanup.release ();
-      cuda_nat_bypass_signals_cleanup (sigs);
+    case cuda_attach_protocol_support::v0_only:
+      cuda_inject_debug_library_old (inf);
+      break;
+    case cuda_attach_protocol_support::v1_supported:
+      cuda_inject_debug_library_new (inf);
+      break;
+    case cuda_attach_protocol_support::v1_supported_later:
+      /* Try later  */
+      gdb_printf (_ ("The CUDA driver has not initialized yet, the attach "
+		     "procedure will finish later.\n"));
+      gdb_printf (_ ("CUDA features will not be available until the driver "
+		     "has initialized.\n"));
 
-      internal_error_code = cuda_get_last_driver_internal_error_code ();
+      /* Schedule to call this function later, before initializing CUDA stuff
+       * in cuda-gdb. */
+      gdb::observers::cuda_driver_preinitialized.attach (
+	  cuda_nat_attach, inf->cuda_preinitialization_hook_observer_token,
+	  "CUDA");
 
-      /* CUDBG_ERROR_ATTACH_NOT_POSSIBLE can be returned in two scenarios:
-       * 1. Attach is really not possible
-       * 2. Critical section's mutex is taken, attaching would cause a deadlock
-       */
-      need_retry = (unsigned int)internal_error_code
-		   == CUDBG_ERROR_ATTACH_NOT_POSSIBLE;
-
-      if (need_retry)
-	{
-	  /* Resume the target */
-	  prepare_execution_command (inf->top_target (), true);
-	  continue_1 (true);
-
-	  usleep (retry_delay * 1000);
-
-	  /* Trigger the future wait() */
-	  interrupt_target_1 (true);
-
-	  /* Get control back */
-	  cuda_wait_for_inferior ();
-	  set_running (inf->process_target (), minus_one_ptid, 0);
-
-	  retry_count++;
-	}
+      /* In this case, unblock the attach command immediately */
+      inf->cuda_attach_finished = true;
+      break;
     }
-  while (need_retry && (retry_count * retry_delay < app_init_timeout));
+}
 
-  /* We are re-using the ATTACH_NOT_POSSIBLE error code for delayed attach,
-   * therefore a timeout will allow us to determine if the error code is
-   * genuinely not possible. */
-  if (need_retry)
-    error (_ ("Attaching not possible. "
-	      "Please verify that software preemption is disabled "
-	      "and that nvidia-cuda-mps-server is not running."));
-
-  if (internal_error_code)
-    error (
-	_ ("Attach failed due to the internal driver error: CUresult=%llu\n"),
-	(unsigned long long)internal_error_code);
+static void
+cuda_nat_attach_post_library_injection (inferior *inf)
+{
+  CORE_ADDR debugFlagAddr = 0;
+  CORE_ADDR resumeAppOnAttachFlagAddr = 0;
+  CORE_ADDR attachDataAvailableFlagAddr = 0;
+  unsigned char resumeAppOnAttach = 0;
+  unsigned int timeOut = 5000; // ms
+  unsigned int timeElapsed = 0;
+  unsigned dev = 0;
+  const unsigned int sleepTime = 1; // ms
+  uint64_t internal_error_code;
+  unsigned char *sigs = NULL;
 
   debugFlagAddr = cuda_get_symbol_address (_STRING_ (CUDBG_IPC_FLAG_NAME));
   resumeAppOnAttachFlagAddr
       = cuda_get_symbol_address (_STRING_ (CUDBG_RESUME_FOR_ATTACH_DETACH));
+  attachDataAvailableFlagAddr
+      = cuda_get_symbol_address (_STRING_ (CUDBG_ATTACH_HANDLER_AVAILABLE));
 
   /* If this is not available, the CUDA driver doesn't support attaching.  */
   if (resumeAppOnAttachFlagAddr == 0 || debugFlagAddr == 0)
@@ -365,11 +542,18 @@ cuda_nat_attach (inferior *inf)
       capabilities |= CUDBG_DEBUGGER_CAPABILITY_SUSPEND_EVENTS;
 
       if (cuda_options_driver_logs_enabled ())
-        {
-          cuda_trace_domain (CUDA_TRACE_GENERAL,
-                           "requesting CUDA UMD logs collection\n");
-          capabilities |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
-        }
+	{
+	  cuda_trace_domain (CUDA_TRACE_GENERAL,
+			     "requesting CUDA UMD logs collection\n");
+	  capabilities |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
+	}
+
+      if (cuda_options_printf_flushing ())
+	{
+	  cuda_trace_domain (CUDA_TRACE_GENERAL,
+			     "requesting CUDA printf flushing on suspend\n");
+	  capabilities |= CUDBG_DEBUGGER_CAPABILITY_FLUSH_PRINTF_ON_SUSPEND;
+	}
 
       target_write_memory (capability_addr, (const gdb_byte *)&capabilities,
 			   sizeof (capabilities));
@@ -395,14 +579,10 @@ cuda_nat_attach (inferior *inf)
   while (cuda_debugapi::initialize () != CUDBG_SUCCESS)
     {
       internal_error_code = cuda_get_last_driver_internal_error_code ();
-
       if ((unsigned int)internal_error_code == CUDBG_ERROR_ATTACH_NOT_POSSIBLE)
-	error (_ ("Attaching not possible. "
-		  "Please verify that software preemption is disabled "
-		  "and that nvidia-cuda-mps-server is not running."));
-      if (internal_error_code)
-	error (_ ("Attach failed due to the internal driver error: "
-		  "CUresult=%llu\n"),
+	error (_ ("Attach is not possible."));
+      else if (internal_error_code)
+	error (_ ("Attach failed due to an internal driver error: %llu"),
 	       (unsigned long long)internal_error_code);
 
       if (timeElapsed < timeOut)
@@ -487,7 +667,16 @@ cuda_nat_attach (inferior *inf)
 
   /* The inferior just got signaled, we're not expecting any other stop */
   inf->control.stop_soon = NO_STOP_QUIETLY;
+
+  /* After attach, force this to "unknown state".
+     This is required because we need to call `mark_async_event_handler()'
+     and will be set to true later anyways.
+     It is set to true as part of normal GDB attach code. */
+  infrun_async (-1);
+
+  inf->cuda_attach_finished = true;
 }
+
 #endif /* !__QNXTARGET__ */
 
 static void
@@ -500,7 +689,48 @@ cuda_inferior_created (inferior *inf)
   // QNX today.
   if (inf->attach_flag)
     cuda_nat_attach (inf);
+#else
+  inf->cuda_attach_finished = true;
 #endif
+}
+
+static void
+cuda_attach_initiated (inferior *inf)
+{
+#ifndef __QNXTARGET__
+  /* This gets called after the driver has injected the debugger library
+     into the program.
+     This function is used in both old (with force call) and new (graceful)
+     attach protocols. */
+  cuda_nat_attach_post_library_injection (inf);
+#endif
+}
+
+static void
+cuda_on_normal_stop (bpstat *bs, int print_frame)
+{
+  bpstat *bs_iter;
+  struct breakpoint *breakpoint_at;
+
+  for (bs_iter = bs; bs_iter != NULL; bs_iter = bs_iter->next)
+    {
+      breakpoint_at = bs_iter->breakpoint_at;
+      if (breakpoint_at == NULL)
+	continue;
+      if (breakpoint_at->type == bp_cuda_attach_initiated)
+	{
+	  gdb::observers::cuda_attach_initiated.notify (current_inferior ());
+
+	  /* The cuda_attach_initiated breakpoint is SILENT, as it
+	     actually stops in the CPU code and setting it to NOISY
+	     would print the internal CPU callstack.  But *after* we
+	     handle it, we are most likely in CUDA code, so now we can
+	     print the backtrace. */
+	  interps_notify_normal_stop (bs_iter, 1);
+
+	  break;
+	}
+    }
 }
 
 void
@@ -861,6 +1091,8 @@ _initialize_cuda_nat ()
   make_final_cleanup (cuda_final_cleanup, NULL);
 
   gdb::observers::inferior_created.attach (cuda_inferior_created, "CUDA");
+  gdb::observers::cuda_attach_initiated.attach (cuda_attach_initiated, "CUDA");
+  gdb::observers::normal_stop.attach (cuda_on_normal_stop, "CUDA");
 
   cuda_debugging_enabled = true;
 }

@@ -75,7 +75,15 @@ with open("gdbarch-gen.h", "w") as f:
 
     # Generate decls for accessors, setters, and predicates for all
     # non-Info components.
+    cudaonly = False
     for c in filter(not_info, components):
+        if c.cudaonly:
+            if cudaonly != True:
+                print(f"#ifdef NVIDIA_CUDA_GDB", file=f)
+                cudaonly = True
+        elif cudaonly:
+            print(f"#endif", file=f)
+            cudaonly = False
         if c.comment:
             print(file=f)
             comment = c.comment.split("\n")
@@ -99,9 +107,6 @@ with open("gdbarch-gen.h", "w") as f:
             print(f"extern bool gdbarch_{c.name}_p (struct gdbarch *gdbarch);", file=f)
 
         print(file=f)
-
-        if c.cudaonly:
-            print(f"#ifdef NVIDIA_CUDA_GDB", file=f)
 
         if isinstance(c, Value):
             print(
@@ -128,8 +133,8 @@ with open("gdbarch-gen.h", "w") as f:
                 file=f,
             )
 
-        if c.cudaonly:
-            print(f"#endif", file=f)
+    if cudaonly:
+        print(f"#endif", file=f)
 
 with open("gdbarch.c", "w") as f:
     print(copyright, file=f)
@@ -158,9 +163,15 @@ with open("gdbarch.c", "w") as f:
     print("  gdbarch_tdep_up tdep;", file=f)
     print("  gdbarch_dump_tdep_ftype *dump_tdep = nullptr;", file=f)
     print(file=f)
+    cudaonly = False
     for c in filter(not_info, components):
         if c.cudaonly:
-            print(f"#ifdef NVIDIA_CUDA_GDB", file=f)
+            if cudaonly != True:
+                print(f"#ifdef NVIDIA_CUDA_GDB", file=f)
+                cudaonly = True
+        elif cudaonly:
+            print(f"#endif", file=f)
+            cudaonly = False
         if isinstance(c, Function):
             print(f"  gdbarch_{c.name}_ftype *", file=f, end="")
         else:
@@ -173,8 +184,8 @@ with open("gdbarch.c", "w") as f:
         else:
             assert isinstance(c, Function)
             print("nullptr;", file=f)
-        if c.cudaonly:
-            print(f"#endif", file=f)
+    if cudaonly:
+        print(f"#endif", file=f)
     print("};", file=f)
     print(file=f)
     #
@@ -220,9 +231,15 @@ with open("gdbarch.c", "w") as f:
         "  /* Check those that need to be defined for the given multi-arch level.  */",
         file=f,
     )
+    cudaonly = False
     for c in filter(not_info, components):
         if c.cudaonly:
-            print(f"#ifdef NVIDIA_CUDA_GDB", file=f)
+            if cudaonly != True:
+                print(f"#ifdef NVIDIA_CUDA_GDB", file=f)
+                cudaonly = True
+        elif cudaonly:
+            print(f"#endif", file=f)
+            cudaonly = False
         # An opportunity to write in the 'postdefault' value.  We
         # change field's value to the postdefault if its current value
         # is not different to the initial value of the field.
@@ -252,8 +269,8 @@ with open("gdbarch.c", "w") as f:
                 print(f"""    log.puts ("\\n\\t{c.name}");""", file=f)
         else:
             print(f"  /* Skip verify of {c.name}, invalid_p == 0 */", file=f)
-        if c.cudaonly:
-            print(f"#endif", file=f)
+    if cudaonly:
+        print(f"#endif", file=f)
     print("  if (!log.empty ())", file=f)
     print(
         """    internal_error (_("verify_gdbarch: the following are invalid ...%s"),""",
@@ -279,9 +296,15 @@ with open("gdbarch.c", "w") as f:
     print("  gdb_printf (file,", file=f)
     print("""	      "gdbarch_dump: GDB_NM_FILE = %s\\n",""", file=f)
     print("	      gdb_nm_file);", file=f)
+    cudaonly = False
     for c in components:
         if c.cudaonly:
-            print(f"#ifdef NVIDIA_CUDA_GDB", file=f)
+            if cudaonly != True:
+                print(f"#ifdef NVIDIA_CUDA_GDB", file=f)
+                cudaonly = True
+        elif cudaonly:
+            print(f"#endif", file=f)
+            cudaonly = False
         if c.predicate:
             print("  gdb_printf (file,", file=f)
             print(
@@ -306,8 +329,8 @@ with open("gdbarch.c", "w") as f:
             print("  gdb_printf (file,", file=f)
             print(f"""	      "gdbarch_dump: {c.name} = %s\\n",""", file=f)
             print(f"	      {printer});", file=f)
-        if c.cudaonly:
-            print(f"#endif", file=f)
+    if cudaonly:
+        print(f"#endif", file=f)
     print("  if (gdbarch->dump_tdep != NULL)", file=f)
     print("    gdbarch->dump_tdep (gdbarch, file);", file=f)
     print("}", file=f)
@@ -315,7 +338,15 @@ with open("gdbarch.c", "w") as f:
     #
     # Bodies of setter, accessor, and predicate functions.
     #
+    cudaonly = False
     for c in components:
+        if c.cudaonly:
+            if cudaonly != True:
+                print(f"#ifdef NVIDIA_CUDA_GDB", file=f)
+                cudaonly = True
+        elif cudaonly:
+            print(f"#endif", file=f)
+            cudaonly = False
         if c.predicate:
             print(file=f)
             print("bool", file=f)
@@ -370,8 +401,6 @@ with open("gdbarch.c", "w") as f:
             print("}", file=f)
         elif isinstance(c, Value):
             print(file=f)
-            if c.cudaonly:
-                print(f"#ifdef NVIDIA_CUDA_GDB", file=f)
             print(f"{c.type}", file=f)
             print(f"gdbarch_{c.name} (struct gdbarch *gdbarch)", file=f)
             print("{", file=f)
@@ -404,8 +433,6 @@ with open("gdbarch.c", "w") as f:
             print("{", file=f)
             print(f"  gdbarch->{c.name} = {c.name};", file=f)
             print("}", file=f)
-            if c.cudaonly:
-                print(f"#endif", file=f)
         else:
             assert isinstance(c, Info)
             print(file=f)
@@ -420,3 +447,5 @@ with open("gdbarch.c", "w") as f:
             )
             print(f"  return gdbarch->{c.name};", file=f)
             print("}", file=f)
+    if c.cudaonly:
+        print(f"#endif", file=f)

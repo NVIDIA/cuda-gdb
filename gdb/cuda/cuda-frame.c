@@ -106,7 +106,6 @@ static bool
 cuda_abi_frame_outermost_p (frame_info_ptr next_frame)
 {
   int call_stack_depth = 0;
-  int syscall_call_depth = 0;
   int normal_frame_depth = 0;
   frame_info_ptr frame = NULL;
   enum frame_type frame_type = SENTINEL_FRAME;
@@ -118,8 +117,8 @@ cuda_abi_frame_outermost_p (frame_info_ptr next_frame)
   if (cuda_frame_inlined_p (next_frame))
     return false;
 
-  /* Find the call stack depth, i.e. the maximum number of normal frames,
-     syscall frames included, we are expected to find in the call stack. */
+  /* Find the call stack depth, i.e. the maximum number of normal frames
+     we are expected to find in the call stack. */
   const auto &c = cuda_current_focus::get ().physical ();
   call_stack_depth
       = cuda_state::lane_get_call_depth (c.dev (), c.sm (), c.wp (), c.ln ());
@@ -142,13 +141,6 @@ cuda_abi_frame_outermost_p (frame_info_ptr next_frame)
 	}
     }
 
-  /* The syscall frames must be taken into account, even if they are hidden. */
-  if (cuda_options_hide_internal_frames ())
-    {
-      syscall_call_depth = cuda_state::lane_get_syscall_call_depth (
-	  c.dev (), c.sm (), c.wp (), c.ln ());
-      normal_frame_depth += syscall_call_depth;
-    }
   if (normal_frame_depth)
     --normal_frame_depth;
 
@@ -247,7 +239,6 @@ cuda_abi_frame_id_build (frame_info_ptr this_frame, void **this_cache,
 {
   struct cuda_frame_cache *cache;
   int call_depth = 0;
-  int syscall_call_depth = 0;
   int this_level;
 
   cache = cuda_frame_cache (this_frame, this_cache);
@@ -256,23 +247,10 @@ cuda_abi_frame_id_build (frame_info_ptr this_frame, void **this_cache,
   const auto &c = cuda_current_focus::get ().physical ();
   call_depth
       = cuda_state::lane_get_call_depth (c.dev (), c.sm (), c.wp (), c.ln ());
-  syscall_call_depth = cuda_state::lane_get_syscall_call_depth (
-      c.dev (), c.sm (), c.wp (), c.ln ());
 
   /* With the ABI, we can have multiple device frames. */
   if (this_level < call_depth)
-    {
-      /* When we have syscall frames, we will build them as special frames,
-	 as the API will always return only the PC to the first non syscall
-	 frame. Thus all frames less the syscall_call_depth will be identical
-	 to the frame at the syscall call depth */
-      if ((this_level < syscall_call_depth)
-	  && !cuda_options_hide_internal_frames ())
-	return frame_id_build_special (cache->base, cache->pc,
-				       syscall_call_depth + this_level);
-      else
-	return frame_id_build (cache->base, cache->pc);
-    }
+    return frame_id_build (cache->base, cache->pc);
   else
     return frame_id_build_special (cache->base, cache->pc, 1);
 }
@@ -318,7 +296,6 @@ static CORE_ADDR
 cuda_abi_frame_prev_pc (frame_info_ptr next_frame)
 {
   uint64_t pc;
-  int syscall_call_depth = 0;
   int call_depth = 0;
   int level = 0;
   int num_normal_frames = 0;
@@ -346,14 +323,6 @@ cuda_abi_frame_prev_pc (frame_info_ptr next_frame)
 	}
     }
   level += num_normal_frames;
-
-  /* remember to skip the syscall frames if required */
-  if (cuda_options_hide_internal_frames ())
-    {
-      syscall_call_depth = cuda_state::lane_get_syscall_call_depth (
-	  c.dev (), c.sm (), c.wp (), c.ln ());
-      level += syscall_call_depth;
-    }
 
   if (level == 0)
     pc = cuda_state::lane_get_pc (c.dev (), c.sm (), c.wp (), c.ln ());

@@ -26,6 +26,10 @@
 #if !defined (INFERIOR_H)
 #define INFERIOR_H 1
 
+#ifdef NVIDIA_CUDA_GDB
+#include "observable.h"
+#endif
+
 #include <exception>
 #include <list>
 
@@ -678,6 +682,8 @@ public:
 #ifdef NVIDIA_CUDA_GDB
   /* CUDA can only be intialized at most once per inferior */
   bool cuda_initialized = false;
+  gdb::observers::token cuda_preinitialization_hook_observer_token;
+  bool cuda_attach_finished = false;
 #endif
 private:
 

@@ -427,12 +427,21 @@ struct cuda_api_error_breakpoint : public internal_breakpoint
 {
   using internal_breakpoint::internal_breakpoint;
 
+  void check_status (struct bpstat *bs) override;
   enum print_stop_action print_it (const bpstat *bs) const override;
 };
 struct cuda_internal_error_breakpoint : public internal_breakpoint
 {
   using internal_breakpoint::internal_breakpoint;
 
+  void check_status (struct bpstat *bs) override;
+  enum print_stop_action print_it (const bpstat *bs) const override;
+};
+struct cuda_attach_initiated_breakpoint : public internal_breakpoint
+{
+  using internal_breakpoint::internal_breakpoint;
+
+  void check_status (struct bpstat *bs) override;
   enum print_stop_action print_it (const bpstat *bs) const override;
 };
 #endif
@@ -3631,6 +3640,18 @@ create_cuda_internal_error_breakpoint (struct gdbarch *gdbarch,
 
   return add_to_breakpoint_chain (std::move (b));
 }
+static struct breakpoint *
+create_cuda_attach_initiated_breakpoint (struct gdbarch *gdbarch,
+					 CORE_ADDR address)
+{
+  std::unique_ptr<cuda_attach_initiated_breakpoint> b (
+      new cuda_attach_initiated_breakpoint (gdbarch, bp_cuda_attach_initiated,
+					    address));
+
+  b->number = internal_breakpoint_number--;
+
+  return add_to_breakpoint_chain (std::move (b));
+}
 #endif
 
 /* Create a TYPE breakpoint on minimal symbol MSYM from an object file with
@@ -3706,6 +3727,8 @@ struct breakpoint_objfile_data
   struct bound_minimal_symbol cuda_api_error_msym;
   /* CUDA: Minimal symbol(s) for cuda internal error (if any). */
   struct bound_minimal_symbol cuda_internal_error_msym;
+  /* CUDA: Minimal symbol(s) for cuda attach initiated (if any). */
+  struct bound_minimal_symbol cuda_attach_initiated_msym;
   /* CUDA: Minimal symbol(s) for uvm (if any). */
   struct bound_minimal_symbol cuda_uvm_msym;
   /* CUDA: Minimal symbol(s) for cdp launch (if any). */
@@ -4270,9 +4293,9 @@ update_breakpoints_after_exec (void)
 	}
 #ifdef NVIDIA_CUDA_GDB
       /* Cleanup CUDA internal breakpoints */
-      if (b.type == bp_cuda_api_error || b.type == bp_cuda_internal_error
-	  || b.type == bp_cuda_uvm || b.type == bp_cuda_cdp
-	  || b.type == bp_cuda_graph)
+      if (b.type == bp_cuda_api_error || b.type == bp_cuda_internal_error ||
+	  b.type == bp_cuda_attach_initiated || b.type == bp_cuda_uvm ||
+	  b.type == bp_cuda_cdp || b.type == bp_cuda_graph)
 	{
 	  delete_breakpoint (&b);
 	  continue;
@@ -4610,6 +4633,7 @@ breakpoint_init_inferior (enum inf_context context)
 #ifdef NVIDIA_CUDA_GDB
 	case bp_cuda_api_error:
 	case bp_cuda_internal_error:
+	case bp_cuda_attach_initiated:
 	case bp_cuda_uvm:
 	case bp_cuda_cdp:
 	case bp_cuda_graph:
@@ -6520,62 +6544,22 @@ bpstat_what (bpstat *bs_head)
 	  break;
 	/* CUDA - breakpoint for error reporting */
 	case bp_cuda_api_error:
-	  {
-      /* Fetch and print CUDA driver logs from the backend */
-      cuda_consume_and_print_driver_logs ();
-	    if (cuda_options_api_failures_stop ())
-	      {
-		/* Stop and show info about the error. */
+	  if (bs->stop)
+	    {
+	      if (bs->print)
 		this_action = BPSTAT_WHAT_STOP_NOISY;
-	      }
-	    else
-	      {
-		if (cuda_options_api_failures_ignore ())
-		  {
-		    /* Don't stop, just show a warning */
-		    uint64_t error_code
-			= cuda_get_last_driver_api_error_code ();
-		    char *func_name = nullptr;
-		    std::string error_source;
-		    std::string error_name;
-		    std::string error_string;
-		    bool has_error_string
-			= cuda_get_last_driver_api_error_source_name (
-			      error_source)
-			  && cuda_get_last_driver_api_error_name (error_name)
-			  && cuda_get_last_driver_api_error_string (
-			      error_string);
-		    cuda_get_last_driver_api_error_func_name (&func_name);
-
-		    if (has_error_string)
-		      {
-			warning (_ ("Cuda %s API error detected: "
-				    "%s returned %s(CUresult=%llu): %s\n"),
-				 error_source.c_str (), func_name,
-				 error_name.c_str (),
-				 (unsigned long long)error_code,
-				 error_string.c_str ());
-		      }
-		    else
-		      {
-			cuda_trace_breakpoint (
-			    "Backend does not report Cuda API Error strings.");
-			warning (_ ("Cuda API error detected: "
-				    "%s returned (CUresult=%llu)\n"),
-				 func_name, (unsigned long long)error_code);
-		      }
-
-		    xfree (func_name);
-		  }
-		this_action = BPSTAT_WHAT_SINGLE;
-	      }
-	    break;
-	  }
+	      else
+		this_action = BPSTAT_WHAT_STOP_SILENT;
+	    }
+	  else
+	    this_action = BPSTAT_WHAT_SINGLE;
+	  break;
 	case bp_cuda_internal_error:
-    /* Fetch and print CUDA driver logs from the backend */
-    cuda_consume_and_print_driver_logs ();
 	  /* Stop and show info about the error. */
 	  this_action = BPSTAT_WHAT_STOP_NOISY;
+	  break;
+	case bp_cuda_attach_initiated:
+	  this_action = BPSTAT_WHAT_STOP_SILENT;
 	  break;
 	/* CUDA - uvm detection */
 	case bp_cuda_uvm:
@@ -7006,6 +6990,7 @@ bptype_string (enum bptype type)
     /* CUDA - breakpoint for error reporting */
     {bp_cuda_api_error, "driver API error"},
     {bp_cuda_internal_error, "driver internal error"},
+    {bp_cuda_attach_initiated, "attach procedure initiated"},
     /* CUDA - uvm detection */
     {bp_cuda_uvm, "cuda uvm detection"},
     /* CUDA - cdp detection */
@@ -8107,7 +8092,8 @@ adjust_breakpoint_address (struct gdbarch *gdbarch,
       /* CUDA - do not print warnings for adjustments */
       if (adjusted_bpaddr != bpaddr && bptype != bp_cuda_auto
 	  && bptype != bp_cuda_autostep && bptype != bp_cuda_api_error
-	  && bptype != bp_cuda_internal_error && bptype != bp_cuda_cdp
+	  && bptype != bp_cuda_internal_error
+	  && bptype != bp_cuda_attach_initiated && bptype != bp_cuda_cdp
 	  && bptype != bp_cuda_uvm && bptype != bp_cuda_graph)
 #else
       if (adjusted_bpaddr != bpaddr)
@@ -8155,6 +8141,7 @@ bp_location_from_bp_type (bptype type)
     /* CUDA - breakpoint for error reporting */
     case bp_cuda_api_error:
     case bp_cuda_internal_error:
+    case bp_cuda_attach_initiated:
     /* CUDA - uvm detection */
     case bp_cuda_uvm:
     /* CUDA - cdp detection */
@@ -8649,6 +8636,52 @@ create_cuda_internal_error_breakpoint (void)
       b->enable_state = bp_enabled;
       cuda_trace_breakpoint (
 	  "add driver internal error handling breakpoint on %s", func_name);
+    }
+}
+static void
+create_cuda_attach_initiated_breakpoint (void)
+{
+  const char *func_name = _STRING_ (CUDBG_REPORT_ATTACH_PROCEDURE_FINISHED);
+
+  for (objfile *objfile : current_program_space->objfiles ())
+    {
+      struct breakpoint *b;
+      struct breakpoint_objfile_data *bp_objfile_data;
+
+      bp_objfile_data = get_breakpoint_objfile_data (objfile);
+
+      if (msym_not_found_p (bp_objfile_data->cuda_attach_initiated_msym.minsym))
+	continue;
+
+      if (bp_objfile_data->cuda_attach_initiated_msym.minsym == NULL)
+	{
+	  struct bound_minimal_symbol m;
+
+	  m = lookup_minimal_symbol (func_name, NULL, objfile);
+	  if (m.minsym == NULL
+	      || (m.minsym->type () != mst_text
+		  && m.minsym->type () != mst_file_text))
+	    {
+	      /* Prevent future lookups in this objfile.  */
+	      bp_objfile_data->cuda_attach_initiated_msym.minsym
+		  = &msym_not_found;
+	      continue;
+	    }
+	  bp_objfile_data->cuda_attach_initiated_msym = m;
+	}
+
+      CORE_ADDR addr
+	  = bp_objfile_data->cuda_attach_initiated_msym.value_address ();
+      /* Skip prologue, get the function name and adjust breakpoint address */
+      addr = gdbarch_skip_prologue_noexcept (objfile->arch (), addr);
+      addr = adjust_breakpoint_address (objfile->arch (), addr,
+					bp_cuda_attach_initiated,
+					current_program_space);
+      b = create_cuda_attach_initiated_breakpoint (objfile->arch (), addr);
+      b->locspec = new_explicit_location_spec_function (func_name);
+      b->enable_state = bp_enabled;
+      cuda_trace_breakpoint (
+	  "add attach initiated internal handling breakpoint on %s", func_name);
     }
 }
 /* CUDA - uvm detection */
@@ -13297,6 +13330,8 @@ internal_breakpoint::re_set ()
     case bp_cuda_api_error:
     /* CUDA - internal driver errros */
     case bp_cuda_internal_error:
+    /* CUDA - attach initiated */
+    case bp_cuda_attach_initiated:
     /* CUDA - uvm detection */
     case bp_cuda_uvm:
     /* CUDA - graph detection */
@@ -13330,18 +13365,6 @@ internal_breakpoint::check_status (bpstat *bs)
       bs->stop = stop_on_solib_events != 0;
       bs->print = stop_on_solib_events != 0;
     }
-#ifdef NVIDIA_CUDA_GDB
-  else if (type == bp_cuda_internal_error)
-    {
-      // Always stop on internal errors
-      bs->stop = 1;
-    }
-  else if (type == bp_cuda_api_error)
-    {
-      // Query user setting to determine if we should stop
-      bs->stop = cuda_options_api_failures_stop ();
-    }
-#endif
   else
     bs->stop = false;
 }
@@ -13388,6 +13411,7 @@ internal_breakpoint::print_it (const bpstat *bs) const
 #ifdef NVIDIA_CUDA_GDB
     case bp_cuda_api_error:
     case bp_cuda_internal_error:
+    case bp_cuda_attach_initiated:
     case bp_cuda_uvm:
     case bp_cuda_cdp:
     case bp_cuda_graph:
@@ -13493,10 +13517,47 @@ cuda_auto_breakpoint::print_it (const bpstat *bs) const
   return PRINT_SRC_AND_LOC;
 }
 
+/* CUDA API error breakpoint handling. */
+void
+cuda_api_error_breakpoint::check_status (bpstat *bs)
+{
+  /* Check for device exceptions and always stop and print the
+   * exception if present */
+  cuda_exception exp;
+  if (exp.has_exception ())
+    {
+      cuda_trace_breakpoint ("CUDA device exception detected: %s\n",
+			     exp.name ());
+      bs->stop = true;
+      bs->print = true;
+    }
+  else if (cuda_options_api_failures_hide ())
+    {
+      /* Hide the error and continue execution. */
+      bs->stop = false;
+      bs->print = false;
+    }
+  else if (cuda_options_api_failures_ignore ())
+    {
+      /* Ignore the error and continue execution. */
+      bs->stop = false;
+      bs->print = true;
+    }
+  else if (cuda_options_api_failures_stop ())
+    {
+      /* Stop and show info about the error. */
+      bs->stop = true;
+      bs->print = true;
+    }
+}
+
 /* Inform the user that the a driver API call has returned an error. */
 enum print_stop_action
 cuda_api_error_breakpoint::print_it (const bpstat *bs) const
 {
+  /* Fetch and print CUDA driver logs from the backend */
+  cuda_consume_and_print_driver_logs ();
+
   struct ui_out *uiout = current_uiout;
   uint64_t res = cuda_get_last_driver_api_error_code ();
   char *func_name = nullptr;
@@ -13532,40 +13593,58 @@ cuda_api_error_breakpoint::print_it (const bpstat *bs) const
     }
   uiout->text ("\n");
   xfree (func_name);
+
+  cuda_exception exp;
+  if (exp.has_exception ())
+    {
+      exp.print_message ();
+      if (exp.has_coords ())
+	{
+	  switch_to_cuda_thread (exp.coords ());
+	  cuda_current_focus::printFocus (true);
+	  print_stack_frame (get_selected_frame (NULL), 0, SRC_LINE, 1);
+	}
+    }
+
   return PRINT_NOTHING;
 }
+
+/* CUDA internal error breakpoint handling. Always stop and print the internal
+ * error BPs. */
+void
+cuda_internal_error_breakpoint::check_status (bpstat *bs)
+{
+  bs->stop = true;
+  bs->print = true;
+}
+
 /* Inform the user that the driver has hit an internal error. */
 enum print_stop_action
 cuda_internal_error_breakpoint::print_it (const bpstat *bs) const
 {
+  /* Fetch and print CUDA driver logs from the backend */
+  cuda_consume_and_print_driver_logs ();
+
   uint64_t res = cuda_get_last_driver_internal_error_code ();
   gdb_printf (_ ("\n"));
-  if (cuda_debugapi::get_attach_state () == CUDA_ATTACH_STATE_DETACHING
-      || cuda_debugapi::get_attach_state () == CUDA_ATTACH_STATE_IN_PROGRESS)
-    {
-      if ((unsigned int)res == CUDBG_ERROR_INVALID_DEVICE)
-	gdb_printf (_ ("The CUDA driver does not support attaching to a "
-		       "running CUDA application on this GPU.\n"));
-      else if ((unsigned int)res == CUDBG_ERROR_FORK_FAILED)
-	gdb_printf (_ ("The CUDA driver hit an error while forking off "
-		       "the debugger process.\n"));
-      else if ((unsigned int)res == CUDBG_ERROR_OS_RESOURCES)
-	gdb_printf (_ ("The CUDA driver could not allocate operating system "
-		       "resources for attaching to the application.\n"));
-      else
-	gdb_printf (_ ("The CUDA driver hit an internal error while attaching "
-		       "to the application: CUresult=%llu\n"), (unsigned long long)res);
-    }
-  else
-    gdb_printf (_ ("The CUDA driver has hit an internal error.\n"
-		   "CUresult=%llu\n"
-		   "Further execution or debugging is unreliable.\n"
-		   "Please ensure that your temporary directory is "
-		   "mounted with write and exec permissions.\n"),
-		(unsigned long long)res);
+  gdb_printf (_ ("Debugger backend has encountered an error (%llu). Further "
+		 "execution or debugging may be unreliable.\n"),
+	      (unsigned long long)res);
   gdb_printf (_ ("\n"));
 
   return PRINT_NOTHING;
+}
+
+void
+cuda_attach_initiated_breakpoint::check_status (bpstat *bs)
+{
+  bs->stop = true;
+}
+
+enum print_stop_action
+cuda_attach_initiated_breakpoint::print_it (const bpstat *bs) const
+{
+  return PRINT_SRC_AND_LOC;
 }
 #endif
 
@@ -14577,6 +14656,7 @@ breakpoint_re_set (void)
 #ifdef NVIDIA_CUDA_GDB
   create_cuda_api_error_breakpoint ();
   create_cuda_internal_error_breakpoint ();
+  create_cuda_attach_initiated_breakpoint ();
   create_cuda_graph_breakpoint ();
   create_cuda_cdp_breakpoint ();
   create_cuda_uvm_breakpoint ();

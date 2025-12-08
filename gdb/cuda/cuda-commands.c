@@ -117,11 +117,10 @@ public:
 		grid = c_l.gridId ();
 		/* Check cluster */
 		if (cuda_coord_is_special (l.clusterIdx ())
-	            && cuda_coord_is_special (l.clusterDim ()))
+		    && cuda_coord_is_special (l.clusterDim ()))
 		  {
 		    /* Fix to current focus */
-		    cluster = c_l.clusterIdx ();
-		    clusterDim = c_l.clusterDim ();
+		    /* Do not fix cluster or clusterDim */
 		    /* Check sm and block */
 		    if (cuda_coord_is_special (p.sm ())
 			&& cuda_coord_is_special (l.blockIdx ()))
@@ -1447,9 +1446,68 @@ info_cuda_barriers_command (const char *arg)
       return;
     }
 
+  char barrierInfo[256];
+  uint32_t msgSz = 0;
+  CUDBGBarrierScope scope = CUDBG_BARRIER_SCOPE_NONE;
+  std::string barrier_str;
+
+  /* Get the current focus or return if there is none */
+  if (!cuda_current_focus::isDevice ())
+    {
+      current_uiout->field_string (NULL, _ ("Command requires CUDA focus.\n"));
+      return;
+    }
+  const auto &p = cuda_current_focus::get ().physical ();
+  uint32_t lane = p.ln ();
+
   /* print the tables */
   for (const auto &cuda_warp_state : cuda_warp_states)
     {
+      if (p.dev () != cuda_warp_state.device ()
+	  || p.sm () != cuda_warp_state.sm ()
+	  || p.wp () != cuda_warp_state.warp ())
+	{
+	  warning (_ ("WARNING: Lane not found for focus!\n"));
+	  continue;
+	}
+      cuda_debugapi::get_hardware_barrier_info (
+	  cuda_warp_state.device (), cuda_warp_state.sm (),
+	  cuda_warp_state.warp (), lane, &scope, barrierInfo,
+	  sizeof (barrierInfo), &msgSz);
+      switch (scope)
+	{
+	case CUDBG_BARRIER_SCOPE_NONE:
+	  barrier_str = "not blocked on a barrier.";
+	  break;
+	case CUDBG_BARRIER_SCOPE_INVALID:
+	  barrier_str = "blocked on an Invalid Barrier.";
+	  break;
+	case CUDBG_BARRIER_SCOPE_WARP:
+	  barrier_str = "blocked on a Warp Barrier.";
+	  break;
+	case CUDBG_BARRIER_SCOPE_WARP_GROUP:
+	  barrier_str = "blocked on a Warp Group Barrier.";
+	  break;
+	case CUDBG_BARRIER_SCOPE_BLOCK:
+	  barrier_str = "blocked on a Block Barrier.";
+	  break;
+	case CUDBG_BARRIER_SCOPE_CLUSTER:
+	  barrier_str = "blocked on a Cluster Barrier.";
+	  break;
+	case CUDBG_BARRIER_SCOPE_KERNEL:
+	  barrier_str = "blocked on a Kernel Barrier.";
+	  break;
+	default:
+	  barrier_str = "not blocked on a barrier.";
+	  break;
+	}
+
+      if (scope != CUDBG_BARRIER_SCOPE_NONE
+	  && scope != CUDBG_BARRIER_SCOPE_INVALID)
+	{
+	  current_uiout->message ("Focus is %s\n", barrier_str.c_str ());
+	}
+
       current_uiout->message ("Device %u SM %u Wp %u\n",
 			      cuda_warp_state.device (), cuda_warp_state.sm (),
 			      cuda_warp_state.warp ());
@@ -2165,7 +2223,8 @@ info_cuda_clusters_command (const char *arg)
 
   const bool coalescing = cuda_options_coalescing ();
 
-  /* print table header ('kernel' and 'clusterDim' is only present in MI output) */
+  /* print table header ('kernel' and 'clusterDim' is only present in MI
+   * output) */
   /* For "current" */
   uint32_t num_columns = 1;
 
@@ -2193,7 +2252,8 @@ info_cuda_clusters_command (const char *arg)
   if (uiout->is_mi_like_p ())
     {
       uiout->table_header (width.kernel, ui_right, "kernel", header_kernel);
-      uiout->table_header (width.kernel, ui_right, "clusterDim", header_cluster_dim);
+      uiout->table_header (width.kernel, ui_right, "clusterDim",
+			   header_cluster_dim);
     }
   if (coalescing)
     {
@@ -2222,7 +2282,8 @@ info_cuda_clusters_command (const char *arg)
 	  uiout->message ("Kernel %llu\n", (unsigned long long)c.kernel_id ()),
 	      kernel_id = c.kernel_id ();
 	}
-      if (!uiout->is_mi_like_p () && (cluster_dim.compare (c.cluster_dim ()) != 0))
+      if (!uiout->is_mi_like_p ()
+	  && (cluster_dim.compare (c.cluster_dim ()) != 0))
 	{
 	  /* row are grouped per kernel only in CLI output */
 	  uiout->message ("ClusterDim %s\n", c.cluster_dim ().c_str ()),
@@ -2231,7 +2292,7 @@ info_cuda_clusters_command (const char *arg)
       ui_out_emit_tuple tuple_emitter (uiout, row_name);
       uiout->field_string ("current", c.current () ? "*" : " ");
       if (uiout->is_mi_like_p ())
-        {
+	{
 	  uiout->field_signed ("kernel", c.kernel_id ());
 	  uiout->field_string ("clusterDim", c.cluster_dim ());
 	}
@@ -3449,8 +3510,8 @@ public:
     gdb_assert (context);
     if (cuda_current_focus::isDevice ())
       {
-        const auto kernel = cuda_current_focus::get ().logical ().kernel ();
-        m_current = kernel ? (context == kernel->context ()) : false;
+	const auto kernel = cuda_current_focus::get ().logical ().kernel ();
+	m_current = kernel ? (context == kernel->context ()) : false;
       }
     else
       m_current = false;
@@ -4089,7 +4150,8 @@ _initialize_cuda_commands ()
 	   _ ("Print or select the current CUDA cluster."), &cudalist);
 
   add_cmd ("clusterDim", no_class, cuda_cluster_dim_command,
-	   _ ("Print or select the current CUDA cluster dimension."), &cudalist);
+	   _ ("Print or select the current CUDA cluster dimension."),
+	   &cudalist);
 
   add_cmd ("block", no_class, cuda_block_command,
 	   _ ("Print or select the current CUDA block."), &cudalist);

@@ -124,6 +124,7 @@ clusterIdx\.z   { return CLUSTERIDX_Z; }
 
 current         { return CURRENT; }
 any             { return WILDCARD; }
+all             { return WILDCARD; }
 
 "&&"		{ return LOGICAL_AND; }
 "||"		{ return LOGICAL_OR; }

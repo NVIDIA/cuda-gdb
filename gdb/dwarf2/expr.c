@@ -318,6 +318,7 @@ write_to_memory (gdbarch *arch, CORE_ADDR address,
 #ifdef NVIDIA_CUDA_GDB
       return;
     }
+
   if (cuda_write_memory (address, flags, buffer, length))
     if (!stack
 	|| cuda_write_memory (address, TYPE_INSTANCE_FLAG_CUDA_LOCAL,
@@ -1150,10 +1151,10 @@ class dwarf_memory final : public dwarf_location
 {
 public:
 #ifdef NVIDIA_CUDA_GDB
-  dwarf_memory (gdbarch *arch, LONGEST offset,
-		type_instance_flags address_class = 0, bool stack = false)
+  dwarf_memory (gdbarch *arch, LONGEST offset, type_instance_flags flags = 0,
+		int address_class = 0, bool stack = false)
     : dwarf_location (arch, offset, ULONGEST_MAX / HOST_CHAR_BIT),
-      m_address_class (address_class), m_stack (stack)
+      m_flags (flags), m_address_class (address_class), m_stack (stack)
 #else
   dwarf_memory (gdbarch *arch, LONGEST offset, bool stack = false)
     : dwarf_location (arch, offset, ULONGEST_MAX / HOST_CHAR_BIT), m_stack (stack)
@@ -1161,7 +1162,7 @@ public:
   {}
 
 #ifdef NVIDIA_CUDA_GDB
-  void set_address_class (type_instance_flags address_class)
+  void set_address_class (int address_class)
   {
     m_address_class = address_class;
   }
@@ -1201,8 +1202,11 @@ public:
 
 private:
 #ifdef NVIDIA_CUDA_GDB
+  /* Old address class type flags (expected to be deprecated in the future).  */
+  type_instance_flags m_flags;
+
   /* Address space of this memory location. Value 0 indicates global memory.  */
-  type_instance_flags m_address_class;
+  int m_address_class;
 #endif
 
   /* True if the location belongs to a stack memory region.  */
@@ -1245,12 +1249,18 @@ dwarf_memory::read (const frame_info_ptr &frame, gdb_byte *buf,
   gdb::byte_vector temp_buf;
   *optimized = 0;
 
+#ifdef NVIDIA_CUDA_GDB
+  start_address
+    = gdbarch_segment_address_to_core_address (m_arch, m_address_class,
+					       start_address);
+#endif
+
   if (total_bits_to_skip == 0 && size.sub_bits () == 0
       && buf_offset.sub_bits () == 0)
     {
       /* Everything is byte-aligned, no buffer needed.  */
 #ifdef NVIDIA_CUDA_GDB
-      read_from_memory (m_arch, start_address, m_address_class,
+      read_from_memory (m_arch, start_address, m_flags,
 #else
       read_from_memory (m_arch, start_address,
 #endif
@@ -1265,7 +1275,7 @@ dwarf_memory::read (const frame_info_ptr &frame, gdb_byte *buf,
       /* Can only read from memory on byte granularity so an
 	 additional buffer is required.  */
 #ifdef NVIDIA_CUDA_GDB
-      read_from_memory (m_arch, start_address, m_address_class,
+      read_from_memory (m_arch, start_address, m_flags,
 #else
       read_from_memory (m_arch, start_address,
 #endif
@@ -1290,12 +1300,18 @@ dwarf_memory::write (const frame_info_ptr &frame, const gdb_byte *buf,
   gdb::byte_vector temp_buf;
   *optimized = 0;
 
+#ifdef NVIDIA_CUDA_GDB
+  start_address
+    = gdbarch_segment_address_to_core_address (m_arch, m_address_class,
+					       start_address);
+#endif
+
   if (total_bits_to_skip == 0 && size.sub_bits () == 0
       && buf_offset.sub_bits () == 0)
     {
       /* Everything is byte-aligned; no buffer needed.  */
 #ifdef NVIDIA_CUDA_GDB
-      write_to_memory (m_arch, start_address, m_address_class,
+      write_to_memory (m_arch, start_address, m_flags,
 #else
       write_to_memory (m_arch, start_address,
 #endif
@@ -1312,7 +1328,7 @@ dwarf_memory::write (const frame_info_ptr &frame, const gdb_byte *buf,
 	  if (this_size <= HOST_CHAR_BIT)
 	    /* Perform a single read for small sizes.  */
 #ifdef NVIDIA_CUDA_GDB
-	    read_from_memory (m_arch, start_address, m_address_class,
+	    read_from_memory (m_arch, start_address, m_flags,
 #else
 	    read_from_memory (m_arch, start_address,
 #endif
@@ -1323,7 +1339,7 @@ dwarf_memory::write (const frame_info_ptr &frame, const gdb_byte *buf,
 	      /* Only the first and last bytes can possibly have
 		 any bits reused.  */
 #ifdef NVIDIA_CUDA_GDB
-	      read_from_memory (m_arch, start_address, m_address_class,
+	      read_from_memory (m_arch, start_address, m_flags,
 #else
 	      read_from_memory (m_arch, start_address,
 #endif
@@ -1333,7 +1349,7 @@ dwarf_memory::write (const frame_info_ptr &frame, const gdb_byte *buf,
 	      if (!*unavailable)
 		read_from_memory (m_arch, start_address + this_size - 1,
 #ifdef NVIDIA_CUDA_GDB
-				  m_address_class, &temp_buf[this_size - 1],
+				  m_flags, &temp_buf[this_size - 1],
 #else
 				  &temp_buf[this_size - 1],
 #endif
@@ -1345,7 +1361,7 @@ dwarf_memory::write (const frame_info_ptr &frame, const gdb_byte *buf,
 		    buf, buf_offset.bits (), size.bits (), big_endian);
 
 #ifdef NVIDIA_CUDA_GDB
-      write_to_memory (m_arch, start_address, m_address_class,
+      write_to_memory (m_arch, start_address, m_flags,
 #else
       write_to_memory (m_arch, start_address,
 #endif
@@ -1437,9 +1453,20 @@ dwarf_memory::to_gdb_value (const frame_info_ptr &frame, struct type *type,
       || subobj_type->code () == TYPE_CODE_METHOD)
     ptr_type = builtin_type (m_arch)->builtin_func_ptr;
 
+#ifdef NVIDIA_CUDA_GDB
+  CORE_ADDR address
+    = value_as_address (value_from_pointer (ptr_type, m_offset.bytes ()))
+      + subobj_offset;
+    
+  address
+    = gdbarch_segment_address_to_core_address (m_arch, m_address_class,
+					       address);
+  value *retval = value_at_lazy (subobj_type, address);
+#else
   CORE_ADDR address
     = value_as_address (value_from_pointer (ptr_type, m_offset.bytes ()));
   value *retval = value_at_lazy (subobj_type, address + subobj_offset);
+#endif
   retval->set_stack (m_stack);
   retval->set_initialized (m_initialised);
   retval->set_bitpos (m_offset.sub_bits ());
@@ -2825,8 +2852,14 @@ gdb_value_to_dwarf_entry (gdbarch *arch, struct value *value)
       }
     case lval_memory:
 #ifdef NVIDIA_CUDA_GDB
-      return make_unique<dwarf_memory> (arch, value->address (),
-					TYPE_CUDA_ALL (type), value->stack ());
+      {
+	CORE_ADDR address = value->address ();
+	int address_class
+	  = gdbarch_address_class_from_core_address (arch, address);
+	address = gdbarch_segment_address_from_core_address (arch, address);
+	return make_unique<dwarf_memory> (arch, address, TYPE_CUDA_ALL (type),
+					  address_class, value->stack ());
+      }
 #else
       return make_unique<dwarf_memory> (arch, value->address (), value->stack ());
 #endif
@@ -3981,7 +4014,7 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 		 * string or'ed with CUDA_PTX_VIRTUAL_TAG to be out-of-range of a
 		 * normal register set size on cuda architectures.
 		 */
-		if (cuda_is_cuda_gdbarch (arch) && result > 0xff)
+		if (cuda_is_cuda_gdbarch (arch))
 		    {
 		      /* Check if this is a ptx virtual register string and convert
 		       * to identifier via cuda-tdep. */
@@ -4105,23 +4138,22 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 	     * of the string or'ed with CUDA_PTX_VIRTUAL_TAG to be out-of-range
 	     * of a normal register set size on cuda architectures.
 	     */
-	    if (cuda_is_cuda_gdbarch (arch) && reg > 0xff)
+	    if (cuda_is_cuda_gdbarch(arch))
 	      {
 		/* Check if this is a ptx virtual register string and convert
 		 * to identifier via cuda-tdep. */
-		uint64_t new_reg
-		    = cuda_check_dwarf2_reg_ptx_virtual_register (reg);
+		uint64_t new_reg = cuda_check_dwarf2_reg_ptx_virtual_register(reg);
+
 		/* Also check if this is an ascii encoded register string and
 		   convert to identifier. Only do this if we didn't detect a
 		   ptx virtual register string. */
 		if (new_reg == reg)
-		  new_reg = cuda_check_dwarf2_reg_ascii_encoded_register (arch,
-									  reg);
+		   new_reg = cuda_check_dwarf2_reg_ascii_encoded_register(arch, reg);
 		reg = new_reg;
 	      }
 #endif
 
-	    gdbarch *frame_arch = get_frame_arch (this->m_frame);
+	    gdbarch *frame_arch = get_frame_arch(this->m_frame);
 	    int regnum = dwarf_reg_to_regnum_or_error (frame_arch, reg);
 	    ULONGEST reg_size = register_size (frame_arch, regnum);
 	    dwarf_register registr (arch, reg);
@@ -4267,13 +4299,10 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 
 	    dwarf_value_up aspace_value = to_value (pop (), address_type);
 	    dwarf_require_integral (aspace_value->type ());
-
-	    type_instance_flags type_flags
-	      = gdbarch_address_class_type_flags (arch, addr_size,
-						  aspace_value->to_long ());
 	    auto location
 	      = gdb::make_unique<dwarf_memory> (arch, address_value->to_long (),
-						type_flags, false);
+						(type_instance_flags) 0,
+						aspace_value->to_long ());
 	    push (location->deref (this->m_frame, this->m_addr_info,
 				   type, addr_size));
 	    break;
@@ -4504,10 +4533,14 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 
 	    ULONGEST result = dwarf2_frame_cfa (this->m_frame);
 #ifdef NVIDIA_CUDA_GDB
-	    push (make_unique<dwarf_memory> (arch, result,
-					     TYPE_INSTANCE_FLAG_CUDA_LOCAL, true));
+	    int address_class
+	      = gdbarch_address_class_from_core_address (arch, (CORE_ADDR) result);
+	    CORE_ADDR address
+	      = gdbarch_segment_address_from_core_address (arch, (CORE_ADDR) result);
+	    push (make_unique<dwarf_memory> (arch, address, TYPE_INSTANCE_FLAG_CUDA_LOCAL,
+					     address_class, true));
 #else
-	    push (make_unique<dwarf_memory> (arch, result, (type_instance_flags) 0, true));
+	    push (make_unique<dwarf_memory> (arch, result, true));
 #endif
 	    break;
 	  }
@@ -4769,12 +4802,11 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 	    dwarf_value_up aspace_value = to_value (pop (), address_type);
 	    dwarf_value_up address_value = to_value (pop (), address_type);
 	    dwarf_require_integral (aspace_value->type ());
-	    type_instance_flags type_flags
-	      = gdbarch_address_class_type_flags (arch, address_type->length (),
-						  aspace_value->to_long ());
+	    dwarf_require_integral (address_value->type ());
 	    auto location
 	      = gdb::make_unique<dwarf_memory> (arch, address_value->to_long (),
-						type_flags, false);
+						(type_instance_flags) 0,
+						aspace_value->to_long ());
 	    push (std::move (location));
 	  }
 	  break;
@@ -4854,10 +4886,7 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 
 	    dwarf_value_up aspace_value = to_value (pop (), address_type);
 	    dwarf_require_integral (aspace_value->type ());
-	    type_instance_flags type_flags
-	      = gdbarch_address_class_type_flags (arch, address_type->length (),
-						  aspace_value->to_long ());
-	    memory->set_address_class (type_flags);
+	    memory->set_address_class (aspace_value->to_long ());
 
 	    push (std::move (location));
 	    break;

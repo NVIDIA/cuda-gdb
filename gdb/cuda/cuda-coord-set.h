@@ -341,8 +341,8 @@ private:
 public:
   cuda_coord_set (const cuda_coords &filter, gdb::optional<cuda_coords> origin
 					     = gdb::optional<cuda_coords> ())
-      : m_compare{},
-	m_coord_set{ [&] (const cuda_coords &lhs, const cuda_coords &rhs) {
+      : m_compare{}, m_coord_set{ [&] (const cuda_coords &lhs,
+				       const cuda_coords &rhs) {
 	  return this->m_compare (lhs, rhs);
 	} }
   {
@@ -438,7 +438,8 @@ public:
 		    kernelId = kernel->id ();
 		    /* Check the default cluster size. If it is non-zero, we
 		       need to get the per warp clusterIdx and clusterDim. */
-		    const auto &default_clusterDim = kernel->cluster_dim_default ();
+		    const auto &default_clusterDim
+			= kernel->cluster_dim_default ();
 		    if ((default_clusterDim.x != 0)
 			&& (default_clusterDim.y != 0)
 			&& (default_clusterDim.z != 0))
@@ -659,8 +660,8 @@ public:
   // This default constructor is kludge to get around the struct initializer in
   // cuda-autostep.c.
   cuda_coord_set ()
-      : m_compare{},
-	m_coord_set{ [&] (const cuda_coords &lhs, const cuda_coords &rhs) {
+      : m_compare{}, m_coord_set{ [&] (const cuda_coords &lhs,
+				       const cuda_coords &rhs) {
 	  return this->m_compare (lhs, rhs);
 	} }
   {

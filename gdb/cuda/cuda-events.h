@@ -19,7 +19,9 @@
 #ifndef _CUDA_EVENTS_H
 #define _CUDA_EVENTS_H 1
 
+#include "cuda-stats.h"
 #include "cudadebugger.h"
+
 #include "gdbsupport/function-view.h"
 
 typedef enum
@@ -28,9 +30,10 @@ typedef enum
   CUDA_EVENT_ASYNC
 } cuda_event_kind_t;
 
-bool
-cuda_process_events (cuda_event_kind_t kind,
-		     gdb::function_view<bool (const CUDBGEvent &)> custom_handler
-		     = nullptr);
+bool cuda_process_events (
+    cuda_event_kind_t kind,
+    gdb::function_view<bool (const CUDBGEvent &)> custom_handler = nullptr);
+
+cuda_statistics_table &get_cuda_event_statistics (void);
 
 #endif

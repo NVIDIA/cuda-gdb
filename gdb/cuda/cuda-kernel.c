@@ -42,15 +42,16 @@
 cuda_kernel::cuda_kernel (uint64_t kernel_id, uint32_t dev_id,
 			  uint64_t grid_id, uint64_t virt_code_base,
 			  cuda_module *module, const CuDim3 &grid_dim,
-			  const CuDim3 &block_dim, const CuDim3 &cluster_dim_default,
-                          const CuDim3 &cluster_dim_preferred,
+			  const CuDim3 &block_dim,
+			  const CuDim3 &cluster_dim_default,
+			  const CuDim3 &cluster_dim_preferred,
 			  CUDBGKernelType type, CUDBGKernelOrigin origin,
 			  uint64_t parent_grid_id)
     : m_id (kernel_id), m_dev_id (dev_id), m_grid_id (grid_id),
       m_module (module), m_virt_code_base (virt_code_base),
       m_grid_dim (grid_dim), m_block_dim (block_dim),
       /* Kernel-ready event will not report cluster info and pass 0,
-         mark the field as invalid and read it later from the grid info. */
+	 mark the field as invalid and read it later from the grid info. */
       m_cluster_dim_default_p (cluster_dim_default.x != 0),
       m_cluster_dim_default (cluster_dim_default),
       m_cluster_dim_preferred_p (m_cluster_dim_default_p),

@@ -184,6 +184,10 @@ enum bptype
     /* This is an internal breakpoint that is hit when there's a driver
      * internal error. */
     bp_cuda_internal_error,
+    /* This is an internal breakpoint that is hit when the driver has
+       injected and initialized the debugger library after we requested
+       that. */
+    bp_cuda_attach_initiated,
     /* CUDA - UVM */
     bp_cuda_uvm,
     /* CUDA - CDP */

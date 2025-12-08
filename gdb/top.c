@@ -1807,7 +1807,7 @@ quit_force (int *exit_arg, int from_tty)
 
 #ifdef NVIDIA_CUDA_GDB
   cuda_exception exp;
-  if (exp.valid ())
+  if (exp.has_exception ())
     {
       cuda_cleanup();
 

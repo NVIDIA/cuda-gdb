@@ -256,7 +256,7 @@ cuda_core_initialize_events_exceptions (void)
 
   /* Figure out, where exception happened */
   cuda_exception ex;
-  if (ex.valid ())
+  if (ex.has_exception ())
     {
       /* Exception detected, set focus to the exception */
       if (ex.has_coords ())
@@ -266,7 +266,7 @@ cuda_core_initialize_events_exceptions (void)
 	  cuda_current_focus::printFocus (false);
 	}
       /* Print the exception */
-      ex.printMessage ();
+      ex.print_message ();
     }
   else
     {

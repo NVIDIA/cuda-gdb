@@ -257,182 +257,11 @@ cuda_remote_notification_consume_pending ()
   cuda_remote_send_packet (NOTIFICATION_CONSUME_PENDING);
 }
 
-template <typename TValue>
-using FnPerWarpUpdateGet
-    = void (*) (uint32_t dev, uint32_t sm, uint32_t wp, TValue *value);
-template <typename TValue>
-using FnPerWarpUpdateSet
-    = void (*) (uint32_t dev, uint32_t sm, uint32_t wp, const TValue &value);
-
-template <typename TValue>
-void
-cuda_remote_update_per_warp_info_in_sm (uint32_t dev, uint32_t sm,
-					cuda_packet_type_t packet_type,
-					const char *name,
-					FnPerWarpUpdateGet<TValue> &&get_value,
-					FnPerWarpUpdateSet<TValue> &&set_value)
-{
-#ifdef __QNXTARGET__
-  uint32_t wp;
-  const cuda_api_warpmask *valid_warps_mask_c;
-  cuda_api_warpmask valid_warps_mask_s;
-  uint32_t num_warps;
-  TValue value;
-
-  /* On QNX the packet size is limited and the response for such packets
-     doesn't fit. Therefore gather all the data from the client side
-     without server-side batching, using individual vCUDA packets via
-     the CUDA API which are constant in size in this case. */
-
-  valid_warps_mask_c = cuda_state::sm_get_valid_warps_mask (dev, sm);
-  num_warps = cuda_state::device_get_num_warps (dev);
-
-  cuda_debugapi::read_valid_warps (dev, sm, &valid_warps_mask_s);
-  gdb_assert (valid_warps_mask_s == valid_warps_mask_c);
-
-  for (wp = 0; wp < num_warps; wp++)
-    {
-      if (cuda_state::warp_valid (dev, sm, wp))
-	{
-	  /* Get the value from the API first, then store it in warp state. */
-	  get_value (dev, sm, wp, &value);
-	  set_value (dev, sm, wp, value);
-	}
-    }
-#else
-  const cuda_api_warpmask *valid_warps_mask_c
-      = cuda_state::sm_get_valid_warps_mask (dev, sm);
-  uint32_t num_warps = cuda_state::device_get_num_warps (dev);
-
-  remote_callbacks.append_string ("qnv.");
-  remote_callbacks.append_bin ((gdb_byte *)&packet_type, sizeof (packet_type));
-  remote_callbacks.append_separator ();
-  remote_callbacks.append_bin ((gdb_byte *)&dev, sizeof (dev));
-  remote_callbacks.append_separator ();
-  remote_callbacks.append_bin ((gdb_byte *)&sm, sizeof (sm));
-  remote_callbacks.append_separator ();
-  remote_callbacks.append_bin ((gdb_byte *)&num_warps, sizeof (num_warps));
-  remote_callbacks.append_separator ();
-
-  remote_callbacks.send_request ();
-
-  cuda_api_warpmask valid_warps_mask_s;
-  remote_callbacks.extract_bin ((gdb_byte *)&valid_warps_mask_s,
-				sizeof (valid_warps_mask_s));
-  gdb_assert (valid_warps_mask_s == valid_warps_mask_c);
-
-  for (uint32_t wp = 0; wp < num_warps; wp++)
-    {
-      if (cuda_state::warp_valid (dev, sm, wp))
-	{
-	  TValue value;
-	  remote_callbacks.extract_bin ((gdb_byte *)&value, sizeof (value));
-	  set_value (dev, sm, wp, value);
-	}
-    }
-
-  CUDBGResult res;
-  remote_callbacks.extract_bin ((gdb_byte *)&res, sizeof (res));
-  if (res != CUDBG_SUCCESS)
-    error (_ ("Error: Failed to read %s (error=%u).\n"), name, res);
-#endif
-}
-
-void
-cuda_remote_update_grid_id_in_sm (uint32_t dev, uint32_t sm)
-{
-  cuda_remote_update_per_warp_info_in_sm<uint64_t> (
-      dev, sm, UPDATE_GRID_ID_IN_SM, "grid ID", cuda_debugapi::read_grid_id,
-      [] (uint32_t _dev, uint32_t _sm, uint32_t _wp,
-	  const uint64_t &_grid_id) {
-	cuda_state::warp_set_grid_id (_dev, _sm, _wp, _grid_id);
-      });
-}
-
-void
-cuda_remote_update_cluster_idx_in_sm (uint32_t dev, uint32_t sm)
-{
-  cuda_remote_update_per_warp_info_in_sm<CuDim3> (
-      dev, sm, UPDATE_CLUSTER_IDX_IN_SM, "cluster index",
-      cuda_debugapi::read_cluster_idx,
-      [] (uint32_t _dev, uint32_t _sm, uint32_t _wp,
-	  const CuDim3 &_cluster_idx) {
-	cuda_state::warp_set_cluster_idx (_dev, _sm, _wp, _cluster_idx);
-      });
-}
-
-void
-cuda_remote_update_cluster_dim_in_sm (uint32_t dev, uint32_t sm)
-{
-  cuda_remote_update_per_warp_info_in_sm<CuDim3> (
-      dev, sm, UPDATE_CLUSTER_DIM_IN_SM, "cluster dimension",
-      cuda_debugapi::get_cluster_dim,
-      [] (uint32_t _dev, uint32_t _sm, uint32_t _wp,
-	  const CuDim3 &_cluster_dim) {
-	cuda_state::warp_set_cluster_dim (_dev, _sm, _wp, _cluster_dim);
-      });
-}
-
-void
-cuda_remote_update_block_idx_in_sm (uint32_t dev, uint32_t sm)
-{
-  cuda_remote_update_per_warp_info_in_sm<CuDim3> (
-      dev, sm, UPDATE_BLOCK_IDX_IN_SM, "block index",
-      cuda_debugapi::read_block_idx,
-      [] (uint32_t _dev, uint32_t _sm, uint32_t _wp,
-	  const CuDim3 &_block_idx) {
-	cuda_state::warp_set_block_idx (_dev, _sm, _wp, _block_idx);
-      });
-}
-
-void
-cuda_remote_update_thread_idx_in_warp (uint32_t dev, uint32_t sm, uint32_t wp)
-{
-  uint32_t valid_lanes_mask_c
-      = cuda_state::warp_get_valid_lanes_mask (dev, sm, wp);
-  uint32_t num_lanes = cuda_state::device_get_num_lanes (dev);
-
-  remote_callbacks.append_string ("qnv.");
-  cuda_packet_type_t packet_type = UPDATE_THREAD_IDX_IN_WARP;
-  remote_callbacks.append_bin ((gdb_byte *)&packet_type, sizeof (packet_type));
-  remote_callbacks.append_separator ();
-  remote_callbacks.append_bin ((gdb_byte *)&dev, sizeof (dev));
-  remote_callbacks.append_separator ();
-  remote_callbacks.append_bin ((gdb_byte *)&sm, sizeof (sm));
-  remote_callbacks.append_separator ();
-  remote_callbacks.append_bin ((gdb_byte *)&wp, sizeof (wp));
-  remote_callbacks.append_separator ();
-  remote_callbacks.append_bin ((gdb_byte *)&num_lanes, sizeof (num_lanes));
-
-  remote_callbacks.send_request ();
-
-  uint32_t valid_lanes_mask_s;
-  remote_callbacks.extract_bin ((gdb_byte *)&valid_lanes_mask_s,
-				sizeof (valid_lanes_mask_s));
-  gdb_assert (valid_lanes_mask_s == valid_lanes_mask_c);
-
-  for (uint32_t ln = 0; ln < num_lanes; ln++)
-    {
-      if (cuda_state::lane_valid (dev, sm, wp, ln))
-	{
-	  CuDim3 thread_idx;
-	  remote_callbacks.extract_bin ((gdb_byte *)&thread_idx,
-					sizeof (thread_idx));
-	  cuda_state::lane_set_thread_idx (dev, sm, wp, ln, thread_idx);
-	}
-    }
-
-  CUDBGResult res;
-  remote_callbacks.extract_bin ((gdb_byte *)&res, sizeof (res));
-  if (res != CUDBG_SUCCESS)
-    error (_ ("Error: Failed to read the thread index (error=%u).\n"), res);
-}
-
 #ifdef __QNXTARGET__
 void
 cuda_remote_set_symbols (bool set_extra_symbols, bool *symbols_are_set)
 {
-  constexpr unsigned char CORE_SYMBOLS_COUNT = 11;
+  constexpr unsigned char CORE_SYMBOLS_COUNT = 10;
   constexpr unsigned char EXTRA_SYMBOLS_COUNT = 2;
   unsigned char symbols_count = CORE_SYMBOLS_COUNT;
 
@@ -488,11 +317,6 @@ cuda_remote_set_symbols (bool set_extra_symbols, bool *symbols_are_set)
   remote_callbacks.append_separator ();
   address = cuda_get_symbol_address (
       _STRING_ (CUDBG_REPORTED_DRIVER_INTERNAL_ERROR_CODE));
-  remote_callbacks.append_bin ((gdb_byte *)&address, sizeof (address));
-  remote_callbacks.append_separator ();
-  /* CUDBG_DETACH_SUSPENDED_DEVICES_MASK is deprecated */
-  address = cuda_get_symbol_address (
-      _STRING_ (CUDBG_DETACH_SUSPENDED_DEVICES_MASK));
   remote_callbacks.append_bin ((gdb_byte *)&address, sizeof (address));
   remote_callbacks.append_separator ();
   address = cuda_get_symbol_address (_STRING_ (CUDBG_ENABLE_LAUNCH_BLOCKING));
@@ -639,8 +463,11 @@ cuda_remote_set_option ()
 			       sizeof (notify_youngest));
   remote_callbacks.append_separator ();
   bool driver_logs = cuda_options_driver_logs_enabled ();
-  remote_callbacks.append_bin ((gdb_byte *)&driver_logs,
-             sizeof (driver_logs));
+  remote_callbacks.append_bin ((gdb_byte *)&driver_logs, sizeof (driver_logs));
+  remote_callbacks.append_separator ();
+  bool printf_flushing = cuda_options_printf_flushing ();
+  remote_callbacks.append_bin ((gdb_byte *)&printf_flushing,
+             sizeof (printf_flushing));
   remote_callbacks.append_separator ();
 
   remote_callbacks.send_request ();

@@ -112,7 +112,7 @@ typedef enum
   CUDBGAPIREQ_getHostAddrFromDeviceAddr,
   CUDBGAPIREQ_singleStepWarp41,
   CUDBGAPIREQ_setNotifyNewEventCallback41,
-  CUDBGAPIREQ_readSyscallCallDepth,
+  CUDBGAPIREQ_STUB_readSyscallCallDepth,
 
   /* 4.2 Extensions */
   CUDBGAPIREQ_STUB_readTextureMemoryBindless,
@@ -217,6 +217,9 @@ typedef enum
   /* 13.0 Extensions */
   CUDBGAPIREQ_getCudaExceptionString,
   CUDBGAPIREQ_setNotifyNewEventCallback,
+
+  /* 13.1 Extensions */
+  CUDBGAPIREQ_getHardwareBarrierInfo,
 } CUDBGAPIREQ_t;
 
 typedef enum

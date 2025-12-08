@@ -26,6 +26,10 @@
 #include "remote.h"
 #include "top.h"
 
+#include "gdbsupport/buildargv.h"
+
+#include "cuda-events.h"
+#include "cuda-notifications.h"
 #include "cuda-options.h"
 #include "cuda-packet-manager.h"
 #include "cuda-regmap.h"
@@ -34,6 +38,8 @@
 #include "cuda-utils.h"
 #include "libcudbgipc.h"
 #include "objfiles.h"
+
+#include <chrono>
 
 /*List of set/show cuda commands */
 struct cmd_list_element *setcudalist;
@@ -600,7 +606,7 @@ cuda_options_disassemble_from_device_memory (void)
   /* Force this to false if there is no target execution - we previously
      warned the user about this when they switched the default. */
   if (!target_has_execution ())
-      return false;
+    return false;
   return cuda_disassemble_from == cuda_disassemble_from_device_memory;
 }
 
@@ -610,7 +616,7 @@ cuda_options_disassemble_from_elf_image (void)
   /* Force this to true if there is no target execution - we previously
      warned the user about this when they switched the default. */
   if (!target_has_execution ())
-      return true;
+    return true;
   return cuda_disassemble_from == cuda_disassemble_from_elf_image;
 }
 
@@ -674,47 +680,6 @@ bool
 cuda_options_disassemble_per_file (void)
 {
   return cuda_disassemble_per == cuda_disassemble_per_file;
-}
-
-/*
- * set cuda hide_internal_frames
- */
-static bool cuda_hide_internal_frames = true;
-
-static void
-cuda_set_hide_internal_frames (const char *args, int from_tty,
-			       struct cmd_list_element *c)
-{
-  // force rebuilding frame stack to see the change
-  reinit_frame_cache ();
-}
-
-static void
-cuda_show_hide_internal_frames (struct ui_file *file, int from_tty,
-				struct cmd_list_element *c, const char *value)
-{
-  gdb_printf (file, _ ("Hiding of CUDA internal frames is %s.\n"), value);
-}
-
-static void
-cuda_options_initialize_hide_internal_frames (void)
-{
-  add_setshow_boolean_cmd (
-      "hide_internal_frame", class_cuda, &cuda_hide_internal_frames,
-      _ ("Set hiding of the internal CUDA frames when printing the call "
-	 "stack"),
-      _ ("Show hiding of the internal CUDA frames when printing the call "
-	 "stack."),
-      _ ("When non-zero, internal CUDA frames are omitted when printing the "
-	 "call stack."),
-      cuda_set_hide_internal_frames, cuda_show_hide_internal_frames,
-      &setcudalist, &showcudalist);
-}
-
-bool
-cuda_options_hide_internal_frames (void)
-{
-  return cuda_hide_internal_frames;
 }
 
 /*
@@ -1101,102 +1066,212 @@ cuda_options_variable_value_cache_enabled (void)
 }
 
 /*
- * set cuda api stat collection
+ * CUDA Statistics
+ *
+ * Used by cuda-gdb developers to track the performance of
+ * the debugger stack, including DebugAPI calls and event
+ * processing.
  */
-static bool cuda_gpu_collect_stats = true;
 
+/* Helper function to setup statistics table headers */
 static void
-cuda_show_cuda_gpu_collect_stats (struct ui_file *file, int from_tty,
-				  struct cmd_list_element *c,
-				  const char *value)
+cuda_setup_stat_table_headers (struct ui_out *uiout, size_t name_width,
+			       const char *header_name,
+			       const char *header_calls,
+			       const char *header_avg, const char *header_min,
+			       const char *header_max,
+			       const char *header_total)
 {
-  gdb_printf (file, _ ("CUDA debugger API statistics collection is %s.\n"),
-	      value);
-}
-
-bool
-cuda_options_statistics_collection_enabled (void)
-{
-  return cuda_gpu_collect_stats;
-}
-
-static void
-cuda_print_statistics (const char *args, int from_tty)
-{
-  struct ui_out *uiout = current_uiout;
-
-  /* column headers */
-  const char *header_name = "API name";
-  const char *header_calls = "Number of calls";
-  const char *header_avg = "Average call time(usec)";
-  const char *header_min = "Min call time(usec)";
-  const char *header_max = "Max call time(usec)";
-  const char *header_total = "Total call time(usec)";
-
-  size_t name_width = strlen (header_name);
-  int row_no = 0;
-  std::chrono::microseconds total_time = std::chrono::microseconds::zero ();
-
-  auto preprocess_stats = [&] (const cuda_api_stat &stat) {
-    if (stat.times_called == 0)
-      return;
-    name_width = std::max (name_width, stat.name.length ());
-    ++row_no;
-    total_time += stat.total_time;
-  };
-  cuda_debugapi::for_each_api_stat (preprocess_stats);
-
-  ui_out_emit_table table_cleanup (uiout, 6, row_no, "CUDBGAPIStatTable");
   uiout->table_header (name_width, ui_left, "name", header_name);
   uiout->table_header (strlen (header_calls), ui_right, "calls", header_calls);
   uiout->table_header (strlen (header_avg), ui_right, "avg", header_avg);
   uiout->table_header (strlen (header_min), ui_right, "min", header_min);
   uiout->table_header (strlen (header_max), ui_right, "max", header_max);
   uiout->table_header (strlen (header_total), ui_right, "total", header_total);
+}
+
+/* Helper function to print a single stat row */
+static void
+print_cuda_stat_row (struct ui_out *uiout, const std::string &name,
+		     const cuda_statistic &stat, const char *row_name)
+{
+  using namespace std::chrono;
+  const int64_t total_us
+      = duration_cast<microseconds> (stat.total_time ()).count ();
+  const int64_t min_us
+      = duration_cast<microseconds> (stat.min_time ()).count ();
+  const int64_t max_us
+      = duration_cast<microseconds> (stat.max_time ()).count ();
+  const int64_t avg_us = total_us / stat.count ();
+
+  ui_out_emit_tuple row_cleanup (uiout, row_name);
+  uiout->field_string ("name", name.c_str ());
+  uiout->field_signed ("calls", stat.count ());
+  uiout->field_signed ("avg", avg_us);
+  uiout->field_signed ("min", min_us);
+  uiout->field_signed ("max", max_us);
+  uiout->field_signed ("total", total_us);
+  uiout->text ("\n");
+}
+
+static void
+print_cuda_statistics (cuda_statistics_table &cuda_statistics_table,
+		       const char *table_name, const char *row_name,
+		       const char *header_name, const char *header_calls,
+		       const char *header_avg, const char *header_min,
+		       const char *header_max, const char *header_total,
+		       const char *total)
+{
+  struct ui_out *uiout = current_uiout;
+
+  size_t name_width = strlen (header_name);
+  int row_no = 0;
+  uint64_t total_measurements = 0;
+  std::chrono::nanoseconds total_time = std::chrono::nanoseconds::zero ();
+
+  auto preprocess_stats
+      = [&] (const std::string &name, const cuda_statistic &stat) {
+	  if (stat.count () > 0)
+	    {
+	      name_width = std::max (name_width, name.length ());
+	      ++row_no;
+	      total_time += stat.total_time ();
+	      total_measurements += stat.count ();
+	    }
+	  return true;
+	};
+
+  /* Pre-process the statistics to get the total time and number of
+   * measurements. The preprocess_stats lamda function always returns true. */
+  cuda_statistics_table.foreach_statistic (preprocess_stats);
+
+  if (total_measurements == 0)
+    {
+      uiout->message ("No measurements found for %s\n", table_name);
+      return;
+    }
+
+  ui_out_emit_table table_cleanup (uiout, 6, row_no, table_name);
+  cuda_setup_stat_table_headers (uiout, name_width, header_name, header_calls,
+				 header_avg, header_min, header_max,
+				 header_total);
   uiout->table_body ();
 
-  auto process_stats = [&] (const cuda_api_stat &stat) {
-    if (stat.times_called == 0)
-      return;
-    ui_out_emit_tuple row_cleanup (uiout, "CUDBGAPIStatRow");
-    uiout->field_string ("name", stat.name.c_str ());
-    uiout->field_signed ("calls", stat.times_called);
-    uiout->field_signed ("avg", stat.total_time.count () / stat.times_called);
-    uiout->field_signed ("min", stat.min_time.count ());
-    uiout->field_signed ("max", stat.max_time.count ());
-    uiout->field_signed ("total", stat.total_time.count ());
-    uiout->text ("\n");
-  };
-  cuda_debugapi::for_each_api_stat (process_stats);
+  auto process_stats
+      = [&] (const std::string &name, const cuda_statistic &stat) {
+	  if (stat.count () > 0)
+	    print_cuda_stat_row (uiout, name, stat, row_name);
+	  return true;
+	};
 
-  printf_unfiltered ("Total time spent in CUDBG API is %.6f sec\n",
-		     std::chrono::duration<double> (total_time).count ());
+  /* Process the statistics to print the rows.
+   * The process_stats lamda function always returns true. */
+  cuda_statistics_table.foreach_statistic (process_stats);
+
+  /* Print the total time, number of measurements, and average time. */
+  using namespace std::chrono;
+  const auto total_ns = duration<double, std::nano> (total_time).count ();
+  const auto avg_ns = total_ns / total_measurements;
+  uiout->message ("%s is %.6f sec (%zu measurements, %.3f usec avg)\n", total,
+		  total_ns * 1e-9, total_measurements, avg_ns * 1e-3);
+}
+
+static void
+print_cuda_notification_stats (
+    const std::string &name, const cuda_statistic &stat,
+    const char *table_name, const char *row_name, const char *header_name,
+    const char *header_calls, const char *header_avg, const char *header_min,
+    const char *header_max, const char *header_total)
+{
+
+  if (stat.count () == 0)
+    return;
+
+  struct ui_out *uiout = current_uiout;
+
+  size_t name_width = std::max (strlen (header_name), name.length ());
+
+  ui_out_emit_table table_cleanup (uiout, 6, 1, table_name);
+  cuda_setup_stat_table_headers (uiout, name_width, header_name, header_calls,
+				 header_avg, header_min, header_max,
+				 header_total);
+  uiout->table_body ();
+
+  print_cuda_stat_row (uiout, name, stat, row_name);
+}
+
+static void
+print_cuda_statistics (const char *args, int from_tty)
+{
+  gdb_argv argv (args);
+
+  // If no arguments are provided, print all statistics by default.
+  bool print_debugapi = (argv.count () == 0);
+  bool print_events = (argv.count () == 0);
+
+  // Process the arguments (if any)
+  for (int i = 0; i < argv.count (); ++i)
+    if (!strcmp (argv[i], "all"))
+      {
+	print_debugapi = true;
+	print_events = true;
+      }
+    else if (!strcmp (argv[i], "debugapi"))
+      print_debugapi = true;
+    else if (!strcmp (argv[i], "events"))
+      print_events = true;
+    else
+      warning (_ ("Skipping unknown statistics group %s"), argv[i]);
+
+  bool need_newline = false;
+  if (print_debugapi)
+    {
+      print_cuda_statistics (
+	  cuda_debugapi::api_call_statistics (), "CUDBGAPIStatTable",
+	  "CUDBGAPIStatRow", "API name", "API Calls", "Avg(usec)", "Min(usec)",
+	  "Max(usec)", "Total(usec)", "Total time spent in CUDBG API");
+      need_newline = true;
+    }
+  if (print_events)
+    {
+      if (need_newline)
+	printf_unfiltered ("\n");
+      print_cuda_statistics (
+	  get_cuda_event_statistics (), "EventStatTable", "EventStatRow",
+	  "Event name", "# Events", "Avg(usec)", "Min(usec)", "Max(usec)",
+	  "Total(usec)", "Total time spent in event processing");
+      need_newline = true;
+    }
+
+  // Print notification statistics
+  if (print_events)
+    {
+      if (need_newline)
+	printf_unfiltered ("\n");
+      print_cuda_notification_stats (
+	  "CUDA Notifications", get_cuda_notification_statistics (),
+	  "CUDA Notification StatsTable", "CUDA Notification StatsRow", "",
+	  "# Notifications", "Avg(usec)", "Min(usec)", "Max(usec)",
+	  "Total(usec)");
+    }
 }
 
 static void
 cuda_reset_statistics (const char *args, int from_tty)
 {
-  cuda_debugapi::reset_api_stat ();
+  cuda_debugapi::api_call_statistics ().reset ();
+  get_cuda_event_statistics ().reset ();
+  get_cuda_notification_statistics ().reset ();
 }
 
 static void
 cuda_options_initialize_stats (void)
 {
-  add_cmd ("cuda_stats", class_maintenance, cuda_print_statistics,
-	   _ ("Print statistics about CUDA Debugger API."),
-	   &maintenanceprintlist);
+  add_cmd ("cuda_stats", class_maintenance, print_cuda_statistics,
+	   _ ("Print CUDA statistics."), &maintenanceprintlist);
 
   add_cmd ("reset_cuda_stats", class_maintenance, cuda_reset_statistics,
-	   _ ("Reset collected statistics about CUDA Debugger API."),
-	   &maintenancelist);
-
-  add_setshow_boolean_cmd (
-      "cuda_stats", class_maintenance, &cuda_gpu_collect_stats,
-      _ ("Turn on/off CUDA Debugger API statistics collection"),
-      _ ("Show if CUDA Debugger API statistics collection is enabled."),
-      _ ("When enabled, cuda-gdb will collect debugger API call statistics."),
-      NULL, cuda_show_cuda_gpu_collect_stats, &maintenance_set_cmdlist,
-      &maintenance_show_cmdlist);
+	   _ ("Reset CUDA statistics"), &maintenancelist);
 }
 
 /*
@@ -1219,7 +1294,7 @@ cuda_options_value_extrapolation_enabled (void)
 }
 
 static void
-cuda_print_regmap (const char *args, int from_tty)
+print_cuda_regmap (const char *args, int from_tty)
 {
   for (objfile *objfile : current_program_space->objfiles ())
     {
@@ -1233,7 +1308,7 @@ cuda_print_regmap (const char *args, int from_tty)
 static void
 cuda_options_initialize_value_extrapolation (void)
 {
-  add_cmd ("cuda_regmap", class_maintenance, cuda_print_regmap,
+  add_cmd ("cuda_regmap", class_maintenance, print_cuda_regmap,
 	   _ ("Print GPUs register map table"), &maintenanceprintlist);
 
   add_setshow_boolean_cmd (
@@ -1365,7 +1440,7 @@ static bool cuda_driver_logs = true;
 
 static void
 cuda_set_driver_logs (const char *args, int from_tty,
-      struct cmd_list_element *c)
+		      struct cmd_list_element *c)
 {
   if (is_remote_target (current_inferior ()->process_target ()))
     cuda_remote_set_option ();
@@ -1375,7 +1450,7 @@ cuda_set_driver_logs (const char *args, int from_tty,
 
 static void
 cuda_show_driver_logs (struct ui_file *file, int from_tty,
-		      struct cmd_list_element *c, const char *value)
+		       struct cmd_list_element *c, const char *value)
 {
   gdb_printf (file, _ ("CUDA driver logs collection is %s.\n"), value);
 }
@@ -1395,19 +1470,19 @@ cuda_options_initialize_driver_logs (void)
       _ ("Show if collection and display of CUDA driver logs is enabled."),
       _ ("When turned on, CUDA driver logs are collected from the driver "
 	 "and displayed by the debugger."),
-   cuda_set_driver_logs, cuda_show_driver_logs, &setcudalist, &showcudalist);
+      cuda_set_driver_logs, cuda_show_driver_logs, &setcudalist,
+      &showcudalist);
 }
 
-static const char *const cuda_driver_log_level_enums[] = {
-  "error", "warning", "extra", NULL
-};
+static const char *const cuda_driver_log_level_enums[]
+    = { "error", "warning", "extra", NULL };
 
 static const char *cuda_driver_log_level = "error";
 static cuda_log_level_t cuda_log_level = CUDA_LOG_LEVEL_ERROR;
 
 static void
 cuda_set_driver_log_level (const char *args, int from_tty,
-			  struct cmd_list_element *c)
+			   struct cmd_list_element *c)
 {
   if (strcmp (cuda_driver_log_level, "error") == 0)
     cuda_log_level = CUDA_LOG_LEVEL_ERROR;
@@ -1421,7 +1496,7 @@ cuda_set_driver_log_level (const char *args, int from_tty,
 
 static void
 cuda_show_driver_log_level (struct ui_file *file, int from_tty,
-			   struct cmd_list_element *c, const char *value)
+			    struct cmd_list_element *c, const char *value)
 {
   gdb_printf (file, _ ("CUDA driver logs level is set to '%s'.\n"), value);
 }
@@ -1441,11 +1516,48 @@ cuda_options_initialize_driver_log_level (void)
       _ ("Set the minimum severity level for CUDA driver logs to display."),
       _ ("Show the minimum severity level for CUDA driver logs to display."),
       _ ("Valid options are:\n"
-	 "  error   - Show only error logs (default)\n"
-	 "  warning - Show error and warning logs\n"
-	 "  extra - Show all logs with Unix timestamps and thread ids\n"),
+	 "  error   - Print only CUDA driver errors (default).\n"
+	 "  warning - Print CUDA driver errors and warnings.\n"
+	 "  extra - Same as 'warning', but adds printing of logging thread IDs"
+	 " and log timestamps.\n"
+	 " A thread ID is the return value of pthread_self() printed in hex"
+	 " and timestamps are in local time formatted as HH:MM:SS.ms."),
       cuda_set_driver_log_level, cuda_show_driver_log_level, &setcudalist,
       &showcudalist);
+}
+
+/*
+ * set cuda printf_flushing
+ */
+static bool print_cudaf_flushing = false;
+
+static void
+cuda_show_printf_flushing (struct ui_file *file, int from_tty,
+			   struct cmd_list_element *c, const char *value)
+{
+  gdb_printf (
+      file,
+      _ ("CUDA automatic flushing of printf buffers on suspend is %s.\n"),
+      value);
+}
+
+bool
+cuda_options_printf_flushing (void)
+{
+  return print_cudaf_flushing;
+}
+
+static void
+cuda_options_initialize_printf_flushing (void)
+{
+  add_setshow_boolean_cmd (
+      "printf_flushing", class_cuda, &print_cudaf_flushing,
+      _ ("Turn on/off automatic flushing of printf buffers on suspend."),
+      _ ("Show if automatic flushing of printf buffers on suspend is "
+	 "enabled"),
+      _ ("When enabled, printf buffers are flushed automatically on suspend, "
+	 "but may add some overhead to debugging operations."),
+      NULL, cuda_show_printf_flushing, &setcudalist, &showcudalist);
 }
 
 /*Initialization */
@@ -1464,7 +1576,6 @@ _initialize_cuda_options ()
   cuda_options_initialize_api_failures ();
   cuda_options_initialize_disassemble_from ();
   cuda_options_initialize_disassemble_per ();
-  cuda_options_initialize_hide_internal_frames ();
   cuda_options_initialize_show_kernel_events ();
   cuda_options_initialize_show_context_events ();
   cuda_options_initialize_launch_blocking ();
@@ -1479,4 +1590,5 @@ _initialize_cuda_options ()
   cuda_options_initialize_device_resume_on_cpu_dynamic_function_call ();
   cuda_options_initialize_driver_logs ();
   cuda_options_initialize_driver_log_level ();
+  cuda_options_initialize_printf_flushing ();
 }

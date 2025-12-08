@@ -116,6 +116,16 @@ static std::unordered_set<std::string> cuda_device_stubs;
 
 int cuda_host_shadow_debug = 0;
 
+/* Bit multiplex mask of the address class information in the core address.  */
+constexpr CORE_ADDR cuda_address_class_multiplex_mask = 0x4000000000000000;
+
+/* Bit mask of the address class information in the core address.  */
+constexpr CORE_ADDR cuda_address_class_mask = 0x3E00000000000000;
+
+/* Bit offset from the start of the core address
+   that represent the address class information.  */
+constexpr unsigned int cuda_address_class_bit_offset = 57;
+
 bool
 cuda_platform_supports_tid (void)
 {
@@ -442,20 +452,10 @@ cuda_breakpoint_hit_p (cuda_coords &coords)
  * ULEB128 to a string. The lifetime of the map must match that of the vector.
  * So we never remove entries from it until cuda cleanup.
  */
-uint64_t
-cuda_check_dwarf2_reg_ptx_virtual_register (uint64_t dwarf2_reg)
+
+const std::string
+cuda_regname_from_dwarf_register (uint64_t dwarf2_reg)
 {
-  /* Ensure that the dwarf2_reg is greater than one character. Anything less
-   * would be an invalid ascii string. */
-  if (dwarf2_reg <= 0xff)
-    return dwarf2_reg;
-
-  /* Check to see if we have seen this dwarf2_reg before. If so, we can just
-     return the tagged offset to the string in the saved vector. */
-  auto elem = cuda_ptx_virtual_reg_to_tagged_offset.find (dwarf2_reg);
-  if (elem != cuda_ptx_virtual_reg_to_tagged_offset.end ())
-    return static_cast<uint64_t> (elem->second);
-
   /* Convert the uleb128 to a string. The order of characters
    * has to be reversed in order to be read as a standard string. */
   uint64_t reg_copy = dwarf2_reg;
@@ -469,20 +469,21 @@ cuda_check_dwarf2_reg_ptx_virtual_register (uint64_t dwarf2_reg)
   /* Null terminate the string */
   raw_str.back () = '\0';
 
-  /* Advance past any '\0' */
+  /* Advance past any '\0', may result in a zero-length string */
   auto data_ptr = raw_str.begin ();
   while (*data_ptr == '\0' && data_ptr != raw_str.end ())
     ++data_ptr;
 
-  /* Early return if we have an empty string */
-  if (data_ptr == raw_str.end ())
-    return dwarf2_reg;
+  /* Create the possible register string */
+  return std::string{ data_ptr };
+}
 
-  /* Create the possible ptx virtual register string */
-  std::string ptx_reg_str{ data_ptr };
-
+uint64_t
+cuda_check_dwarf2_reg_ptx_virtual_register (uint64_t dwarf2_reg)
+{
   /* Is this a ptx virtual register? */
-  if (ptx_reg_str[0] == '%')
+  auto ptx_reg_str = cuda_regname_from_dwarf_register (dwarf2_reg);
+  if (!ptx_reg_str.empty () && ptx_reg_str[0] == '%')
     {
       /* First time encountering this ptx virtual register string. */
       cuda_ptx_virtual_strings.emplace_back (ptx_reg_str);
@@ -515,45 +516,14 @@ uint64_t
 cuda_check_dwarf2_reg_ascii_encoded_register (struct gdbarch *gdbarch,
 					      uint64_t dwarf2_reg)
 {
-  /* Ensure that the dwarf2_reg is greater than one character. Anything less
-   * would be an invalid ascii string. */
-  if (dwarf2_reg <= 0xff)
-    return dwarf2_reg;
-
-  /* Convert the uleb128 to a string. The order of characters
-   * has to be reversed in order to be read as a standard string. */
-  uint64_t reg_copy = dwarf2_reg;
-  std::array<char, sizeof (uint64_t) + 1> raw_str;
-  for (auto i = 0; i < sizeof (uint64_t); ++i)
-    {
-      raw_str[sizeof (uint64_t) - i - 1] = reg_copy & 0xff;
-      reg_copy = reg_copy >> 8;
-    }
-
-  /* Null terminate the string */
-  raw_str.back () = '\0';
-
-  /* Advance past any '\0' */
-  auto data_ptr = raw_str.begin ();
-  while (*data_ptr == '\0' && data_ptr != raw_str.end ())
-    ++data_ptr;
-
-  /* Early return if we have an empty string */
-  if (data_ptr == raw_str.end ())
-    return dwarf2_reg;
-
-  /* Create the possible register string */
-  std::string reg_str{ data_ptr };
-
   /* Is this an ascii encoded register? Today the compiler
    * only supports regular registers which start with 'R'. */
-  if (reg_str[0] == 'R')
-    {
-      /* Convert to uint64_t and store in dwarf2_reg */
-      dwarf2_reg = user_reg_map_name_to_regnum (gdbarch, reg_str.c_str (),
-						reg_str.length ());
-    }
+  auto reg_str = cuda_regname_from_dwarf_register (dwarf2_reg);
 
+  /* Convert to uint64_t and store in dwarf2_reg */
+  if (!reg_str.empty () && reg_str[0] == 'R')
+    dwarf2_reg = user_reg_map_name_to_regnum (gdbarch, reg_str.c_str (),
+					      reg_str.length ());
   return dwarf2_reg;
 }
 
@@ -588,10 +558,6 @@ cuda_register_name (struct gdbarch *gdbarch, int regnum)
   // Error PC register
   if (cuda_error_pc_regnum_p (gdbarch, regnum))
     return "errorpc";
-
-  // CC register
-  if (cuda_cc_regnum_p (gdbarch, regnum))
-    return "CC";
 
   // Invalid register
   if (cuda_invalid_regnum_p (gdbarch, regnum))
@@ -936,15 +902,6 @@ cuda_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
       return;
     }
 
-  // CC register
-  if (cuda_cc_regnum_p (gdbarch, regnum))
-    {
-      const uint32_t cc = cuda_state::lane_get_cc_register (c.dev (), c.sm (),
-							    c.wp (), c.ln ());
-      regcache->raw_supply (regnum, &cc);
-      return;
-    }
-
   // Single SASS register
   if (cuda_zero_register_p (gdbarch, regnum))
     {
@@ -1054,14 +1011,6 @@ cuda_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
   if (cuda_uniform_zero_register_p (gdbarch, regnum))
     error ("Cannot write to URZ register");
 
-  // CC register
-  if (cuda_cc_regnum_p (gdbarch, regnum))
-    {
-      cuda_state::lane_set_cc_register (c.dev (), c.sm (), c.wp (), c.ln (),
-					*(uint32_t *)buf);
-      return;
-    }
-
   // single SASS register
   if (cuda_regular_register_p (gdbarch, regnum))
     {
@@ -1141,10 +1090,8 @@ cuda_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
       || cuda_special_regnum_p (gdbarch, regnum))
     return 0;
 
-  /* Include predicates and CC register in special and all register groups */
-  if ((cuda_pred_regnum_p (gdbarch, regnum)
-       || cuda_cc_regnum_p (gdbarch, regnum))
-      && (group == system_reggroup || group == all_reggroup))
+  /* Include predicates in special and all register groups */
+  if ((cuda_pred_regnum_p(gdbarch, regnum)) && (group == system_reggroup || group == all_reggroup))
     return 1;
 
   // Do not include unallocated registers in the general group.
@@ -1807,6 +1754,8 @@ cuda_initialize_target (void)
   uint32_t apiClientRev = CUDBG_API_VERSION_REVISION;
   uint32_t sessionId;
 
+  gdb::observers::cuda_driver_preinitialized.notify (current_inferior ());
+
   if (cuda_initialized)
     return true;
 
@@ -1899,11 +1848,19 @@ cuda_initialize_target (void)
       capabilities |= CUDBG_DEBUGGER_CAPABILITY_SUSPEND_EVENTS;
 
       if (cuda_options_driver_logs_enabled ())
-        {
-          cuda_trace_domain (CUDA_TRACE_GENERAL,
-                           "requesting enablement CUDA UMD logs collection\n");
-          capabilities |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
-        }
+	{
+	  cuda_trace_domain (
+	      CUDA_TRACE_GENERAL,
+	      "requesting enablement CUDA UMD logs collection\n");
+	  capabilities |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
+	}
+
+      if (cuda_options_printf_flushing ())
+	{
+	  cuda_trace_domain (CUDA_TRACE_GENERAL,
+			     "requesting CUDA printf flushing on suspend\n");
+	  capabilities |= CUDBG_DEBUGGER_CAPABILITY_FLUSH_PRINTF_ON_SUSPEND;
+	}
 
       target_write_memory (capability_addr, (const gdb_byte *)&capabilities,
 			   sizeof (capabilities));
@@ -1930,25 +1887,25 @@ cuda_set_driver_log_capability (bool enable)
   if (!capability_addr)
     {
       if (cuda_inferior_in_debug_mode ())
-        warning (_ ("Failed to set the CUDA driver logs capability."));
+	warning (_ ("Failed to set the CUDA driver logs capability."));
       return;
     }
 
-  cuda_trace_domain(CUDA_TRACE_GENERAL,
-    "requesting %s of CUDA driver log collection\n", enable ? "enablement" : "disablement");
-
+  cuda_trace_domain (CUDA_TRACE_GENERAL,
+		     "requesting %s of CUDA driver log collection\n",
+		     enable ? "enablement" : "disablement");
 
   uint32_t capabilities = CUDBG_DEBUGGER_CAPABILITY_NONE;
-  target_read_memory(capability_addr, (gdb_byte *)&capabilities,
-                     sizeof (capabilities));
+  target_read_memory (capability_addr, (gdb_byte *)&capabilities,
+		      sizeof (capabilities));
 
   if (enable)
     capabilities |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
   else
     capabilities &= ~CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
 
-  target_write_memory(capability_addr, (const gdb_byte *)&capabilities,
-                      sizeof (capabilities));
+  target_write_memory (capability_addr, (const gdb_byte *)&capabilities,
+		       sizeof (capabilities));
 }
 
 bool
@@ -2082,6 +2039,50 @@ cuda_address_class_name_to_type_flags (struct gdbarch *gdbarch,
     }
 
   return false;
+}
+
+/* Convert address class and segment address into a core address.  */
+static CORE_ADDR
+cuda_segment_address_to_core_address (int address_class, CORE_ADDR address)
+{
+  /* If this is a CUDA built-in symbol address, just return it.  */
+  if (address >= CUDBG_BUILTINS_MAX)
+    return address;
+
+  gdb_assert ((address & cuda_address_class_multiplex_mask) == 0);
+
+  return address | cuda_address_class_multiplex_mask
+	 | (((CORE_ADDR) address_class) << cuda_address_class_bit_offset) ;
+}
+
+/* Extract address class from a core address.  */
+static int
+cuda_address_class_from_core_address (CORE_ADDR address)
+{
+  /* If this is a CUDA built-in symbol address, just return default address class.  */
+  if (address >= CUDBG_BUILTINS_MAX)
+    return 0;
+
+  /* No address class information, therefore this is a global memory address.  */
+  if ((address & cuda_address_class_multiplex_mask) == 0)
+    return 0;
+
+  return (address & cuda_address_class_mask) >> cuda_address_class_bit_offset;
+}
+
+/* Extract segmented address from a core address.  */
+static CORE_ADDR
+cuda_segment_address_from_core_address (CORE_ADDR address)
+{
+  /* If this is a CUDA built-in symbol address, just return the address.  */
+  if (address >= CUDBG_BUILTINS_MAX)
+    return address;
+
+  /* No address class information, therefore this is a global memory address.  */
+  if ((address & cuda_address_class_multiplex_mask) == 0)
+    return address;
+
+  return address & ~(cuda_address_class_mask | cuda_address_class_multiplex_mask);
 }
 
 void
@@ -2323,6 +2324,13 @@ cuda_read_memory (CORE_ADDR address, type_instance_flags flags, gdb_byte *buf,
 {
   gdb_assert (buf);
 
+  /* Try extracting address class and segmented address from CORE_ADDR */
+  int address_class = cuda_address_class_from_core_address (address);
+  address = cuda_segment_address_from_core_address (address);
+
+  if (address_class)
+    flags = cuda_address_class_type_flags (0, address_class);
+
   cuda_trace ("cuda_read_memory (0x%lx, %u, 0x%08x)", (uint64_t)address, len,
 	      (uint32_t)flags);
 
@@ -2372,8 +2380,15 @@ cuda_read_memory (CORE_ADDR address, struct value *val, struct type *type,
   if (!cuda_debugging_enabled)
     return 1;
 
-  const auto flags = TYPE_CUDA_ALL (type);
+  auto flags = TYPE_CUDA_ALL (type);
   gdb_byte *buf = val->contents_all_raw ().data ();
+
+  /* Try extracting address class and segmented address from CORE_ADDR */
+  int address_class = cuda_address_class_from_core_address (address);
+  address = cuda_segment_address_from_core_address (address);
+
+  if (address_class)
+    flags = cuda_address_class_type_flags (0, address_class);
 
   cuda_trace ("cuda_read_memory (0x%lx, %d, 0x%08x) [struct value]",
 	      (uint64_t)address, len, (uint32_t)flags);
@@ -2576,7 +2591,14 @@ cuda_write_memory (CORE_ADDR address, type_instance_flags flags,
       return 1;
     }
 
-  /* Default: write the host memory as usual */
+  /* Default: Try extracting address class and segmented address from CORE_ADDR */
+  int address_class = cuda_address_class_from_core_address (address);
+  address = cuda_segment_address_from_core_address (address);
+
+  if (address_class)
+    flags = cuda_address_class_type_flags (0, address_class);
+
+  /* Write the host memory as usual */
   try
     {
       uint64_t hostaddr = 0;
@@ -2784,9 +2806,11 @@ cuda_find_next_control_flow_instruction (uint64_t pc, uint64_t range_start_pc,
    * Break if instruction that can potentially alter program counter has been
    * encountered. */
   std::string inst_str;
+  bool is_control_flow = false;
+  bool is_subroutine_call = false;
+  bool is_barrier = false;
 
-  end_pc = pc;
-  while (end_pc <= range_end_pc)
+  for (end_pc = pc; end_pc <= range_end_pc; end_pc += inst_size)
     {
       auto inst = disassembler->disassemble_instruction (end_pc);
       if (!inst)
@@ -2797,13 +2821,23 @@ cuda_find_next_control_flow_instruction (uint64_t pc, uint64_t range_start_pc,
 	}
 
       inst_str = inst->to_string ();
-      cuda_trace_domain (CUDA_TRACE_BREAKPOINT, "%s: pc=0x%lx inst %.*s",
-			 __func__, end_pc, 20, inst_str.c_str ());
+      is_barrier = inst->is_barrier ();
+      is_control_flow = inst->is_control_flow ();
+      is_subroutine_call = inst->is_subroutine_call ();
 
-      if (inst->is_control_flow (skip_subroutines))
+      cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
+			 "%s: pc=0x%lx inst %.*s is_barrier=%d "
+			 "is_control_flow=%d is_subroutine_call=%d",
+			 __func__, end_pc, 20, inst_str.c_str (), is_barrier,
+			 is_control_flow, is_subroutine_call);
+
+      /* Subroutine calls are also classified as control flow by the nvdisasm
+       Make the check for skip_subroutine before checking for is_control_flow
+       || is_subroutine_call */
+      if (skip_subroutines && is_subroutine_call)
+	continue;
+      else if (is_barrier || is_control_flow || is_subroutine_call)
 	break;
-
-      end_pc += inst_size;
     }
 
   /* The above loop might increment end_pc beyond step_range_end.
@@ -3410,6 +3444,14 @@ cuda_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_address_class_type_flags (gdbarch,
 					cuda_address_class_type_flags);
 
+  /* CORE_ADDR Conversions*/
+  set_gdbarch_address_class_from_core_address
+    (gdbarch, cuda_address_class_from_core_address);
+  set_gdbarch_segment_address_from_core_address
+    (gdbarch, cuda_segment_address_from_core_address);
+  set_gdbarch_segment_address_to_core_address
+    (gdbarch, cuda_segment_address_to_core_address);
+
   /* CUDA - managed variables */
   set_gdbarch_elf_make_msymbol_special (gdbarch,
 					cuda_elf_make_msymbol_special);
@@ -3582,16 +3624,6 @@ cuda_adjust_device_code_address (CORE_ADDR addr, CORE_ADDR *adjusted_addr)
   if (module)
     cuda_debugapi::get_adjusted_code_address (
 	module->context ()->dev_id (), addr, &addr, CUDBG_ADJ_CURRENT_ADDRESS);
-  *adjusted_addr = (CORE_ADDR)addr;
-}
-
-void
-cuda_next_device_code_address (CORE_ADDR addr, CORE_ADDR *adjusted_addr)
-{
-  auto module = cuda_state::find_module_by_address (addr);
-  if (module)
-    cuda_debugapi::get_adjusted_code_address (
-	module->context ()->dev_id (), addr, &addr, CUDBG_ADJ_NEXT_ADDRESS);
   *adjusted_addr = (CORE_ADDR)addr;
 }
 

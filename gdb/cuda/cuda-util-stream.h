@@ -139,11 +139,7 @@ public:
     return m_offset + m_pos;
   }
 
-  inline
-  operator bool () const
-  {
-    return m_file;
-  }
+  inline operator bool () const { return m_file; }
 
   virtual ~file_stream ()
   {

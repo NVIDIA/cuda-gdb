@@ -22,6 +22,7 @@
 #include "cuda/cuda-api.h"
 #include "cuda/cuda-coord-set.h"
 #include "cuda/cuda-coords.h"
+#include "cuda/cuda-events.h"
 #include "cuda/cuda-state.h"
 #include "gdbsupport/gdb_unique_ptr.h"
 
@@ -29,35 +30,10 @@
 
 #include "structmember.h"
 
+#include <iomanip>
+#include <sstream>
+
 #define DEFAULT_BUFFER_SIZE 1024
-
-// Python3.6 doesn't have Py_RETURN_RICHCOMPARE, so fake it here.
-#if PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION == 6
-
-#define Py_RETURN_RICHCOMPARE(a, b, op)                                       \
-  return gdbpy_return_richcompare (a, b, op)
-
-// We only use boolean values, so we can simplify the implementation.
-static PyObject *
-gdbpy_return_richcompare (bool a, bool b, int op)
-{
-  switch (op)
-    {
-    case Py_EQ:
-      return PyBool_FromLong (a == b);
-    case Py_NE:
-      return PyBool_FromLong (a != b);
-    case Py_LT:
-    case Py_LE:
-    case Py_GE:
-    case Py_GT:
-    default:
-      PyErr_Format (PyExc_RuntimeError, "Unsupported boolean comparison op %u",
-		    op);
-      return nullptr;
-    }
-}
-#endif
 
 static PyObject *gdbpy_cuda_cu_dim3_create (const CuDim3 &dim3);
 
@@ -107,9 +83,16 @@ to_python (const char *value)
 
 template <>
 PyObject *
-to_python (CuDim3 value)
+to_python (const CuDim3 value)
 {
   return gdbpy_cuda_cu_dim3_create (value);
+}
+
+template <>
+PyObject *
+to_python (const cuda_coords_physical coords)
+{
+  return gdbpy_cuda_coords_physical_create (coords);
 }
 
 // Identity function
@@ -131,14 +114,19 @@ static PyObject *gdbpy_cuda_set_focus_physical (PyObject *self,
 static PyObject *gdbpy_cuda_get_focus_logical (PyObject *self, PyObject *args);
 static PyObject *gdbpy_cuda_set_focus_logical (PyObject *self, PyObject *args);
 static PyObject *gdbpy_cuda_get_devices (PyObject *self, PyObject *args);
-static PyObject *gdbpy_cuda_read_global_memory (PyObject *self,
-						PyObject *args,
+static PyObject *gdbpy_cuda_read_global_memory (PyObject *self, PyObject *args,
 						PyObject *kwargs);
 
-static PyObject *gdbpy_cuda_get_device (PyObject *self, PyObject *args, PyObject *kwargs);
-static PyObject *gdbpy_cuda_get_sm (PyObject *self, PyObject *args, PyObject *kwargs);
-static PyObject *gdbpy_cuda_get_warp (PyObject *self, PyObject *args, PyObject *kwargs);
-static PyObject *gdbpy_cuda_get_lane (PyObject *self, PyObject *args, PyObject *kwargs);
+static PyObject *gdbpy_cuda_get_device (PyObject *self, PyObject *args,
+					PyObject *kwargs);
+static PyObject *gdbpy_cuda_get_sm (PyObject *self, PyObject *args,
+				    PyObject *kwargs);
+static PyObject *gdbpy_cuda_get_warp (PyObject *self, PyObject *args,
+				      PyObject *kwargs);
+static PyObject *gdbpy_cuda_get_lane (PyObject *self, PyObject *args,
+				      PyObject *kwargs);
+
+static PyObject *gdbpy_cuda_statistic_domains (PyObject *self, PyObject *args);
 
 static PyMethodDef gdbpy_cuda_methods[] = {
   { "execute_internal_command", gdbpy_cuda_execute_internal_command,
@@ -153,16 +141,18 @@ static PyMethodDef gdbpy_cuda_methods[] = {
     "Sets the current focus to the passed in logical coordinates" },
   { "devices", gdbpy_cuda_get_devices, METH_NOARGS,
     "Returns the list of devices as list of cuda.Device" },
-  { "device", (PyCFunction) gdbpy_cuda_get_device, METH_VARARGS | METH_KEYWORDS,
+  { "device", (PyCFunction)gdbpy_cuda_get_device, METH_VARARGS | METH_KEYWORDS,
     "Returns the specified cuda.Device" },
-  { "sm", (PyCFunction) gdbpy_cuda_get_sm, METH_VARARGS | METH_KEYWORDS,
+  { "sm", (PyCFunction)gdbpy_cuda_get_sm, METH_VARARGS | METH_KEYWORDS,
     "Returns the specified cuda.Sm" },
-  { "warp", (PyCFunction) gdbpy_cuda_get_warp, METH_VARARGS | METH_KEYWORDS,
+  { "warp", (PyCFunction)gdbpy_cuda_get_warp, METH_VARARGS | METH_KEYWORDS,
     "Returns the specified cuda.Warp" },
-  { "lane", (PyCFunction) gdbpy_cuda_get_lane, METH_VARARGS | METH_KEYWORDS,
+  { "lane", (PyCFunction)gdbpy_cuda_get_lane, METH_VARARGS | METH_KEYWORDS,
     "Returns the specified cuda.Lane" },
-  { "read_global_memory", (PyCFunction) gdbpy_cuda_read_global_memory, METH_VARARGS | METH_KEYWORDS,
-    "Read global memory" },
+  { "read_global_memory", (PyCFunction)gdbpy_cuda_read_global_memory,
+    METH_VARARGS | METH_KEYWORDS, "Read global memory" },
+  { "statistic_domains", (PyCFunction)gdbpy_cuda_statistic_domains,
+    METH_NOARGS, "Returns performance statistic domains" },
   { nullptr, nullptr, 0, nullptr },
 };
 
@@ -195,7 +185,8 @@ gdbpy_cuda_install_type_in_module (PyObject *module, const char *name,
 }
 
 static PyObject *
-gdbpy_cuda_read_global_memory (PyObject *self, PyObject *args, PyObject *kwargs)
+gdbpy_cuda_read_global_memory (PyObject *self, PyObject *args,
+			       PyObject *kwargs)
 {
   uint64_t size = 0;
   uint64_t address = 0;
@@ -211,8 +202,8 @@ gdbpy_cuda_read_global_memory (PyObject *self, PyObject *args, PyObject *kwargs)
       if (buffer == nullptr)
 	return nullptr;
 
-      cuda_debugapi::read_global_memory (address, PyBytes_AS_STRING (buffer.get ()),
-					 size);
+      cuda_debugapi::read_global_memory (
+	  address, PyBytes_AS_STRING (buffer.get ()), size);
       return buffer.release ();
     }
   catch (const gdb_exception &e)
@@ -220,6 +211,286 @@ gdbpy_cuda_read_global_memory (PyObject *self, PyObject *args, PyObject *kwargs)
       PyErr_SetString (PyExc_RuntimeError, e.what ());
       return nullptr;
     }
+  catch (...)
+    {
+      PyErr_Format (PyExc_RuntimeError, "Unknown exception in %s()",
+		    __FUNCTION__);
+      return nullptr;
+    }
+}
+
+//
+// gdb.cuda.Statistic
+//
+
+//
+// Python objects are PODs, so no use of references or C++ classes
+//
+typedef struct
+{
+  PyObject_HEAD const char *name; // Name of the statistic
+  cuda_statistics_table *domain; // The statistics domain this statistic belongs to
+} gdbpy_cuda_statistic_object;
+
+static PyTypeObject gdbpy_cuda_statistic_type
+    = { PyVarObject_HEAD_INIT (nullptr, 0) };
+
+static PyObject *
+gdbpy_cuda_statistic_get_count (PyObject *self, void *closure)
+{
+  const auto stat_obj = (gdbpy_cuda_statistic_object *)self;
+  const auto &stat = stat_obj->domain->get_statistic (stat_obj->name);
+
+  return PyLong_FromUnsignedLong (stat.count());
+}
+
+static PyObject *
+gdbpy_cuda_statistic_get_min (PyObject *self, void *closure)
+{
+  const auto stat_obj = (gdbpy_cuda_statistic_object *)self;
+  const auto &stat = stat_obj->domain->get_statistic (stat_obj->name);
+
+  // Convert nanoseconds to seconds
+  return PyFloat_FromDouble (stat.min_time().count () * 1e-9);
+}
+
+static PyObject *
+gdbpy_cuda_statistic_get_max (PyObject *self, void *closure)
+{
+  const auto stat_obj = (gdbpy_cuda_statistic_object *)self;
+  const auto &stat = stat_obj->domain->get_statistic (stat_obj->name);
+
+  return PyFloat_FromDouble (stat.max_time().count () * 1e-9);
+}
+
+static PyObject *
+gdbpy_cuda_statistic_get_total (PyObject *self, void *closure)
+{
+  const auto stat_obj = (gdbpy_cuda_statistic_object *)self;
+  const auto &stat = stat_obj->domain->get_statistic (stat_obj->name);
+
+  return PyFloat_FromDouble (stat.total_time().count () * 1e-9);
+}
+
+static PyObject *
+gdbpy_cuda_statistic_get_name (PyObject *self, void *closure)
+{
+  const auto stat_obj = (gdbpy_cuda_statistic_object *)self;
+  return PyUnicode_FromString (stat_obj->name);
+}
+
+static gdb_PyGetSetDef gdbpy_cuda_statistic_getset[] = {
+  { "count", gdbpy_cuda_statistic_get_count, nullptr, "count", nullptr },
+  { "min", gdbpy_cuda_statistic_get_min, nullptr, "min", nullptr },
+  { "max", gdbpy_cuda_statistic_get_max, nullptr, "max", nullptr },
+  { "name", gdbpy_cuda_statistic_get_name, nullptr, "name", nullptr },
+  { "total", gdbpy_cuda_statistic_get_total, nullptr, "total", nullptr },
+  { nullptr },
+};
+
+static PyObject *
+gdbpy_cuda_statistic_create (cuda_statistics_table &domain, const std::string &name)
+{
+  gdbpy_ref<gdbpy_cuda_statistic_object> self (
+      PyObject_New (gdbpy_cuda_statistic_object, &gdbpy_cuda_statistic_type));
+  if (self == nullptr)
+    return nullptr;
+
+  // Python objects are PODs, can't use std::string or
+  // references.
+  self->name = xstrdup (name.c_str ());
+  self->domain = &domain;
+
+  return (PyObject *)self.release ();
+}
+
+static PyObject *
+gdbpy_cuda_statistic_repr (PyObject *self)
+{
+  const auto stat_obj = (gdbpy_cuda_statistic_object *)self;
+
+  const auto &stat = stat_obj->domain->get_statistic (stat_obj->name);
+  const double min = stat.min_time().count () * 1e-9;
+  const double max = stat.max_time().count () * 1e-9;
+  const double total = stat.total_time().count () * 1e-9;
+
+  std::stringstream output;
+  output << "gdb.cuda.Statistic<" << stat_obj->name;
+  output << ", count=" << stat.count();
+  output << ", min=" << std::fixed << std::setprecision (3) << min;
+  output << ", max=" << std::fixed << std::setprecision (3) << max;
+  output << ", total=" << std::fixed << std::setprecision (3) << total;
+  output << ">";
+
+  const auto output_str = output.str ();
+  return PyUnicode_FromFormat (output_str.c_str ());
+}
+
+static bool
+gdbpy_cuda_statistic_type_init (PyObject *module)
+{
+  auto flags = Py_TPFLAGS_DEFAULT;
+
+#if PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION >= 10
+  // Don't allow users to create their own instances
+  flags |= Py_TPFLAGS_DISALLOW_INSTANTIATION;
+#endif
+
+  gdbpy_cuda_statistic_type.tp_name = "cuda.Statistic";
+  gdbpy_cuda_statistic_type.tp_doc
+      = PyDoc_STR ("Statistic object representing timing in seconds");
+  gdbpy_cuda_statistic_type.tp_basicsize
+      = sizeof (gdbpy_cuda_statistic_object);
+  gdbpy_cuda_statistic_type.tp_itemsize = 0;
+  gdbpy_cuda_statistic_type.tp_flags = flags;
+  gdbpy_cuda_statistic_type.tp_new = PyType_GenericNew;
+  gdbpy_cuda_statistic_type.tp_getset = gdbpy_cuda_statistic_getset;
+  gdbpy_cuda_statistic_type.tp_repr = gdbpy_cuda_statistic_repr;
+
+  return gdbpy_cuda_install_type_in_module (module, "Statistic",
+					    &gdbpy_cuda_statistic_type);
+}
+
+//
+// gdb.cuda.StatisticDomain
+//
+
+typedef struct
+{
+  PyObject_HEAD cuda_statistics_table *domain; // The statistics domain
+} gdbpy_cuda_statistic_domain_object;
+
+static PyTypeObject gdbpy_cuda_statistic_domain_type
+    = { PyVarObject_HEAD_INIT (nullptr, 0) };
+
+static PyObject *
+gdbpy_cuda_statistic_domain_get_name (PyObject *self, void *data)
+{
+  const auto domain_obj = (gdbpy_cuda_statistic_domain_object *)self;
+  return PyUnicode_FromString (domain_obj->domain->name ().c_str ());
+}
+
+static PyObject *
+gdbpy_cuda_statistic_domain_get_statistics (PyObject *self, void *closure)
+{
+  const auto domain_obj = (gdbpy_cuda_statistic_domain_object *)self;
+
+  gdbpy_ref<> statistics_list (PyList_New (0));
+  if (statistics_list == nullptr)
+    return nullptr;
+
+  auto add_statistic = [&statistics_list, domain_obj] (const std::string &name, const cuda_statistic &stat) {
+    // Skip empty statistics, but keep going
+    if (stat.count() > 0)
+      {
+	gdbpy_ref<> stat_obj (
+	    gdbpy_cuda_statistic_create (*domain_obj->domain, name));
+	if (stat_obj == nullptr)
+	  return false;
+
+	// Now add the stat_obj to the parent dict
+	if (PyList_Append (statistics_list.get (), stat_obj.get ()) < 0)
+	  return false;
+      }
+    return true;
+  };
+
+  if (!domain_obj->domain->foreach_statistic (add_statistic))
+    return nullptr;
+
+  return statistics_list.release ();
+}
+
+static PyMethodDef gdbpy_cuda_statistic_domain_methods[] = {
+  { "statistics", (PyCFunction)gdbpy_cuda_statistic_domain_get_statistics,
+    METH_NOARGS, "Returns performance statistics" },
+  { nullptr, nullptr, 0, nullptr },
+};
+
+static gdb_PyGetSetDef gdbpy_cuda_statistic_domain_getset[] = {
+  { "name", gdbpy_cuda_statistic_domain_get_name, nullptr, "name", nullptr },
+  { "statistics", gdbpy_cuda_statistic_domain_get_statistics, nullptr,
+    "statistics", nullptr },
+  { nullptr },
+};
+
+static PyObject *
+gdbpy_cuda_statistic_domain_create (cuda_statistics_table &domain)
+{
+  gdbpy_ref<gdbpy_cuda_statistic_domain_object> self (PyObject_New (
+      gdbpy_cuda_statistic_domain_object, &gdbpy_cuda_statistic_domain_type));
+  if (self == nullptr)
+    return nullptr;
+
+  self->domain = &domain;
+
+  return (PyObject *)self.release ();
+}
+
+static PyObject *
+gdbpy_cuda_statistic_domain_repr (PyObject *self)
+{
+  const auto domain_obj = (gdbpy_cuda_statistic_domain_object *)self;
+
+  return PyUnicode_FromFormat ("gdb.cuda.StatisticDomain<%s>",
+			       domain_obj->domain->name ().c_str ());
+}
+
+static bool
+gdbpy_cuda_statistic_domain_type_init (PyObject *module)
+{
+  auto flags = Py_TPFLAGS_DEFAULT;
+
+#if PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION >= 10
+  // Don't allow users to create their own instances
+  flags |= Py_TPFLAGS_DISALLOW_INSTANTIATION;
+#endif
+
+  gdbpy_cuda_statistic_domain_type.tp_name = "cuda.StatisticDomain";
+  gdbpy_cuda_statistic_domain_type.tp_doc = PyDoc_STR ("Statistic domain");
+  gdbpy_cuda_statistic_domain_type.tp_basicsize
+      = sizeof (gdbpy_cuda_statistic_domain_object);
+  gdbpy_cuda_statistic_domain_type.tp_itemsize = 0;
+  gdbpy_cuda_statistic_domain_type.tp_flags = flags;
+  gdbpy_cuda_statistic_domain_type.tp_new = PyType_GenericNew;
+  gdbpy_cuda_statistic_domain_type.tp_getset
+      = gdbpy_cuda_statistic_domain_getset;
+  gdbpy_cuda_statistic_domain_type.tp_methods
+      = gdbpy_cuda_statistic_domain_methods;
+  gdbpy_cuda_statistic_domain_type.tp_repr = gdbpy_cuda_statistic_domain_repr;
+
+  return gdbpy_cuda_install_type_in_module (module, "StatisticDomain",
+					    &gdbpy_cuda_statistic_domain_type);
+}
+
+static PyObject *
+gdbpy_cuda_statistic_domains (PyObject *self, PyObject *args)
+{
+  // Build a dictionary of the DebugAPI call statistics
+  gdbpy_ref<> calls (gdbpy_cuda_statistic_domain_create (
+      cuda_debugapi::api_call_statistics ()));
+  if (calls == nullptr)
+    return nullptr;
+
+  // Now build the DebugAPI event statistics
+  gdbpy_ref<> events (
+      gdbpy_cuda_statistic_domain_create (get_cuda_event_statistics ()));
+  if (events == nullptr)
+    return nullptr;
+
+  // Now build a list of the statistic groups
+  gdbpy_ref<> result (PyList_New (2));
+  if (result == nullptr)
+    return nullptr;
+
+  // PyList_SetItem() steals the reference to the object, so
+  // use obj.release () here.
+  if (PyList_SetItem (result.get (), 0, calls.release ()) < 0)
+    return nullptr;
+  if (PyList_SetItem (result.get (), 1, events.release ()) < 0)
+    return nullptr;
+
+  return result.release ();
 }
 
 /* gdb.cuda.CuDim3 type */
@@ -286,7 +557,8 @@ gdbpy_cuda_cu_dim3_init (PyObject *self, PyObject *args, PyObject *kwds)
 static PyObject *
 gdbpy_cuda_cu_dim3_create (const CuDim3 &dim3)
 {
-  gdbpy_ref<gdbpy_cuda_cu_dim3_object> self (PyObject_New (gdbpy_cuda_cu_dim3_object, &gdbpy_cuda_cu_dim3_type));
+  gdbpy_ref<gdbpy_cuda_cu_dim3_object> self (
+      PyObject_New (gdbpy_cuda_cu_dim3_object, &gdbpy_cuda_cu_dim3_type));
   if (self == nullptr)
     return nullptr;
 
@@ -301,10 +573,8 @@ static PyObject *
 gdbpy_cuda_cu_dim3_richcompare (PyObject *self, PyObject *other, int opid)
 {
   if (opid != Py_EQ && opid != Py_NE)
-    {
-      PyErr_SetString (PyExc_TypeError, "Invalid comparison");
-      return nullptr;
-    }
+    Py_RETURN_FALSE;
+
   if (other == Py_None)
     {
       if (opid == Py_EQ)
@@ -312,16 +582,9 @@ gdbpy_cuda_cu_dim3_richcompare (PyObject *self, PyObject *other, int opid)
       if (opid == Py_NE)
 	Py_RETURN_TRUE;
     }
-  if (!PyObject_TypeCheck (self, &gdbpy_cuda_cu_dim3_type))
-    {
-      PyErr_SetString (PyExc_TypeError, "Invalid type");
-      return nullptr;
-    }
+
   if (!PyObject_TypeCheck (other, &gdbpy_cuda_cu_dim3_type))
-    {
-      PyErr_SetString (PyExc_TypeError, "Invalid type");
-      return nullptr;
-    }
+    Py_RETURN_FALSE;
 
   auto a = (gdbpy_cuda_cu_dim3_object *)self;
   auto b = (gdbpy_cuda_cu_dim3_object *)other;
@@ -541,7 +804,14 @@ cuda_device_attr_wrapper (PyObject *self, void *closure)
     }
   catch (const gdb_exception &e)
     {
-      PyErr_SetString (PyExc_RuntimeError, e.what ());
+      // Probably accessing an attribute when the object is
+      // not valid, return None
+      Py_RETURN_NONE;
+    }
+  catch (...)
+    {
+      PyErr_Format (PyExc_RuntimeError, "Unknown exception in %s()",
+		    __FUNCTION__);
       return nullptr;
     }
 }
@@ -574,7 +844,14 @@ cuda_warp_attr_wrapper (PyObject *self, void *closure)
     }
   catch (const gdb_exception &e)
     {
-      PyErr_SetString (PyExc_RuntimeError, e.what ());
+      // Probably accessing an attribute when the object is
+      // not valid, return None
+      Py_RETURN_NONE;
+    }
+  catch (...)
+    {
+      PyErr_Format (PyExc_RuntimeError, "Unknown exception in %s()",
+		    __FUNCTION__);
       return nullptr;
     }
 }
@@ -609,7 +886,14 @@ cuda_lane_attr_wrapper (PyObject *self, void *closure)
     }
   catch (const gdb_exception &e)
     {
-      PyErr_SetString (PyExc_RuntimeError, e.what ());
+      // Probably accessing an attribute when the object is
+      // not valid, return None
+      Py_RETURN_NONE;
+    }
+  catch (...)
+    {
+      PyErr_Format (PyExc_RuntimeError, "Unknown exception in %s()",
+		    __FUNCTION__);
       return nullptr;
     }
 }
@@ -736,7 +1020,7 @@ gdbpy_cuda_device_sms_filtered (PyObject *self,
       if (sm == nullptr)
 	return nullptr;
       if (PyList_Append (list.get (), sm.get ()) == -1)
-        return nullptr;
+	return nullptr;
 
       cuda_trace_domain (CUDA_TRACE_PYTHON,
 			 "Added SM <dev%u.sm%u> @ %p to list at %p",
@@ -773,10 +1057,8 @@ gdbpy_cuda_device_method_richcompare (PyObject *self, PyObject *other,
 				      int opid)
 {
   if (opid != Py_EQ && opid != Py_NE)
-    {
-      PyErr_SetString (PyExc_TypeError, "Invalid comparison");
-      return nullptr;
-    }
+    Py_RETURN_FALSE;
+
   if (other == Py_None)
     {
       if (opid == Py_EQ)
@@ -785,14 +1067,13 @@ gdbpy_cuda_device_method_richcompare (PyObject *self, PyObject *other,
 	Py_RETURN_TRUE;
     }
 
-  const auto obj_self = gdbpy_cuda_device (self);
-  if (obj_self == nullptr)
-    return nullptr;
+  if (!PyObject_TypeCheck (other, &gdbpy_cuda_device_type))
+    Py_RETURN_FALSE;
 
-  const auto obj_other = gdbpy_cuda_device (other);
-  if (obj_other == nullptr)
-    return nullptr;
+  const auto obj_self = (gdbpy_cuda_device_object *)self;
+  const auto obj_other = (gdbpy_cuda_device_object *)other;
 
+  // Both self and other refer to a valid cuda.Device object
   Py_RETURN_RICHCOMPARE (obj_self->dev == obj_other->dev, true, opid);
 }
 
@@ -810,13 +1091,15 @@ gdbpy_cuda_device_create (uint32_t dev)
   if (!gdbpy_check_device (dev))
     return nullptr;
 
-  auto *self = PyObject_New (gdbpy_cuda_device_object, &gdbpy_cuda_device_type);
+  auto *self
+      = PyObject_New (gdbpy_cuda_device_object, &gdbpy_cuda_device_type);
   if (self == nullptr)
     return nullptr;
 
   self->dev = dev;
 
-  cuda_trace_domain (CUDA_TRACE_PYTHON, "cuda_device_create <dev%u> @ %p", dev, self);
+  cuda_trace_domain (CUDA_TRACE_PYTHON, "cuda_device_create <dev%u> @ %p", dev,
+		     self);
   return (PyObject *)self;
 }
 
@@ -861,6 +1144,35 @@ gdbpy_cuda_device_type_init (PyObject *module)
 //
 
 static PyObject *
+gdbpy_cuda_sm_get_valid (PyObject *self, void *closure)
+{
+  try
+    {
+      const auto obj = gdbpy_cuda_sm (self);
+      if (!obj)
+	return nullptr;
+
+      // If the SM isn't currently valid, return False
+      // This can happen if the SM is not active or has been removed
+      if (!cuda_state::sm_valid (obj->dev, obj->sm))
+	Py_RETURN_FALSE;
+
+      Py_RETURN_TRUE;
+    }
+  catch (const gdb_exception &e)
+    {
+      PyErr_SetString (PyExc_RuntimeError, e.what ());
+      return nullptr;
+    }
+  catch (...)
+    {
+      PyErr_Format (PyExc_RuntimeError, "Unknown exception in %s()",
+		    __FUNCTION__);
+      return nullptr;
+    }
+}
+
+static PyObject *
 cuda_sm_get_attribute (PyObject *self,
 		       PyObject *(*closure) (uint32_t dev, uint32_t sm))
 {
@@ -875,6 +1187,12 @@ cuda_sm_get_attribute (PyObject *self,
   catch (const gdb_exception &e)
     {
       PyErr_SetString (PyExc_RuntimeError, e.what ());
+      return nullptr;
+    }
+  catch (...)
+    {
+      PyErr_Format (PyExc_RuntimeError, "Unknown exception in %s()",
+		    __FUNCTION__);
       return nullptr;
     }
 }
@@ -906,11 +1224,12 @@ gdbpy_cuda_sm_get_exception (PyObject *self, void *closure)
 // cuda.Sm attributes table
 
 static gdb_PyGetSetDef gdbpy_cuda_sm_getset[] = {
-  { "device_id", cuda_get_device_id<gdbpy_cuda_sm_object>, nullptr, "Device ID",
-    nullptr },
+  { "device_id", cuda_get_device_id<gdbpy_cuda_sm_object>, nullptr,
+    "Device ID", nullptr },
   { "sm_id", cuda_get_sm_id<gdbpy_cuda_sm_object>, nullptr, "Sm ID", nullptr },
   { "errorpc", gdbpy_cuda_sm_get_errorpc, nullptr, "Error pc", nullptr },
   { "exception", gdbpy_cuda_sm_get_exception, nullptr, "Exception", nullptr },
+  { "is_valid", gdbpy_cuda_sm_get_valid, nullptr, "Valid", nullptr },
   { nullptr },
 };
 
@@ -932,10 +1251,7 @@ gdbpy_cuda_sm_method_warps (PyObject *self, PyObject *args)
       if (warp == nullptr)
 	return nullptr;
       if (PyList_SetItem (list.get (), i, warp) == -1)
-	{
-	  Py_DECREF (warp);
-	  return nullptr;
-	}
+	return nullptr;
     }
 
   return list.release ();
@@ -951,10 +1267,8 @@ static PyObject *
 gdbpy_cuda_sm_method_richcompare (PyObject *self, PyObject *other, int opid)
 {
   if (opid != Py_EQ && opid != Py_NE)
-    {
-      PyErr_SetString (PyExc_TypeError, "Invalid comparison");
-      return nullptr;
-    }
+    Py_RETURN_FALSE;
+
   if (other == Py_None)
     {
       if (opid == Py_EQ)
@@ -963,13 +1277,11 @@ gdbpy_cuda_sm_method_richcompare (PyObject *self, PyObject *other, int opid)
 	Py_RETURN_TRUE;
     }
 
-  const auto obj_self = gdbpy_cuda_sm (self);
-  if (obj_self == nullptr)
-    return nullptr;
+  if (!PyObject_TypeCheck (other, &gdbpy_cuda_sm_type))
+    Py_RETURN_FALSE;
 
-  const auto obj_other = gdbpy_cuda_sm (other);
-  if (obj_other == nullptr)
-    return nullptr;
+  const auto obj_self = (gdbpy_cuda_sm_object *)self;
+  const auto obj_other = (gdbpy_cuda_sm_object *)other;
 
   Py_RETURN_RICHCOMPARE ((obj_self->dev == obj_other->dev)
 			     && (obj_self->sm == obj_other->sm),
@@ -1064,6 +1376,12 @@ cuda_warp_get_attribute (PyObject *self,
       PyErr_SetString (PyExc_RuntimeError, e.what ());
       return nullptr;
     }
+  catch (...)
+    {
+      PyErr_Format (PyExc_RuntimeError, "Unknown exception in %s()",
+		    __FUNCTION__);
+      return nullptr;
+    }
 }
 
 static PyObject *
@@ -1083,6 +1401,12 @@ gdbpy_cuda_warp_get_valid (PyObject *self, void *closure)
   catch (const gdb_exception &e)
     {
       PyErr_SetString (PyExc_RuntimeError, e.what ());
+      return nullptr;
+    }
+  catch (...)
+    {
+      PyErr_Format (PyExc_RuntimeError, "Unknown exception in %s()",
+		    __FUNCTION__);
       return nullptr;
     }
 }
@@ -1115,8 +1439,8 @@ gdbpy_cuda_warp_get_cluster_exception_block_idx (PyObject *self, void *closure)
 }
 
 static gdb_PyGetSetDef gdbpy_cuda_warp_getset[] = {
-  { "device_id", cuda_get_device_id<gdbpy_cuda_warp_object>, nullptr, "Device ID",
-    nullptr },
+  { "device_id", cuda_get_device_id<gdbpy_cuda_warp_object>, nullptr,
+    "Device ID", nullptr },
   { "sm_id", cuda_get_sm_id<gdbpy_cuda_warp_object>, nullptr, "Sm ID",
     nullptr },
   { "warp_id", cuda_get_warp_id<gdbpy_cuda_warp_object>, nullptr, "Warp ID",
@@ -1124,8 +1448,8 @@ static gdb_PyGetSetDef gdbpy_cuda_warp_getset[] = {
   { "active_pc",
     cuda_warp_attr_wrapper<uint64_t, cuda_state::warp_get_active_pc>, nullptr,
     "Active pc", nullptr },
-  { "is_broken", cuda_warp_attr_wrapper<bool, cuda_state::warp_broken>, nullptr,
-    "Broken", nullptr },
+  { "is_broken", cuda_warp_attr_wrapper<bool, cuda_state::warp_broken>,
+    nullptr, "Broken", nullptr },
   { "errorpc", gdbpy_cuda_warp_get_errorpc, nullptr, "Error pc", nullptr },
   { "grid_id",
     cuda_warp_attr_wrapper<int64_t, uint64_t, cuda_state::warp_get_grid_id>,
@@ -1175,7 +1499,8 @@ gdbpy_cuda_warp_lanes_filtered (PyObject *self,
       if (filter && !filter (warp->dev, warp->sm, warp->wp, i))
 	continue;
 
-      gdbpy_ref<> lane ((PyObject *)gdbpy_cuda_lane_create (warp->dev, warp->sm, warp->wp, i));
+      gdbpy_ref<> lane ((PyObject *)gdbpy_cuda_lane_create (
+	  warp->dev, warp->sm, warp->wp, i));
       if (lane == nullptr)
 	return nullptr;
       if (PyList_Append (list.get (), lane.get ()) == -1)
@@ -1221,7 +1546,8 @@ gdbpy_cuda_warp_method_valid_lanes (PyObject *self, PyObject *args)
 }
 
 static PyObject *
-gdbpy_cuda_warp_method_read_shared_memory (PyObject *self, PyObject *args, PyObject *kwargs)
+gdbpy_cuda_warp_method_read_shared_memory (PyObject *self, PyObject *args,
+					   PyObject *kwargs)
 {
   auto warp = gdbpy_cuda_warp (self);
   if (!warp)
@@ -1231,7 +1557,8 @@ gdbpy_cuda_warp_method_read_shared_memory (PyObject *self, PyObject *args, PyObj
   uint64_t address = 0;
   static const char *kwlist[] = { "address", "size", nullptr };
 
-  if (!PyArg_ParseTupleAndKeywords (args, kwargs, "KK", (char **)kwlist, &address, &size))
+  if (!PyArg_ParseTupleAndKeywords (args, kwargs, "KK", (char **)kwlist,
+				    &address, &size))
     return nullptr;
 
   try
@@ -1249,6 +1576,12 @@ gdbpy_cuda_warp_method_read_shared_memory (PyObject *self, PyObject *args, PyObj
       PyErr_SetString (PyExc_RuntimeError, e.what ());
       return nullptr;
     }
+  catch (...)
+    {
+      PyErr_Format (PyExc_RuntimeError, "Unknown exception in %s()",
+		    __FUNCTION__);
+      return nullptr;
+    }
 }
 
 static PyMethodDef gdbpy_cuda_warp_methods[] = {
@@ -1260,7 +1593,8 @@ static PyMethodDef gdbpy_cuda_warp_methods[] = {
     "Returns the list of the divergent cuda.Lane objects for a cuda.Warp" },
   { "valid_lanes", gdbpy_cuda_warp_method_valid_lanes, METH_NOARGS,
     "Returns the list of the valid cuda.Lane objects for a cuda.Warp" },
-  { "read_shared_memory", (PyCFunction) gdbpy_cuda_warp_method_read_shared_memory,
+  { "read_shared_memory",
+    (PyCFunction)gdbpy_cuda_warp_method_read_shared_memory,
     METH_VARARGS | METH_KEYWORDS, "Read shared memory from a cuda.Warp" },
   { nullptr, nullptr, 0, nullptr },
 };
@@ -1269,10 +1603,8 @@ static PyObject *
 gdbpy_cuda_warp_method_richcompare (PyObject *self, PyObject *other, int opid)
 {
   if (opid != Py_EQ && opid != Py_NE)
-    {
-      PyErr_SetString (PyExc_TypeError, "Invalid comparison");
-      return nullptr;
-    }
+    Py_RETURN_FALSE;
+
   if (other == Py_None)
     {
       if (opid == Py_EQ)
@@ -1281,13 +1613,11 @@ gdbpy_cuda_warp_method_richcompare (PyObject *self, PyObject *other, int opid)
 	Py_RETURN_TRUE;
     }
 
-  const auto obj_self = gdbpy_cuda_warp (self);
-  if (obj_self == nullptr)
-    return nullptr;
+  if (!PyObject_TypeCheck (other, &gdbpy_cuda_warp_type))
+    Py_RETURN_FALSE;
 
-  const auto obj_other = gdbpy_cuda_warp (other);
-  if (obj_other == nullptr)
-    return nullptr;
+  const auto obj_self = (gdbpy_cuda_warp_object *)self;
+  const auto obj_other = (gdbpy_cuda_warp_object *)other;
 
   Py_RETURN_RICHCOMPARE ((obj_self->dev == obj_other->dev)
 			     && (obj_self->sm == obj_other->sm)
@@ -1319,7 +1649,8 @@ gdbpy_cuda_warp_create (uint32_t dev, uint32_t sm, uint32_t wp)
   self->wp = wp;
 
   cuda_trace_domain (CUDA_TRACE_PYTHON,
-		     "cuda_warp_create <dev%u.sm%u.wp%u> @ %p", dev, sm, wp, self);
+		     "cuda_warp_create <dev%u.sm%u.wp%u> @ %p", dev, sm, wp,
+		     self);
   return (PyObject *)self;
 }
 
@@ -1391,6 +1722,12 @@ cuda_lane_get_attribute (PyObject *self,
       PyErr_SetString (PyExc_RuntimeError, e.what ());
       return nullptr;
     }
+  catch (...)
+    {
+      PyErr_Format (PyExc_RuntimeError, "Unknown exception in %s()",
+		    __FUNCTION__);
+      return nullptr;
+    }
 }
 
 static PyObject *
@@ -1413,6 +1750,12 @@ gdbpy_cuda_lane_get_valid (PyObject *self, void *closure)
       PyErr_SetString (PyExc_RuntimeError, e.what ());
       return nullptr;
     }
+  catch (...)
+    {
+      PyErr_Format (PyExc_RuntimeError, "Unknown exception in %s()",
+		    __FUNCTION__);
+      return nullptr;
+    }
 }
 
 static PyObject *
@@ -1432,8 +1775,8 @@ gdbpy_cuda_lane_get_exception (PyObject *self, void *closure)
 // cuda.Lane attributes table
 
 static gdb_PyGetSetDef gdbpy_cuda_lane_getset[] = {
-  { "device_id", cuda_get_device_id<gdbpy_cuda_lane_object>, nullptr, "Device ID",
-    nullptr },
+  { "device_id", cuda_get_device_id<gdbpy_cuda_lane_object>, nullptr,
+    "Device ID", nullptr },
   { "sm_id", cuda_get_sm_id<gdbpy_cuda_lane_object>, nullptr, "Sm ID",
     nullptr },
   { "warp_id", cuda_get_warp_id<gdbpy_cuda_lane_object>, nullptr, "Warp ID",
@@ -1441,17 +1784,14 @@ static gdb_PyGetSetDef gdbpy_cuda_lane_getset[] = {
   { "lane_id", cuda_get_lane_id<gdbpy_cuda_lane_object>, nullptr, "Lane ID",
     nullptr },
   { "is_valid", gdbpy_cuda_lane_get_valid, nullptr, "Valid", nullptr },
-  { "is_active", cuda_lane_attr_wrapper<bool, cuda_state::lane_active>, nullptr,
-    "Active", nullptr },
-  { "is_divergent", cuda_lane_attr_wrapper<bool, cuda_state::lane_active>,
+  { "is_active", cuda_lane_attr_wrapper<bool, cuda_state::lane_active>,
+    nullptr, "Active", nullptr },
+  { "is_divergent", cuda_lane_attr_wrapper<bool, cuda_state::lane_divergent>,
     nullptr, "Active", nullptr },
   { "pc", cuda_lane_attr_wrapper<uint64_t, cuda_state::lane_get_pc>, nullptr,
     "PC", nullptr },
   { "exception", gdbpy_cuda_lane_get_exception, nullptr, "Exception",
     nullptr },
-  { "cc_register",
-    cuda_lane_attr_wrapper<uint32_t, cuda_state::lane_get_cc_register>,
-    nullptr, "CC register", nullptr },
   { "thread_idx",
     cuda_lane_attr_wrapper<const CuDim3 &, cuda_state::lane_get_thread_idx>,
     nullptr, "Thread index", nullptr },
@@ -1462,10 +1802,8 @@ static PyObject *
 gdbpy_cuda_lane_method_richcompare (PyObject *self, PyObject *other, int opid)
 {
   if (opid != Py_EQ && opid != Py_NE)
-    {
-      PyErr_SetString (PyExc_TypeError, "Invalid comparison");
-      return nullptr;
-    }
+    Py_RETURN_FALSE;
+
   if (other == Py_None)
     {
       if (opid == Py_EQ)
@@ -1474,13 +1812,11 @@ gdbpy_cuda_lane_method_richcompare (PyObject *self, PyObject *other, int opid)
 	Py_RETURN_TRUE;
     }
 
-  const auto obj_self = gdbpy_cuda_lane (self);
-  if (obj_self == nullptr)
-    return nullptr;
+  if (!PyObject_TypeCheck (other, &gdbpy_cuda_lane_type))
+    Py_RETURN_FALSE;
 
-  const auto obj_other = gdbpy_cuda_lane (other);
-  if (obj_other == nullptr)
-    return nullptr;
+  const auto obj_self = (gdbpy_cuda_lane_object *)self;
+  const auto obj_other = (gdbpy_cuda_lane_object *)other;
 
   Py_RETURN_RICHCOMPARE ((obj_self->dev == obj_other->dev)
 			     && (obj_self->sm == obj_other->sm)
@@ -1510,7 +1846,8 @@ gdbpy_cuda_lane_method_call_depth (PyObject *self, PyObject *args)
 }
 
 static PyObject *
-gdbpy_cuda_lane_method_read_generic_memory (PyObject *self, PyObject *args, PyObject *kwargs)
+gdbpy_cuda_lane_method_read_generic_memory (PyObject *self, PyObject *args,
+					    PyObject *kwargs)
 {
   auto lane = gdbpy_cuda_lane (self);
   if (!lane)
@@ -1520,7 +1857,8 @@ gdbpy_cuda_lane_method_read_generic_memory (PyObject *self, PyObject *args, PyOb
   uint64_t address = 0;
   static const char *kwlist[] = { "address", "size", nullptr };
 
-  if (!PyArg_ParseTupleAndKeywords (args, kwargs, "KK", (char **)kwlist, &address, &size))
+  if (!PyArg_ParseTupleAndKeywords (args, kwargs, "KK", (char **)kwlist,
+				    &address, &size))
     return nullptr;
 
   try
@@ -1538,10 +1876,17 @@ gdbpy_cuda_lane_method_read_generic_memory (PyObject *self, PyObject *args, PyOb
       PyErr_SetString (PyExc_RuntimeError, e.what ());
       return nullptr;
     }
+  catch (...)
+    {
+      PyErr_Format (PyExc_RuntimeError, "Unknown exception in %s()",
+		    __FUNCTION__);
+      return nullptr;
+    }
 }
 
 static PyObject *
-gdbpy_cuda_lane_method_read_local_memory (PyObject *self, PyObject *args, PyObject *kwargs)
+gdbpy_cuda_lane_method_read_local_memory (PyObject *self, PyObject *args,
+					  PyObject *kwargs)
 {
   auto lane = gdbpy_cuda_lane (self);
   if (!lane)
@@ -1551,7 +1896,8 @@ gdbpy_cuda_lane_method_read_local_memory (PyObject *self, PyObject *args, PyObje
   uint64_t address = 0;
   static const char *kwlist[] = { "address", "size", nullptr };
 
-  if (!PyArg_ParseTupleAndKeywords (args, kwargs, "KK", (char **)kwlist, &address, &size))
+  if (!PyArg_ParseTupleAndKeywords (args, kwargs, "KK", (char **)kwlist,
+				    &address, &size))
     return nullptr;
 
   try
@@ -1568,6 +1914,12 @@ gdbpy_cuda_lane_method_read_local_memory (PyObject *self, PyObject *args, PyObje
   catch (const gdb_exception &e)
     {
       PyErr_SetString (PyExc_RuntimeError, e.what ());
+      return nullptr;
+    }
+  catch (...)
+    {
+      PyErr_Format (PyExc_RuntimeError, "Unknown exception in %s()",
+		    __FUNCTION__);
       return nullptr;
     }
 }
@@ -1606,6 +1958,12 @@ gdbpy_cuda_lane_method_logical (PyObject *self, PyObject *args)
 	    PyErr_SetString (PyExc_RuntimeError, e.what ());
 	    return nullptr;
 	  }
+	catch (...)
+	  {
+	    PyErr_Format (PyExc_RuntimeError, "Unknown exception in %s()",
+			  __FUNCTION__);
+	    return nullptr;
+	  }
       });
 }
 
@@ -1615,43 +1973,18 @@ gdbpy_cuda_lane_method_physical (PyObject *self, PyObject *args)
   return cuda_lane_get_attribute (
       self,
       [] (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln) -> PyObject * {
-	try
-	  {
-	    cuda_coords filter{ dev,
-				sm,
-				wp,
-				ln,
-				CUDA_WILDCARD,
-				CUDA_WILDCARD,
-				CUDA_WILDCARD_DIM,
-				CUDA_WILDCARD_DIM,
-				CUDA_WILDCARD_DIM,
-				CUDA_WILDCARD_DIM };
-	    cuda_coord_set<cuda_coord_set_type::threads,
-			   select_valid | select_sngl>
-		coord{ filter };
-	    if (coord.size () == 0)
-	      {
-		PyErr_SetString (PyExc_RuntimeError, "Invalid coordinates");
-		return nullptr;
-	      }
-	    return gdbpy_cuda_coords_physical_create (
-		coord.begin ()->physical ());
-	  }
-	catch (const gdb_exception &e)
-	  {
-	    PyErr_SetString (PyExc_RuntimeError, e.what ());
-	    return nullptr;
-	  }
+	return to_python (
+	    cuda_state::lane_get_coords_physical (dev, sm, wp, ln));
       });
 }
 
 static PyMethodDef gdbpy_cuda_lane_methods[] = {
   { "call_depth", gdbpy_cuda_lane_method_call_depth, METH_NOARGS,
     "Returns the call depth of the a cuda.Lane" },
-  { "read_generic_memory", (PyCFunction) gdbpy_cuda_lane_method_read_generic_memory,
+  { "read_generic_memory",
+    (PyCFunction)gdbpy_cuda_lane_method_read_generic_memory,
     METH_VARARGS | METH_KEYWORDS, "Reads from generic memory" },
-  { "read_local_memory", (PyCFunction) gdbpy_cuda_lane_method_read_local_memory,
+  { "read_local_memory", (PyCFunction)gdbpy_cuda_lane_method_read_local_memory,
     METH_VARARGS | METH_KEYWORDS, "Reads from local memory" },
   { "logical", gdbpy_cuda_lane_method_logical, METH_NOARGS,
     "Returns the logical coordinates of the a cuda.Lane" },
@@ -1691,6 +2024,17 @@ gdbpy_cuda_lane_finalize (PyObject *self)
 		     obj->dev, obj->sm, obj->wp, obj->ln, obj);
 }
 
+static Py_hash_t
+gdbpy_cuda_lane_method_hash (PyObject *self)
+{
+  auto obj = (gdbpy_cuda_lane_object *)self;
+  // Max 32 lanes/warp and 64 warps/sm
+  // Make sure to not return -1 (which is reserved for errors)
+  Py_hash_t hash
+      = (obj->dev << 24) ^ (obj->sm << (5 + 6)) ^ (obj->wp << 5) ^ obj->ln;
+  return hash == -1 ? 0 : hash;
+}
+
 static bool
 gdbpy_cuda_lane_type_init (PyObject *module)
 {
@@ -1712,6 +2056,7 @@ gdbpy_cuda_lane_type_init (PyObject *module)
   gdbpy_cuda_lane_type.tp_methods = gdbpy_cuda_lane_methods;
   gdbpy_cuda_lane_type.tp_finalize = gdbpy_cuda_lane_finalize;
   gdbpy_cuda_lane_type.tp_richcompare = gdbpy_cuda_lane_method_richcompare;
+  gdbpy_cuda_lane_type.tp_hash = gdbpy_cuda_lane_method_hash;
 
   return gdbpy_cuda_install_type_in_module (module, "Lane",
 					    &gdbpy_cuda_lane_type);
@@ -1759,11 +2104,57 @@ gdbpy_cuda_coords_physical_get_ln (PyObject *self, void *closure)
   return PyLong_FromUnsignedLong (coords->ln);
 }
 
+static PyObject *
+gdbpy_cuda_coords_physical_get_dev_obj (PyObject *self, void *closure)
+{
+  const auto coords = (gdbpy_cuda_coords_physical_object *)self;
+
+  return gdbpy_cuda_device_create (coords->dev);
+}
+
+static PyObject *
+gdbpy_cuda_coords_physical_get_sm_obj (PyObject *self, void *closure)
+{
+  const auto coords = (gdbpy_cuda_coords_physical_object *)self;
+
+  return gdbpy_cuda_sm_create (coords->dev, coords->sm);
+}
+
+static PyObject *
+gdbpy_cuda_coords_physical_get_wp_obj (PyObject *self, void *closure)
+{
+  const auto coords = (gdbpy_cuda_coords_physical_object *)self;
+
+  return gdbpy_cuda_warp_create (coords->dev, coords->sm, coords->wp);
+}
+
+static PyObject *
+gdbpy_cuda_coords_physical_get_ln_obj (PyObject *self, void *closure)
+{
+  const auto coords = (gdbpy_cuda_coords_physical_object *)self;
+
+  return gdbpy_cuda_lane_create (coords->dev, coords->sm, coords->wp,
+				 coords->ln);
+}
+
 static gdb_PyGetSetDef gdbpy_cuda_coords_physical_getset[] = {
-  { "device_id", gdbpy_cuda_coords_physical_get_dev, nullptr, "Device ID", nullptr },
+  // Getters for integer coordinates
+  { "device_id", gdbpy_cuda_coords_physical_get_dev, nullptr, "Device ID",
+    nullptr },
   { "sm_id", gdbpy_cuda_coords_physical_get_sm, nullptr, "SM ID", nullptr },
-  { "warp_id", gdbpy_cuda_coords_physical_get_wp, nullptr, "Warp ID", nullptr },
-  { "lane_id", gdbpy_cuda_coords_physical_get_ln, nullptr, "Lane ID", nullptr },
+  { "warp_id", gdbpy_cuda_coords_physical_get_wp, nullptr, "Warp ID",
+    nullptr },
+  { "lane_id", gdbpy_cuda_coords_physical_get_ln, nullptr, "Lane ID",
+    nullptr },
+
+  // Getters for Device/SM/Warp/Lane objects
+  { "device", gdbpy_cuda_coords_physical_get_dev_obj, nullptr, "Device",
+    nullptr },
+  { "sm", gdbpy_cuda_coords_physical_get_sm_obj, nullptr, "SM", nullptr },
+  { "warp", gdbpy_cuda_coords_physical_get_wp_obj, nullptr, "Warp ID",
+    nullptr },
+  { "lane", gdbpy_cuda_coords_physical_get_ln_obj, nullptr, "Lane ID",
+    nullptr },
   { nullptr },
 };
 
@@ -1784,10 +2175,8 @@ gdbpy_cuda_coords_physical_richcompare (PyObject *self, PyObject *other,
 					int opid)
 {
   if (opid != Py_EQ && opid != Py_NE)
-    {
-      PyErr_SetString (PyExc_TypeError, "Invalid comparison");
-      return nullptr;
-    }
+    Py_RETURN_FALSE;
+
   if (other == Py_None)
     {
       if (opid == Py_EQ)
@@ -1795,16 +2184,9 @@ gdbpy_cuda_coords_physical_richcompare (PyObject *self, PyObject *other,
       if (opid == Py_NE)
 	Py_RETURN_TRUE;
     }
-  if (!PyObject_TypeCheck (self, &gdbpy_cuda_coords_physical_type))
-    {
-      PyErr_SetString (PyExc_TypeError, "Invalid type");
-      return nullptr;
-    }
+
   if (!PyObject_TypeCheck (other, &gdbpy_cuda_coords_physical_type))
-    {
-      PyErr_SetString (PyExc_TypeError, "Invalid type");
-      return nullptr;
-    }
+    Py_RETURN_FALSE;
 
   auto a = (gdbpy_cuda_coords_physical_object *)self;
   auto b = (gdbpy_cuda_coords_physical_object *)other;
@@ -1817,7 +2199,8 @@ static int
 gdbpy_cuda_coords_physical_init (PyObject *self, PyObject *args,
 				 PyObject *kwds)
 {
-  static const char *kwlist[] = { "device_id", "sm_id", "warp_id", "lane_id", nullptr };
+  static const char *kwlist[]
+      = { "device_id", "sm_id", "warp_id", "lane_id", nullptr };
 
   // PyArg_ParseTupleAndKeywords does not modify fields corresponding
   // to missing arguments, so we need to initialize them to 0
@@ -1837,8 +2220,8 @@ gdbpy_cuda_coords_physical_init (PyObject *self, PyObject *args,
 static PyObject *
 gdbpy_cuda_coords_physical_create (const cuda_coords_physical &coords)
 {
-  gdbpy_ref<gdbpy_cuda_coords_physical_object> self (PyObject_New (gdbpy_cuda_coords_physical_object,
-			    &gdbpy_cuda_coords_physical_type));
+  gdbpy_ref<gdbpy_cuda_coords_physical_object> self (PyObject_New (
+      gdbpy_cuda_coords_physical_object, &gdbpy_cuda_coords_physical_type));
   if (self == nullptr)
     return nullptr;
 
@@ -1853,13 +2236,20 @@ gdbpy_cuda_coords_physical_create (const cuda_coords_physical &coords)
 static bool
 gdbpy_cuda_coords_physical_type_init (PyObject *module)
 {
+  auto flags = Py_TPFLAGS_DEFAULT;
+
+#if PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION >= 10
+  // Don't allow users to create their own instances
+  flags |= Py_TPFLAGS_DISALLOW_INSTANTIATION;
+#endif
+
   gdbpy_cuda_coords_physical_type.tp_name = "cuda.CoordsPhysical";
   gdbpy_cuda_coords_physical_type.tp_doc
       = PyDoc_STR ("CUDA Physical Coordinates");
   gdbpy_cuda_coords_physical_type.tp_basicsize
       = sizeof (gdbpy_cuda_coords_physical_object);
   gdbpy_cuda_coords_physical_type.tp_itemsize = 0;
-  gdbpy_cuda_coords_physical_type.tp_flags = Py_TPFLAGS_DEFAULT;
+  gdbpy_cuda_coords_physical_type.tp_flags = flags;
   gdbpy_cuda_coords_physical_type.tp_new = PyType_GenericNew;
   gdbpy_cuda_coords_physical_type.tp_getset
       = gdbpy_cuda_coords_physical_getset;
@@ -1876,8 +2266,7 @@ gdbpy_cuda_coords_physical_type_init (PyObject *module)
 
 typedef struct
 {
-  PyObject_HEAD
-  uint64_t kernel_id;
+  PyObject_HEAD uint64_t kernel_id;
   uint32_t dev_id;
   uint64_t grid_id;
   PyObject *cluster_idx;
@@ -1972,10 +2361,8 @@ gdbpy_cuda_coords_logical_richcompare (PyObject *self, PyObject *other,
 				       int opid)
 {
   if (opid != Py_EQ && opid != Py_NE)
-    {
-      PyErr_SetString (PyExc_TypeError, "Invalid comparison");
-      return nullptr;
-    }
+    Py_RETURN_FALSE;
+
   if (other == Py_None)
     {
       if (opid == Py_EQ)
@@ -1983,16 +2370,9 @@ gdbpy_cuda_coords_logical_richcompare (PyObject *self, PyObject *other,
       if (opid == Py_NE)
 	Py_RETURN_TRUE;
     }
-  if (!PyObject_TypeCheck (self, &gdbpy_cuda_coords_logical_type))
-    {
-      PyErr_SetString (PyExc_TypeError, "Invalid type");
-      return nullptr;
-    }
+
   if (!PyObject_TypeCheck (other, &gdbpy_cuda_coords_logical_type))
-    {
-      PyErr_SetString (PyExc_TypeError, "Invalid type");
-      return nullptr;
-    }
+    Py_RETURN_FALSE;
 
   const auto a = (gdbpy_cuda_coords_logical_object *)self;
   const auto b = (gdbpy_cuda_coords_logical_object *)other;
@@ -2054,8 +2434,8 @@ gdbpy_cuda_coords_logical_repr (PyObject *self)
 static PyObject *
 gdbpy_cuda_coords_logical_create (const cuda_coords_logical &coords)
 {
-  gdbpy_ref<gdbpy_cuda_coords_logical_object> self (PyObject_New (gdbpy_cuda_coords_logical_object,
-			    &gdbpy_cuda_coords_logical_type));
+  gdbpy_ref<gdbpy_cuda_coords_logical_object> self (PyObject_New (
+      gdbpy_cuda_coords_logical_object, &gdbpy_cuda_coords_logical_type));
   if (self == nullptr)
     return nullptr;
 
@@ -2152,6 +2532,12 @@ gdbpy_cuda_execute_internal_command (PyObject *self, PyObject *args)
       PyErr_SetString (PyExc_RuntimeError, e.what ());
       return nullptr;
     }
+  catch (...)
+    {
+      PyErr_Format (PyExc_RuntimeError, "Unknown exception in %s()",
+		    __FUNCTION__);
+      return nullptr;
+    }
 }
 
 static PyObject *
@@ -2201,6 +2587,12 @@ gdbpy_cuda_set_focus_physical (PyObject *self, PyObject *args)
       PyErr_SetString (PyExc_RuntimeError, e.what ());
       return nullptr;
     }
+  catch (...)
+    {
+      PyErr_Format (PyExc_RuntimeError, "Unknown exception in %s()",
+		    __FUNCTION__);
+      return nullptr;
+    }
 }
 
 static PyObject *
@@ -2232,7 +2624,8 @@ gdbpy_cuda_set_focus_logical (PyObject *self, PyObject *args)
 
       const auto cluster = (gdbpy_cuda_cu_dim3_object *)lcoords->cluster_idx;
       gdb_assert (cluster);
-      const auto cluster_dim = (gdbpy_cuda_cu_dim3_object *)lcoords->cluster_dim;
+      const auto cluster_dim
+	  = (gdbpy_cuda_cu_dim3_object *)lcoords->cluster_dim;
       gdb_assert (cluster_dim);
       const auto block = (gdbpy_cuda_cu_dim3_object *)lcoords->block_idx;
       gdb_assert (block);
@@ -2246,7 +2639,8 @@ gdbpy_cuda_set_focus_logical (PyObject *self, PyObject *args)
 			  lcoords->kernel_id,
 			  lcoords->grid_id,
 			  CuDim3{ cluster->x, cluster->y, cluster->z },
-			  CuDim3{ cluster_dim->x, cluster_dim->y, cluster_dim->z },
+			  CuDim3{ cluster_dim->x, cluster_dim->y,
+				  cluster_dim->z },
 			  CuDim3{ block->x, block->y, block->z },
 			  CuDim3{ thread->x, thread->y, thread->z } };
       cuda_coord_set<cuda_coord_set_type::threads, select_valid | select_sngl>
@@ -2262,6 +2656,12 @@ gdbpy_cuda_set_focus_logical (PyObject *self, PyObject *args)
   catch (const gdb_exception &e)
     {
       PyErr_SetString (PyExc_RuntimeError, e.what ());
+      return nullptr;
+    }
+  catch (...)
+    {
+      PyErr_Format (PyExc_RuntimeError, "Unknown exception in %s()",
+		    __FUNCTION__);
       return nullptr;
     }
 }
@@ -2281,10 +2681,7 @@ gdbpy_cuda_get_devices (PyObject *self, PyObject *args)
       if (device == nullptr)
 	return nullptr;
       if (PyList_SetItem (list.get (), i, device) == -1)
-	{
-	  Py_DECREF (device);
-	  return nullptr;
-	}
+	return nullptr;
     }
 
   return list.release ();
@@ -2339,7 +2736,8 @@ gdbpy_cuda_get_lane (PyObject *self, PyObject *args, PyObject *kwargs)
   uint32_t sm_id = 0;
   uint32_t wp_id = 0;
   uint32_t ln_id = 0;
-  static const char *kwlist[] = { "device_id", "sm_id", "warp_id", "lane_id", nullptr };
+  static const char *kwlist[]
+      = { "device_id", "sm_id", "warp_id", "lane_id", nullptr };
 
   if (!PyArg_ParseTupleAndKeywords (args, kwargs, "IIII", (char **)kwlist,
 				    &dev_id, &sm_id, &wp_id, &ln_id))
@@ -2360,6 +2758,8 @@ gdbpy_cuda_init (void)
       || !gdbpy_cuda_warp_type_init (module)
       || !gdbpy_cuda_lane_type_init (module)
       || !gdbpy_cuda_cu_dim3_type_init (module)
+      || !gdbpy_cuda_statistic_type_init (module)
+      || !gdbpy_cuda_statistic_domain_type_init (module)
       || !gdbpy_cuda_coords_physical_type_init (module)
       || !gdbpy_cuda_coords_logical_type_init (module))
     {

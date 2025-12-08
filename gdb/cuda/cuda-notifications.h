@@ -69,4 +69,7 @@ bool cuda_notification_received (void);
 
 void cuda_notification_consume_pending (void);
 
+class cuda_statistic;
+cuda_statistic &get_cuda_notification_statistics (void);
+
 #endif

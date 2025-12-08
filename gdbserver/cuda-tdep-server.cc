@@ -58,8 +58,6 @@ struct cuda_sym cuda_symbol_list[] =
   CUDA_SYM(CUDBG_DEBUGGER_INITIALIZED),
   CUDA_SYM(CUDBG_REPORTED_DRIVER_API_ERROR_CODE),
   CUDA_SYM(CUDBG_REPORTED_DRIVER_INTERNAL_ERROR_CODE),
-  /* CUDBG_DETACH_SUSPENDED_DEVICES_MASK is deprecated */
-  CUDA_SYM(CUDBG_DETACH_SUSPENDED_DEVICES_MASK),
   CUDA_SYM(CUDBG_ENABLE_LAUNCH_BLOCKING),
   /* This symbol is not exposed through cudadebugger.h yet */
   CUDA_SYM(cudbgInjectionPath),
@@ -72,6 +70,7 @@ bool cuda_syms_looked_up = false;
 static bool inferior_in_debug_mode = false;
 static char cuda_gdb_session_dir[CUDA_GDB_TMP_BUF_SIZE] = {0};
 static uint32_t cuda_gdb_session_id = 0;
+static uint32_t debugger_capabilities = CUDBG_DEBUGGER_CAPABILITY_NONE;
 
 bool cuda_launch_blocking;
 bool cuda_debug_general;
@@ -79,6 +78,7 @@ bool cuda_debug_libcudbg;
 bool cuda_debug_notifications;
 bool cuda_notify_youngest;
 bool cuda_driver_logs = true;
+bool cuda_printf_flushing = false;
 struct cuda_trace_msg *cuda_first_trace_msg = NULL;
 struct cuda_trace_msg *cuda_last_trace_msg = NULL;
 
@@ -327,6 +327,12 @@ cuda_options_driver_logs (void)
   return cuda_driver_logs;
 }
 
+bool
+cuda_options_printf_flushing (void)
+{
+  return cuda_printf_flushing;
+}
+
 void
 cuda_cleanup (void)
 {
@@ -531,33 +537,37 @@ cuda_initialize_target (void)
   write_memory (sessionIdAddr, (unsigned char*)&sessionId, sizeof(sessionId));
   write_memory (launchblockingAddr, cuda_options_launch_blocking () ? &one : &zero, 1);
 
-  /* Setup our desired capabilities for the debugger backend. It is alright
+  /* Setup our desired debugger capabilities for the debugger backend. It is alright
    * if the older driver doesn't understand some of these flags. We will deal
    * with those situations after initialization. */
   CORE_ADDR capability_addr = cuda_get_symbol_address_from_cache (
       _STRING_ (CUDBG_DEBUGGER_CAPABILITIES));
   if (capability_addr)
     {
-      uint32_t capabilities = CUDBG_DEBUGGER_CAPABILITY_NONE;
-
       cuda_trace ("requesting CUDA lazy function loading support\n");
-      capabilities |= CUDBG_DEBUGGER_CAPABILITY_LAZY_FUNCTION_LOADING;
+      debugger_capabilities |= CUDBG_DEBUGGER_CAPABILITY_LAZY_FUNCTION_LOADING;
 
       cuda_trace ("requesting tracking of exceptions in exited warps\n");
-      capabilities
+      debugger_capabilities
 	  |= CUDBG_DEBUGGER_CAPABILITY_REPORT_EXCEPTIONS_IN_EXITED_WARPS;
 
       cuda_trace ("requesting CUDA suspend events\n");
-      capabilities |= CUDBG_DEBUGGER_CAPABILITY_SUSPEND_EVENTS;
+      debugger_capabilities |= CUDBG_DEBUGGER_CAPABILITY_SUSPEND_EVENTS;
 
       if (cuda_options_driver_logs ())
         {
           cuda_trace ("requesting CUDA driver logging\n");
-          capabilities |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
+          debugger_capabilities |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
         }
 
-      write_memory (capability_addr, (const gdb_byte *)&capabilities,
-		    sizeof (capabilities));
+      if (cuda_options_printf_flushing ())
+        {
+          cuda_trace ("requesting CUDA printf flushing on suspend\n");
+          debugger_capabilities |= CUDBG_DEBUGGER_CAPABILITY_FLUSH_PRINTF_ON_SUSPEND;
+        }
+
+      write_memory (capability_addr, (const gdb_byte *)&debugger_capabilities,
+		    sizeof (debugger_capabilities));
     }
 
   inferior_in_debug_mode = true;
@@ -572,22 +582,26 @@ cuda_set_driver_logging (bool enable)
       _STRING_ (CUDBG_DEBUGGER_CAPABILITIES));
   if (capability_addr)
     {
-      uint32_t capabilities;
-
-      /* Read the current capabilities from the target */
-      target_read_memory (capability_addr, (gdb_byte *)&capabilities, sizeof (capabilities));
+#ifndef __QNXHOST__
+      /* Read the current capabilities from the target process memory */
+      /* target_read_memory is not supported on QNX.
+       * TODO: Implement target_read_memory for QNX and then remove the global */
+      target_read_memory (capability_addr, (gdb_byte *)&debugger_capabilities,
+        sizeof (debugger_capabilities));
+#endif
+      cuda_trace ("Current CUDA debugger capabilities: 0x%x\n", debugger_capabilities);
 
       /* Set or clear the driver logging capability */
       cuda_trace ("%s CUDA driver logging\n", enable ? "enabling" : "disabling");
 
       if (enable)
-        capabilities |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
+        debugger_capabilities |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
       else
-        capabilities &= ~CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
+        debugger_capabilities &= ~CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
       /* Write the new capabilities back to the target */
-      cuda_trace ("setting CUDA debugger capabilities to 0x%x\n", capabilities);
-      write_memory (capability_addr, (const gdb_byte *)&capabilities,
-        sizeof (capabilities));
+      cuda_trace ("setting CUDA debugger capabilities to 0x%x\n", debugger_capabilities);
+      write_memory (capability_addr, (const gdb_byte *)&debugger_capabilities,
+        sizeof (debugger_capabilities));
     }
 }
 

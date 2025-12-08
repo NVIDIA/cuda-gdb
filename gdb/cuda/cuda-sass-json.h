@@ -72,6 +72,7 @@ struct schema_sass_instruction
   std::string m_operands;
   std::string m_extra;
   gdb::optional<bool> m_opt_is_control_flow;
+  gdb::optional<bool> m_opt_is_subroutine_call;
   std::vector<std::pair<std::string, std::string>> m_other_attributes;
   std::vector<std::string> m_other_flags;
 };

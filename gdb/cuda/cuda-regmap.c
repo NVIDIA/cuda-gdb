@@ -57,11 +57,11 @@
 
 /* Raw value decoding */
 #define REGMAP_CLASS(x) ((x) >> 24)
-#define REGMAP_REG(x) ((x) & 0x00ffffff)
-#define REGMAP_PRED(x) ((x) & 0x07)
-#define REGMAP_OFST(x) ((x) & 0x00ffffff)
+#define REGMAP_REG(x) ((x)&0x00ffffff)
+#define REGMAP_PRED(x) ((x)&0x07)
+#define REGMAP_OFST(x) ((x)&0x00ffffff)
 #define REGMAP_SP_REG(x) (((x) >> 16) & 0xff)
-#define REGMAP_SP_OFST(x) ((x) & 0x0000ffff)
+#define REGMAP_SP_OFST(x) ((x)&0x0000ffff)
 
 /* Structure/global variables for storing search results*/
 #define REGMAP_ENTRIES_ALLOC 64
@@ -605,8 +605,7 @@ regmap_extend_liverange (regmap_func_t *func)
 	min_entries = entries;
     }
 
-  if (cuda_options_trace_domain_enabled (CUDA_TRACE_GENERAL)
-      && reg_to_map.size ())
+  if (cuda_options_debug_general () && reg_to_map.size ())
     {
       const auto end{ std::chrono::high_resolution_clock::now () };
       const std::chrono::duration<double> elapsed_seconds{ end - start };

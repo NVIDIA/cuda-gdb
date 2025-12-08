@@ -1279,11 +1279,12 @@ parser::parse_instruction_other_attribute_field (
 {
   // Fields:
   // - control-flow
+  // - subroutine-call
 
   if (field == "control-flow")
-    {
-      instruction.m_opt_is_control_flow = (value == "True");
-    }
+    instruction.m_opt_is_control_flow = (value == "True");
+  else if (field == "subroutine-call")
+    instruction.m_opt_is_subroutine_call = (value == "True");
 }
 
 inline token

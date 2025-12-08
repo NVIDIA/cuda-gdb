@@ -843,27 +843,6 @@ cuda_process_read_call_depth_packet (char *buf)
 }
 
 static void
-cuda_process_read_syscall_call_depth_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint32_t ln;
-  uint32_t value;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,  sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,  sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &ln,  sizeof (ln));
-
-  res = cudbgAPI->readSyscallCallDepth (dev, sm, wp, ln, &value);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &value, p, sizeof (value), false);;
-}
-
-static void
 cuda_process_read_virtual_return_address_packet (char *buf)
 {
   CUDBGResult res;
@@ -1202,6 +1181,7 @@ cuda_process_set_option_packet (char *buf)
   extract_bin (NULL, (unsigned char *) &cuda_debug_notifications, sizeof (cuda_debug_notifications));
   extract_bin (NULL, (unsigned char *) &cuda_notify_youngest,     sizeof (cuda_notify_youngest));
   extract_bin (NULL, (unsigned char *) &cuda_driver_logs,         sizeof (cuda_driver_logs));
+  extract_bin (NULL, (unsigned char *) &cuda_printf_flushing,     sizeof (cuda_printf_flushing));
 
   /* Apply the runtime option */
   cuda_set_driver_logging (cuda_driver_logs);
@@ -1425,7 +1405,8 @@ handle_cuda_packet (char *buf)
       cuda_process_read_call_depth_packet (buf);
       break;
     case READ_SYSCALL_CALL_DEPTH:
-      cuda_process_read_syscall_call_depth_packet (buf);
+      /* Support dropped */
+      buf[0] = '\0';
       break;
     case READ_VIRTUAL_RETURN_ADDRESS:
       cuda_process_read_virtual_return_address_packet (buf);

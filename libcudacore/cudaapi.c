@@ -1253,24 +1253,6 @@ DEF_API_CALL(readLaneStatus)(uint32_t devId, uint32_t sm, uint32_t wp,
 	return CUDBG_SUCCESS;
 }
 
-DEF_API_CALL(readSyscallCallDepth)(uint32_t dev, uint32_t sm, uint32_t wp,
-				   uint32_t ln, uint32_t *depth)
-{
-	CudbgThreadTableEntry *tte;
-
-	TRACE_FUNC("dev=%u sm=%u wp=%u ln=%u depth=%p",
-		   dev, sm, wp, ln, depth);
-
-	VERIFY_ARG(depth);
-
-	GET_TABLE_ENTRY(tte, NULL, CUDBG_ERROR_INVALID_LANE,
-			"ln%u_wp%u_sm%u_dev%u", ln, wp, sm, dev);
-
-	*depth = tte->syscallCallDepth;
-
-	return CUDBG_SUCCESS;
-}
-
 DEF_API_CALL(readCallDepth)(uint32_t dev, uint32_t sm, uint32_t wp,
 			    uint32_t ln, uint32_t *depth)
 {
@@ -1397,23 +1379,6 @@ DEF_API_CALL(readPredicates)(uint32_t dev, uint32_t sm, uint32_t wp,
 	memcpy(predicates, data.d_buf, size);
 
 	return rc;
-}
-
-DEF_API_CALL(readCCRegister)(uint32_t dev, uint32_t sm, uint32_t wp,
-			     uint32_t ln, uint32_t *val)
-{
-	CudbgThreadTableEntry *tte;
-
-	TRACE_FUNC("dev=%u sm=%u wp=%u ln=%u val=%p", dev, sm, wp, ln, val);
-
-	VERIFY_ARG(val);
-
-	GET_TABLE_ENTRY(tte, NULL, CUDBG_ERROR_INVALID_LANE,
-			"ln%u_wp%u_sm%u_dev%u", ln, wp, sm, dev);
-
-	*val = tte->ccRegister;
-
-	return CUDBG_SUCCESS;
 }
 
 DEF_API_CALL(getGridAttributes)(uint32_t dev, uint32_t sm, uint32_t wp,
@@ -1957,6 +1922,90 @@ DEF_API_CALL (getCudaExceptionString)
 
   return CUDBG_SUCCESS;
 }
+DEF_API_CALL (getHardwareBarrierInfo) (uint32_t dev, uint32_t sm, uint32_t wp,
+				       uint32_t ln, CUDBGBarrierScope *scope,
+				       char *buf, uint32_t bufSz,
+				       uint32_t *msgSz)
+{
+  CudbgWarpTableEntry *wte;
+  size_t wteSize;
+  const char *barrierInfoString = NULL;
+
+  TRACE_FUNC ("dev=%u sm=%u wp=%u ln=%u scope=%p buf=%p bufSz=%u msgSz=%p", dev,
+	      sm, wp, ln, scope, buf, bufSz, msgSz);
+
+  VERIFY_ARG (scope);
+  VERIFY_ARG (buf);
+
+  /* Initialize outputs */
+  *scope = CUDBG_BARRIER_SCOPE_INVALID;
+  if (buf && bufSz > 0)
+    buf[0] = '\0';
+  if (msgSz)
+    *msgSz = 1; /* At least null terminator */
+
+  /* Get warp table entry for barrier information */
+  GET_TABLE_ENTRY (wte, &wteSize, CUDBG_ERROR_INVALID_WARP,
+		   "wp%u_sm%u_dev%u", wp, sm, dev);
+
+  /* Check if barrier info is available in this coredump version */
+  if (offsetof (CudbgWarpTableEntry, barrierScope) >= wteSize)
+    return CUDBG_SUCCESS; /* No barrier info available */
+
+  /* Set the barrier scope */
+  *scope = (CUDBGBarrierScope)wte->barrierScope;
+
+  /* Check if additional barrier info is available */
+  if (offsetof (CudbgWarpTableEntry, additionalBarrierInfo) < wteSize
+      && wte->additionalBarrierInfo != 0)
+    {
+      /* Try to interpret additionalBarrierInfo as a string table index */
+      barrierInfoString
+	= cuCoreGetStrTabByIndex (curcc, wte->additionalBarrierInfo);
+    }
+
+  /* If no string available, provide a default based on scope */
+  if (!barrierInfoString || strlen (barrierInfoString) == 0)
+    {
+      switch (*scope)
+	{
+	case CUDBG_BARRIER_SCOPE_NONE:
+	  barrierInfoString = "No barrier";
+	  break;
+	case CUDBG_BARRIER_SCOPE_WARP:
+	  barrierInfoString = "Warp barrier";
+	  break;
+	case CUDBG_BARRIER_SCOPE_WARP_GROUP:
+	  barrierInfoString = "Warp group barrier";
+	  break;
+	case CUDBG_BARRIER_SCOPE_BLOCK:
+	  barrierInfoString = "Thread block barrier";
+	  break;
+	case CUDBG_BARRIER_SCOPE_CLUSTER:
+	  barrierInfoString = "Cluster barrier";
+	  break;
+	case CUDBG_BARRIER_SCOPE_KERNEL:
+	  barrierInfoString = "Kernel barrier";
+	  break;
+	case CUDBG_BARRIER_SCOPE_INVALID:
+	default:
+	  barrierInfoString = "No barrier information";
+	  break;
+	}
+    }
+
+  const size_t requiredBufSz = strlen (barrierInfoString) + 1;
+  if (msgSz)
+    *msgSz = requiredBufSz;
+
+  if (bufSz < requiredBufSz)
+    return CUDBG_ERROR_BUFFER_TOO_SMALL;
+
+  strncpy (buf, barrierInfoString, bufSz);
+  buf[bufSz - 1] = '\0';
+
+  return CUDBG_SUCCESS;
+}
 
 static const struct CUDBGAPI_st cudbgCoreApi = {
   /* Initialization */
@@ -2060,7 +2109,7 @@ static const struct CUDBGAPI_st cudbgCoreApi = {
   API_CALL (notSupported),
   API_CALL (notSupported),
   API_CALL (notSupported),
-  API_CALL (readSyscallCallDepth),
+  API_CALL (notSupported),
 
   /* 4.2 Extensions */
   API_CALL (notSupported),
@@ -2105,8 +2154,8 @@ static const struct CUDBGAPI_st cudbgCoreApi = {
   API_CALL (readPredicates),
   API_CALL (notSupported),
   API_CALL (getNumPredicates),
-  API_CALL (readCCRegister),
-  API_CALL (notSupported),
+  API_CALL (notSupported), /* readCCRegister */
+  API_CALL (notSupported), /* writeCCRegister */
 
   API_CALL (getDeviceName),
   API_CALL (notSupported),
@@ -2171,6 +2220,9 @@ static const struct CUDBGAPI_st cudbgCoreApi = {
   /* 13.0 Extensions */
   API_CALL (getCudaExceptionString),
   API_CALL (notSupported), /* setNotifyNewEventCallback */
+
+  /* 13.1 Extensions */
+  API_CALL (getHardwareBarrierInfo), /* getHardwareBarrierInfo */
 };
 
 CUDBGAPI cuCoreGetApi(CudaCore *cc)

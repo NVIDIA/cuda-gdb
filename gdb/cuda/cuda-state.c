@@ -115,6 +115,26 @@ static uint32_t debug_invalidate = 0;
 #define CUDA_STATE_TRACE_LANE(lane, fmt, ...)                                 \
   CUDA_STATE_TRACE_DOMAIN_LANE (CUDA_TRACE_STATE, lane, fmt, ##__VA_ARGS__)
 
+// An alternative to gdb_assert(), which is overkill, and can be triggered by
+// attempts to read attributes for invalid objects (among other things).
+// This is useful for the python interface to keep from throwing fatal
+// exceptins.
+// Consistency checks still use gdb_assert() as they are not expected to
+// trigger in normal operation, and indicate a bug in the code.
+#define CUDA_STATE_ERROR_IF(cond, fmt, ...)                                   \
+  do                                                                          \
+    {                                                                         \
+      if (cond)                                                               \
+	{                                                                     \
+	  if (cuda_options_trace_domain_enabled (CUDA_TRACE_STATE))           \
+	    cuda_trace_domain (CUDA_TRACE_STATE,                              \
+			       "cuda-state error: %s(): " fmt, __FUNCTION__,  \
+			       ##__VA_ARGS__);                                \
+	  error ("%s(): " fmt, __FUNCTION__, ##__VA_ARGS__);                  \
+	}                                                                     \
+    }                                                                         \
+  while (0)
+
 /******************************************************************************
  *
  *				    System
@@ -225,6 +245,7 @@ cuda_state::create_context (uint32_t dev_id, uint64_t context_id,
 			    uint32_t thread_id)
 {
   cuda_trace ("Context create device %u context 0x%llx", dev_id, context_id);
+  gdb_assert (dev_id < m_instance.m_num_devices);
 
   m_instance.m_context_map[context_id]
       = std::make_unique<cuda_context> (dev_id, context_id);
@@ -238,7 +259,6 @@ cuda_state::destroy_context (uint64_t context_id)
   auto context = find_context_by_id (context_id);
   cuda_trace ("Context destroy device %u context 0x%llx", context->dev_id (),
 	      context_id);
-
 
   m_instance.m_context_map.erase (context_id);
 }
@@ -410,6 +430,8 @@ cuda_state::broken (cuda_coords &coords)
 cuda_kernel *
 cuda_state::find_kernel_by_grid_id (uint32_t dev_id, uint64_t grid_id)
 {
+  gdb_assert (dev_id < m_instance.m_num_devices);
+
   for (const auto &iter : m_instance.m_kernel_map)
     if ((iter.second->dev_id () == dev_id)
 	&& (iter.second->grid_id () == grid_id))
@@ -443,17 +465,19 @@ cuda_state::find_kernel_by_kernel_id (uint64_t kernel_id)
 cuda_kernel *
 cuda_state::create_kernel (uint32_t dev_id, uint64_t grid_id)
 {
+  gdb_assert (dev_id < m_instance.m_num_devices);
   const auto grid_info = cuda_state::device_get_grid_info (dev_id, grid_id);
 
   auto context = cuda_state::find_context_by_id (grid_info.context);
-  if (!context)
-    error ("Could not find CUDA context for context_id 0x%lx",
-	   grid_info.context);
+  CUDA_STATE_ERROR_IF (!context,
+		       "Could not find CUDA context for context_id 0x%lx",
+		       grid_info.context);
 
   const auto module = cuda_state::find_module_by_id (grid_info.module);
-  if (!module)
-    error ("Could not find CUDA module for context_id 0x%lx module_id 0x%lx",
-	   grid_info.context, grid_info.module);
+  CUDA_STATE_ERROR_IF (!module,
+		       "Could not find CUDA module for context_id 0x%lx "
+		       "module_id 0x%lx",
+		       grid_info.context, grid_info.module);
 
   const auto module_id = grid_info.module;
 
@@ -468,17 +492,19 @@ cuda_state::create_kernel (uint32_t dev_id, uint64_t grid_id)
   const auto parent_grid_id = grid_info.parentGridId;
 
   return create_kernel (dev_id, grid_id, virt_code_base, module_id, grid_dim,
-			block_dim, cluster_dim_default, cluster_dim_preferred, type, origin, parent_grid_id);
+			block_dim, cluster_dim_default, cluster_dim_preferred,
+			type, origin, parent_grid_id);
 }
 
 cuda_kernel *
 cuda_state::create_kernel (uint32_t dev_id, uint64_t grid_id,
 			   uint64_t virt_code_base, uint64_t module_id,
 			   CuDim3 grid_dim, CuDim3 block_dim,
-			   CuDim3 cluster_dim_default, CuDim3 cluster_dim_preferred,
-                           CUDBGKernelType type, CUDBGKernelOrigin origin,
-                           uint64_t parent_grid_id)
+			   CuDim3 cluster_dim_default,
+			   CuDim3 cluster_dim_preferred, CUDBGKernelType type,
+			   CUDBGKernelOrigin origin, uint64_t parent_grid_id)
 {
+  gdb_assert (dev_id < m_instance.m_num_devices);
   // First see if there's a parent kernel for this grid.
   // If not, create one before proceeding
   if (parent_grid_id
@@ -491,7 +517,8 @@ cuda_state::create_kernel (uint32_t dev_id, uint64_t grid_id,
   auto kernel_id = m_instance.m_next_kernel_id++;
   auto kernel = std::make_unique<cuda_kernel> (
       kernel_id, dev_id, grid_id, virt_code_base, module, grid_dim, block_dim,
-      cluster_dim_default, cluster_dim_preferred, type, origin, parent_grid_id);
+      cluster_dim_default, cluster_dim_preferred, type, origin,
+      parent_grid_id);
 
   if (kernel->should_print_kernel_event ())
     printf_unfiltered (
@@ -533,6 +560,8 @@ cuda_state::add_parent_kernel (uint32_t dev_id, uint64_t grid_id)
 void
 cuda_state::destroy_kernel (uint32_t dev_id, uint64_t grid_id)
 {
+  gdb_assert (dev_id < m_instance.m_num_devices);
+  gdb_assert (grid_id != 0);
   auto kernel = find_kernel_by_grid_id (dev_id, grid_id);
   if (!kernel)
     CUDA_STATE_TRACE_DEV (device (dev_id), "kernel not found for grid_id %ld",
@@ -872,8 +901,6 @@ cuda_device::get_pci_dev_id ()
 uint32_t
 cuda_device::get_num_kernels ()
 {
-  gdb_assert (valid ());
-
   uint32_t num_kernels = 0;
   for (auto &iter : cuda_state::kernels ())
     if (iter.second->dev_id () == dev_idx ())
@@ -941,16 +968,27 @@ void
 cuda_device::resume ()
 {
   // There can be redundant calls to this, don't error out if so
-  if (suspended ())
+  if (!suspended ())
     {
-      CUDA_STATE_TRACE_DEV (this, "Resuming device");
-
-      cuda_debugapi::resume_device (dev_idx ());
-
-      cuda_state::clear_suspended_devices_mask (dev_idx ());
+      CUDA_STATE_TRACE_DEV (this, "Device already resumed");
+      return;
     }
-  else
-    CUDA_STATE_TRACE_DEV (this, "Device already resumed");
+
+  // Don't resume if there is a watcher
+  if (m_execution_state_watched)
+    {
+      CUDA_STATE_TRACE_DEV (this,
+			    "Device not resumed: execution state watched and "
+			    "will be resumed by the watcher");
+      m_watcher_needs_resume = true;
+      return;
+    }
+
+  CUDA_STATE_TRACE_DEV (this, "Resuming device");
+
+  cuda_debugapi::resume_device (dev_idx ());
+
+  cuda_state::clear_suspended_devices_mask (dev_idx ());
 }
 
 const CUDBGGridInfo &
@@ -986,22 +1024,29 @@ cuda_device::get_grid_info (uint64_t grid_id)
   return m_grid_info[grid_id];
 }
 
-void
-cuda_device::suspend ()
+/* Returns true if we suspended. False if we were already suspended. */
+bool
+cuda_device::suspend (bool spurious)
 {
+  bool ret = false;
+
   // There can be redundant calls to this, don't error out if so
   if (!suspended ())
     {
       CUDA_STATE_TRACE_DEV (this, "Suspending device");
 
-      cuda_debugapi::suspend_device (dev_idx ());
+      ret = cuda_debugapi::suspend_device (dev_idx ());
 
       cuda_state::set_suspended_devices_mask (dev_idx ());
 
-      update (CUDBG_RESPONSE_TYPE_UPDATE);
+      /* Skip update if spurious */
+      if (!spurious)
+	update (CUDBG_RESPONSE_TYPE_UPDATE);
     }
   else
     CUDA_STATE_TRACE_DEV (this, "Device already suspended");
+
+  return ret;
 }
 
 void
@@ -1148,9 +1193,9 @@ cuda_sm::has_error_pc ()
 uint64_t
 cuda_sm::get_error_pc ()
 {
-  if (has_error_pc ())
-    return m_error_pc;
-  gdb_assert (0);
+  CUDA_STATE_ERROR_IF (!has_error_pc (),
+		       "get_error_pc() called when no error PC available");
+  return m_error_pc;
 }
 
 const cuda_api_warpmask *
@@ -1165,6 +1210,7 @@ cuda_sm::get_valid_warps_mask ()
 	cuda_api_clear_mask (&m_valid_warps_mask);
       m_valid_warps_mask_p = true;
     }
+
   return &m_valid_warps_mask;
 }
 
@@ -1180,6 +1226,7 @@ cuda_sm::get_broken_warps_mask ()
 	cuda_api_clear_mask (&m_broken_warps_mask);
       m_broken_warps_mask_p = true;
     }
+
   return &m_broken_warps_mask;
 }
 
@@ -1231,7 +1278,9 @@ cuda_sm::single_step_warp (uint32_t wp_id, uint32_t lane_id_hint,
       this, "wp_id %u nsteps %u valid warp mask %" WARP_MASK_FORMAT, wp_id,
       nsteps, cuda_api_mask_string (get_valid_warps_mask ()));
 
-  gdb_assert (wp_id < device ()->get_num_warps ());
+  CUDA_STATE_ERROR_IF (wp_id >= device ()->get_num_warps (),
+		       "Invalid warp id %u, max is %u", wp_id,
+		       device ()->get_num_warps () - 1);
 
   cuda_api_clear_mask (single_stepped_warp_mask);
   bool rc;
@@ -1313,7 +1362,7 @@ cuda_sm::update_state ()
 			   cuda_clock ());
 
       // Invalidate the SM state
-      // Warp invalidation is handled by the loop below
+      // Warp (& lane) invalidation is handled by the loop below
       invalidate (!debug_invalidate, false);
 
       // Update all the valid warps
@@ -1369,7 +1418,7 @@ cuda_warp::valid ()
 uint32_t
 cuda_warp::get_uregister (uint32_t regno)
 {
-  gdb_assert (valid ());
+  CUDA_STATE_ERROR_IF (!valid (), "invalid warp");
 
   // If requesting uniform register values on a device w/o uniform
   // registers, simply return 0. This is to support commands like
@@ -1400,17 +1449,17 @@ cuda_warp::get_uregister (uint32_t regno)
 void
 cuda_warp::set_uregister (uint32_t regno, uint32_t value)
 {
-  gdb_assert (valid ());
+  CUDA_STATE_ERROR_IF (!valid (), "invalid warp");
 
-  if (!sm ()->device ()->get_num_uregisters ())
-    error ("Attempting to set register UR%u for a device without uniform "
-	   "registers",
-	   regno);
-
-  if (regno >= sm ()->device ()->get_num_uregisters ())
-    error ("Attempting to set register UR%u: register out of range for this "
-	   "device",
-	   regno);
+  const auto num_uregs = sm ()->device ()->get_num_uregisters ();
+  CUDA_STATE_ERROR_IF (num_uregs == 0,
+		       "Attempting to write uniform register on a device "
+		       "without uniform predicates");
+  CUDA_STATE_ERROR_IF (regno == num_uregs,
+		       "Attempting to write read-only uniform register URZ");
+  CUDA_STATE_ERROR_IF (regno > num_uregs,
+		       "Attempting to write invalid uniform register UR%u",
+		       regno);
 
   cuda_debugapi::write_uregister (dev_idx (), sm_idx (), warp_idx (), regno,
 				  value);
@@ -1430,7 +1479,7 @@ cuda_warp::set_uregister (uint32_t regno, uint32_t value)
 bool
 cuda_warp::get_upredicate (uint32_t pred)
 {
-  gdb_assert (valid ());
+  CUDA_STATE_ERROR_IF (!valid (), "invalid warp");
 
   // If there are no uniform predicate registers in this device,
   // simply return false.
@@ -1438,7 +1487,8 @@ cuda_warp::get_upredicate (uint32_t pred)
   if (!num_upreds)
     return false;
 
-  gdb_assert (pred < num_upreds);
+  CUDA_STATE_ERROR_IF (pred >= num_upreds,
+		       "Attempting to read invalid predicate UP%u", pred);
 
   if (!(m_upredicates_p & (1 << pred)))
     {
@@ -1453,14 +1503,17 @@ cuda_warp::get_upredicate (uint32_t pred)
 void
 cuda_warp::set_upredicate (uint32_t pred, bool value)
 {
-  gdb_assert (valid ());
+  CUDA_STATE_ERROR_IF (!valid (), "invalid warp");
 
-  if (!sm ()->device ()->get_num_upredicates ())
-    error ("Attempting to set predicate UP%u for a device without uniform "
-	   "registers",
-	   pred);
-
-  gdb_assert (pred < sm ()->device ()->get_num_upredicates ());
+  const auto num_upreds = sm ()->device ()->get_num_upredicates ();
+  CUDA_STATE_ERROR_IF (num_upreds == 0,
+		       "Attempting to write uniform predicate on a device "
+		       "without uniform predicates");
+  CUDA_STATE_ERROR_IF (pred == num_upreds - 1,
+		       "Attempting to write read-only uniform predicate UPT");
+  CUDA_STATE_ERROR_IF (pred >= num_upreds,
+		       "Attempting to write invalid uniform predicate UP%u",
+		       pred);
 
   // If we don't have them all, read them all in
   auto all_upredicate_mask
@@ -1514,12 +1567,13 @@ cuda_warp::invalidate (bool quietly, bool recurse)
 
   // Default to no cluster exception target block idx
   m_cluster_exception_target_block_idx_p = false;
-  m_cluster_exception_target_block_idx = { 0 };
+  m_cluster_exception_target_block_idx = { 0, 0, 0 };
   m_cluster_exception_target_block_idx_available = false;
 
-  m_cluster_idx = CuDim3{ 0, 0, 0 };
+  m_cluster_idx = { 0, 0, 0 };
   m_cluster_idx_p = false;
-  m_cluster_dim = CuDim3{ 0, 0, 0 };
+
+  m_cluster_dim = { 0, 0, 0 };
   m_cluster_dim_p = false;
 
   // Reset the warp resources predicate and values
@@ -1544,97 +1598,75 @@ cuda_warp::invalidate (bool quietly, bool recurse)
 uint32_t
 cuda_warp::get_lowest_active_lane ()
 {
-  gdb_assert (valid ());
-  gdb_assert (get_active_lanes_mask () != 0);
+  CUDA_STATE_ERROR_IF (!valid (), "invalid warp");
 
   for (auto ln_id = 0; ln_id < sm ()->device ()->get_num_lanes (); ++ln_id)
     if (lane_active (ln_id))
       return ln_id;
 
-  return ~0;
-}
+  // Shouldn't ever get here as we asserted on valid and active_lanes_mask
+  // above. Note that error() does not return.
+  error ("get_lowest_active_lane(%u, %u, %u): no active lanes in warp",
+	 dev_idx (), sm_idx (), warp_idx ());
 
-void
-cuda_warp::set_grid_id (uint64_t grid_id)
-{
-  m_grid_id = grid_id;
-  m_kernel = nullptr;
+  // This is a placeholder to avoid compiler warnings
+  return ~0;
 }
 
 uint64_t
 cuda_warp::get_grid_id ()
 {
-  if (is_remote_target (current_inferior ()->process_target ()) && !m_grid_id)
-    cuda_remote_update_grid_id_in_sm (dev_idx (), sm_idx ());
-
-  if (!m_grid_id)
+  if (sm ()->device ()->incremental () && !m_grid_id)
     update_state ();
 
-  gdb_assert (valid ());
+  // The warp is expected to be valid at this point.
+  CUDA_STATE_ERROR_IF (!valid (), "invalid warp");
+
+  // Valid warps always have a non-zero grid id
   gdb_assert (m_grid_id != 0);
 
   return m_grid_id;
 }
 
-void
-cuda_warp::set_block_idx (const CuDim3 &block_idx)
-{
-  gdb_assert (is_remote_target (current_inferior ()->process_target ()));
-
-  m_block_idx = block_idx;
-  m_block_idx_p = true;
-}
-
 const CuDim3 &
 cuda_warp::get_block_idx ()
 {
-  if (is_remote_target (current_inferior ()->process_target ())
-      && !m_block_idx_p && sm ()->warp_valid (warp_idx ()))
-    cuda_remote_update_block_idx_in_sm (dev_idx (), sm_idx ());
-  if (!m_block_idx_p)
+  if (sm ()->device ()->incremental () && !valid ())
     update_state ();
 
+  // The warp is expected to be valid at this point, which
+  // implies that m_block_idx_p & m_block_idx are also valid.
+  CUDA_STATE_ERROR_IF (!valid (), "invalid warp");
+
+  // The warp is expected to always have a block index if
+  // it's valid, so use gdb_assert() here.
+  gdb_assert (m_block_idx_p);
+
   return m_block_idx;
-}
-
-void
-cuda_warp::set_cluster_idx (const CuDim3 &cluster_idx)
-{
-  gdb_assert (is_remote_target (current_inferior ()->process_target ()));
-
-  m_cluster_idx = cluster_idx;
-  m_cluster_idx_p = true;
 }
 
 const CuDim3 &
 cuda_warp::get_cluster_idx ()
 {
-  if (is_remote_target (current_inferior ()->process_target ())
-      && !m_cluster_idx_p && sm ()->warp_valid (warp_idx ()))
-    cuda_remote_update_cluster_idx_in_sm (dev_idx (), sm_idx ());
-  if (!m_cluster_idx_p)
+  if (sm ()->device ()->incremental () && !valid ())
     update_state ();
 
+  CUDA_STATE_ERROR_IF (!valid (), "invalid warp");
+  CUDA_STATE_ERROR_IF (!m_cluster_idx_p, "warp without cluster index");
+
   return m_cluster_idx;
-}
-
-void
-cuda_warp::set_cluster_dim (const CuDim3 &cluster_dim)
-{
-  gdb_assert (is_remote_target (current_inferior ()->process_target ()));
-
-  m_cluster_dim = cluster_dim;
-  m_cluster_dim_p = true;
 }
 
 const CuDim3 &
 cuda_warp::get_cluster_dim ()
 {
-  if (is_remote_target (current_inferior ()->process_target ())
-      && !m_cluster_dim_p && sm ()->warp_valid (warp_idx ()))
-    cuda_remote_update_cluster_dim_in_sm (dev_idx (), sm_idx ());
-  if (!m_cluster_dim_p)
+  if (sm ()->device ()->incremental () && !valid ())
     update_state ();
+
+  // The warp is expected to be valid at this point, which
+  // implies that m_cluster_dim_p & m_cluster_dim should be valid.
+  CUDA_STATE_ERROR_IF (!valid (), "invalid warp");
+  CUDA_STATE_ERROR_IF (!m_cluster_dim_p, "warp without cluster dimension");
 
   return m_cluster_dim;
 }
@@ -1642,41 +1674,37 @@ cuda_warp::get_cluster_dim ()
 cuda_kernel *
 cuda_warp::get_kernel ()
 {
-  if (!m_kernel)
+  if (!m_kernel && (get_grid_id () != 0))
     m_kernel = sm ()->device ()->get_kernel (get_grid_id ());
 
-  gdb_assert (m_kernel);
+  CUDA_STATE_ERROR_IF (!valid (), "invalid warp");
+
   return m_kernel;
 }
 
 uint32_t
 cuda_warp::get_valid_lanes_mask ()
 {
-  if (m_valid_lanes_mask_p)
-    return m_valid_lanes_mask;
+  if (sm ()->device ()->incremental () && !valid ())
+    update_state ();
 
-  if (sm ()->warp_valid (warp_idx ()))
-    {
-      update_state ();
-      return m_valid_lanes_mask;
-    }
-
-  m_valid_lanes_mask = 0;
-  m_valid_lanes_mask_p = true;
-
-  if (!timestamp_valid ())
-    set_timestamp (cuda_clock ());
-
-  return 0;
+  // If the warp is invalid if m_valid_lanes_mask==0, so
+  // m_valid_lanes_mask should be up-to-date at this point.
+  return m_valid_lanes_mask;
 }
 
 uint32_t
 cuda_warp::get_active_lanes_mask ()
 {
-  if (m_active_lanes_mask_p)
-    return m_active_lanes_mask;
+  if (sm ()->device ()->incremental () && !valid ())
+    update_state ();
 
-  update_state ();
+  // This is an internal consistency check within cuda-state, so we use
+  // gdb_assert() If the warp is valid, m_active_lanes_mask should be non-0 as
+  // there's always one active lane if the warp is valid (valid_lanes != 0). If
+  // the warp is invalid, m_active_lanes_mask should be 0.
+  gdb_assert ((valid () && m_active_lanes_mask != 0)
+	      || (!valid () && m_active_lanes_mask == 0));
 
   return m_active_lanes_mask;
 }
@@ -1684,28 +1712,30 @@ cuda_warp::get_active_lanes_mask ()
 bool
 cuda_warp::has_error_pc ()
 {
-  if (!m_error_pc_p)
+  if (sm ()->device ()->incremental () && valid () && !m_error_pc_p)
     {
       cuda_debugapi::read_error_pc (dev_idx (), sm_idx (), warp_idx (),
 				    &m_error_pc, &m_error_pc_available);
       m_error_pc_p = true;
     }
-
-  return m_error_pc_available;
+  return m_error_pc_p ? m_error_pc_available : false;
 }
 
 uint64_t
 cuda_warp::get_error_pc ()
 {
-  if (has_error_pc ())
-    return m_error_pc;
-  gdb_assert (0);
+  CUDA_STATE_ERROR_IF (!has_error_pc (), "no error PC available");
+  return m_error_pc;
 }
 
 bool
 cuda_warp::has_cluster_exception_target_block_idx ()
 {
-  if (!m_cluster_exception_target_block_idx_p)
+  // cluster exception information is always up-to-date in
+  // batch mode. If the warp is valid, then the predicate field
+  // is also valid.
+  if (sm ()->device ()->incremental () && valid ()
+      && !m_cluster_exception_target_block_idx_p)
     {
       cuda_debugapi::get_cluster_exception_target_block (
 	  dev_idx (), sm_idx (), warp_idx (),
@@ -1714,24 +1744,33 @@ cuda_warp::has_cluster_exception_target_block_idx ()
       m_cluster_exception_target_block_idx_p = true;
     }
 
-  return m_cluster_exception_target_block_idx_available;
+  // The warp should either be invalid, or have up-to-date information.
+  CUDA_STATE_ERROR_IF (!valid (), "invalid warp");
+
+  return m_cluster_exception_target_block_idx_p
+	     ? m_cluster_exception_target_block_idx_available
+	     : false;
 }
 
 const CuDim3 &
 cuda_warp::get_cluster_exception_target_block_idx ()
 {
-  gdb_assert (has_cluster_exception_target_block_idx ());
+  CUDA_STATE_ERROR_IF (!has_cluster_exception_target_block_idx (),
+		       "warp without cluster exception target block idx");
   return m_cluster_exception_target_block_idx;
 }
 
 void
 cuda_warp::update_warp_resources ()
 {
-  if (!m_warp_resources_p)
+  // If the device is in incremental mode, we need to read the warp
+  // resources from the debug API.
+  // These fields are always up-to-date in batch mode.
+  if (valid () && !m_warp_resources_p)
     {
       // If reading warp resources isn't supported by the debugger backend,
       // the cuda_debugapi call will return with resources set to 0.
-      CUDBGWarpResources resources;
+      CUDBGWarpResources resources{ 0 };
       cuda_debugapi::read_warp_resources (dev_idx (), sm_idx (), warp_idx (),
 					  &resources);
       m_registers_allocated = resources.numRegisters;
@@ -1743,13 +1782,12 @@ cuda_warp::update_warp_resources ()
 void
 cuda_warp::update_cbu_state ()
 {
-  if (!m_cbu_state_p)
+  if (valid () && !m_cbu_state_p)
     {
       constexpr uint32_t num_warp_states = 1;
       const cuda_api_warpmask warp_mask{ 0x1ull << warp_idx () };
       cuda_debugapi::get_cbu_warp_state (dev_idx (), sm_idx (), warp_mask,
 					 &m_cbu_state, num_warp_states);
-
       m_cbu_state_p = true;
     }
 }
@@ -1780,58 +1818,69 @@ cuda_warp::update_state ()
 {
   CUDA_STATE_TRACE_WARP (this, "timestamp %lu clock %lu", timestamp (),
 			 cuda_clock ());
+  gdb_assert (sm ()->device ()->incremental ());
+  try
+    {
+      // Invalidate just the warp, the lanes will either be invalidated
+      // or updated below.
+      invalidate (!debug_invalidate, false);
 
-  // Just invalidate the warp, and not the lanes
-  // We'll handle the lanes below
-  invalidate (!debug_invalidate, false);
+      CUDBGWarpState warp_state{ 0 };
+      cuda_debugapi::read_warp_state (dev_idx (), sm_idx (), warp_idx (),
+				      &warp_state);
+      CUDA_STATE_TRACE_WARP (
+	  this,
+	  "gridId %ld block (%u, %u, %u) validLanes 0x%08x activeLanes 0x%08x",
+	  (uint64_t)warp_state.gridId, warp_state.blockIdx.x,
+	  warp_state.blockIdx.y, warp_state.blockIdx.z, warp_state.validLanes,
+	  warp_state.activeLanes);
 
-  CUDBGWarpState warp_state{ 0 };
-  cuda_debugapi::read_warp_state (dev_idx (), sm_idx (), warp_idx (),
-				  &warp_state);
+      m_grid_id = warp_state.gridId;
+      m_kernel = nullptr;
 
-  CUDA_STATE_TRACE_WARP (
-      this,
-      "gridId %d block (%u, %u, %u) validLanes 0x%08x activeLanes 0x%08x",
-      (int)warp_state.gridId, warp_state.blockIdx.x, warp_state.blockIdx.y,
-      warp_state.blockIdx.z, warp_state.validLanes, warp_state.activeLanes);
+      m_valid_lanes_mask = warp_state.validLanes;
+      m_valid_lanes_mask_p = true;
 
-  m_grid_id = warp_state.gridId;
-  m_kernel = nullptr;
+      m_active_lanes_mask = warp_state.activeLanes;
+      m_active_lanes_mask_p = true;
 
-  m_valid_lanes_mask = warp_state.validLanes;
-  m_valid_lanes_mask_p = true;
+      m_block_idx = warp_state.blockIdx;
+      m_block_idx_p = true;
 
-  m_active_lanes_mask = warp_state.activeLanes;
-  m_active_lanes_mask_p = true;
+      m_cluster_idx = warp_state.clusterIdx;
+      m_cluster_idx_p = true;
 
-  m_block_idx = warp_state.blockIdx;
-  m_block_idx_p = true;
+      m_cluster_dim = warp_state.clusterDim;
+      m_cluster_dim_p = true;
 
-  m_cluster_idx = warp_state.clusterIdx;
-  m_cluster_idx_p = true;
-  m_cluster_dim = warp_state.clusterDim;
-  m_cluster_dim_p = true;
+      m_error_pc_p = true;
+      m_error_pc = warp_state.errorPC;
+      m_error_pc_available = warp_state.errorPCValid;
 
-  m_error_pc_p = true;
-  m_error_pc = warp_state.errorPC;
-  m_error_pc_available = warp_state.errorPCValid;
+      m_cluster_exception_target_block_idx_p = true;
+      m_cluster_exception_target_block_idx
+	  = warp_state.clusterExceptionTargetBlockIdx;
+      m_cluster_exception_target_block_idx_available
+	  = warp_state.clusterExceptionTargetBlockIdxValid;
 
-  m_cluster_exception_target_block_idx_p = true;
-  m_cluster_exception_target_block_idx
-      = warp_state.clusterExceptionTargetBlockIdx;
-  m_cluster_exception_target_block_idx_available
-      = warp_state.clusterExceptionTargetBlockIdxValid;
+      const auto num_lanes = sm ()->device ()->get_num_lanes ();
+      for (auto ln_id = 0; ln_id < num_lanes; ++ln_id)
+	if (m_valid_lanes_mask & (1ULL << ln_id))
+	  lane (ln_id)->update (warp_state.lane[ln_id]);
+	else
+	  lane (ln_id)->invalidate (!debug_invalidate);
 
-  const auto num_lanes = sm ()->device ()->get_num_lanes ();
-  for (auto ln_id = 0; ln_id < num_lanes; ++ln_id)
-    if (m_valid_lanes_mask & (1ULL << ln_id))
-      lane (ln_id)->update (warp_state.lane[ln_id]);
-    else
-      lane (ln_id)->invalidate (!debug_invalidate);
-
-  if (!timestamp_valid ())
-    set_timestamp (cuda_clock ());
-
+      if (!timestamp_valid ())
+	set_timestamp (cuda_clock ());
+    }
+  catch (const gdb_exception_error &exception)
+    {
+      CUDA_STATE_TRACE_WARP (
+	  this,
+	  "failed to update warp state, invalidating warp and lanes (%s)",
+	  exception.what ());
+      invalidate (!debug_invalidate, true);
+    }
   CUDA_STATE_TRACE_WARP (this, "done");
 }
 
@@ -1860,6 +1909,8 @@ cuda_lane::configure (cuda_warp *warp, uint32_t idx)
   m_warp = warp;
   m_lane_idx = idx;
   m_registers_p.resize (warp->sm ()->device ()->get_num_registers ());
+  m_coords_physical
+      = cuda_coords_physical (dev_idx (), sm_idx (), warp_idx (), lane_idx ());
 }
 
 uint32_t
@@ -1878,32 +1929,6 @@ uint32_t
 cuda_lane::warp_idx () const
 {
   return m_warp->warp_idx ();
-}
-
-const CuDim3 &
-cuda_lane::get_thread_idx ()
-{
-  /* In a remote session, we fetch the threadIdx of all valid thread in the
-   * warp using one rsp packet to reduce the amount of communication. */
-  if (is_remote_target (current_inferior ()->process_target ())
-      && !m_thread_idx_p && warp ()->lane_valid (lane_idx ()))
-    cuda_remote_update_thread_idx_in_warp (dev_idx (), sm_idx (), warp_idx ());
-
-  if (!m_thread_idx_p)
-    warp ()->update_state ();
-
-  return m_thread_idx;
-}
-
-CUDBGException_t
-cuda_lane::get_exception ()
-{
-  gdb_assert (warp ()->lane_valid (lane_idx ()));
-
-  if (!m_exception_p)
-    warp ()->update_state ();
-
-  return m_exception;
 }
 
 void
@@ -1925,12 +1950,6 @@ cuda_lane::invalidate (bool quietly)
   m_call_depth_p = false;
   m_call_depth = 0;
 
-  m_syscall_call_depth_p = false;
-  m_syscall_call_depth = 0;
-
-  m_cc_register_p = false;
-  m_cc_register = 0;
-
   // Even though we have valid bits, clear the vectors in order
   // to save space after this warp/lane exits (until it's reused)
   m_registers.clear ();
@@ -1944,20 +1963,60 @@ cuda_lane::invalidate (bool quietly)
   set_timestamp (0);
 }
 
+const CuDim3 &
+cuda_lane::get_thread_idx ()
+{
+  // For batch update, if the warp is valid, then m_thread_idx_p should be
+  // true and m_thread_idx should have the correct already.
+  // For incremental updates, we need to fetch the values through
+  // the debugAPI by using the warp->update_state() call.
+  if (warp ()->sm ()->device ()->incremental () && !m_thread_idx_p)
+    warp ()->update_state ();
+
+  // Ensure everything is consistent
+  CUDA_STATE_ERROR_IF (!valid (), "invalid lane");
+
+  // Should always be true for valid warps
+  gdb_assert (m_thread_idx_p);
+
+  // m_thread_idx will be either the real thread idx, or 0,0,0
+  // depending on whether the warp is valid or not.
+  return m_thread_idx;
+}
+
+CUDBGException_t
+cuda_lane::get_exception ()
+{
+  if (warp ()->sm ()->device ()->incremental () && !m_exception_p)
+    warp ()->update_state ();
+
+  return m_exception_p ? m_exception : CUDBG_EXCEPTION_NONE;
+}
+
 uint64_t
 cuda_lane::get_pc ()
 {
-  if (!m_pc_p)
+  if (warp ()->sm ()->device ()->incremental () && !m_pc_p)
     warp ()->update_state ();
 
-  return m_pc;
+  CUDA_STATE_ERROR_IF (!valid (), "invalid lane");
+
+  return m_pc_p ? m_pc : 0;
 }
 
 uint32_t
 cuda_lane::get_register (uint32_t regno)
 {
+  CUDA_STATE_ERROR_IF (!valid (), "invalid lane");
+
   if (regno == CUDA_STATE_REGISTER_RZ)
     return 0;
+
+  CUDA_STATE_ERROR_IF (
+      regno >= warp ()->sm ()->device ()->get_num_registers (),
+      "Attempting to read register R%u: register out of range "
+      "for this device",
+      regno);
 
   // Round down
   auto reg_range_size = CUDA_STATE_REGISTER_RANGE_SIZE;
@@ -1970,6 +2029,7 @@ cuda_lane::get_register (uint32_t regno)
   auto end_regno
       = std::min (start_regno + reg_range_size, CUDA_REG_MAX_REGISTERS);
 
+  // Internal consistency checks.
   gdb_assert (end_regno > start_regno);
   gdb_assert (regno < end_regno);
 
@@ -1988,6 +2048,7 @@ cuda_lane::get_register (uint32_t regno)
 	m_registers_p.set (i, true);
     }
 
+  // Internal consistency checks
   gdb_assert (m_registers_p[regno]);
 
   CUDA_STATE_TRACE_LANE (this, "R%u = 0x%08x", regno, m_registers[regno]);
@@ -1998,9 +2059,16 @@ cuda_lane::get_register (uint32_t regno)
 void
 cuda_lane::set_register (uint32_t regno, uint32_t value)
 {
+  CUDA_STATE_ERROR_IF (!valid (), "invalid lane");
+
   // Validate the parameters
-  gdb_assert (regno < CUDA_STATE_REGISTER_RZ);
-  gdb_assert (regno < warp ()->sm ()->device ()->get_num_registers ());
+  CUDA_STATE_ERROR_IF (regno == CUDA_STATE_REGISTER_RZ,
+		       "Attempting to set read-only register RZ");
+  CUDA_STATE_ERROR_IF (regno
+			   >= warp ()->sm ()->device ()->get_num_registers (),
+		       "Attempting to set register R%u: register out of range "
+		       "for this device",
+		       regno);
 
   cuda_debugapi::write_register (dev_idx (), sm_idx (), warp_idx (),
 				 lane_idx (), regno, value);
@@ -2015,9 +2083,11 @@ cuda_lane::set_register (uint32_t regno, uint32_t value)
 bool
 cuda_lane::get_predicate (uint32_t pred)
 {
+  CUDA_STATE_ERROR_IF (!valid (), "invalid lane");
+
   auto num_predicates = warp ()->sm ()->device ()->get_num_predicates ();
-  gdb_assert (pred < num_predicates);
-  gdb_assert (warp ()->lane_valid (lane_idx ()));
+  CUDA_STATE_ERROR_IF (pred >= num_predicates,
+		       "Attempting to get invalid predicate P%u", pred);
 
   // If the requested predicate isn't valid, read them all in
   if (!(m_predicates_p & (1 << pred)))
@@ -2034,9 +2104,13 @@ cuda_lane::get_predicate (uint32_t pred)
 void
 cuda_lane::set_predicate (uint32_t pred, bool value)
 {
+  CUDA_STATE_ERROR_IF (!valid (), "invalid lane");
+
   auto num_predicates = warp ()->sm ()->device ()->get_num_predicates ();
-  gdb_assert (pred < num_predicates);
-  gdb_assert (warp ()->lane_valid (lane_idx ()));
+  CUDA_STATE_ERROR_IF (pred == num_predicates - 1,
+		       "Attempting to set read-only predicate PT");
+  CUDA_STATE_ERROR_IF (pred > num_predicates,
+		       "Attempting to set invalid predicate P%u", pred);
 
   // If we don't have them all, read them all in
   if (m_predicates_p != (num_predicates - 1))
@@ -2054,32 +2128,11 @@ cuda_lane::set_predicate (uint32_t pred, bool value)
 				   lane_idx (), num_predicates, m_predicates);
 }
 
-uint32_t
-cuda_lane::get_cc_register ()
-{
-  if (!m_cc_register_p)
-    {
-      cuda_debugapi::read_cc_register (dev_idx (), sm_idx (), warp_idx (),
-				       lane_idx (), &m_cc_register);
-      m_cc_register_p = true;
-    }
-
-  return m_cc_register;
-}
-
-void
-cuda_lane::set_cc_register (uint32_t value)
-{
-  cuda_debugapi::write_cc_register (dev_idx (), sm_idx (), warp_idx (),
-				    lane_idx (), value);
-
-  m_cc_register = value;
-  m_cc_register_p = true;
-}
-
 int32_t
 cuda_lane::get_call_depth ()
 {
+  CUDA_STATE_ERROR_IF (!valid (), "invalid lane");
+
   if (m_call_depth_p)
     return (int32_t)m_call_depth;
 
@@ -2090,22 +2143,13 @@ cuda_lane::get_call_depth ()
   return (int32_t)m_call_depth;
 }
 
-int32_t
-cuda_lane::get_syscall_call_depth ()
-{
-  if (m_syscall_call_depth_p)
-    return m_syscall_call_depth;
-
-  cuda_debugapi::read_syscall_call_depth (dev_idx (), sm_idx (), warp_idx (),
-					  lane_idx (), &m_syscall_call_depth);
-  m_syscall_call_depth_p = true;
-
-  return (int32_t)m_syscall_call_depth;
-}
-
 uint64_t
 cuda_lane::get_return_address (int32_t level)
 {
+  CUDA_STATE_ERROR_IF (!valid (), "invalid lane");
+  CUDA_STATE_ERROR_IF (level < 0 || level >= get_call_depth (),
+		       "Attempting to get return address for invalid level %d",
+		       level);
   auto iter = m_return_address.find (level);
   if (iter != m_return_address.end ())
     return iter->second;
@@ -2122,6 +2166,8 @@ cuda_lane::get_return_address (int32_t level)
 void
 cuda_lane::get_cuda_exception_string (char *buf, uint32_t bufSz)
 {
+  CUDA_STATE_ERROR_IF (!valid (), "invalid lane");
+
   cuda_debugapi::get_cuda_exception_string (dev_idx (), sm_idx (), warp_idx (),
 					    lane_idx (), buf, bufSz, nullptr);
 }

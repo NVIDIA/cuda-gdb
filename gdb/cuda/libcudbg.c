@@ -330,7 +330,7 @@ cudbgReadCodeMemory (uint32_t dev, uint64_t addr, void *buf, uint32_t buf_size)
 
 static CUDBGResult
 STUB_cudbgReadConstMemory (uint32_t dev, uint64_t addr, void *buf,
-		      uint32_t buf_size)
+			   uint32_t buf_size)
 {
   return CUDBG_ERROR_UNKNOWN;
 }
@@ -1160,23 +1160,10 @@ cudbgSingleStepWarp41 (uint32_t dev, uint32_t sm, uint32_t wp,
 }
 
 static CUDBGResult
-cudbgReadSyscallCallDepth (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln,
+STUB_cudbgReadSyscallCallDepth (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln,
 			   uint32_t *depth)
 {
-  char *ipc_buf;
-  CUDBGResult result;
-
-  CUDBG_IPC_BEGIN (CUDBGAPIREQ_readSyscallCallDepth);
-  CUDBG_IPC_APPEND (&dev, sizeof (dev));
-  CUDBG_IPC_APPEND (&sm, sizeof (sm));
-  CUDBG_IPC_APPEND (&wp, sizeof (wp));
-  CUDBG_IPC_APPEND (&ln, sizeof (ln));
-
-  CUDBG_IPC_REQUEST ((void **)&ipc_buf);
-  CUDBG_IPC_RECEIVE (&result, &ipc_buf);
-  CUDBG_IPC_RECEIVE (depth, &ipc_buf);
-
-  return result;
+  return CUDBG_ERROR_UNKNOWN;
 }
 
 static CUDBGResult
@@ -1210,8 +1197,8 @@ STUB_cudbgGetNextSyncEvent50 (CUDBGEvent50 *event)
 
 static CUDBGResult
 STUB_cudbgMemcheckReadErrorAddress (uint32_t dev, uint32_t sm, uint32_t wp,
-			       uint32_t ln, uint64_t *address,
-			       ptxStorageKind *storage)
+				    uint32_t ln, uint64_t *address,
+				    ptxStorageKind *storage)
 {
   return CUDBG_ERROR_UNKNOWN;
 }
@@ -1758,43 +1745,17 @@ cudbgGetNumUniformPredicates (uint32_t dev, uint32_t *numPredicates)
 }
 
 static CUDBGResult
-cudbgReadCCRegister (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln,
+STUB_cudbgReadCCRegister (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln,
 		     uint32_t *val)
 {
-  char *ipc_buf;
-  CUDBGResult result;
-
-  CUDBG_IPC_BEGIN (CUDBGAPIREQ_readCCRegister);
-  CUDBG_IPC_APPEND (&dev, sizeof (dev));
-  CUDBG_IPC_APPEND (&sm, sizeof (sm));
-  CUDBG_IPC_APPEND (&wp, sizeof (wp));
-  CUDBG_IPC_APPEND (&ln, sizeof (ln));
-
-  CUDBG_IPC_REQUEST ((void **)&ipc_buf);
-  CUDBG_IPC_RECEIVE (&result, &ipc_buf);
-  CUDBG_IPC_RECEIVE (val, &ipc_buf);
-
-  return result;
+  return CUDBG_ERROR_UNKNOWN;
 }
 
 static CUDBGResult
-cudbgWriteCCRegister (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln,
+STUB_cudbgWriteCCRegister (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln,
 		      uint32_t val)
 {
-  char *ipc_buf;
-  CUDBGResult result;
-
-  CUDBG_IPC_BEGIN (CUDBGAPIREQ_writeCCRegister);
-  CUDBG_IPC_APPEND (&dev, sizeof (dev));
-  CUDBG_IPC_APPEND (&sm, sizeof (sm));
-  CUDBG_IPC_APPEND (&wp, sizeof (wp));
-  CUDBG_IPC_APPEND (&ln, sizeof (ln));
-  CUDBG_IPC_APPEND (&val, sizeof (val));
-
-  CUDBG_IPC_REQUEST ((void **)&ipc_buf);
-  CUDBG_IPC_RECEIVE (&result, &ipc_buf);
-
-  return result;
+  return CUDBG_ERROR_UNKNOWN;
 }
 
 static CUDBGResult
@@ -2428,9 +2389,50 @@ cudbgGetCudaExceptionString (uint32_t dev, uint32_t sm, uint32_t wp,
 }
 
 static CUDBGResult
-STUB_cudbgSetNotifyNewEventCallback (CUDBGNotifyNewEventCallback callback, void* data)
+STUB_cudbgSetNotifyNewEventCallback (CUDBGNotifyNewEventCallback callback,
+				     void *data)
 {
   return CUDBG_ERROR_UNKNOWN;
+}
+
+static CUDBGResult
+cudbgGetHardwareBarrierInfo (uint32_t dev, uint32_t sm, uint32_t wp,
+			     uint32_t ln, CUDBGBarrierScope *scope, char *buf,
+			     uint32_t bufSz, uint32_t *msgSz)
+{
+
+  char *ipc_buf;
+  uint32_t msg_size;
+  uint32_t copied_size;
+  CUDBGResult result;
+
+  CUDBG_IPC_BEGIN (CUDBGAPIREQ_getHardwareBarrierInfo);
+  CUDBG_IPC_APPEND (&dev, sizeof (dev));
+  CUDBG_IPC_APPEND (&sm, sizeof (sm));
+  CUDBG_IPC_APPEND (&wp, sizeof (wp));
+  CUDBG_IPC_APPEND (&ln, sizeof (ln));
+  CUDBG_IPC_APPEND (&bufSz, sizeof (bufSz));
+  CUDBG_IPC_REQUEST ((void **)&ipc_buf);
+
+  CUDBG_IPC_RECEIVE (&result, &ipc_buf);
+  CUDBG_IPC_RECEIVE (scope, &ipc_buf);
+
+  CUDBG_IPC_RECEIVE (&msg_size, &ipc_buf);
+
+  if (result != CUDBG_SUCCESS)
+    msg_size = 0;
+
+  copied_size = std::min (bufSz, msg_size);
+
+  CUDBG_IPC_RECEIVE_ARRAY (buf, copied_size, &ipc_buf);
+
+  if (msgSz)
+    *msgSz = msg_size;
+
+  buf[copied_size ? copied_size - 1 : 0] = 0;
+ 
+
+  return result;
 }
 
 template <typename... T>
@@ -2441,9 +2443,10 @@ numberOfArgs (T... a)
 }
 
 #define DEFINE_CUDBGAPI(name, ...)                                            \
+  /* TODO (DTCGDB-4319): Add a feature flag for this validation              \
   static_assert (numberOfArgs (__VA_ARGS__)                                   \
 		     == sizeof (struct CUDBGAPI_st) / sizeof (void *),        \
-		 "Not all fields initialized");                               \
+		 "Not all fields initialized"); */                             \
   static const struct CUDBGAPI_st name = { __VA_ARGS__ }
 
 DEFINE_CUDBGAPI (
@@ -2507,7 +2510,7 @@ DEFINE_CUDBGAPI (
 
     /* 4.1 Extensions */
     cudbgGetHostAddrFromDeviceAddr, cudbgSingleStepWarp41,
-    cudbgSetNotifyNewEventCallback41, cudbgReadSyscallCallDepth,
+    cudbgSetNotifyNewEventCallback41, STUB_cudbgReadSyscallCallDepth,
 
     /* 4.2 Extensions */
     STUB_cudbgReadTextureMemoryBindless,
@@ -2534,7 +2537,7 @@ DEFINE_CUDBGAPI (
 
     /* 6.5 Extensions */
     cudbgReadPredicates, cudbgWritePredicates, cudbgGetNumPredicates,
-    cudbgReadCCRegister, cudbgWriteCCRegister,
+    STUB_cudbgReadCCRegister, STUB_cudbgWriteCCRegister,
 
     cudbgGetDeviceName, cudbgSingleStepWarp65,
 
@@ -2583,7 +2586,10 @@ DEFINE_CUDBGAPI (
     cudbgReadCPUCallStack,
 
     /* 13.0 Extensions */
-    cudbgGetCudaExceptionString, STUB_cudbgSetNotifyNewEventCallback);
+    cudbgGetCudaExceptionString, STUB_cudbgSetNotifyNewEventCallback,
+    
+    /* 13.1 Extensions */
+    cudbgGetHardwareBarrierInfo);
 
 CUDBGResult
 cudbgGetAPI (uint32_t major, uint32_t minor, uint32_t rev, CUDBGAPI *api)

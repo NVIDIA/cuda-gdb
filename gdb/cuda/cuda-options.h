@@ -24,7 +24,8 @@
 /*
  * set cuda driver_log_level
  */
-typedef enum {
+typedef enum
+{
   CUDA_LOG_LEVEL_ERROR = 1,
   CUDA_LOG_LEVEL_WARNING = 2,
   CUDA_LOG_LEVEL_EXTRA = 4,
@@ -43,7 +44,6 @@ bool cuda_options_disassemble_from_elf_image (void);
 void cuda_options_set_disassemble_from_elf_image (void);
 bool cuda_options_disassemble_per_file (void);
 bool cuda_options_disassemble_per_function (void);
-bool cuda_options_hide_internal_frames (void);
 void cuda_options_force_set_launch_notification_update (void);
 unsigned int cuda_options_show_kernel_events_depth (void);
 bool cuda_options_show_kernel_events_application (void);
@@ -60,7 +60,6 @@ void cuda_options_disable_break_on_launch (void);
 bool cuda_options_notify_youngest (void);
 bool cuda_options_notify_random (void);
 bool cuda_options_variable_value_cache_enabled (void);
-bool cuda_options_statistics_collection_enabled (void);
 bool cuda_options_value_extrapolation_enabled (void);
 bool cuda_options_trace_domain_enabled (cuda_trace_domain_t);
 void cuda_options_set_trace_domain (cuda_trace_domain_t domain, bool enabled);
@@ -70,6 +69,7 @@ bool cuda_options_step_divergent_lanes_enabled (void);
 bool cuda_options_device_resume_on_cpu_dynamic_function_call (void);
 bool cuda_options_driver_logs_enabled (void);
 cuda_log_level_t cuda_options_driver_log_level (void);
+bool cuda_options_printf_flushing (void);
 
 /* Return true if KERNEL_READY breakpoints needs to be inserted */
 bool cuda_options_auto_breakpoints_needed (void);

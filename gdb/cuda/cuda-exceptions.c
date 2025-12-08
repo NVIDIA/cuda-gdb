@@ -172,7 +172,7 @@ cuda_exception::print_cuda_exception_string () const
 }
 
 void
-cuda_exception::printMessage () const
+cuda_exception::print_message () const
 {
   gdb_assert (m_valid);
 
@@ -183,10 +183,6 @@ cuda_exception::printMessage () const
       print_exception_origin ();
       break;
     case GDB_SIGNAL_CUDA_DEVICE_ILLEGAL_ADDRESS:
-    case GDB_SIGNAL_CUDA_DEVICE_HARDWARE_STACK_OVERFLOW:
-      print_exception_name ();
-      print_exception_device ();
-      break;
     case GDB_SIGNAL_CUDA_WARP_ILLEGAL_INSTRUCTION:
     case GDB_SIGNAL_CUDA_WARP_OUT_OF_RANGE_ADDRESS:
     case GDB_SIGNAL_CUDA_WARP_MISALIGNED_ADDRESS:
@@ -194,7 +190,6 @@ cuda_exception::printMessage () const
     case GDB_SIGNAL_CUDA_WARP_INVALID_PC:
     case GDB_SIGNAL_CUDA_WARP_HARDWARE_STACK_OVERFLOW:
     case GDB_SIGNAL_CUDA_WARP_ILLEGAL_ADDRESS:
-    case GDB_SIGNAL_CUDA_LANE_USER_STACK_OVERFLOW:
     case GDB_SIGNAL_CUDA_CLUSTER_OUT_OF_RANGE_ADDRESS:
     case GDB_SIGNAL_CUDA_CLUSTER_BLOCK_NOT_PRESENT:
     case GDB_SIGNAL_CUDA_WARP_STACK_CANARY:
@@ -204,16 +199,28 @@ cuda_exception::printMessage () const
       print_exception_name ();
       print_exception_origin ();
       break;
+    case GDB_SIGNAL_CUDA_WARP_MISALIGNED_PC:
+    case GDB_SIGNAL_CUDA_WARP_PC_OVERFLOW:
+    case GDB_SIGNAL_CUDA_WARP_MISALIGNED_REG:
+    case GDB_SIGNAL_CUDA_WARP_ILLEGAL_INSTR_ENCODING:
+    case GDB_SIGNAL_CUDA_WARP_ILLEGAL_INSTR_PARAM:
+    case GDB_SIGNAL_CUDA_WARP_OUT_OF_RANGE_REGISTER:
+    case GDB_SIGNAL_CUDA_WARP_INVALID_CONST_ADDR_LDC:
+    case GDB_SIGNAL_CUDA_WARP_MMU_FAULT:
+    case GDB_SIGNAL_CUDA_WARP_ARRIVE:
+    case GDB_SIGNAL_CUDA_WARP_BLOCK_NOT_PRESENT:
+    case GDB_SIGNAL_CUDA_WARP_API_STACK_ERROR:
+    case GDB_SIGNAL_CUDA_WARP_USER_STACK_OVERFLOW:
+    case GDB_SIGNAL_CUDA_CLUSTER_POISON:
+      print_exception_name ();
+      print_exception_origin ();
+      break;
     case GDB_SIGNAL_CUDA_UNKNOWN_EXCEPTION:
-    case GDB_SIGNAL_CUDA_DEPRECATED_1:
-    case GDB_SIGNAL_CUDA_DEPRECATED_11:
-    case GDB_SIGNAL_CUDA_DEPRECATED_13:
-    case GDB_SIGNAL_CUDA_DEPRECATED_16:
     default:
       print_exception_name ();
       break;
     }
-    print_cuda_exception_string();
+  print_cuda_exception_string ();
 }
 
 cuda_exception::cuda_exception ()
@@ -229,7 +236,8 @@ cuda_exception::cuda_exception ()
   if (cuda_sstep_is_active ())
     {
       dev = cuda_sstep_dev_id ();
-      /* Performance optimization - Look at the coord we were single stepping */
+      /* Performance optimization - Look at the coord we were single stepping
+       */
       sm = cuda_sstep_sm_id ();
       /* If only one bit is set in warp mask limit iteration to it */
       cuda_api_warpmask tmp;
@@ -314,16 +322,6 @@ cuda_exception::cuda_exception ()
 
   switch (exception)
     {
-    case CUDBG_EXCEPTION_LANE_USER_STACK_OVERFLOW:
-      m_gdb_sig = GDB_SIGNAL_CUDA_LANE_USER_STACK_OVERFLOW;
-      m_valid = true;
-      m_recoverable = false;
-      break;
-    case CUDBG_EXCEPTION_DEVICE_HARDWARE_STACK_OVERFLOW:
-      m_gdb_sig = GDB_SIGNAL_CUDA_DEVICE_HARDWARE_STACK_OVERFLOW;
-      m_valid = true;
-      m_recoverable = false;
-      break;
     case CUDBG_EXCEPTION_WARP_ILLEGAL_INSTRUCTION:
       m_gdb_sig = GDB_SIGNAL_CUDA_WARP_ILLEGAL_INSTRUCTION;
       m_valid = true;
@@ -369,7 +367,6 @@ cuda_exception::cuda_exception ()
       m_valid = true;
       m_recoverable = false;
       break;
-#if (CUDBG_API_VERSION_REVISION >= 131)
     case CUDBG_EXCEPTION_CLUSTER_BLOCK_NOT_PRESENT:
       m_gdb_sig = GDB_SIGNAL_CUDA_CLUSTER_BLOCK_NOT_PRESENT;
       m_valid = true;
@@ -380,7 +377,6 @@ cuda_exception::cuda_exception ()
       m_valid = true;
       m_recoverable = false;
       break;
-#endif
     case CUDBG_EXCEPTION_WARP_STACK_CANARY:
       m_gdb_sig = GDB_SIGNAL_CUDA_WARP_STACK_CANARY;
       m_valid = true;
@@ -402,6 +398,71 @@ cuda_exception::cuda_exception ()
       m_recoverable = false;
       break;
     case CUDBG_EXCEPTION_NONE:
+      break;
+     case CUDBG_EXCEPTION_WARP_MISALIGNED_PC:
+      m_gdb_sig = GDB_SIGNAL_CUDA_WARP_MISALIGNED_PC;
+      m_valid = true;
+      m_recoverable = false;
+      break;
+    case CUDBG_EXCEPTION_WARP_PC_OVERFLOW:
+      m_gdb_sig = GDB_SIGNAL_CUDA_WARP_PC_OVERFLOW;
+      m_valid = true;
+      m_recoverable = false;
+      break;
+    case CUDBG_EXCEPTION_WARP_MISALIGNED_REG:
+      m_gdb_sig = GDB_SIGNAL_CUDA_WARP_MISALIGNED_REG;
+      m_valid = true;
+      m_recoverable = false;
+      break;
+    case CUDBG_EXCEPTION_WARP_ILLEGAL_INSTR_ENCODING:
+      m_gdb_sig = GDB_SIGNAL_CUDA_WARP_ILLEGAL_INSTR_ENCODING;
+      m_valid = true;
+      m_recoverable = false;
+      break;
+    case CUDBG_EXCEPTION_WARP_ILLEGAL_INSTR_PARAM:
+      m_gdb_sig = GDB_SIGNAL_CUDA_WARP_ILLEGAL_INSTR_PARAM;
+      m_valid = true;
+      m_recoverable = false;
+      break;
+    case CUDBG_EXCEPTION_WARP_OUT_OF_RANGE_REGISTER:
+      m_gdb_sig = GDB_SIGNAL_CUDA_WARP_OUT_OF_RANGE_REGISTER;
+      m_valid = true;
+      m_recoverable = false;
+      break;
+    case CUDBG_EXCEPTION_WARP_INVALID_CONST_ADDR_LDC:
+      m_gdb_sig = GDB_SIGNAL_CUDA_WARP_INVALID_CONST_ADDR_LDC;
+      m_valid = true;
+      m_recoverable = false;
+      break;
+    case CUDBG_EXCEPTION_WARP_MMU_FAULT:
+      m_gdb_sig = GDB_SIGNAL_CUDA_WARP_MMU_FAULT;
+      m_valid = true;
+      m_recoverable = false;
+      break;
+    case CUDBG_EXCEPTION_WARP_ARRIVE:
+      m_gdb_sig = GDB_SIGNAL_CUDA_WARP_ARRIVE;
+      m_valid = true;
+      m_recoverable = false;
+      break;
+    case CUDBG_EXCEPTION_CLUSTER_POISON:
+      m_gdb_sig = GDB_SIGNAL_CUDA_CLUSTER_POISON;
+      m_valid = true;
+      m_recoverable = false;
+      break;
+    case CUDBG_EXCEPTION_WARP_API_STACK_ERROR:
+      m_gdb_sig = GDB_SIGNAL_CUDA_WARP_API_STACK_ERROR;
+      m_valid = true;
+      m_recoverable = false;
+      break;
+    case CUDBG_EXCEPTION_WARP_BLOCK_NOT_PRESENT:
+      m_gdb_sig = GDB_SIGNAL_CUDA_WARP_BLOCK_NOT_PRESENT;
+      m_valid = true;
+      m_recoverable = false;
+      break;
+    case CUDBG_EXCEPTION_WARP_USER_STACK_OVERFLOW:
+      m_gdb_sig = GDB_SIGNAL_CUDA_WARP_USER_STACK_OVERFLOW;
+      m_valid = true;
+      m_recoverable = false;
       break;
     case CUDBG_EXCEPTION_UNKNOWN:
     default:
@@ -429,11 +490,6 @@ cuda_exception::type_to_name (CUDBGException_t type)
 {
   switch (type)
     {
-    case CUDBG_EXCEPTION_LANE_USER_STACK_OVERFLOW:
-      return gdb_signal_to_string (GDB_SIGNAL_CUDA_LANE_USER_STACK_OVERFLOW);
-    case CUDBG_EXCEPTION_DEVICE_HARDWARE_STACK_OVERFLOW:
-      return gdb_signal_to_string (
-	  GDB_SIGNAL_CUDA_DEVICE_HARDWARE_STACK_OVERFLOW);
     case CUDBG_EXCEPTION_WARP_ILLEGAL_INSTRUCTION:
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_WARP_ILLEGAL_INSTRUCTION);
     case CUDBG_EXCEPTION_WARP_OUT_OF_RANGE_ADDRESS:
@@ -453,13 +509,11 @@ cuda_exception::type_to_name (CUDBGException_t type)
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_WARP_ASSERT);
     case CUDBG_EXCEPTION_WARP_ILLEGAL_ADDRESS:
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_WARP_ILLEGAL_ADDRESS);
-#if (CUDBG_API_VERSION_REVISION >= 131)
     case CUDBG_EXCEPTION_CLUSTER_BLOCK_NOT_PRESENT:
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_CLUSTER_BLOCK_NOT_PRESENT);
     case CUDBG_EXCEPTION_CLUSTER_OUT_OF_RANGE_ADDRESS:
       return gdb_signal_to_string (
 	  GDB_SIGNAL_CUDA_CLUSTER_OUT_OF_RANGE_ADDRESS);
-#endif
     case CUDBG_EXCEPTION_WARP_STACK_CANARY:
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_WARP_STACK_CANARY);
     case CUDBG_EXCEPTION_WARP_TMEM_ACCESS_CHECK:
@@ -467,7 +521,34 @@ cuda_exception::type_to_name (CUDBGException_t type)
     case CUDBG_EXCEPTION_WARP_TMEM_LEAK:
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_WARP_TMEM_LEAK);
     case CUDBG_EXCEPTION_WARP_CALL_REQUIRES_NEWER_DRIVER:
-      return gdb_signal_to_string (GDB_SIGNAL_CUDA_WARP_CALL_REQUIRES_NEWER_DRIVER);
+      return gdb_signal_to_string (
+	  GDB_SIGNAL_CUDA_WARP_CALL_REQUIRES_NEWER_DRIVER);
+    case CUDBG_EXCEPTION_WARP_MISALIGNED_PC:
+      return gdb_signal_to_string(GDB_SIGNAL_CUDA_WARP_MISALIGNED_PC);
+    case CUDBG_EXCEPTION_WARP_PC_OVERFLOW:
+      return gdb_signal_to_string(GDB_SIGNAL_CUDA_WARP_PC_OVERFLOW);
+    case CUDBG_EXCEPTION_WARP_MISALIGNED_REG:
+      return gdb_signal_to_string(GDB_SIGNAL_CUDA_WARP_MISALIGNED_REG);
+    case CUDBG_EXCEPTION_WARP_ILLEGAL_INSTR_ENCODING:
+      return gdb_signal_to_string(GDB_SIGNAL_CUDA_WARP_ILLEGAL_INSTR_ENCODING);
+    case CUDBG_EXCEPTION_WARP_ILLEGAL_INSTR_PARAM:
+      return gdb_signal_to_string(GDB_SIGNAL_CUDA_WARP_ILLEGAL_INSTR_PARAM);
+    case CUDBG_EXCEPTION_WARP_OUT_OF_RANGE_REGISTER:
+      return gdb_signal_to_string(GDB_SIGNAL_CUDA_WARP_OUT_OF_RANGE_REGISTER);
+    case CUDBG_EXCEPTION_WARP_INVALID_CONST_ADDR_LDC:
+      return gdb_signal_to_string(GDB_SIGNAL_CUDA_WARP_INVALID_CONST_ADDR_LDC);
+    case CUDBG_EXCEPTION_WARP_MMU_FAULT:
+      return gdb_signal_to_string(GDB_SIGNAL_CUDA_WARP_MMU_FAULT);
+    case CUDBG_EXCEPTION_WARP_ARRIVE:
+      return gdb_signal_to_string(GDB_SIGNAL_CUDA_WARP_ARRIVE);
+    case CUDBG_EXCEPTION_CLUSTER_POISON:
+      return gdb_signal_to_string(GDB_SIGNAL_CUDA_CLUSTER_POISON);
+    case CUDBG_EXCEPTION_WARP_API_STACK_ERROR:
+      return gdb_signal_to_string(GDB_SIGNAL_CUDA_WARP_API_STACK_ERROR);
+    case CUDBG_EXCEPTION_WARP_BLOCK_NOT_PRESENT:
+      return gdb_signal_to_string(GDB_SIGNAL_CUDA_WARP_BLOCK_NOT_PRESENT);
+    case CUDBG_EXCEPTION_WARP_USER_STACK_OVERFLOW:
+      return gdb_signal_to_string(GDB_SIGNAL_CUDA_WARP_USER_STACK_OVERFLOW);
     default:
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_UNKNOWN_EXCEPTION);
     }

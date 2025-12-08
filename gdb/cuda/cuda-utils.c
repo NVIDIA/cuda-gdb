@@ -26,11 +26,23 @@
 #include "cuda-options.h"
 #include "exceptions.h"
 #include "gdb/signals.h"
+#include "gdbsupport/gdb_locale.h"
 #include "gdbthread.h"
 #include "inferior.h"
+#include "interps.h"
+#include "mi/mi-console.h"
+#include "mi/mi-interp.h"
 #include "objfiles.h"
 #include "stack.h"
+#include "target.h"
+#include "ui-out.h"
 #include "utils.h"
+
+#include <chrono>
+#include <iomanip>
+#include <sstream>
+#include <string>
+#include <time.h>
 #endif
 
 #include <ctype.h>
@@ -102,8 +114,9 @@ cuda_gdb_tmpdir_create_basedir (void)
   ret = cuda_gdb_dir_create (cuda_gdb_tmp_basedir, S_IRWXU | S_IRWXG | S_IRWXO,
 			     override_umask, &dir_exists);
   if (ret)
-    error (_ ("Error creating temporary directory %s\n"),
-	   cuda_gdb_tmp_basedir);
+    warning (_ ("Unable to create temporary directory %s. Set TMPDIR to a "
+		"writeable location.\n"),
+	     cuda_gdb_tmp_basedir);
 }
 
 static char *
@@ -212,7 +225,9 @@ cuda_gdb_tmpdir_setup (void)
   ret = cuda_gdb_dir_create (dirpath, S_IRWXU | S_IRWXG | S_IXOTH,
 			     override_umask, &dir_exists);
   if (ret)
-    error (_ ("Error creating temporary directory %s\n"), dirpath);
+    warning (_ ("Error creating temporary directory %s. Set TMPDIR to a "
+		"writeable location.\n"),
+	     dirpath);
 
 #ifndef __QNXHOST__
   if (dir_exists)
@@ -675,6 +690,36 @@ _initialize_cuda_utils ()
 }
 
 #ifndef GDBSERVER
+/* Helper function to format a nanosecond timestamp into hh:mm:ss.ms string. */
+static std::string
+cuda_format_log_timestamp_string (uint64_t timestamp_ns)
+{
+  const std::chrono::nanoseconds ns_duration (timestamp_ns);
+  const std::chrono::seconds ss_duration
+      = std::chrono::duration_cast<std::chrono::seconds> (ns_duration);
+  const std::chrono::time_point<std::chrono::system_clock,
+				std::chrono::nanoseconds>
+      tp_ns (ns_duration);
+
+  const auto tp_s = std::chrono::time_point_cast<std::chrono::seconds> (tp_ns);
+  const std::time_t time_c = std::chrono::system_clock::to_time_t (tp_s);
+
+  const auto ms = std::chrono::duration_cast<std::chrono::milliseconds> (
+      ns_duration - ss_duration);
+
+  struct tm time_info;
+  localtime_r (&time_c, &time_info); // Use thread-safe version
+
+  // Format hh:mm:ss.ms using stringstream
+  std::stringstream ss;
+  ss << std::setw (2) << std::setfill ('0') << time_info.tm_hour << ":"
+     << std::setw (2) << std::setfill ('0') << time_info.tm_min << ":"
+     << std::setw (2) << std::setfill ('0') << time_info.tm_sec << "."
+     << std::setw (3) << std::setfill ('0') << ms.count ();
+
+  return ss.str ();
+}
+
 /* Drain the CUDA log queue from the backend and print all logs
  * according to the current log level setting. This should be called
  * whenever we need to consume logs from the backend.
@@ -684,45 +729,75 @@ cuda_consume_and_print_driver_logs (void)
 {
   CUDBGCudaLogMessage logMessages[cuda_debugapi::CudaLogMessagesFetchLimit];
   uint32_t num_consumed = 0;
+
   // Keep fetching logs until no more are available
   do
-  {
-    cuda_debugapi::consume_cuda_logs(
-        logMessages, cuda_debugapi::CudaLogMessagesFetchLimit, &num_consumed);
-
-    for (uint32_t i = 0; i < num_consumed; i++)
     {
-      bool drop_log_record = false;
-      const auto output_log_level = cuda_options_driver_log_level();
-      const char *log_level_str;
-      switch (logMessages[i].logLevel)
-      {
-      case CUDBG_CUDA_LOG_LEVEL_ERROR:
-        log_level_str = "error";
-        break;
-      case CUDBG_CUDA_LOG_LEVEL_WARNING:
-        log_level_str = "warning";
-        if (output_log_level == cuda_log_level_t::CUDA_LOG_LEVEL_ERROR)
-          drop_log_record = true;
-        break;
-      default:
-        log_level_str = "unknown";
-        if (output_log_level != cuda_log_level_t::CUDA_LOG_LEVEL_EXTRA)
-          drop_log_record = true;
-        break;
-      }
-      if (drop_log_record)
-        continue;
-      // Print the log message prefix
-      printf_unfiltered(_("warning: Cuda Driver %s detected"), log_level_str);
-      // print the log timestamp and thread id when driver_log_level is extra
-      if (output_log_level == cuda_log_level_t::CUDA_LOG_LEVEL_EXTRA)
-        printf_unfiltered(_(" (thread=0x%x timestamp_ns=%llu)"),
-                          logMessages[i].osThreadId,
-                          (unsigned long long)logMessages[i].unixTimestampNs);
-      // print the log message
-      printf_unfiltered(_(": %s\n"), logMessages[i].message);
+      cuda_debugapi::consume_cuda_logs (
+	  logMessages, cuda_debugapi::CudaLogMessagesFetchLimit,
+	  &num_consumed);
+
+      for (uint32_t i = 0; i < num_consumed; i++)
+	{
+	  bool drop_log_record = false;
+	  const auto output_log_level = cuda_options_driver_log_level ();
+	  const char *log_level_str;
+	  switch (logMessages[i].logLevel)
+	    {
+	    case CUDBG_CUDA_LOG_LEVEL_ERROR:
+	      log_level_str = "error";
+	      break;
+	    case CUDBG_CUDA_LOG_LEVEL_WARNING:
+	      log_level_str = "warning";
+	      if (output_log_level == cuda_log_level_t::CUDA_LOG_LEVEL_ERROR)
+		drop_log_record = true;
+	      break;
+	    default:
+	      log_level_str = "unknown";
+	      if (output_log_level != cuda_log_level_t::CUDA_LOG_LEVEL_EXTRA)
+		drop_log_record = true;
+	      break;
+	    }
+	  if (drop_log_record)
+	    continue;
+	  const uint64_t timestamp_ns = logMessages[i].unixTimestampNs;
+	  const std::string timestamp_str
+	      = cuda_format_log_timestamp_string (timestamp_ns);
+	  /* Generate MI async event record if running in MI mode */
+	  if (current_uiout->is_mi_like_p ())
+	    {
+	      /* Get the MI interpreter for event channel access */
+	      struct mi_interp *mi = as_mi_interp (top_level_interpreter ());
+	      gdb_assert (mi != NULL);
+	      target_terminal::scoped_restore_terminal_state term_state;
+	      target_terminal::ours_for_output ();
+
+	      /* Print the async record name first */
+	      gdb_printf (mi->event_channel, "cuda-driver-log");
+
+	      /* Redirect MI uiout to event channel for structured data */
+	      ui_out *mi_uiout = mi->interp_ui_out ();
+	      ui_out_redirect_pop redir (mi_uiout, mi->event_channel);
+
+	      /* Use uiout functions for structured MI output */
+	      mi_uiout->field_string ("level", log_level_str);
+	      mi_uiout->field_string ("message", logMessages[i].message);
+	      mi_uiout->field_fmt ("thread-id", "0x%x",
+				logMessages[i].osThreadId);
+	      mi_uiout->field_string ("timestamp", timestamp_str.c_str ());
+
+	      gdb_flush (mi->event_channel);
+	    }
+	  else
+	    {
+	      gdb_printf (_ ("Cuda Driver %s detected"), log_level_str);
+	      if (output_log_level == cuda_log_level_t::CUDA_LOG_LEVEL_EXTRA)
+		gdb_printf (_ (" (thread=0x%x timestamp=%s)"),
+			    logMessages[i].osThreadId, timestamp_str.c_str ());
+	      gdb_printf (_ (": %s\n"), logMessages[i].message);
+	    }
+	}
     }
-  } while (num_consumed > 0);
+  while (num_consumed > 0);
 }
 #endif /* GDBSERVER */

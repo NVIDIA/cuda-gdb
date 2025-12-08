@@ -23,6 +23,7 @@
 #include "cuda-coords.h"
 #include "gdbarch.h"
 
+#include <string>
 #include <vector>
 
 struct inferior;
@@ -138,11 +139,8 @@ struct cuda_gdbarch_tdep : gdbarch_tdep_base
       = first_upred_regnum + (CUDA_UREG_MAX_PREDICATES - 1);
   static constexpr int true_upred_regnum = last_upred_regnum;
 
-  // CC register
-  static constexpr int cc_regnum = last_upred_regnum + 1;
-
   // Regular registers, predicates, uniform registers, uniform predicates, PC
-  static constexpr int num_regs = cc_regnum + 1;
+  static constexpr int num_regs = last_upred_regnum + 1;
 
   // Pseudo-Registers
   static constexpr int first_pseudo_regnum = num_regs;
@@ -264,13 +262,6 @@ cuda_pc_regnum_p (struct gdbarch *gdbarch, int regnum)
 }
 
 static inline bool
-cuda_cc_regnum_p (struct gdbarch *gdbarch, int regnum)
-{
-  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
-  return regnum == tdep->cc_regnum;
-}
-
-static inline bool
 cuda_error_pc_regnum_p (struct gdbarch *gdbarch, int regnum)
 {
   cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
@@ -383,6 +374,8 @@ bool cuda_sstep_kernel_has_terminated (void);
 uint64_t cuda_check_dwarf2_reg_ptx_virtual_register (uint64_t dwarf2_reg);
 uint64_t cuda_check_dwarf2_reg_ascii_encoded_register (struct gdbarch *gdbarch,
 						       uint64_t dwarf2_reg);
+const std::string cuda_regname_from_dwarf_register (uint64_t dwarf2_reg);
+
 int cuda_reg_to_regnum_extrapolated (struct gdbarch *gdbarch,
 				     frame_info_ptr frame, int reg);
 
@@ -429,8 +422,6 @@ int cuda_breakpoint_address_match (struct gdbarch *gdbarch,
 void cuda_adjust_host_pc (ptid_t r);
 void cuda_adjust_device_code_address (CORE_ADDR original_addr,
 				      CORE_ADDR *adjusted_addr);
-void cuda_next_device_code_address (CORE_ADDR original_addr,
-				    CORE_ADDR *adjusted_addr);
 bool cuda_find_next_control_flow_instruction (
     uint64_t pc, uint64_t range_start_pc, uint64_t range_end_pc,
     bool skip_subroutines, uint64_t &end_pc, uint32_t &inst_size);
