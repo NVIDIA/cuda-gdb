@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "arch-utils.h"
 #include "exceptions.h"
 #include "symtab.h"
@@ -56,6 +61,11 @@
 #include <optional>
 #include "source.h"
 #include "cli/cli-style.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-exceptions.h"
+#include "cuda/cuda-utils.h"
+#include "cuda/cuda-tdep.h"
+#endif
 
 /* Local functions: */
 
@@ -244,6 +254,12 @@ post_create_inferior (int from_tty)
      don't need to.  */
   target_find_description ();
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - for cudacore-dump files, inferior_ptid==null_ptid here,
+     which triggers an assert in inferior_thread(), so skip */
+  if (inferior_ptid != null_ptid)
+    {
+#endif
   /* Now that we know the register layout, retrieve current PC.  But
      if the PC is unavailable (e.g., we're opening a core file with
      missing registers info), ignore it.  */
@@ -260,6 +276,9 @@ post_create_inferior (int from_tty)
       if (ex.error != NOT_AVAILABLE_ERROR)
 	throw;
     }
+#ifdef NVIDIA_CUDA_GDB
+    }
+#endif
 
   if (current_program_space->exec_bfd ())
     {
@@ -302,7 +321,13 @@ post_create_inferior (int from_tty)
      breakpoint_re_set is never called.  Call it now so that software
      watchpoints get a chance to be promoted to hardware watchpoints
      if the now pushed target supports hardware watchpoints.  */
+#ifdef NVIDIA_CUDA_GDB
+  /* Skip setting breakpoints when debugging a corefile */
+  if (target_has_execution ())
+    breakpoint_re_set ();
+#else
   breakpoint_re_set ();
+#endif
 
   gdb::observers::inferior_created.notify (current_inferior ());
 }
@@ -930,6 +955,9 @@ prepare_one_step (thread_info *tp, struct step_command_fsm *sm)
      inferior_ptid value.  */
   gdb_assert (inferior_ptid == tp->ptid);
 
+#ifdef NVIDIA_CUDA_GDB
+  cuda_ptx_cache_refresh ();
+#endif
   if (sm->count > 0)
     {
       frame_info_ptr frame = get_current_frame ();
@@ -1598,7 +1626,15 @@ finish_command_fsm::should_stop (struct thread_info *tp)
 
       rv->type = function->type ()->target_type ();
       if (rv->type == nullptr)
+#ifdef NVIDIA_CUDA_GDB
+	/* CUDA - if the function has no target type, don't try to retrieve its return value
+	   gdb otherwise needlessly bails out */
+	return true;
+      /* CUDA: Resolve typedef before comparing the type to void */
+      rv->type = check_typedef (rv->type);
+#else
 	internal_error (_("finish_command: function has no target type"));
+#endif
 
       if (check_typedef (rv->type)->code () != TYPE_CODE_VOID)
 	{
@@ -1742,6 +1778,12 @@ finish_forward (struct finish_command_fsm *sm, const frame_info_ptr &frame)
 					     get_stack_frame_id (frame),
 					     bp_finish);
 
+#ifdef NVIDIA_CUDA_GDB
+  /* Don't break on specific thread when device has focus as the
+     thread focus may be incorrect. */
+  if (cuda_current_focus::isDevice () && sm->breakpoint != 0)
+    sm->breakpoint->thread = -1;
+#endif
   set_longjmp_breakpoint (tp, frame_id);
 
   /* We want to print return value, please...  */
@@ -2724,6 +2766,38 @@ attach_command (const char *args, int from_tty)
 
       if (!target_is_async_p ())
 	mark_infrun_async_event_handler ();
+
+#ifdef NVIDIA_CUDA_GDB
+      {
+	/* Do not return until the attach procedure has finished.
+	   We will run a few iterations of the GDB event loop to let
+	   the continuations run. */
+	using namespace std::chrono;
+	const auto start = system_clock::now ();
+	auto timeout = milliseconds(5000);
+	auto delay = milliseconds(100);
+	while (!inferior->cuda_attach_finished && system_clock::now() - start < timeout)
+	  {
+	    try
+	      {
+		gdb_do_one_event (delay.count());
+	      }
+	    catch (const gdb_exception_forced_quit &ex)
+	      {
+		throw;
+	      }
+	    catch (const gdb_exception &ex)
+	      {
+		exception_print (gdb_stderr, ex);
+		break;
+	      }
+	  }
+      }
+      if (!inferior->cuda_attach_finished)
+	{
+	  warning (_ ("Failed to attach in time"));
+	}
+#endif
       return;
     }
   else

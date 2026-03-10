@@ -78,6 +78,7 @@ esac
 case "${host}" in
 
 *-*-darwin*)		gdb_host=darwin ;;
+*-*-nto*)		gdb_host=nto ;;
 
 aarch64*-*-linux*)	gdb_host=linux ;;
 aarch64*-*-freebsd*)	gdb_host=fbsd ;;

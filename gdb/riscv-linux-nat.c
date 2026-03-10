@@ -16,6 +16,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "regcache.h"
 #include "gregset.h"
 #include "linux-nat.h"
@@ -28,6 +33,10 @@
 
 #include <sys/ptrace.h>
 
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-linux-nat-template.h"
+#endif
+
 /* Work around glibc header breakage causing ELF_NFPREG not to be usable.  */
 #ifndef NFPREG
 # define NFPREG 33
@@ -35,7 +44,11 @@
 
 /* RISC-V Linux native additions to the default linux support.  */
 
+#ifdef NVIDIA_CUDA_GDB
+class riscv_linux_nat_target : public linux_nat_target
+#else
 class riscv_linux_nat_target final : public linux_nat_target
+#endif
 {
 public:
   /* Add our register access methods.  */
@@ -46,7 +59,11 @@ public:
   const struct target_desc *read_description () override;
 };
 
+#ifdef NVIDIA_CUDA_GDB
+static cuda_nat_linux<riscv_linux_nat_target> the_riscv_linux_nat_target;
+#else
 static riscv_linux_nat_target the_riscv_linux_nat_target;
+#endif
 
 /* Copy general purpose register REGNUM (or all gp regs if REGNUM == -1)
    from regset GREGS into REGCACHE.  */
@@ -335,5 +352,9 @@ _initialize_riscv_linux_nat ()
 {
   /* Register the target.  */
   linux_target = &the_riscv_linux_nat_target;
+#ifdef NVIDIA_CUDA_GDB
+  add_inf_child_target (linux_target);
+#else
   add_inf_child_target (&the_riscv_linux_nat_target);
+#endif
 }

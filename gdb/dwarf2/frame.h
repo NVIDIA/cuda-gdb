@@ -19,6 +19,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef GDB_DWARF2_FRAME_H
 #define GDB_DWARF2_FRAME_H
 
@@ -294,4 +299,8 @@ extern void *dwarf2_frame_get_fn_data (const frame_info_ptr &this_frame,
 				       void **this_cache,
 				       fn_prev_register cookie);
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - frames */
+extern const struct frame_unwind dwarf2_frame_unwind;
+#endif
 #endif /* GDB_DWARF2_FRAME_H */

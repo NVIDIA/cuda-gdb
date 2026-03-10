@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "extract-store-integer.h"
 #include "target.h"
 #include "gdbtypes.h"
@@ -356,7 +361,15 @@ auxv_all_objfiles_removed (program_space *pspace)
 }
 
 /* See auxv.h.  */
-
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+/* CUDA: Changed this slightly from upstream QNX to provide better encapsulation. */
+std::optional<gdb::byte_vector>&
+qnx_get_auxv_data (inferior *inf)
+{
+  auxv_info *info = auxv_inferior_data.emplace (inf);
+  return info->data;
+}
+#endif
 const std::optional<gdb::byte_vector> &
 target_read_auxv ()
 {
@@ -513,14 +526,20 @@ default_print_auxv_entry (struct gdbarch *gdbarch, struct ui_file *file,
 	   AUXV_FORMAT_HEX);
       TAG (AT_L1D_CACHESHAPE, _("L1 Data cache information"), AUXV_FORMAT_HEX);
       TAG (AT_L1D_CACHESIZE, _("L1 Data cache size"), AUXV_FORMAT_HEX);
+#ifndef __QNXTARGET__
       TAG (AT_L1D_CACHEGEOMETRY, _("L1 Data cache geometry"),
 	   AUXV_FORMAT_HEX);
+#endif
       TAG (AT_L2_CACHESHAPE, _("L2 cache information"), AUXV_FORMAT_HEX);
+#ifndef __QNXTARGET__
       TAG (AT_L2_CACHESIZE, _("L2 cache size"), AUXV_FORMAT_HEX);
       TAG (AT_L2_CACHEGEOMETRY, _("L2 cache geometry"), AUXV_FORMAT_HEX);
+#endif
       TAG (AT_L3_CACHESHAPE, _("L3 cache information"), AUXV_FORMAT_HEX);
+#ifndef __QNXTARGET__
       TAG (AT_L3_CACHESIZE, _("L3 cache size"), AUXV_FORMAT_HEX);
       TAG (AT_L3_CACHEGEOMETRY, _("L3 cache geometry"), AUXV_FORMAT_HEX);
+#endif
       TAG (AT_MINSIGSTKSZ, _("Minimum stack size for signal delivery"),
 	   AUXV_FORMAT_HEX);
       TAG (AT_SUN_UID, _("Effective user ID"), AUXV_FORMAT_DEC);
@@ -559,6 +578,14 @@ default_print_auxv_entry (struct gdbarch *gdbarch, struct ui_file *file,
 	   AUXV_FORMAT_HEX);
       TAG (AT_SUN_CAP_HW2, _("Machine-dependent CPU capability hints 2"),
 	   AUXV_FORMAT_HEX);
+#ifdef __QNXTARGET__
+      TAG (AT_FREE_STACK, _("QNX Extension"), AUXV_FORMAT_HEX);
+      TAG (AT_INTP_DEVICE, _("QNX Extension"), AUXV_FORMAT_HEX);
+      TAG (AT_INTP_INODE, _("QNX Extension"), AUXV_FORMAT_HEX);
+      TAG (AT_EXEFILE, _("QNX Extension"), AUXV_FORMAT_HEX);
+      TAG (AT_LIBPATH, _("QNX Extension"), AUXV_FORMAT_HEX);
+      TAG (AT_DATA, _("QNX Extension"), AUXV_FORMAT_HEX);
+#endif
     }
 
   fprint_auxv_entry (file, name, description, format, type, val);

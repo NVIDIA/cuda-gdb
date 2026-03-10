@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "target.h"
 #include "xml-support.h"
 #include "osdata.h"
@@ -28,7 +33,14 @@
 std::unique_ptr<osdata>
 osdata_parse (const char *xml)
 {
+#ifdef NVIDIA_BUGFIX
+  /* CUDA - XML warning */
+  /* No need to warn since an error will be raised next if this function
+     returns NULL. Avoids unnecessary warning messages in the MI clients. */
+  static int have_warned = 1;
+#else
   static int have_warned;
+#endif
 
   if (!have_warned)
     {

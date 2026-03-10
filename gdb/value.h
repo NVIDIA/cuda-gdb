@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef GDB_VALUE_H
 #define GDB_VALUE_H
 
@@ -138,6 +143,10 @@ private:
       m_stack (false),
       m_is_zero (false),
       m_in_history (false),
+#ifdef NVIDIA_CUDA_GDB
+      m_cached (false),
+      m_extrapolated (false),
+#endif
       m_type (type_),
       m_enclosing_type (type_)
   {
@@ -607,6 +616,28 @@ public:
 			const gdb_byte *valaddr, LONGEST embedded_offset)
     const;
 
+#ifdef NVIDIA_CHERRY_PICK
+  /* Copy LENGTH bytes of this value's (all) contents
+     (value_contents_all) starting at SRC_OFFSET byte and
+     SRC_BIT_OFFSET bit, into DST value's (all) contents,
+     starting at DST_OFFSET.  If unavailable contents are
+     being copied from this value, the corresponding DST
+     contents are marked unavailable accordingly.  DST must not be
+     lazy.  If this value is lazy, it will be fetched now.
+
+     It is assumed the contents of DST in the [DST_OFFSET,
+     DST_OFFSET+LENGTH) range are wholly available.  */
+  void contents_copy (struct value *dst, LONGEST dst_offset,
+		      LONGEST src_offset, LONGEST src_bit_offset,
+		      LONGEST length);
+  
+  /* Overload for compatibility when src_bit_offset is 0 */
+  void contents_copy (struct value *dst, LONGEST dst_offset,
+		      LONGEST src_offset, LONGEST length)
+  {
+    contents_copy (dst, dst_offset, src_offset, 0, length);
+  }
+#else
   /* Copy LENGTH bytes of this value's (all) contents
      (value_contents_all) starting at SRC_OFFSET byte, into DST
      value's (all) contents, starting at DST_OFFSET.  If unavailable
@@ -618,6 +649,7 @@ public:
      DST_OFFSET+LENGTH) range are wholly available.  */
   void contents_copy (struct value *dst, LONGEST dst_offset,
 		      LONGEST src_offset, LONGEST length);
+#endif
 
   /* Given a value (offset by OFFSET bytes)
      of a struct or union type ARG_TYPE,
@@ -641,6 +673,18 @@ public:
   /* Record this value on the value history, and return its location
      in the history.  The value is removed from the value chain.  */
   int record_latest ();
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - register cache */
+  bool cached () const
+  { return m_cached; }
+  void set_cached (bool val)
+  { m_cached = val; }
+  /* CUDA - regmap extrapolation */
+  bool extrapolated () const
+  { return m_extrapolated; }
+  void set_extrapolated (bool val)
+  { m_extrapolated = val; }
+#endif
 
 private:
 
@@ -680,6 +724,15 @@ private:
 
   /* True if this a value recorded in value history; false otherwise.  */
   bool m_in_history : 1;
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - register cache */
+  /* True if this value was recovered from CUDA PTX cache */
+  bool m_cached : 1; 
+  /* CUDA - regmap extrapolation */
+  /* True if this value has been extrapolated */
+  bool m_extrapolated : 1; 
+#endif
+
 
   /* Location of value (if lval).  */
   union
@@ -877,7 +930,12 @@ private:
      It is assumed the contents of DST in the [DST_OFFSET,
      DST_OFFSET+LENGTH) range are wholly available.  */
   void contents_copy_raw (struct value *dst, LONGEST dst_offset,
+#ifdef NVIDIA_CHERRY_PICK
+			  LONGEST src_offset, LONGEST src_bit_offset,
+			  LONGEST length);
+#else
 			  LONGEST src_offset, LONGEST length);
+#endif
 
   /* A helper for value_from_component_bitsize that copies bits from
      this value to DEST.  */
@@ -1092,6 +1150,10 @@ extern struct value *value_field_bitfield (struct type *type, int fieldno,
 					   const struct value *val);
 
 extern void pack_long (gdb_byte *buf, struct type *type, LONGEST num);
+#ifdef NVIDIA_CHERRY_PICK
+extern void pack_unsigned_long (gdb_byte *buf, struct type *type,
+				ULONGEST num);
+#endif
 
 extern struct value *value_from_longest (struct type *type, LONGEST num);
 extern struct value *value_from_ulongest (struct type *type, ULONGEST num);
@@ -1127,6 +1189,10 @@ extern struct value *value_from_contents (struct type *, const gdb_byte *);
 extern value *default_value_from_register (gdbarch *gdbarch, type *type,
 					   int regnum,
 					   const frame_info_ptr &this_frame);
+
+#ifdef NVIDIA_CHERRY_PICK
+extern void read_frame_register_value (struct value *value);
+#endif
 
 extern struct value *value_from_register (struct type *type, int regnum,
 					  const frame_info_ptr &frame);

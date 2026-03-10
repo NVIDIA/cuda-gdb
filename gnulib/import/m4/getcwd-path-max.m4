@@ -222,11 +222,12 @@ main ()
             gl_cv_func_getcwd_path_max='guessing no, it has the AIX bug' ;;
           gnu*) # On Hurd, it is 'yes'.
             gl_cv_func_getcwd_path_max='guessing yes' ;;
-          linux* | kfreebsd*)
+          linux* | kfreebsd* | nto*)
             # On older Linux+glibc it's 'no, but it is partly working',
             # on newer Linux+glibc it's 'yes'.
             # On Linux+musl libc, it's 'no, but it is partly working'.
             # On kFreeBSD+glibc, it's 'no, but it is partly working'.
+            # On nto, it's 'no, but it is partly working'.
             gl_cv_func_getcwd_path_max='guessing no, but it is partly working' ;;
           *) # If we don't know, obey --enable-cross-guesses.
             gl_cv_func_getcwd_path_max="$gl_cross_guess_normal" ;;

@@ -17,6 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
 
 #include "arch-utils.h"
 #include "extract-store-integer.h"
@@ -298,8 +302,38 @@ default_floatformat_for_type (struct gdbarch *gdbarch,
   if (name != nullptr && strcmp (name, "__bf16") == 0
       && len == gdbarch_bfloat16_bit (gdbarch))
     format = gdbarch_bfloat16_format (gdbarch);
+#ifdef NVIDIA_CUDA_GDB
+  /* fp8, fp6, and fp4 have 8-bit length for all variants */
+  else if (len == gdbarch_nv_fp8_e8m0_bit (gdbarch))
+    {
+      /* CUDA - nv_fp8 support */
+      if (name && !strcmp(name, "__nv_fp8_e8m0"))
+	format = gdbarch_nv_fp8_e8m0_format (gdbarch);
+      else if (name && !strcmp(name, "__nv_fp8_e5m2"))
+	format = gdbarch_nv_fp8_e5m2_format (gdbarch);
+      else if (name && !strcmp(name, "__nv_fp8_e4m3"))
+	format = gdbarch_nv_fp8_e4m3_format (gdbarch);
+      /* CUDA - nv_fp6 support */
+      else if (name && !strcmp(name, "__nv_fp6_e2m3"))
+	format = gdbarch_nv_fp6_e2m3_format (gdbarch);
+      else if (name && !strcmp(name, "__nv_fp6_e3m2"))
+	format = gdbarch_nv_fp6_e3m2_format (gdbarch);
+      /* CUDA - nv_fp4 support */
+      else if (name && !strcmp(name, "__nv_fp4_e2m1"))
+	format = gdbarch_nv_fp4_e2m1_format (gdbarch);
+    }
+  else if (len == gdbarch_half_bit (gdbarch))
+    {
+      /* CUDA - nv_bfloat16 support */
+      if (name && !strcmp(name, "__nv_bfloat16"))
+	format = gdbarch_bfloat16_format (gdbarch);
+      else
+	format = gdbarch_half_format (gdbarch);
+    }
+#else
   else if (len == gdbarch_half_bit (gdbarch))
     format = gdbarch_half_format (gdbarch);
+#endif
   else if (len == gdbarch_float_bit (gdbarch))
     format = gdbarch_float_format (gdbarch);
   else if (len == gdbarch_double_bit (gdbarch))
@@ -1130,6 +1164,39 @@ default_update_call_site_pc (struct gdbarch *gdbarch, CORE_ADDR pc)
   return pc;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+
+/* See arch-utils.h.  */
+int
+default_address_class_from_core_address (CORE_ADDR address)
+{
+  return 0;
+}
+
+/* See arch-utils.h.  */
+CORE_ADDR
+default_segment_address_from_core_address (CORE_ADDR address)
+{
+  return address;
+}
+
+/* See arch-utils.h.  */
+CORE_ADDR
+default_segment_address_to_core_address (int address_class, CORE_ADDR address)
+{
+  if (address_class != 0)
+    warning (_("This architecture doesn't handle \
+non-default address spaces."));
+  return address;
+}
+
+/* See arch-utils.h.  */
+int
+default_type_instance_flags_to_address_class (type_instance_flags type_flags)
+{
+  return 0;
+}
+#endif
 /* Non-zero if we want to trace architecture code.  */
 
 #ifndef GDBARCH_DEBUG
@@ -1326,10 +1393,13 @@ gdbarch_register (enum bfd_architecture bfd_architecture,
        (*curr) != NULL;
        curr = &(*curr)->next)
     {
+/* CUDA - BFD architecture - we re-use the bfd_arch_m68k arch. */
+#ifndef NVIDIA_CUDA_GDB
       if (bfd_architecture == (*curr)->bfd_architecture)
 	internal_error (_("gdbarch: Duplicate registration "
 			  "of architecture (%s)"),
 			bfd_arch_info->printable_name);
+#endif
     }
   /* log it */
   if (gdbarch_debug)

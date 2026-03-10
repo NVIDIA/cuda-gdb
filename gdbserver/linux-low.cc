@@ -16,6 +16,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "linux-low.h"
 #include "nat/linux-osdata.h"
 #include "gdbsupport/agent.h"
@@ -54,6 +59,10 @@
 #include "gdbsupport/environ.h"
 #include "gdbsupport/gdb-sigmask.h"
 #include "gdbsupport/scoped_restore.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-notifications.h"
+#include "cuda/cuda-tdep-server.h"
+#endif
 #ifndef ELFMAG0
 /* Don't include <linux/elf.h> here.  If it got included by gdb_proc_service.h
    then ELFMAG0 will have been defined.  If it didn't get included by
@@ -151,6 +160,11 @@ static bool
 report_exit_events_for (thread_info *thr)
 {
   client_state &cs = get_client_state ();
+
+#ifdef NVIDIA_CUDA_GDB
+  if (cuda_debugging_enabled)
+    return cs.report_thread_events;
+#endif
 
   return (cs.report_thread_events
 	  || (thr->thread_options & GDB_THREAD_OPTION_EXIT) != 0);
@@ -1449,6 +1463,20 @@ get_detach_signal (thread_info *thread)
       return 0;
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /*SIGSEGVs that could be explained by breakpoint
+   need not to be raised again on detach. */
+  if (!lp->status_pending_p && WSTOPSIG (status) == SIGSEGV
+      && lp->breakpoint_explains_trap)
+  {
+      if (debug_threads)
+	fprintf (stderr,
+		 "GPS: lwp %s had stopped due to breakpoint "
+		 "status: no pending signal\n",
+		 target_pid_to_str (thread->id).c_str ());
+	  return 0;
+  }
+#endif
   signo = gdb_signal_from_host (WSTOPSIG (status));
 
   if (cs.program_signals_p && !cs.program_signals[signo])
@@ -2604,8 +2632,16 @@ linux_process_target::wait_for_event_filtered (ptid_t wait_ptid,
 	   without reporting an exit (so we'd hang if we waited for it
 	   explicitly in that case).  The exec event is reported to
 	   the TGID pid.  */
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - notifications */
+      cuda_notification_accept ();
+#endif
       errno = 0;
       ret = my_waitpid (-1, wstatp, options | WNOHANG);
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - notifications */
+      cuda_notification_block ();
+#endif
 
       threads_debug_printf ("waitpid(-1, ...) returned %d, %s",
 			    ret, errno ? safe_strerror (errno) : "ERRNO-OK");
@@ -2651,7 +2687,16 @@ linux_process_target::wait_for_event_filtered (ptid_t wait_ptid,
       /* Check for zombie thread group leaders.  Those can't be reaped
 	 until all other threads in the thread group are.  */
       if (check_zombie_leaders ())
+#ifdef NVIDIA_BUGFIX
+      {
+        /* We're jumping before the sigmask SIG_BLOCK, the current block mask will be saved.
+           To prevent restoring the current blocked mask, we need to restore the previous mask. */
+        gdb_sigmask (SIG_SETMASK, &prev_mask, NULL);
 	goto retry;
+      }
+#else
+        goto retry;
+#endif
 
       auto not_stopped = [&] (thread_info *thread)
 	{
@@ -2685,7 +2730,15 @@ linux_process_target::wait_for_event_filtered (ptid_t wait_ptid,
       /* Block until we get an event reported with SIGCHLD.  */
       threads_debug_printf ("sigsuspend'ing");
 
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - notifications */
+      cuda_notification_accept ();
+#endif
       sigsuspend (&prev_mask);
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - notifications */
+      cuda_notification_block ();
+#endif
       gdb_sigmask (SIG_SETMASK, &prev_mask, NULL);
       goto retry;
     }
@@ -2694,6 +2747,10 @@ linux_process_target::wait_for_event_filtered (ptid_t wait_ptid,
 
   switch_to_thread (event_thread);
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - notifications */
+  cuda_notification_block ();
+#endif
   return event_thread->id.lwp ();
 }
 
@@ -3110,6 +3167,9 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
 		|| WSTOPSIG (w) == SIGSEGV)
 	       && low_breakpoint_at (event_child->stop_pc))));
 
+#ifdef NVIDIA_CUDA_GDB
+  event_child->breakpoint_explains_trap = 0;
+#endif
   if (maybe_internal_trap)
     {
       /* Handle anything that requires bookkeeping before deciding to
@@ -3136,7 +3196,14 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
       trace_event = handle_tracepoints (event_child);
 
       if (bp_explains_trap)
+#ifdef NVIDIA_CUDA_GDB
+	{
+	  event_child->breakpoint_explains_trap = 1;
+	  threads_debug_printf ("Hit a gdbserver breakpoint.");
+	}
+#else
 	threads_debug_printf ("Hit a gdbserver breakpoint.");
+#endif
     }
   else
     {
@@ -3270,6 +3337,10 @@ linux_process_target::wait_1 (ptid_t ptid, target_waitstatus *ourstatus,
      breakpoint.  */
   if (WIFSTOPPED (w)
       && current_thread->last_resume_kind != resume_step
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - do we have an urgent message from the backend */
+      && WSTOPSIG (w) != SIGURG
+#endif
       && (
 #if defined (USE_THREAD_DB) && !defined (__ANDROID__)
 	  (current_process ()->priv->thread_db != NULL

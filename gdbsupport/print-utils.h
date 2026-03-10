@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef GDBSUPPORT_PRINT_UTILS_H
 #define GDBSUPPORT_PRINT_UTILS_H
 
@@ -47,7 +52,11 @@ extern const char *phex_nz (ULONGEST l, int sizeof_l);
 /* Converts a LONGEST to a C-format hexadecimal literal and stores it
    in a static string.  Returns a pointer to this string.  */
 
+#ifdef NVIDIA_CUDA_GDB
+extern const char *hex_string (ULONGEST num);
+#else
 extern const char *hex_string (LONGEST num);
+#endif
 
 /* Converts a LONGEST number to a C-format hexadecimal literal and
    stores it in a static string.  Returns a pointer to this string

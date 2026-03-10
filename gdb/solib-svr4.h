@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef GDB_SOLIB_SVR4_H
 #define GDB_SOLIB_SVR4_H
 
@@ -46,6 +51,11 @@ struct lm_info_svr4 final : public lm_info
 
   /* Values read in from inferior's fields of the same name.  */
   CORE_ADDR l_ld = 0, l_next = 0, l_prev = 0, l_name = 0;
+
+#ifdef __QNXTARGET__
+  /* todo: bweb: it would probably make more sense to have an lm_info_nto */
+  CORE_ADDR l_path = 0;
+#endif
 };
 
 using lm_info_svr4_up = std::unique_ptr<lm_info_svr4>;
@@ -58,6 +68,11 @@ struct link_map_offsets
   {
     /* Offset and size of r_debug.r_version.  */
     int r_version_offset, r_version_size;
+
+#ifdef __QNXTARGET__
+    /* Offset and size of r_debug.r_state.  */
+    int r_state_offset, r_state_size;
+#endif
 
     /* Offset of r_debug.r_map.  */
     int r_map_offset;
@@ -89,6 +104,11 @@ struct link_map_offsets
 
     /* Offset to l_name field in struct link_map.  */
     int l_name_offset;
+
+#ifdef __QNXTARGET__
+    /* Offset of l_path field of struct link_map.  */
+    int l_path_offset;
+#endif
   };
 
 /* set_solib_svr4_fetch_link_map_offsets() is intended to be called by
@@ -111,5 +131,9 @@ extern struct link_map_offsets *svr4_lp64_fetch_link_map_offsets (void);
 /* Return 1 if PC lies in the dynamic symbol resolution code of the
    SVR4 run time loader.  */
 int svr4_in_dynsym_resolve_code (CORE_ADDR pc);
+
+#ifdef __QNXTARGET__
+CORE_ADDR lm_addr_check (const solib &so, bfd *abfd);
+#endif
 
 #endif /* GDB_SOLIB_SVR4_H */

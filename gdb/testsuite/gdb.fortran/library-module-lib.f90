@@ -14,7 +14,7 @@
 ! along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 module lib
-        integer :: var_i = 1
+        integer :: VaR_I = 1
 contains
         subroutine lib_func
         if (var_i .ne. 1) call abort

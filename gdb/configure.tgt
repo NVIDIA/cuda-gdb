@@ -130,6 +130,9 @@ case "${targ}" in
 	os_obs="obsd-tdep.o solib-svr4.o";;
 esac
 
+gdb_target_qnx_obs="aarch64-tdep.o aarch64-nto-tdep.o solib-svr4.o \
+			nto-tdep.o arch/aarch64-insn.o"
+
 # 3. Get the rest of objects.
 
 case "${targ}" in
@@ -153,6 +156,12 @@ aarch64*-*-linux*)
 			glibc-tdep.o linux-tdep.o solib-svr4.o \
 			symfile-mem.o linux-record.o"
 	;;
+
+aarch64*-*-nto*)
+        # Target: AArch64 nto (QNX)
+        gdb_target_obs="aarch64-tdep.o aarch64-nto-tdep.o solib-svr4.o \
+                        solib-nto.o nto-tdep.o remote-nto.o"
+        ;;
 
 alpha*-*-linux*)
 	# Target: Little-endian Alpha running Linux
@@ -208,6 +217,11 @@ arm*-*-freebsd*)
 arm*-*-netbsd* | arm*-*-knetbsd*-gnu)
 	# Target: NetBSD/arm
 	gdb_target_obs="arm-netbsd-tdep.o"
+	;;
+arm*-*-nto*)
+	# Target: nto/arm
+	gdb_target_obs="arm.o arm-get-next-pcs.o arm-tdep.o solib-svr4.o \
+			arm-nto-tdep.o nto-tdep.o"
 	;;
 arm*-*-openbsd*)
 	# Target: OpenBSD/arm
@@ -305,6 +319,12 @@ i[34567]86-*-openbsd*)
 	# Target: OpenBSD/i386
 	gdb_target_obs="i386-bsd-tdep.o i386-obsd-tdep.o bsd-uthread.o"
 	;;
+x86_64-*-nto*)
+        # Target: Intel x86_64 running qnx8
+        gdb_target_obs="solib-svr4.o solib-nto.o \
+                i386-tdep.o i387-tdep.o amd64-tdep.o \
+                amd64-nto-tdep.o i386-nto-tdep.o nto-tdep.o remote-nto.o"
+        ;;
 i[34567]86-*-solaris2* | x86_64-*-solaris2*)
 	# Target: Solaris x86_64
 	gdb_target_obs="${i386_tobjs} ${amd64_tobjs} \
@@ -323,6 +343,12 @@ i[34567]86-*-linux*)
 	    # Target: GNU/Linux x86-64
 	    gdb_target_obs="amd64-linux-tdep.o \
 			    arch/amd64-linux-tdesc.o ${gdb_target_obs}"
+	fi
+	if test "x$enable_qnx" = "xyes"; then
+	    gdb_target_obs="${gdb_target_qnx_obs} ${gdb_target_obs}"
+	fi
+	if test "x$enable_qnx" = "xyes"; then
+	    gdb_target_obs="${gdb_target_qnx_obs} ${gdb_target_obs}"
 	fi
 	;;
 i[34567]86-*-gnu*)
@@ -804,6 +830,10 @@ m68*-*-openbsd* | m88*-*-openbsd* | vax-*-openbsd*) ;;
 powerpc-*-aix* | rs6000-*-* | powerpc64-*-aix*)
                 gdb_osabi=GDB_OSABI_AIX ;;
 esac
+
+if test "x$enable_qnx" = "xyes"; then
+   gdb_osabi=GDB_OSABI_QNXNTO
+fi
 
 # Check whether this target supports gcore.
 # Such target has to call set_gdbarch_find_memory_regions.

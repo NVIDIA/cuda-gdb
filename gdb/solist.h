@@ -16,6 +16,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef GDB_SOLIST_H
 #define GDB_SOLIST_H
 
@@ -95,6 +100,17 @@ struct solib : intrusive_list_node<solib>
      that supports outputting multiple segments once the related code
      supports them.  */
   CORE_ADDR addr_low = 0, addr_high = 0;
+#ifdef __QNXTARGET__
+    /* Build id in raw format, contains verbatim contents of
+       .note.gnu.build-id note data.  This is actual
+       BUILD_ID which comes either from the remote target via qXfer
+       packet or via reading target memory.  Therefore, it may differ
+       from the build-id of the associated bfd.  In a normal
+       scenario, this so would soon lose its abfd due to failed
+       validation.  */
+    size_t build_idsz;
+    gdb_byte *build_id;
+#endif
 };
 
 struct solib_ops
@@ -180,6 +196,16 @@ struct solib_ops
      name).  */
 
   std::optional<CORE_ADDR> (*find_solib_addr) (solib &so);
+
+#ifdef __QNXTARGET__
+  /* Optional extra hook for finding and opening a solib.
+     If TEMP_PATHNAME is non-NULL: If the file is successfully opened a
+     pointer to a malloc'd and realpath'd copy of SONAME is stored there,
+     otherwise NULL is stored there.  */
+  int (*find_and_open_solib) (const char *soname,
+                              unsigned o_flags,
+                              gdb::unique_xmalloc_ptr<char> *temp_pathname);
+#endif
 };
 
 /* A unique pointer to a so_list.  */

@@ -49,6 +49,8 @@ AC_DEFUN([gl_FUNC_GETCWD_NULL],
         [gl_cv_func_getcwd_null=yes],
         [gl_cv_func_getcwd_null=no],
         [[case "$host_os" in
+                           # Guess yes on qnx nto systems.
+            nto*)          gl_cv_func_getcwd_null="guessing yes";;
                            # Guess yes on glibc systems.
             *-gnu* | gnu*) gl_cv_func_getcwd_null="guessing yes";;
                            # Guess yes on musl systems.

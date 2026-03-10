@@ -20,6 +20,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* To regenerate this file, run:
    ./gdbarch.py
 */
@@ -66,12 +71,51 @@ extern void set_gdbarch_long_bit (struct gdbarch *gdbarch, int long_bit);
 
 extern int gdbarch_long_long_bit (struct gdbarch *gdbarch);
 extern void set_gdbarch_long_long_bit (struct gdbarch *gdbarch, int long_long_bit);
+#ifdef NVIDIA_CUDA_GDB
 
-/* The ABI default bit-size and format for "bfloat16", "half", "float", "double", and
-   "long double".  These bit/format pairs should eventually be combined
+/* The ABI default bit-size and format for "nv_fp8", "nv_fp6", "nv_fp4",
+   "bfloat16", "half", "float", "double", and "long double".
+   These bit/format pairs should eventually be combined
    into a single object.  For the moment, just initialize them as a pair.
    Each format describes both the big and little endian layouts (if
    useful). */
+
+extern int gdbarch_nv_fp8_e8m0_bit (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp8_e8m0_bit (struct gdbarch *gdbarch, int nv_fp8_e8m0_bit);
+
+extern const struct floatformat ** gdbarch_nv_fp8_e8m0_format (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp8_e8m0_format (struct gdbarch *gdbarch, const struct floatformat ** nv_fp8_e8m0_format);
+
+extern int gdbarch_nv_fp8_e5m2_bit (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp8_e5m2_bit (struct gdbarch *gdbarch, int nv_fp8_e5m2_bit);
+
+extern const struct floatformat ** gdbarch_nv_fp8_e5m2_format (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp8_e5m2_format (struct gdbarch *gdbarch, const struct floatformat ** nv_fp8_e5m2_format);
+
+extern int gdbarch_nv_fp8_e4m3_bit (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp8_e4m3_bit (struct gdbarch *gdbarch, int nv_fp8_e4m3_bit);
+
+extern const struct floatformat ** gdbarch_nv_fp8_e4m3_format (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp8_e4m3_format (struct gdbarch *gdbarch, const struct floatformat ** nv_fp8_e4m3_format);
+
+extern int gdbarch_nv_fp6_e2m3_bit (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp6_e2m3_bit (struct gdbarch *gdbarch, int nv_fp6_e2m3_bit);
+
+extern const struct floatformat ** gdbarch_nv_fp6_e2m3_format (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp6_e2m3_format (struct gdbarch *gdbarch, const struct floatformat ** nv_fp6_e2m3_format);
+
+extern int gdbarch_nv_fp6_e3m2_bit (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp6_e3m2_bit (struct gdbarch *gdbarch, int nv_fp6_e3m2_bit);
+
+extern const struct floatformat ** gdbarch_nv_fp6_e3m2_format (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp6_e3m2_format (struct gdbarch *gdbarch, const struct floatformat ** nv_fp6_e3m2_format);
+
+extern int gdbarch_nv_fp4_e2m1_bit (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp4_e2m1_bit (struct gdbarch *gdbarch, int nv_fp4_e2m1_bit);
+
+extern const struct floatformat ** gdbarch_nv_fp4_e2m1_format (struct gdbarch *gdbarch);
+extern void set_gdbarch_nv_fp4_e2m1_format (struct gdbarch *gdbarch, const struct floatformat ** nv_fp4_e2m1_format);
+#endif
 
 extern int gdbarch_bfloat16_bit (struct gdbarch *gdbarch);
 extern void set_gdbarch_bfloat16_bit (struct gdbarch *gdbarch, int bfloat16_bit);
@@ -443,6 +487,40 @@ extern bool gdbarch_integer_to_address_p (struct gdbarch *gdbarch);
 typedef CORE_ADDR (gdbarch_integer_to_address_ftype) (struct gdbarch *gdbarch, struct type *type, const gdb_byte *buf);
 extern CORE_ADDR gdbarch_integer_to_address (struct gdbarch *gdbarch, struct type *type, const gdb_byte *buf);
 extern void set_gdbarch_integer_to_address (struct gdbarch *gdbarch, gdbarch_integer_to_address_ftype *integer_to_address);
+#ifdef NVIDIA_CUDA_GDB
+
+/* Extracts address space from core address.
+   TODO: This hook is a quick fix until a proper address space support
+   is added and should not be pushed upstream. */
+
+typedef int (gdbarch_address_class_from_core_address_ftype) (CORE_ADDR address);
+extern int gdbarch_address_class_from_core_address (struct gdbarch *gdbarch, CORE_ADDR address);
+extern void set_gdbarch_address_class_from_core_address (struct gdbarch *gdbarch, gdbarch_address_class_from_core_address_ftype *address_class_from_core_address);
+
+/* Extracts segment address from core address.
+   TODO: This hook is a quick fix until a proper address space support
+   is added and should not be pushed upstream. */
+
+typedef CORE_ADDR (gdbarch_segment_address_from_core_address_ftype) (CORE_ADDR address);
+extern CORE_ADDR gdbarch_segment_address_from_core_address (struct gdbarch *gdbarch, CORE_ADDR address);
+extern void set_gdbarch_segment_address_from_core_address (struct gdbarch *gdbarch, gdbarch_segment_address_from_core_address_ftype *segment_address_from_core_address);
+
+/* Converts segment address and address class to core address.
+   TODO: This hook is a quick fix until a proper address space support
+   is added and should not be pushed upstream. */
+
+typedef CORE_ADDR (gdbarch_segment_address_to_core_address_ftype) (int address_class, CORE_ADDR address);
+extern CORE_ADDR gdbarch_segment_address_to_core_address (struct gdbarch *gdbarch, int address_class, CORE_ADDR address);
+extern void set_gdbarch_segment_address_to_core_address (struct gdbarch *gdbarch, gdbarch_segment_address_to_core_address_ftype *segment_address_to_core_address);
+
+/* Converts type instance flags to an address class.
+   TODO: This hook is a quick fix until a proper address space support
+   is added and should not be pushed upstream. */
+
+typedef int (gdbarch_type_instance_flags_to_address_class_ftype) (type_instance_flags flags);
+extern int gdbarch_type_instance_flags_to_address_class (struct gdbarch *gdbarch, type_instance_flags flags);
+extern void set_gdbarch_type_instance_flags_to_address_class (struct gdbarch *gdbarch, gdbarch_type_instance_flags_to_address_class_ftype *type_instance_flags_to_address_class);
+#endif
 
 /* Return the return-value convention that will be used by FUNCTION
    to return a value of type VALTYPE.  FUNCTION may be NULL in which

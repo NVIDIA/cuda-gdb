@@ -20,6 +20,11 @@
 #include "cli/cli-cmds.h"
 #include "ui.h"
 #include "cli/cli-decode.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "demangle.h"
+#include <string.h>
+#include "ui-style.h"
+#endif
 
 /* See bt-utils.h.  */
 
@@ -71,6 +76,124 @@ libbacktrace_error (void *data, const char *errmsg, int errnum)
   sig_write ("\n");
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* Async-safe demangling support for libbacktrace.  */
+
+/* Static buffer for demangled names. This is used to provide async-safe
+   demangling in signal handlers. The buffer is large enough for most
+   demangled C++ names. */
+static char demangle_buffer[2048];
+static size_t demangle_buffer_used = 0;
+
+/* Callback for cplus_demangle_v3_callback that writes to our static buffer
+   in an async-safe manner. */
+static void
+demangle_callback (const char *s, size_t len, void *opaque)
+{
+  size_t *buffer_offset = (size_t *) opaque;
+  size_t available = sizeof (demangle_buffer) - *buffer_offset - 1;
+
+  if (len > available)
+    len = available;
+
+  if (len > 0)
+    {
+      memcpy (demangle_buffer + *buffer_offset, s, len);
+      *buffer_offset += len;
+    }
+}
+
+/* Attempt to demangle a symbol name in an async-safe manner.
+   Returns the demangled name or the original name if demangling fails. */
+static const char *
+async_safe_demangle (const char *mangled)
+{
+  /* Only attempt to demangle C++ names */
+  if (mangled == nullptr || mangled[0] != '_' || mangled[1] != 'Z')
+    return mangled;
+
+  /* Reset the buffer */
+  demangle_buffer_used = 0;
+
+  /* Try to demangle using the callback interface which is async-safe */
+  int result = cplus_demangle_v3_callback (mangled, 
+                                          DMGL_PARAMS | DMGL_ANSI,
+                                          demangle_callback,
+                                          &demangle_buffer_used);
+
+  if (result && demangle_buffer_used > 0 
+      && demangle_buffer_used < sizeof (demangle_buffer))
+    {
+      demangle_buffer[demangle_buffer_used] = '\0';
+      return demangle_buffer;
+    }
+
+  /* Demangling failed, return the original name */
+  return mangled;
+}
+
+static void
+write_default (const char *text)
+{
+  gdb_stderr->write_async_safe (text, strlen (text));
+}
+
+static void
+write_style (const char *text, const ui_file_style &style)
+{
+  gdb_stderr->emit_style_escape (style);
+  write_default (text);
+  gdb_stderr->reset_style ();
+}
+
+static int
+libbacktrace_print (void *data, uintptr_t pc, const char *filename,
+			   int lineno, const char *function)
+{
+  static ui_file_style address_style (ui_file_style::BLUE, ui_file_style::NONE);
+  static ui_file_style function_style (ui_file_style::YELLOW, ui_file_style::NONE);
+  static ui_file_style filename_style (ui_file_style::GREEN, ui_file_style::NONE);
+
+  char buf[19];
+
+  snprintf (buf, sizeof (buf), "0x%016" PRIxPTR, pc);
+  buf[sizeof (buf) - 1] = '\0';
+
+  write_style (buf, address_style);
+
+  write_default ("| ");
+
+  if (function == nullptr)
+    write_style ("???", function_style);
+  else
+    {
+      const char *display_name = async_safe_demangle (function);
+      write_style (display_name, function_style);
+    }
+
+  if (filename != nullptr)
+    {
+      /* Remove leading "../" from filename */
+      const char *display_filename = filename;
+      while (strncmp (display_filename, "../", 3) == 0)
+        display_filename += 3;
+
+      write_default (" at ");
+      write_style (display_filename, filename_style);
+      if (lineno > 0)
+        {
+          write_default (":");
+          snprintf (buf, sizeof (buf), "%d", lineno);
+          buf[sizeof (buf) - 1] = '\0';
+          write_default (buf);
+        }
+    }
+  write_default ("\n");
+
+  return function != nullptr && strcmp (function, "main") == 0;
+}
+#else
+
 /* Callback used by libbacktrace to print a single stack frame.  */
 
 static int
@@ -105,6 +228,7 @@ libbacktrace_print (void *data, uintptr_t pc, const char *filename,
 
   return function != nullptr && strcmp (function, "main") == 0;
 }
+#endif /* NVIDIA_CUDA_GDB */
 
 /* Write a backtrace to GDB's stderr in an async safe manner.  This is a
    backtrace of GDB, not any running inferior, and is to be used when GDB

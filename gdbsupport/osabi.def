@@ -43,6 +43,8 @@ GDB_OSABI_DEF (NETBSD, "NetBSD", nullptr)
 GDB_OSABI_DEF (OPENBSD, "OpenBSD", nullptr)
 GDB_OSABI_DEF (WINCE, "WindowsCE", nullptr)
 GDB_OSABI_DEF (GO32, "DJGPP", nullptr)
+/* CUDA - add support for QNX */
+GDB_OSABI_DEF (QNXNTO, "QNX/Neutrino", nullptr)
 GDB_OSABI_DEF (CYGWIN, "Cygwin", nullptr)
 GDB_OSABI_DEF (WINDOWS, "Windows", nullptr)
 GDB_OSABI_DEF (AIX, "AIX", nullptr)

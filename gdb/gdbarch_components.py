@@ -17,6 +17,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+# NVIDIA CUDA Debugger CUDA-GDB
+# Copyright (C) 2007-2025 NVIDIA Corporation
+# Modified from the original GDB file referenced above by the CUDA-GDB
+# team at NVIDIA <cudatools@nvidia.com>.
+
 # How to add to gdbarch:
 #
 # There are four kinds of fields in gdbarch:
@@ -185,12 +190,115 @@ machine.
 
 Value(
     comment="""
-The ABI default bit-size and format for "bfloat16", "half", "float", "double", and
-"long double".  These bit/format pairs should eventually be combined
+The ABI default bit-size and format for "nv_fp8", "nv_fp6", "nv_fp4",
+"bfloat16", "half", "float", "double", and "long double".
+These bit/format pairs should eventually be combined
 into a single object.  For the moment, just initialize them as a pair.
 Each format describes both the big and little endian layouts (if
 useful).
 """,
+    type="int",
+    name="nv_fp8_e8m0_bit",
+    predefault="TARGET_CHAR_BIT",
+    invalid=False,
+    cudaonly=True,
+)
+
+Value(
+    type="const struct floatformat **",
+    name="nv_fp8_e8m0_format",
+    postdefault="floatformats_nv_fp8_e8m0",
+    invalid=False,
+    printer="pformat (gdbarch, gdbarch->nv_fp8_e8m0_format)",
+    cudaonly=True,
+)
+
+Value(
+    type="int",
+    name="nv_fp8_e5m2_bit",
+    predefault="TARGET_CHAR_BIT",
+    invalid=False,
+    cudaonly=True,
+)
+
+Value(
+    type="const struct floatformat **",
+    name="nv_fp8_e5m2_format",
+    postdefault="floatformats_nv_fp8_e5m2",
+    invalid=False,
+    printer="pformat (gdbarch, gdbarch->nv_fp8_e5m2_format)",
+    cudaonly=True,
+)
+
+Value(
+    type="int",
+    name="nv_fp8_e4m3_bit",
+    predefault="TARGET_CHAR_BIT",
+    invalid=False,
+    cudaonly=True,
+)
+
+Value(
+    type="const struct floatformat **",
+    name="nv_fp8_e4m3_format",
+    postdefault="floatformats_nv_fp8_e4m3",
+    invalid=False,
+    printer="pformat (gdbarch, gdbarch->nv_fp8_e4m3_format)",
+    cudaonly=True,
+)
+
+Value(
+    type="int",
+    name="nv_fp6_e2m3_bit",
+    predefault="TARGET_CHAR_BIT",
+    invalid=False,
+    cudaonly=True,
+)
+
+Value(
+    type="const struct floatformat **",
+    name="nv_fp6_e2m3_format",
+    postdefault="floatformats_nv_fp6_e2m3",
+    invalid=False,
+    printer="pformat (gdbarch, gdbarch->nv_fp6_e2m3_format)",
+    cudaonly=True,
+)
+
+Value(
+    type="int",
+    name="nv_fp6_e3m2_bit",
+    predefault="TARGET_CHAR_BIT",
+    invalid=False,
+    cudaonly=True,
+)
+
+Value(
+    type="const struct floatformat **",
+    name="nv_fp6_e3m2_format",
+    postdefault="floatformats_nv_fp6_e3m2",
+    invalid=False,
+    printer="pformat (gdbarch, gdbarch->nv_fp6_e3m2_format)",
+    cudaonly=True,
+)
+
+Value(
+    type="int",
+    name="nv_fp4_e2m1_bit",
+    predefault="TARGET_CHAR_BIT",
+    invalid=False,
+    cudaonly=True,
+)
+
+Value(
+    type="const struct floatformat **",
+    name="nv_fp4_e2m1_format",
+    postdefault="floatformats_nv_fp4_e2m1",
+    invalid=False,
+    printer="pformat (gdbarch, gdbarch->nv_fp4_e2m1_format)",
+    cudaonly=True,
+)
+
+Value(
     type="int",
     name="bfloat16_bit",
     predefault="2*TARGET_CHAR_BIT",
@@ -851,6 +959,65 @@ Method(
     params=[("struct type *", "type"), ("const gdb_byte *", "buf")],
     predicate=True,
 )
+
+#ifdef NVIDIA_CUDA_GDB
+Function(
+    comment="""
+Extracts address space from core address.
+TODO: This hook is a quick fix until a proper address space support
+is added and should not be pushed upstream.
+""",
+    type="int",
+    name="address_class_from_core_address",
+    params=[("CORE_ADDR", "address")],
+    postdefault="default_address_class_from_core_address",
+    invalid=False,
+    cudaonly=True,
+)
+
+Function(
+    comment="""
+Extracts segment address from core address.
+TODO: This hook is a quick fix until a proper address space support
+is added and should not be pushed upstream.
+""",
+    type="CORE_ADDR",
+    name="segment_address_from_core_address",
+    params=[("CORE_ADDR", "address")],
+    postdefault="default_segment_address_from_core_address",
+    invalid=False,
+    cudaonly=True,
+)
+
+Function(
+    comment="""
+Converts segment address and address class to core address.
+TODO: This hook is a quick fix until a proper address space support
+is added and should not be pushed upstream.
+""",
+    type="CORE_ADDR",
+    name="segment_address_to_core_address",
+    params=[("int", "address_class"), ("CORE_ADDR", "address")],
+    postdefault="default_segment_address_to_core_address",
+    invalid=False,
+    cudaonly=True,
+)
+
+Function(
+    comment="""
+Converts type instance flags to an address class.
+TODO: This hook is a quick fix until a proper address space support
+is added and should not be pushed upstream.
+""",
+    type="int",
+    name="type_instance_flags_to_address_class",
+    params=[("type_instance_flags", "flags")],
+    postdefault="default_type_instance_flags_to_address_class",
+    invalid=False,
+    cudaonly=True,
+)
+
+#endif
 
 Method(
     comment="""

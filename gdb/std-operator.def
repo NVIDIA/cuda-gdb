@@ -16,6 +16,10 @@
 
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
 
 /* Used when it's necessary to pass an opcode which will be ignored,
    or to catch uninitialized values.  */
@@ -87,6 +91,9 @@ OP (BINOP_VAL)
    the second operand with itself that many times.  */
 OP (BINOP_CONCAT)
 
+/* CUDA - Intrinsic functions (fmod etc.).  */
+OP (BINOP_FMOD)
+/* END CUDA */
 /* Operates on three values computed by following subexpressions.  */
 OP (TERNOP_COND)		/* ?: */
 
@@ -238,6 +245,17 @@ OP (UNOP_PLUS)			/* Unary plus */
 
 OP (UNOP_ABS)
 OP (UNOP_HIGH)
+/* CUDA - Intrinsic functions (isnan, isinf, creal, cimag, etc.).  */
+OP (UNOP_ISNAN)
+OP (UNOP_ISINF)
+OP (UNOP_ISFINITE)
+OP (UNOP_ISNORMAL)
+OP (UNOP_CREAL)
+OP (UNOP_CIMAG)
+OP (UNOP_FABS)
+OP (UNOP_CEIL)
+OP (UNOP_FLOOR)
+/* END CUDA */
 
 OP (OP_BOOL)			/* Modula-2 builtin BOOLEAN type */
 

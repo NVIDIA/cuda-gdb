@@ -414,4 +414,28 @@ extern enum return_value_convention default_gdbarch_return_value
       struct regcache *regcache, struct value **read_value,
       const gdb_byte *writebuf);
 
+#ifdef NVIDIA_CUDA_GDB
+
+/* TODO: Following default address space hooks are a quick fix until a proper
+	 address space support is added and should not be pushed upstream.  */
+
+/* Default implementation of gdbarch_address_space_id_from_core_address.  */
+extern int default_address_class_from_core_address (CORE_ADDR address);
+
+/* Default implementation of gdbarch_segment_address_from_core_address.  */
+extern CORE_ADDR default_segment_address_from_core_address (CORE_ADDR address);
+
+/* Default implementation of gdbarch_segment_address_to_core_address.  */
+extern CORE_ADDR default_segment_address_to_core_address (int address_class,
+							  CORE_ADDR address);
+
+extern CORE_ADDR
+default_core_address_from_segment_address_and_type (CORE_ADDR segment_address,
+						    struct type *type);
+
+extern int
+default_type_instance_flags_to_address_class (type_instance_flags type_flags);
+
+#endif /* NVIDIA_CUDA_GDB */
+
 #endif /* GDB_ARCH_UTILS_H */

@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "event-top.h"
 #include "extract-store-integer.h"
 #include "symtab.h"
@@ -32,6 +37,9 @@
 #include "block.h"
 #include "objfiles.h"
 #include "language.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-tdep.h"
+#endif
 
 /* Basic byte-swapping routines.  All 'extract' functions return a
    host-format integer from a target-format integer at ADDR which is
@@ -303,8 +311,38 @@ language_defn::read_var_value (struct symbol *var,
   if (frame != NULL)
     frame = get_hosting_frame (var, var_block, frame);
 
+#ifdef NVIDIA_CUDA_GDB
+  /* Fix for Numba polymorphic types*/
+  if (const symbol_computed_ops *computed_ops = var->computed_ops ())
+    {
+      dynamic_prop *variant_prop = type->dyn_prop (DYN_PROP_VARIANT_PARTS);
+
+      if (type->code () != TYPE_CODE_STRUCT || variant_prop == nullptr
+	  || variant_prop->kind () != PROP_VARIANT_PARTS)
+	return computed_ops->read_variable (var, frame);
+
+      v = computed_ops->read_variable (var, frame);
+      const gdb_byte *valaddr = v->contents_for_printing ().data ();
+      gdb::array_view<const gdb_byte> view = gdb::make_array_view (valaddr, type->length ());
+      type = resolve_dynamic_type (type, view, /* Unused address.  */ 0);
+      if (type->code () == TYPE_CODE_STRUCT && type->num_fields () == 1)
+	{
+	  LONGEST bit_offset = v->offset () * TARGET_CHAR_BIT + type->field (0).loc_bitpos ();
+	  v->set_offset (bit_offset / TARGET_CHAR_BIT);
+	  v->set_bitpos (bit_offset % TARGET_CHAR_BIT);
+	  /* This method has been deprecated for a while but there is no replacement for it.  */
+	  v->deprecated_set_type (type->field (0).type ());
+
+	  /* Because we are changing the offset of a struct value object, the potential
+	     cached content of the underlying location needs to be invalidated.*/
+	  v->set_lazy (true);
+	}
+      return v;
+    }
+#else
   if (const symbol_computed_ops *computed_ops = var->computed_ops ())
     return computed_ops->read_variable (var, frame);
+#endif
 
   switch (var->aclass ())
     {
@@ -501,6 +539,32 @@ language_defn::read_var_value (struct symbol *var,
     }
 
   v = value_at_lazy (type, addr);
+
+#ifdef NVIDIA_CUDA_GDB
+  /* Fix for Numba polymorphic types*/
+  dynamic_prop *variant_prop = type->dyn_prop (DYN_PROP_VARIANT_PARTS);
+
+  if (type->code () != TYPE_CODE_STRUCT || variant_prop == nullptr
+      || variant_prop->kind () != PROP_VARIANT_PARTS)
+    return v;
+
+  type = v->type ();
+  if (type == nullptr)
+    return v;
+
+  if (type->code () == TYPE_CODE_STRUCT && type->num_fields () == 1)
+    {
+      LONGEST bit_offset = v->offset () * TARGET_CHAR_BIT + type->field (0).loc_bitpos ();
+      v->set_offset (bit_offset / TARGET_CHAR_BIT);
+      v->set_bitpos (bit_offset % TARGET_CHAR_BIT);
+      /* This method has been deprecated for a while but there is no replacement for it.  */
+      v->deprecated_set_type (type->field (0).type ());
+      /* Because we are changing the offset of a struct value object, the potential
+	 cached content of the underlying location needs to be invalidated.*/
+      v->set_lazy (true);
+    }
+#endif
+
   return v;
 }
 
@@ -549,7 +613,11 @@ default_value_from_register (gdbarch *gdbarch, type *type, int regnum,
    If any of the registers we try to read are optimized out, then mark the
    complete resulting value as optimized out.  */
 
+#ifdef NVIDIA_CHERRY_PICK
+void
+#else
 static void
+#endif
 read_frame_register_value (value *value)
 {
   gdb_assert (value->lval () == lval_register);
@@ -560,6 +628,9 @@ read_frame_register_value (value *value)
   gdbarch *gdbarch = frame_unwind_arch (next_frame);
   LONGEST offset = 0;
   LONGEST reg_offset = value->offset ();
+#ifdef NVIDIA_CHERRY_PICK
+  LONGEST bit_offset = value->bitpos ();
+#endif
   int regnum = value->regnum ();
   int len = type_length_units (check_typedef (value->type ()));
 
@@ -570,6 +641,11 @@ read_frame_register_value (value *value)
       regnum++;
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - fetch lazy values first */
+  if (value->lazy ())
+    value->fetch_lazy ();
+#endif
   /* Copy the data.  */
   while (len > 0)
     {
@@ -581,7 +657,12 @@ read_frame_register_value (value *value)
       if (reg_len > len)
 	reg_len = len;
 
+#ifdef NVIDIA_CHERRY_PICK
+      regval->contents_copy (value, offset, reg_offset,
+			     bit_offset, reg_len);
+#else
       regval->contents_copy (value, offset, reg_offset, reg_len);
+#endif
 
       offset += reg_len;
       len -= reg_len;
@@ -643,6 +724,18 @@ CORE_ADDR
 address_from_register (int regnum, const frame_info_ptr &frame)
 {
   type *type = builtin_type (get_frame_arch (frame))->builtin_data_ptr;
+
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - Read correct pointer size from header */
+  /* When debugging 32-bit apps on 64-bit cuda-gdb, the pointer size
+  * is not set correctly. Here we need to reset the size of the builtin
+  * type to make sure cuda-gdb reads the correct size.
+  */
+  gdbarch *gdbarch = get_frame_arch (frame);
+  if (cuda_is_cuda_gdbarch (gdbarch))
+    type = gdbarch_register_type (gdbarch, regnum);
+#endif
+
   value_ref_ptr v = release_value (value_from_register (type, regnum, frame));
 
   if (v->optimized_out ())

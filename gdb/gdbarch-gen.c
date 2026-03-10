@@ -20,6 +20,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* To regenerate this file, run:
    ./gdbarch.py
 */
@@ -52,6 +57,20 @@ struct gdbarch
   int int_bit = 4*TARGET_CHAR_BIT;
   int long_bit = 4*TARGET_CHAR_BIT;
   int long_long_bit = 2*4*TARGET_CHAR_BIT;
+#ifdef NVIDIA_CUDA_GDB
+  int nv_fp8_e8m0_bit = TARGET_CHAR_BIT;
+  const struct floatformat ** nv_fp8_e8m0_format = 0;
+  int nv_fp8_e5m2_bit = TARGET_CHAR_BIT;
+  const struct floatformat ** nv_fp8_e5m2_format = 0;
+  int nv_fp8_e4m3_bit = TARGET_CHAR_BIT;
+  const struct floatformat ** nv_fp8_e4m3_format = 0;
+  int nv_fp6_e2m3_bit = TARGET_CHAR_BIT;
+  const struct floatformat ** nv_fp6_e2m3_format = 0;
+  int nv_fp6_e3m2_bit = TARGET_CHAR_BIT;
+  const struct floatformat ** nv_fp6_e3m2_format = 0;
+  int nv_fp4_e2m1_bit = TARGET_CHAR_BIT;
+  const struct floatformat ** nv_fp4_e2m1_format = 0;
+#endif
   int bfloat16_bit = 2*TARGET_CHAR_BIT;
   const struct floatformat ** bfloat16_format = floatformats_bfloat16;
   int half_bit = 2*TARGET_CHAR_BIT;
@@ -112,6 +131,12 @@ struct gdbarch
   gdbarch_pointer_to_address_ftype *pointer_to_address = unsigned_pointer_to_address;
   gdbarch_address_to_pointer_ftype *address_to_pointer = unsigned_address_to_pointer;
   gdbarch_integer_to_address_ftype *integer_to_address = nullptr;
+#ifdef NVIDIA_CUDA_GDB
+  gdbarch_address_class_from_core_address_ftype *address_class_from_core_address = nullptr;
+  gdbarch_segment_address_from_core_address_ftype *segment_address_from_core_address = nullptr;
+  gdbarch_segment_address_to_core_address_ftype *segment_address_to_core_address = nullptr;
+  gdbarch_type_instance_flags_to_address_class_ftype *type_instance_flags_to_address_class = nullptr;
+#endif
   gdbarch_return_value_ftype *return_value = nullptr;
   gdbarch_return_value_as_value_ftype *return_value_as_value = default_gdbarch_return_value;
   gdbarch_get_return_buf_addr_ftype *get_return_buf_addr = default_get_return_buf_addr;
@@ -304,6 +329,32 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of int_bit, invalid_p == 0.  */
   /* Skip verify of long_bit, invalid_p == 0.  */
   /* Skip verify of long_long_bit, invalid_p == 0.  */
+#ifdef NVIDIA_CUDA_GDB
+  /* Skip verify of nv_fp8_e8m0_bit, invalid_p == 0.  */
+  if (gdbarch->nv_fp8_e8m0_format == 0)
+    gdbarch->nv_fp8_e8m0_format = floatformats_nv_fp8_e8m0;
+  /* Skip verify of nv_fp8_e8m0_format, invalid_p == 0.  */
+  /* Skip verify of nv_fp8_e5m2_bit, invalid_p == 0.  */
+  if (gdbarch->nv_fp8_e5m2_format == 0)
+    gdbarch->nv_fp8_e5m2_format = floatformats_nv_fp8_e5m2;
+  /* Skip verify of nv_fp8_e5m2_format, invalid_p == 0.  */
+  /* Skip verify of nv_fp8_e4m3_bit, invalid_p == 0.  */
+  if (gdbarch->nv_fp8_e4m3_format == 0)
+    gdbarch->nv_fp8_e4m3_format = floatformats_nv_fp8_e4m3;
+  /* Skip verify of nv_fp8_e4m3_format, invalid_p == 0.  */
+  /* Skip verify of nv_fp6_e2m3_bit, invalid_p == 0.  */
+  if (gdbarch->nv_fp6_e2m3_format == 0)
+    gdbarch->nv_fp6_e2m3_format = floatformats_nv_fp6_e2m3;
+  /* Skip verify of nv_fp6_e2m3_format, invalid_p == 0.  */
+  /* Skip verify of nv_fp6_e3m2_bit, invalid_p == 0.  */
+  if (gdbarch->nv_fp6_e3m2_format == 0)
+    gdbarch->nv_fp6_e3m2_format = floatformats_nv_fp6_e3m2;
+  /* Skip verify of nv_fp6_e3m2_format, invalid_p == 0.  */
+  /* Skip verify of nv_fp4_e2m1_bit, invalid_p == 0.  */
+  if (gdbarch->nv_fp4_e2m1_format == 0)
+    gdbarch->nv_fp4_e2m1_format = floatformats_nv_fp4_e2m1;
+  /* Skip verify of nv_fp4_e2m1_format, invalid_p == 0.  */
+#endif
   /* Skip verify of bfloat16_bit, invalid_p == 0.  */
   /* Skip verify of bfloat16_format, invalid_p == 0.  */
   /* Skip verify of half_bit, invalid_p == 0.  */
@@ -375,6 +426,20 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of pointer_to_address, invalid_p == 0.  */
   /* Skip verify of address_to_pointer, invalid_p == 0.  */
   /* Skip verify of integer_to_address, has predicate.  */
+#ifdef NVIDIA_CUDA_GDB
+  if (gdbarch->address_class_from_core_address == 0)
+    gdbarch->address_class_from_core_address = default_address_class_from_core_address;
+  /* Skip verify of address_class_from_core_address, invalid_p == 0.  */
+  if (gdbarch->segment_address_from_core_address == 0)
+    gdbarch->segment_address_from_core_address = default_segment_address_from_core_address;
+  /* Skip verify of segment_address_from_core_address, invalid_p == 0.  */
+  if (gdbarch->segment_address_to_core_address == 0)
+    gdbarch->segment_address_to_core_address = default_segment_address_to_core_address;
+  /* Skip verify of segment_address_to_core_address, invalid_p == 0.  */
+  if (gdbarch->type_instance_flags_to_address_class == 0)
+    gdbarch->type_instance_flags_to_address_class = default_type_instance_flags_to_address_class;
+  /* Skip verify of type_instance_flags_to_address_class, invalid_p == 0.  */
+#endif
   /* Skip verify of return_value, invalid_p == 0.  */
   if ((gdbarch->return_value_as_value == default_gdbarch_return_value) == (gdbarch->return_value == nullptr))
     log.puts ("\n\treturn_value_as_value");
@@ -579,6 +644,44 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: long_long_bit = %s\n",
 	      plongest (gdbarch->long_long_bit));
+#ifdef NVIDIA_CUDA_GDB
+  gdb_printf (file,
+	      "gdbarch_dump: nv_fp8_e8m0_bit = %s\n",
+	      plongest (gdbarch->nv_fp8_e8m0_bit));
+  gdb_printf (file,
+	      "gdbarch_dump: nv_fp8_e8m0_format = %s\n",
+	      pformat (gdbarch, gdbarch->nv_fp8_e8m0_format));
+  gdb_printf (file,
+	      "gdbarch_dump: nv_fp8_e5m2_bit = %s\n",
+	      plongest (gdbarch->nv_fp8_e5m2_bit));
+  gdb_printf (file,
+	      "gdbarch_dump: nv_fp8_e5m2_format = %s\n",
+	      pformat (gdbarch, gdbarch->nv_fp8_e5m2_format));
+  gdb_printf (file,
+	      "gdbarch_dump: nv_fp8_e4m3_bit = %s\n",
+	      plongest (gdbarch->nv_fp8_e4m3_bit));
+  gdb_printf (file,
+	      "gdbarch_dump: nv_fp8_e4m3_format = %s\n",
+	      pformat (gdbarch, gdbarch->nv_fp8_e4m3_format));
+  gdb_printf (file,
+	      "gdbarch_dump: nv_fp6_e2m3_bit = %s\n",
+	      plongest (gdbarch->nv_fp6_e2m3_bit));
+  gdb_printf (file,
+	      "gdbarch_dump: nv_fp6_e2m3_format = %s\n",
+	      pformat (gdbarch, gdbarch->nv_fp6_e2m3_format));
+  gdb_printf (file,
+	      "gdbarch_dump: nv_fp6_e3m2_bit = %s\n",
+	      plongest (gdbarch->nv_fp6_e3m2_bit));
+  gdb_printf (file,
+	      "gdbarch_dump: nv_fp6_e3m2_format = %s\n",
+	      pformat (gdbarch, gdbarch->nv_fp6_e3m2_format));
+  gdb_printf (file,
+	      "gdbarch_dump: nv_fp4_e2m1_bit = %s\n",
+	      plongest (gdbarch->nv_fp4_e2m1_bit));
+  gdb_printf (file,
+	      "gdbarch_dump: nv_fp4_e2m1_format = %s\n",
+	      pformat (gdbarch, gdbarch->nv_fp4_e2m1_format));
+#endif
   gdb_printf (file,
 	      "gdbarch_dump: bfloat16_bit = %s\n",
 	      plongest (gdbarch->bfloat16_bit));
@@ -801,6 +904,20 @@ gdbarch_dump (struct gdbarch *gdbarch, struct ui_file *file)
   gdb_printf (file,
 	      "gdbarch_dump: integer_to_address = <%s>\n",
 	      host_address_to_string (gdbarch->integer_to_address));
+#ifdef NVIDIA_CUDA_GDB
+  gdb_printf (file,
+	      "gdbarch_dump: address_class_from_core_address = <%s>\n",
+	      host_address_to_string (gdbarch->address_class_from_core_address));
+  gdb_printf (file,
+	      "gdbarch_dump: segment_address_from_core_address = <%s>\n",
+	      host_address_to_string (gdbarch->segment_address_from_core_address));
+  gdb_printf (file,
+	      "gdbarch_dump: segment_address_to_core_address = <%s>\n",
+	      host_address_to_string (gdbarch->segment_address_to_core_address));
+  gdb_printf (file,
+	      "gdbarch_dump: type_instance_flags_to_address_class = <%s>\n",
+	      host_address_to_string (gdbarch->type_instance_flags_to_address_class));
+#endif
   gdb_printf (file,
 	      "gdbarch_dump: return_value = <%s>\n",
 	      host_address_to_string (gdbarch->return_value));
@@ -1518,6 +1635,218 @@ set_gdbarch_long_long_bit (struct gdbarch *gdbarch,
 {
   gdbarch->long_long_bit = long_long_bit;
 }
+#ifdef NVIDIA_CUDA_GDB
+
+int
+gdbarch_nv_fp8_e8m0_bit (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of nv_fp8_e8m0_bit, invalid_p == 0.  */
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_nv_fp8_e8m0_bit called\n");
+  return gdbarch->nv_fp8_e8m0_bit;
+}
+
+void
+set_gdbarch_nv_fp8_e8m0_bit (struct gdbarch *gdbarch,
+			     int nv_fp8_e8m0_bit)
+{
+  gdbarch->nv_fp8_e8m0_bit = nv_fp8_e8m0_bit;
+}
+
+const struct floatformat **
+gdbarch_nv_fp8_e8m0_format (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Check variable changed from its initial value.  */
+  gdb_assert (gdbarch->nv_fp8_e8m0_format != 0);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_nv_fp8_e8m0_format called\n");
+  return gdbarch->nv_fp8_e8m0_format;
+}
+
+void
+set_gdbarch_nv_fp8_e8m0_format (struct gdbarch *gdbarch,
+				const struct floatformat ** nv_fp8_e8m0_format)
+{
+  gdbarch->nv_fp8_e8m0_format = nv_fp8_e8m0_format;
+}
+
+int
+gdbarch_nv_fp8_e5m2_bit (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of nv_fp8_e5m2_bit, invalid_p == 0.  */
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_nv_fp8_e5m2_bit called\n");
+  return gdbarch->nv_fp8_e5m2_bit;
+}
+
+void
+set_gdbarch_nv_fp8_e5m2_bit (struct gdbarch *gdbarch,
+			     int nv_fp8_e5m2_bit)
+{
+  gdbarch->nv_fp8_e5m2_bit = nv_fp8_e5m2_bit;
+}
+
+const struct floatformat **
+gdbarch_nv_fp8_e5m2_format (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Check variable changed from its initial value.  */
+  gdb_assert (gdbarch->nv_fp8_e5m2_format != 0);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_nv_fp8_e5m2_format called\n");
+  return gdbarch->nv_fp8_e5m2_format;
+}
+
+void
+set_gdbarch_nv_fp8_e5m2_format (struct gdbarch *gdbarch,
+				const struct floatformat ** nv_fp8_e5m2_format)
+{
+  gdbarch->nv_fp8_e5m2_format = nv_fp8_e5m2_format;
+}
+
+int
+gdbarch_nv_fp8_e4m3_bit (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of nv_fp8_e4m3_bit, invalid_p == 0.  */
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_nv_fp8_e4m3_bit called\n");
+  return gdbarch->nv_fp8_e4m3_bit;
+}
+
+void
+set_gdbarch_nv_fp8_e4m3_bit (struct gdbarch *gdbarch,
+			     int nv_fp8_e4m3_bit)
+{
+  gdbarch->nv_fp8_e4m3_bit = nv_fp8_e4m3_bit;
+}
+
+const struct floatformat **
+gdbarch_nv_fp8_e4m3_format (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Check variable changed from its initial value.  */
+  gdb_assert (gdbarch->nv_fp8_e4m3_format != 0);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_nv_fp8_e4m3_format called\n");
+  return gdbarch->nv_fp8_e4m3_format;
+}
+
+void
+set_gdbarch_nv_fp8_e4m3_format (struct gdbarch *gdbarch,
+				const struct floatformat ** nv_fp8_e4m3_format)
+{
+  gdbarch->nv_fp8_e4m3_format = nv_fp8_e4m3_format;
+}
+
+int
+gdbarch_nv_fp6_e2m3_bit (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of nv_fp6_e2m3_bit, invalid_p == 0.  */
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_nv_fp6_e2m3_bit called\n");
+  return gdbarch->nv_fp6_e2m3_bit;
+}
+
+void
+set_gdbarch_nv_fp6_e2m3_bit (struct gdbarch *gdbarch,
+			     int nv_fp6_e2m3_bit)
+{
+  gdbarch->nv_fp6_e2m3_bit = nv_fp6_e2m3_bit;
+}
+
+const struct floatformat **
+gdbarch_nv_fp6_e2m3_format (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Check variable changed from its initial value.  */
+  gdb_assert (gdbarch->nv_fp6_e2m3_format != 0);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_nv_fp6_e2m3_format called\n");
+  return gdbarch->nv_fp6_e2m3_format;
+}
+
+void
+set_gdbarch_nv_fp6_e2m3_format (struct gdbarch *gdbarch,
+				const struct floatformat ** nv_fp6_e2m3_format)
+{
+  gdbarch->nv_fp6_e2m3_format = nv_fp6_e2m3_format;
+}
+
+int
+gdbarch_nv_fp6_e3m2_bit (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of nv_fp6_e3m2_bit, invalid_p == 0.  */
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_nv_fp6_e3m2_bit called\n");
+  return gdbarch->nv_fp6_e3m2_bit;
+}
+
+void
+set_gdbarch_nv_fp6_e3m2_bit (struct gdbarch *gdbarch,
+			     int nv_fp6_e3m2_bit)
+{
+  gdbarch->nv_fp6_e3m2_bit = nv_fp6_e3m2_bit;
+}
+
+const struct floatformat **
+gdbarch_nv_fp6_e3m2_format (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Check variable changed from its initial value.  */
+  gdb_assert (gdbarch->nv_fp6_e3m2_format != 0);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_nv_fp6_e3m2_format called\n");
+  return gdbarch->nv_fp6_e3m2_format;
+}
+
+void
+set_gdbarch_nv_fp6_e3m2_format (struct gdbarch *gdbarch,
+				const struct floatformat ** nv_fp6_e3m2_format)
+{
+  gdbarch->nv_fp6_e3m2_format = nv_fp6_e3m2_format;
+}
+
+int
+gdbarch_nv_fp4_e2m1_bit (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Skip verify of nv_fp4_e2m1_bit, invalid_p == 0.  */
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_nv_fp4_e2m1_bit called\n");
+  return gdbarch->nv_fp4_e2m1_bit;
+}
+
+void
+set_gdbarch_nv_fp4_e2m1_bit (struct gdbarch *gdbarch,
+			     int nv_fp4_e2m1_bit)
+{
+  gdbarch->nv_fp4_e2m1_bit = nv_fp4_e2m1_bit;
+}
+
+const struct floatformat **
+gdbarch_nv_fp4_e2m1_format (struct gdbarch *gdbarch)
+{
+  gdb_assert (gdbarch != NULL);
+  /* Check variable changed from its initial value.  */
+  gdb_assert (gdbarch->nv_fp4_e2m1_format != 0);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_nv_fp4_e2m1_format called\n");
+  return gdbarch->nv_fp4_e2m1_format;
+}
+
+void
+set_gdbarch_nv_fp4_e2m1_format (struct gdbarch *gdbarch,
+				const struct floatformat ** nv_fp4_e2m1_format)
+{
+  gdbarch->nv_fp4_e2m1_format = nv_fp4_e2m1_format;
+}
+#endif
 
 int
 gdbarch_bfloat16_bit (struct gdbarch *gdbarch)
@@ -2645,6 +2974,76 @@ set_gdbarch_integer_to_address (struct gdbarch *gdbarch,
 {
   gdbarch->integer_to_address = integer_to_address;
 }
+#ifdef NVIDIA_CUDA_GDB
+
+int
+gdbarch_address_class_from_core_address (struct gdbarch *gdbarch, CORE_ADDR address)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->address_class_from_core_address != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_address_class_from_core_address called\n");
+  return gdbarch->address_class_from_core_address (address);
+}
+
+void
+set_gdbarch_address_class_from_core_address (struct gdbarch *gdbarch,
+					     gdbarch_address_class_from_core_address_ftype address_class_from_core_address)
+{
+  gdbarch->address_class_from_core_address = address_class_from_core_address;
+}
+
+CORE_ADDR
+gdbarch_segment_address_from_core_address (struct gdbarch *gdbarch, CORE_ADDR address)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->segment_address_from_core_address != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_segment_address_from_core_address called\n");
+  return gdbarch->segment_address_from_core_address (address);
+}
+
+void
+set_gdbarch_segment_address_from_core_address (struct gdbarch *gdbarch,
+					       gdbarch_segment_address_from_core_address_ftype segment_address_from_core_address)
+{
+  gdbarch->segment_address_from_core_address = segment_address_from_core_address;
+}
+
+CORE_ADDR
+gdbarch_segment_address_to_core_address (struct gdbarch *gdbarch, int address_class, CORE_ADDR address)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->segment_address_to_core_address != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_segment_address_to_core_address called\n");
+  return gdbarch->segment_address_to_core_address (address_class, address);
+}
+
+void
+set_gdbarch_segment_address_to_core_address (struct gdbarch *gdbarch,
+					     gdbarch_segment_address_to_core_address_ftype segment_address_to_core_address)
+{
+  gdbarch->segment_address_to_core_address = segment_address_to_core_address;
+}
+
+int
+gdbarch_type_instance_flags_to_address_class (struct gdbarch *gdbarch, type_instance_flags flags)
+{
+  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch->type_instance_flags_to_address_class != NULL);
+  if (gdbarch_debug >= 2)
+    gdb_printf (gdb_stdlog, "gdbarch_type_instance_flags_to_address_class called\n");
+  return gdbarch->type_instance_flags_to_address_class (flags);
+}
+
+void
+set_gdbarch_type_instance_flags_to_address_class (struct gdbarch *gdbarch,
+						  gdbarch_type_instance_flags_to_address_class_ftype type_instance_flags_to_address_class)
+{
+  gdbarch->type_instance_flags_to_address_class = type_instance_flags_to_address_class;
+}
+#endif
 
 void
 set_gdbarch_return_value (struct gdbarch *gdbarch,

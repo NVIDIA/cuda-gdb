@@ -1,47 +1,46 @@
-		   README for GNU development tools
+		     README for CUDA-GDB release
 
-This directory contains various GNU compilers, assemblers, linkers, 
-debuggers, etc., plus their support routines, definitions, and documentation.
+This is CUDA-GDB, the NVIDIA CUDA source-level debugger for Linux and Mac OS,
+based on GDB-14.2, the GNU source-level debugger.
 
-If you are receiving this as part of a GDB release, see the file gdb/README.
-If with a binutils release, see binutils/README;  if with a libg++ release,
-see libg++/README, etc.  That'll give you info about this
-package -- supported targets, how to use it, how to report bugs, etc.
+For more information about gdb, please refer to README file in this folder or
+check the GDB home page at http://www.gnu.org/software/gdb
 
-It is now possible to automatically configure and build a variety of
-tools with one command.  To build all of the tools contained herein,
-run the ``configure'' script here, e.g.:
+CUDA-GDB BUILD INSTRUCTIONS (example only, adjust as needed)
+===========================
 
-	./configure 
-	make
+First, make sure that libtermcap and other required dependent packages are
+installed (try sudo yum install ncurses-devel). The configure command will
+issue an error if some packages are missing.
 
-To install them (by default in /usr/local/bin, /usr/local/lib, etc),
-then do:
-	make install
+Please note that the libexpat development headers must be present if CUDA-GDB
+is to be used for cross-platform debugging.
 
-(If the configure script can't determine your type of computer, give it
-the name as an argument, for instance ``./configure sun4''.  You can
-use the script ``config.sub'' to test whether a name is recognized; if
-it is, config.sub translates it to a triplet specifying CPU, vendor,
-and OS.)
+Issue the following commands to build CUDA-GDB:
+    ./configure --program-prefix=cuda- \
+        --enable-cuda \
+        --enable-targets="x86_64-unknown-linux-gnu,\
+        arm-elf-linux-gnu,m68k-unknown-linux-gnu" \
+        CFLAGS='-I/usr/local/cuda/include' \
+        LDFLAGS='-lpthread'
+    make
 
-If you have more than one compiler on your system, it is often best to
-explicitly set CC in the environment before running configure, and to
-also set CC when running make.  For example (assuming sh/bash/ksh):
+USING CUDA-GDB
+==============
+All standard GDB commands could be used both for CPU and GPU code debugging.
+In addition to that, CUDA-GDB provides CUDA-specific command families like 
+"info cuda ..." to query GPU states, "cuda .." to control debugger focus on
+GPU and "[get|set] cuda .." to alter/query CUDA debugger configuration.
 
-	CC=gcc ./configure
-	make
+For more information please check http://docs.nvidia.com/cuda/cuda-gdb/
 
-A similar example using csh:
 
-	setenv CC gcc
-	./configure
-	make
-
-Much of the code and documentation enclosed is copyright by
-the Free Software Foundation, Inc.  See the file COPYING or
-COPYING.LIB in the various directories, for a description of the
-GNU General Public License terms under which you can copy the files.
-
-REPORTING BUGS: Again, see gdb/README, binutils/README, etc., for info
-on where and how to report problems.
+REPORTING BUGS
+==============
+Use any of the following options.
+1. Send e-mail to cuda-debugger-bugs@nvidia.com.
+2. Fill an issue report form at the NVIDIA registered developers portal.
+3. Post a new topic at the NVIDIA CUDA-GDB forum:
+   https://forums.developer.nvidia.com/c/developer-tools/cuda-developer-tools/cuda-gdb
+4. Fill an issue report at the NVIDIA CUDA-GDB Github:
+   https://github.com/NVIDIA/cuda-gdb/issues

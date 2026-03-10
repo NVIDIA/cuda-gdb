@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "breakpoint.h"
 #include "inline-frame.h"
 #include "addrmap.h"
@@ -419,6 +424,50 @@ skip_inline_frames (thread_info *thread, bpstat *stop_chain)
 
   CORE_ADDR this_pc = get_frame_pc (get_current_frame ());
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - inline frame support */
+  /* For the CUDA frames, we want to always expose the inlined frames */
+  if (!cuda_current_focus::isDevice ())
+    {
+      std::vector<const symbol *> function_symbols
+        = gather_inline_frames (this_pc);
+
+      /* Figure out how many of the inlined frames to skip.  Do not skip an
+         inlined frame (and its callers) if execution stopped because of a user
+         breakpoint for this specific function.
+
+         By default, skip all the found inlined frames.
+
+         The last entry in FUNCTION_SYMBOLS is special, this is the function
+         which contains all of the inlined functions, we never skip this.  */
+      int skipped_frames = 0;
+
+      for (const auto sym : function_symbols)
+        {
+          if (stopped_by_user_bp_inline_frame (sym, stop_chain)
+              || sym == function_symbols.back ())
+            break;
+
+          ++skipped_frames;
+        }
+
+      if (skipped_frames > 0)
+        reinit_frame_cache ();
+
+      inline_states.emplace_back (thread, skipped_frames, this_pc,
+                                  std::move (function_symbols));
+    }
+  else
+    {
+      /* For CUDA device frames, we don't skip any inline frames */
+      std::vector<const symbol *> function_symbols
+        = gather_inline_frames (this_pc);
+      int skipped_frames = 0;
+
+      inline_states.emplace_back (thread, skipped_frames, this_pc,
+                                  std::move (function_symbols));
+    }
+#else
   std::vector<const symbol *> function_symbols
     = gather_inline_frames (this_pc);
 
@@ -446,6 +495,7 @@ skip_inline_frames (thread_info *thread, bpstat *stop_chain)
 
   inline_states.emplace_back (thread, skipped_frames, this_pc,
 			      std::move (function_symbols));
+#endif
 }
 
 /* Step into an inlined function by unhiding it.  */

@@ -20,6 +20,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* This was blantantly ripped off the C expression parser, please 
    be aware of that as you look at its basic structure -FMB */ 
 
@@ -72,6 +77,10 @@ static int paren_depth;
 /* The current type stack.  */
 static struct type_stack *type_stack;
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - The current address space */
+static type_instance_flags address_space = 0;
+#endif
 int yyparse (void);
 
 static int yylex (void);
@@ -135,7 +144,12 @@ static int parse_number (struct parser_state *, const char *, int,
 			 int, YYSTYPE *);
 %}
 
+/*** CUDA REMOVAL*/
 %type <voidval> exp  type_exp start variable 
+/***/
+/* CUDA */
+//%type <voidval> addrspace exp type_exp start variable
+/* END CUDA */
 %type <tval> type typebase
 %type <tvec> nonempty_typelist
 /* %type <bval> block */
@@ -170,7 +184,12 @@ static int parse_number (struct parser_state *, const char *, int,
 
 %token <ssym> NAME_OR_INT 
 
+/*** CUDA REMOVAL
 %token SIZEOF KIND
+***/
+/* CUDA */
+%token SIZEOF KIND POINTER
+/* END CUDA */
 %token ERROR
 
 /* Special type cases, put in to allow the parser to distinguish different
@@ -181,7 +200,12 @@ static int parse_number (struct parser_state *, const char *, int,
 %token REAL_KEYWORD REAL_S4_KEYWORD REAL_S8_KEYWORD REAL_S16_KEYWORD
 %token COMPLEX_KEYWORD COMPLEX_S4_KEYWORD COMPLEX_S8_KEYWORD
 %token COMPLEX_S16_KEYWORD
+/*** CUDA REMOVAL
 %token BOOL_AND BOOL_OR BOOL_NOT   
+***/
+/* CUDA */
+%token BOOL_AND BOOL_OR BOOL_NOT BIN_MOD
+/* END CUDA */
 %token SINGLE DOUBLE PRECISION
 %token <lval> CHARACTER 
 
@@ -227,6 +251,46 @@ exp     :       '(' exp ')'
 			{ }
 	;
 
+/* CUDA: address specifiers */
+/*
+addrspace:      '@' name
+                        {
+                            address_space = address_space_name_to_type_instance_flags (pstate->gdbarch (),
+                                                                                       copy_name($2).c_str());
+                        }
+                '(' variable
+			{
+                            if (address_space)
+                                {
+                                    struct type *type;
+                                    struct symbol *sym = pstate->expout->elts[pstate->expout_ptr-2].symbol;
+
+                                    type = make_type_with_address_space (SYMBOL_TYPE (sym), address_space);
+                                    write_exp_elt_opcode (pstate, UNOP_CAST);
+                                    write_exp_elt_type (pstate, type);
+                                    write_exp_elt_opcode (pstate, UNOP_CAST);
+                                    address_space = 0;
+                                }
+                        }
+        ;
+
+exp	:	addrspace '('
+                        {
+			    pstate->start_arglist ();
+                        }
+		arglist ')'
+			{ write_exp_elt_opcode (pstate,
+						OP_F77_UNDETERMINED_ARGLIST);
+			  write_exp_elt_longcst (pstate,
+						 pstate->end_arglist ());
+			  write_exp_elt_opcode (pstate,
+					      OP_F77_UNDETERMINED_ARGLIST); } ')'
+	;
+
+exp	:	addrspace ')'
+	;
+*/
+/* END CUDA */
 /* Expressions, not including the comma operator.  */
 exp	:	'*' exp    %prec UNARY
 			{ pstate->wrap<unop_ind_operation> (); }
@@ -563,6 +627,11 @@ exp	:	exp BOOL_OR exp
 			{ pstate->wrap2<logical_or_operation> (); }
 	;
 
+/* CUDA */
+exp	:	exp BIN_MOD exp
+			{ pstate->wrap2<fortran_mod_operation> (); }
+	;
+/* END CUDA */
 exp	:	exp '=' exp
 			{ pstate->wrap2<assign_operation> (); }
 	;
@@ -735,6 +804,10 @@ typebase  /* Implements (approximately): (type-qualifier)* type-specifier */
 			{ $$ = parse_f_type (pstate)->builtin_integer; }
 	|	INT_S8_KEYWORD
 			{ $$ = parse_f_type (pstate)->builtin_integer_s8; }
+/* CUDA */
+        |       POINTER ',' typebase
+                        { type_stack->push (tp_pointer); $$ = $3; }
+/* END CUDA */
 	|	CHARACTER 
 			{ $$ = parse_f_type (pstate)->builtin_character; }
 	|	LOGICAL_S1_KEYWORD 
@@ -855,6 +928,26 @@ wrap_unop_intrinsic (exp_opcode code)
     case FORTRAN_UBOUND:
       pstate->push_new<fortran_bound_1arg> (code, pstate->pop ());
       break;
+#ifdef NVIDIA_CUDA_GDB
+			    case UNOP_CIMAG:
+			      pstate->wrap<cuda_cimag_operation> ();
+			      break;
+			    case UNOP_CREAL:
+			      pstate->wrap<cuda_creal_operation> ();
+			      break;
+			    case UNOP_ISINF:
+			      pstate->wrap<cuda_isinf_operation> ();
+			      break;
+			    case UNOP_ISFINITE:
+			      pstate->wrap<cuda_isfinite_operation> ();
+			      break;
+			    case UNOP_ISNAN:
+			      pstate->wrap<cuda_isnan_operation> ();
+			      break;
+			    case UNOP_ISNORMAL:
+			      pstate->wrap<cuda_isnormal_operation> ();
+			      break;
+#endif
     default:
       gdb_assert_not_reached ("unhandled intrinsic");
     }
@@ -1257,12 +1350,18 @@ static const struct f_token fortran_operators[] =
 {
   { ".and.", BOOL_AND, OP_NULL, false },
   { ".or.", BOOL_OR, OP_NULL, false },
+#ifdef NVIDIA_CUDA_GDB
+  { ".mod.", BIN_MOD, OP_NULL, false },
+#endif
   { ".not.", BOOL_NOT, OP_NULL, false },
   { ".eq.", EQUAL, OP_NULL, false },
   { ".eqv.", EQUAL, OP_NULL, false },
   { ".neqv.", NOTEQUAL, OP_NULL, false },
   { ".xor.", NOTEQUAL, OP_NULL, false },
   { "==", EQUAL, OP_NULL, false },
+#ifdef NVIDIA_CUDA_GDB
+  { "!=", NOTEQUAL, OP_NULL, false },
+#endif
   { ".ne.", NOTEQUAL, OP_NULL, false },
   { "/=", NOTEQUAL, OP_NULL, false },
   { ".le.", LEQ, OP_NULL, false },
@@ -1314,6 +1413,18 @@ static const struct f_token f_intrinsics[] =
   { "shape", UNOP_INTRINSIC, UNOP_FORTRAN_SHAPE, false },
   { "loc", UNOP_INTRINSIC, UNOP_FORTRAN_LOC, false },
   { "sizeof", SIZEOF, OP_NULL, false },
+#ifdef NVIDIA_CUDA_GDB
+  { "aimag", UNOP_INTRINSIC, UNOP_CIMAG, false},
+  { "realpart", UNOP_INTRINSIC, UNOP_CREAL, false},
+  { "isinf", UNOP_INTRINSIC, UNOP_ISINF, false},
+  { "ieee_is_inf", UNOP_INTRINSIC, UNOP_ISINF, false},
+  { "isfinite", UNOP_INTRINSIC, UNOP_ISFINITE, false},
+  { "ieee_is_finite", UNOP_INTRINSIC, UNOP_ISFINITE, false},
+  { "isnan", UNOP_INTRINSIC, UNOP_ISNAN, false},
+  { "ieee_is_nan", UNOP_INTRINSIC, UNOP_ISNAN, false},
+  { "isnormal", UNOP_INTRINSIC, UNOP_ISNORMAL, false},
+  { "ieee_is_normal", UNOP_INTRINSIC, UNOP_ISNORMAL, false}
+#endif
 };
 
 static const f_token f_keywords[] =
@@ -1341,6 +1452,9 @@ static const f_token f_keywords[] =
   { "single", SINGLE, OP_NULL, true },
   { "double", DOUBLE, OP_NULL, true },
   { "precision", PRECISION, OP_NULL, true },
+#ifdef NVIDIA_CUDA_GDB
+  { "pointer", POINTER, OP_NULL, true },
+#endif
 };
 
 /* Implementation of a dynamically expandable buffer for processing input

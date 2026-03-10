@@ -172,7 +172,6 @@ AC_DEFUN([AM_ICONV_LINK],
         iconv_close (cd_88591_to_utf8);
       }
   }
-#endif
   /* Test against HP-UX 11.11 bug: No converter from EUC-JP to UTF-8 is
      provided.  */
   {
@@ -196,6 +195,7 @@ AC_DEFUN([AM_ICONV_LINK],
     if (cd4 != (iconv_t)(-1))
       iconv_close (cd4);
   }
+#endif /* NVIDIA: WAR: EUC-JP missing from P4 */
   return result;
 ]])],
           [am_cv_func_iconv_works=yes], ,

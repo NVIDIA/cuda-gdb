@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 
 #include <fcntl.h>
 #include "exceptions.h"
@@ -48,6 +53,10 @@
 #include "gdbsupport/scoped_fd.h"
 #include "source.h"
 #include "cli/cli-style.h"
+
+#ifdef __QNXTARGET__
+#include "solib-nto.h"
+#endif
 
 /* See solib.h.  */
 
@@ -540,7 +549,21 @@ solib_map_sections (solib &so)
     }
 
   if (abfd == NULL)
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+    {
+      /* On QNX, so_name is always a filename, not a path (except for dynamic linker).
+         Because of this, the sysroot setting is ingored. Try again with so_original_name
+         which will contain the full path and will be resolved against the sysroot. */
+      filename.reset (tilde_expand (so.so_original_name.c_str()));
+      abfd = ops->bfd_open (filename.get ());
+      if (abfd == NULL)
+        {
+          return 0;
+        }
+    }
+#else
     return 0;
+#endif
 
   /* Leave bfd open, core_xfer_memory and "info files" need it.  */
   so.abfd = std::move (abfd);
@@ -551,6 +574,22 @@ solib_map_sections (solib &so)
      the library's host-side path.  If we let the target dictate
      that objfile's path, and the target is different from the host,
      GDB/MI will not provide the correct host-side path.  */
+
+#ifdef __QNXTARGET__
+  /* validate the internal versioning to make sure that host and target are
+     using the very same library */
+  if ((!nto_allow_mismatched_debuginfo) && (nto_so_validate (so) != 0))
+    {
+#ifdef NVIDIA_CUDA_GDB
+      /* so.abfd is a gdb_bfd_ref_ptr. reset(nullptr) will decref and close
+         as needed. Do not manually unref the raw pointer to avoid double-free. */
+#else
+      gdb_bfd_unref (so.abfd.get ());
+#endif
+      so.abfd.reset (nullptr);
+      return 0;
+    }
+#endif /* __QNXTARGET__ */
 
   so.so_name = bfd_get_filename (so.abfd.get ());
   so.sections = build_section_table (so.abfd.get ());
@@ -827,9 +866,22 @@ update_solib_list (int from_tty)
 
 	  try
 	    {
+#ifdef NVIDIA_CUDA_GDB
+	      /* Fill in the rest of the `struct so_list' node.
+		 Work around PR libc/13097.  */
+	      if (!solib_map_sections (new_so)
+		  && new_so.so_original_name != "linux-vdso.so.1"
+		  && new_so.so_original_name != "linux-gate.so.1")
+#else
 	      /* Fill in the rest of the `struct solib' node.  */
 	      if (!solib_map_sections (new_so))
+#endif
 		{
+		  /* Emit an immediate warning for libraries that failed to map. */
+#ifdef NVIDIA_CUDA_GDB
+		  warning (_ ("Failed to map shared library \"%s\"; skipping observers."),
+			   new_so.so_original_name.c_str ());
+#endif
 		  not_found++;
 		  if (not_found_filename == NULL)
 		    not_found_filename = new_so.so_original_name.c_str ();
@@ -843,9 +895,15 @@ update_solib_list (int from_tty)
 				    "library sections:\n"));
 	    }
 
+#ifdef NVIDIA_CUDA_GDB
+	  /* Notify observers only for successfully mapped libraries.  */
+	  if (new_so.abfd != NULL)
+	    notify_solib_loaded (new_so);
+#else
 	  /* Notify any observer that the shared object has been
 	     loaded now that we've added it to GDB's tables.  */
 	  notify_solib_loaded (new_so);
+#endif
 	}
 
       /* Add the new shared objects to GDB's list.  */
@@ -909,6 +967,15 @@ libpthread_solib_p (const solib &so)
   return libpthread_name_p (so.so_name.c_str ());
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* Return non-zero if SO is the CUDA library */
+static int
+libcuda_solib_p (const solib &so)
+{
+  return strstr (so.so_name.c_str (), "/libcuda") != NULL;
+}
+#endif
+
 /* Read in symbolic information for any shared objects whose names
    match PATTERN.  (If we've already read a shared object's symbol
    info, leave it alone.)  If PATTERN is zero, read them all.
@@ -963,7 +1030,13 @@ solib_add (const char *pattern, int from_tty, int readsyms)
 	     exception for the pthread library, because we sometimes
 	     need the library symbols to be loaded in order to provide
 	     thread support (x86-linux for instance).  */
+#ifdef NVIDIA_CUDA_GDB
+    /* CUDA - load libcuda symbols even if readsyms is 0 */
+    const int add_this_solib =
+      (readsyms || libpthread_solib_p (gdb) || libcuda_solib_p (gdb));
+#else
 	  const int add_this_solib = (readsyms || libpthread_solib_p (gdb));
+#endif
 
 	  any_matches = true;
 	  if (add_this_solib)
@@ -1011,6 +1084,22 @@ info_sharedlibrary_command (const char *pattern, int from_tty)
   int nr_libs;
   gdbarch *gdbarch = current_inferior ()->arch ();
   struct ui_out *uiout = current_uiout;
+#ifdef __QNXTARGET__
+  int verbose = 0;
+
+  if (pattern)
+    {
+      /* Check if there are options */
+      if (strstr(pattern, "-v") == pattern) {
+	verbose = 1;
+	pattern = pattern + strlen ("-v");
+	while (*pattern == ' ' || *pattern == '\t')
+	  pattern++;
+	if (*pattern == '\0')
+	  pattern = NULL;
+      }
+    }
+#endif /* __QNXTARGET__ */
 
   if (pattern)
     {
@@ -1080,6 +1169,16 @@ info_sharedlibrary_command (const char *pattern, int from_tty)
 	else
 	  uiout->field_string ("syms-read", so.symbols_loaded ? "Yes" : "No");
 
+#ifdef __QNXTARGET__
+	if (verbose)
+	  {
+	    char buff[SO_NAME_MAX_PATH_SIZE * 2 + 100];
+	    snprintf (buff, sizeof (buff), "%s (%s)", so.so_name.c_str (),
+		      so.so_original_name.c_str ());
+	    uiout->field_string ("name", buff, file_name_style.style ());
+	  }
+	else
+#endif /* __QNXTARGET__ */
 	uiout->field_string ("name", so.so_name, file_name_style.style ());
 
 	uiout->text ("\n");

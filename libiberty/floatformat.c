@@ -17,6 +17,11 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA 02110-1301, USA.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* This is needed to pick up the NAN macro on some systems.  */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
@@ -407,6 +412,105 @@ const struct floatformat floatformat_bfloat16_little =
   floatformat_always_valid,
   NULL
 };
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA: FP8 formats */
+const struct floatformat floatformat_nv_fp8_e8m0_big =
+{
+  floatformat_big, 8, 0, 0, 8, 127, 255, 8, 0,
+  floatformat_intbit_no,
+  "floatformat_nv_fp8_e8m0_big",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp8_e8m0_little =
+{
+  floatformat_little, 8, 0, 0, 8, 127, 255, 8, 0,
+  floatformat_intbit_no,
+  "floatformat_nv_fp8_e8m0_little",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp8_e5m2_big =
+{
+  floatformat_big, 8, 0, 1, 5, 15, 31, 6, 2,
+  floatformat_intbit_no,
+  "floatformat_nv_fp8_e5m2_big",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp8_e5m2_little =
+{
+  floatformat_little, 8, 0, 1, 5, 15, 31, 6, 2,
+  floatformat_intbit_no,
+  "floatformat_nv_fp8_e5m2_little",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp8_e4m3_big =
+{
+  floatformat_big, 8, 0, 1, 4, 7, 15, 5, 3,
+  floatformat_intbit_no,
+  "floatformat_nv_fp8_e4m3_big",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp8_e4m3_little =
+{
+  floatformat_little, 8, 0, 1, 4, 7, 15, 5, 3,
+  floatformat_intbit_no,
+  "floatformat_nv_fp8_e4m3_little",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp6_e2m3_big =
+{
+  floatformat_big, 6, 0, 1, 2, 1, 3, 3, 3,
+  floatformat_intbit_no,
+  "floatformat_nv_fp6_e2m3_big",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp6_e2m3_little =
+{
+  floatformat_little, 6, 0, 1, 2, 1, 3, 3, 3,
+  floatformat_intbit_no,
+  "floatformat_nv_fp6_e2m3_little",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp6_e3m2_big =
+{
+  floatformat_big, 6, 0, 1, 3, 3, 7, 4, 2,
+  floatformat_intbit_no,
+  "floatformat_nv_fp6_e3m2_big",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp6_e3m2_little =
+{
+  floatformat_little, 6, 0, 1, 3, 3, 7, 4, 2,
+  floatformat_intbit_no,
+  "floatformat_nv_fp6_e3m2_little",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp4_e2m1_big =
+{
+  floatformat_big, 4, 0, 1, 2, 1, 3, 3, 1,
+  floatformat_intbit_no,
+  "floatformat_nv_fp4_e2m1_big",
+  floatformat_always_valid,
+  NULL
+};
+const struct floatformat floatformat_nv_fp4_e2m1_little =
+{
+  floatformat_little, 4, 0, 1, 2, 1, 3, 3, 1,
+  floatformat_intbit_no,
+  "floatformat_nv_fp4_e2m1_little",
+  floatformat_always_valid,
+  NULL
+};
+#endif
 
 #ifndef min
 #define min(a, b) ((a) < (b) ? (a) : (b))
@@ -517,7 +621,12 @@ floatformat_to_double (const struct floatformat *fmt,
       else
 	dto = INFINITY;
 
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA: Handle FMT without sign bits */
+      if ((fmt->sign_start != fmt->exp_start) && get_field (ufrom, fmt->byteorder, fmt->totalsize, fmt->sign_start, 1))
+#else
       if (get_field (ufrom, fmt->byteorder, fmt->totalsize, fmt->sign_start, 1))
+#endif
 	dto = -dto;
 
       *to = dto;
@@ -563,7 +672,12 @@ floatformat_to_double (const struct floatformat *fmt,
     }
 
   /* Negate it if negative.  */
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Handle FMT without sign bits */
+  if ((fmt->sign_start != fmt->exp_start) && get_field (ufrom, fmt->byteorder, fmt->totalsize, fmt->sign_start, 1))
+#else
   if (get_field (ufrom, fmt->byteorder, fmt->totalsize, fmt->sign_start, 1))
+#endif
     dto = -dto;
   *to = dto;
 }
@@ -635,7 +749,12 @@ floatformat_from_double (const struct floatformat *fmt,
      only supported case of split values).  */
 
   /* If negative, set the sign bit.  */
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA: Handle FMT without sign bits */
+      if ((fmt->sign_start != fmt->exp_start) && dfrom < 0)
+#else
   if (dfrom < 0)
+#endif
     {
       put_field (uto, fmt->byteorder, fmt->totalsize, fmt->sign_start, 1, 1);
       dfrom = -dfrom;

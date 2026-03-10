@@ -35,6 +35,20 @@ struct axs_value;
 /* `set debug entry-values' setting.  */
 extern unsigned int entry_values_debug;
 
+#ifdef NVIDIA_CUDA_GDB
+struct value *dwarf2_evaluate (const gdb_byte *exp, size_t len,
+				      bool as_lval,
+				      dwarf2_per_objfile *per_objfile,
+				      dwarf2_per_cu_data *per_cu,
+				      const frame_info_ptr &frame,
+				      int addr_size,
+				      std::vector<value *> *init_values,
+				      const struct property_addr_info *addr_info,
+				      struct type *type,
+				      struct type *subobj_type,
+				      LONGEST subobj_offset);
+#endif
+
 /* Find a particular location expression from a location list.  */
 const gdb_byte *dwarf2_find_location_expression
   (const dwarf2_loclist_baton *baton,

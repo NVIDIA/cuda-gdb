@@ -16,6 +16,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "gdbthread.h"
 #include "gdbsupport/agent.h"
 #include "notif.h"
@@ -34,6 +39,11 @@
 #include "tracepoint.h"
 #include "dll.h"
 #include "hostio.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-tdep-server.h"
+#include "cuda/cuda-utils.h"
+#include "cuda/cuda-version.h"
+#endif
 #include <vector>
 #include <unordered_map>
 #include "gdbsupport/common-inferior.h"
@@ -163,13 +173,15 @@ static struct btrace_config current_btrace_conf;
 
 static client_state g_client_state;
 
+#ifdef NVIDIA_CUDA_GDB
+extern void cuda_final_cleanup (void);
+#endif
 client_state &
 get_client_state ()
 {
   client_state &cs = g_client_state;
   return cs;
 }
-
 
 /* Put a stop reply to the stop reply queue.  */
 
@@ -1394,6 +1406,10 @@ handle_detach (char *own_buf)
 	     need to hang around doing nothing, until the child is
 	     gone.  */
 	  join_inferior (pid);
+#ifdef NVIDIA_CUDA_GDB
+	  /* CUDA - final cleanup before gdbserver quits. */
+          cuda_final_cleanup ();
+#endif
 	  exit (0);
 	}
     }
@@ -1755,7 +1771,17 @@ handle_monitor_command (char *mon, char *own_buf)
   else if (strcmp (mon, "help") == 0)
     monitor_show_help ();
   else if (strcmp (mon, "exit") == 0)
+#ifdef NVIDIA_CUDA_GDB
+    {
+      /* Request cuda cleanup and defer exit */
+      if (cuda_debugging_enabled && !cuda_cleanup_completed) 
+          cuda_exit_requested = true;
+      else
+          exit_requested = true;
+    }
+#else
     exit_requested = true;
+#endif
   else
     {
       monitor_output ("Unknown monitor command.\n\n");
@@ -2555,6 +2581,14 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 	}
     };
 
+#ifdef NVIDIA_CUDA_GDB
+  /* Handle all CUDA RSP packet */
+  if (strncmp ("qnv.", own_buf, 4) == 0)
+    {
+      handle_cuda_packet (own_buf);
+      return;
+    }
+#endif
   /* Reply the current thread id.  */
   if (strcmp ("qC", own_buf) == 0 && !disable_packet_qC)
     {
@@ -2727,13 +2761,29 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 		{
 		  /* GDB supports and wants fork events if possible.  */
 		  if (target_supports_fork_events ())
+#ifdef NVIDIA_CUDA_GDB
+		   /* CUDA debugging uses a forked debug process that
+		      doesn't cope well with fork-following.  Keep it
+		      disabled and let gdbserver silently detach from
+		      the forked process.  */
+		    cs.report_fork_events = 0;
+#else
 		    cs.report_fork_events = 1;
+#endif
 		}
 	      else if (feature == "vfork-events+")
 		{
 		  /* GDB supports and wants vfork events if possible.  */
 		  if (target_supports_vfork_events ())
+#ifdef NVIDIA_CUDA_GDB
+		    /* CUDA debugging uses a forked debug process that
+		       doesn't cope well with vfork-following.  Keep it
+		       disabled and let gdbserver silently detach from
+		       the vforked process.  */
+		    cs.report_vfork_events = 0;
+#else
 		    cs.report_vfork_events = 1;
+#endif
 		}
 	      else if (feature == "exec-events+")
 		{
@@ -2890,6 +2940,13 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
       if (target_supports_memory_tagging ())
 	strcat (own_buf, ";memory-tagging+");
 
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - version handshake */
+      sprintf (own_buf + strlen (own_buf), ";CUDAVersion=%d.%d.%d",
+               CUDBG_API_VERSION_MAJOR,
+               CUDBG_API_VERSION_MINOR,
+               CUDBG_API_VERSION_REVISION);
+#endif
       /* Reinitialize components as needed for the new connection.  */
       hostio_handle_new_gdb_connection ();
       target_handle_new_gdb_connection ();
@@ -3587,6 +3644,11 @@ handle_v_requests (char *own_buf, int packet_len, int *new_packet_len)
       && handle_vFile (own_buf, packet_len, new_packet_len))
     return;
 
+#ifdef NVIDIA_CUDA_GDB
+  if (strncmp (own_buf, "vCUDA", 5) == 0
+      && handle_vCuda (own_buf, packet_len, new_packet_len))
+    return;
+#endif
   if (startswith (own_buf, "vAttach;"))
     {
       if ((!extended_protocol || !cs.multi_process) && target_running ())
@@ -3825,13 +3887,30 @@ handle_status (char *own_buf)
 	  prepare_resume_reply (own_buf, tp->id, tp->last_status);
 	}
       else
+#ifdef NVIDIA_CUDA_GDB
+        {
+	  strcpy (own_buf, "W00");
+          /* CUDA - Append the return value of api_finalize. */
+          cuda_append_api_finalize_res (own_buf + strlen (own_buf));
+        }
+#else
 	strcpy (own_buf, "W00");
+#endif
     }
 }
 
+/* CUDA - ignore for QNX */
+#ifndef __QNXHOST__
 static void
 gdbserver_version (void)
 {
+#ifdef NVIDIA_CUDA_GDB
+  printf ("NVIDIA (R) CUDA gdbserver\n"
+          "%d.%d release\n"
+          "Portions Copyright (C) 2013-%s NVIDIA Corporation\n",
+	  cuda_major_version (), cuda_minor_version (),
+	  cuda_current_year ());
+#endif
   printf ("GNU gdbserver %s%s\n"
 	  "Copyright (C) 2024 Free Software Foundation, Inc.\n"
 	  "gdbserver is free software, covered by the "
@@ -3904,7 +3983,9 @@ gdbserver_usage (FILE *stream)
   if (REPORT_BUGS_TO[0] && stream == stdout)
     fprintf (stream, "Report bugs to \"%s\".\n", REPORT_BUGS_TO);
 }
+#endif /* !__QNXHOST__ */
 
+#ifndef __QNXHOST__
 static void
 gdbserver_show_disableable (FILE *stream)
 {
@@ -3917,10 +3998,12 @@ gdbserver_show_disableable (FILE *stream)
 	   "  threads     \tAll of the above\n"
 	   "  T           \tAll 'T' packets\n");
 }
+#endif
 
 /* Start up the event loop.  This is the entry point to the event
    loop.  */
 
+#ifndef __QNXHOST__
 static void
 start_event_loop ()
 {
@@ -3943,6 +4026,7 @@ start_event_loop ()
   /* We are done with the event loop.  There are no more event sources
      to listen to.  So we exit gdbserver.  */
 }
+#endif
 
 static void
 kill_inferior_callback (process_info *process)
@@ -3951,6 +4035,8 @@ kill_inferior_callback (process_info *process)
   discard_queued_stop_replies (ptid_t (process->pid));
 }
 
+/* CUDA - disable for QNX */
+#ifndef __QNXHOST__
 /* Call this when exiting gdbserver with possible inferiors that need
    to be killed or detached from.  */
 
@@ -3997,10 +4083,13 @@ detach_or_kill_for_exit (void)
     discard_queued_stop_replies (ptid_t (pid));
   });
 }
+#endif
 
 /* Value that will be passed to exit(3) when gdbserver exits.  */
 static int exit_code;
 
+/* CUDA - disable for QNX */
+#ifndef __QNXHOST__
 /* Wrapper for detach_or_kill_for_exit that catches and prints
    errors.  */
 
@@ -4019,6 +4108,7 @@ detach_or_kill_for_exit_cleanup ()
       exit_code = 1;
     }
 }
+#endif
 
 #if GDB_SELF_TEST
 
@@ -4130,6 +4220,7 @@ static void test_registers_raw_compare_zero_length ()
 /* Main function.  This is called by the real "main" function,
    wrapped in a TRY_CATCH that handles any uncaught exceptions.  */
 
+#if !defined(__QNXHOST__)
 [[noreturn]] static void
 captured_main (int argc, char *argv[])
 {
@@ -4474,6 +4565,12 @@ captured_main (int argc, char *argv[])
 	     are removed from the event loop.  */
 	  start_event_loop ();
 
+#ifdef NVIDIA_CUDA_GDB
+	  /* Check if CUDA exit was requested and cleanup is complete */
+	  if (cuda_exit_requested && cuda_cleanup_completed)
+            exit_requested = true;
+#endif
+
 	  /* If an exit was requested (using the "monitor exit"
 	     command), terminate now.  */
 	  if (exit_requested)
@@ -4549,6 +4646,16 @@ captured_main (int argc, char *argv[])
 	}
     }
 }
+#endif /* CUDA - !__QNXHOST__ */
+#ifdef NVIDIA_CUDA_GDB
+/* Cleanup CUDA-related resources before gdbserver exits.  */
+void
+cuda_final_cleanup (void)
+{
+  cuda_gdb_tmpdir_cleanup_self (NULL);
+  cuda_cleanup_trace_messages ();
+}
+#endif
 
 /* Main function.  */
 
@@ -4556,6 +4663,32 @@ int
 main (int argc, char *argv[])
 {
   setlocale (LC_CTYPE, "");
+#if defined(NVIDIA_CUDA_GDB)
+#if !defined(__QNXHOST__)
+  /* For QNX cuda_debugging_enabled is only set in captured_main.
+   * Exceptions thrown there will be caught by captured_main try/catch
+   * block.  */
+  if (!cuda_debugging_enabled)
+    {
+      warning("CUDA debugging cannot be enabled, exiting");
+      return -1;
+    }
+
+  /* We use the gdb initializers for some of the CUDA sources we share between
+   * gdb and gdbserver. See gdb/make-init-c for more info. There is no
+   * equivalent concept for gdbserver today. We need to explicitly call the
+   * intializers once per execution. */
+  static bool cuda_called_initializers = false;
+  extern void _initialize_cuda_notification ();
+  extern void _initialize_cuda_utils ();
+  if (!cuda_called_initializers)
+    {
+      cuda_called_initializers = true;
+      _initialize_cuda_notification ();
+      _initialize_cuda_utils ();
+    }
+#endif
+#endif
 
   try
     {
@@ -4571,6 +4704,10 @@ main (int argc, char *argv[])
 	  exit_code = 1;
 	}
 
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - final cleanup before gdbserver quits. */
+      cuda_final_cleanup ();
+#endif
       exit (exit_code);
     }
 
@@ -4928,7 +5065,14 @@ process_serial_event (void)
 	  return 0;
 	}
       else
+#ifdef NVIDIA_CUDA_GDB
+	{
+	  cuda_final_cleanup ();
+	  exit (0);
+	}
+#else
 	exit (0);
+#endif
 
     case 'T':
       {
@@ -4996,6 +5140,12 @@ process_serial_event (void)
       break;
 
     default:
+#ifdef NVIDIA_CUDA_GDB
+      if (remote_debug)
+        {
+	  debug_printf ("Unknown packet (0x%02x).\n", ch);
+        }
+#endif
       /* It is a request we don't understand.  Respond with an empty
 	 packet so that gdb knows that we don't support this
 	 request.  */
@@ -5092,6 +5242,9 @@ handle_target_event (int err, gdb_client_data client_data)
 	  if (!target_running ())
 	    {
 	      /* The last process exited.  We're done.  */
+#ifdef NVIDIA_CUDA_GDB
+	      cuda_final_cleanup ();
+#endif
 	      exit (0);
 	    }
 

@@ -16,6 +16,11 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+# NVIDIA CUDA Debugger CUDA-GDB
+# Copyright (C) 2007-2025 NVIDIA Corporation
+# Modified from the original GDB file referenced above by the CUDA-GDB
+# team at NVIDIA <cudatools@nvidia.com>.
 
 from typing import List, Optional, Tuple, Union
 
@@ -51,6 +56,7 @@ class Component:
         param_checks: Optional[List[str]] = None,
         result_checks: Optional[List[str]] = None,
         implement: bool = True,
+        cudaonly: bool = False,
     ):
         self.name = name
         self.type = type
@@ -64,6 +70,7 @@ class Component:
         self.param_checks = param_checks
         self.result_checks = result_checks
         self.implement = implement
+        self.cudaonly = cudaonly
 
         components.append(self)
 
@@ -99,6 +106,7 @@ class Value(Component):
         postdefault: Optional[str] = None,
         invalid: Union[bool, str] = True,
         printer: Optional[str] = None,
+        cudaonly: bool = False,
     ):
         super().__init__(
             comment=comment,
@@ -109,6 +117,7 @@ class Value(Component):
             postdefault=postdefault,
             invalid=invalid,
             printer=printer,
+            cudaonly=cudaonly,
         )
 
 
@@ -130,6 +139,7 @@ class Function(Component):
         param_checks: Optional[List[str]] = None,
         result_checks: Optional[List[str]] = None,
         implement: bool = True,
+        cudaonly: bool = False,
     ):
         super().__init__(
             comment=comment,
@@ -144,6 +154,7 @@ class Function(Component):
             param_checks=param_checks,
             result_checks=result_checks,
             implement=implement,
+            cudaonly=cudaonly,
         )
 
     def ftype(self):

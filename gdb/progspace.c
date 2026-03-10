@@ -150,6 +150,22 @@ void
 program_space::add_objfile (std::unique_ptr<objfile> &&objfile,
 			    struct objfile *before)
 {
+#ifdef NVIDIA_CUDA_GDB
+  if (before == nullptr)
+    {
+      objfile->id = m_objfiles_list.empty() ? 0 : m_objfiles_list.back().id + 1;
+      m_objfiles_list.push_back (std::move (objfile));
+    }
+  else
+    {
+      gdb_assert (before->is_linked ());
+      objfile->id = before->id;
+      auto iter = m_objfiles_list.insert(m_objfiles_list.iterator_to(*before), std::move(objfile));
+
+      while (++iter != m_objfiles_list.end())
+        iter->id++;
+    }
+#else
   if (before == nullptr)
     m_objfiles_list.push_back (std::move (objfile));
   else
@@ -158,6 +174,7 @@ program_space::add_objfile (std::unique_ptr<objfile> &&objfile,
       m_objfiles_list.insert (m_objfiles_list.iterator_to (*before),
 			      std::move (objfile));
     }
+#endif
 }
 
 /* See progspace.h.  */

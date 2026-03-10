@@ -277,10 +277,18 @@ cp_search_static_and_baseclasses (const char *name,
 				     | SEARCH_FUNCTION_DOMAIN
 				     | SEARCH_MODULE_DOMAIN);
   if (scope_sym.symbol == NULL)
+#ifdef NVIDIA_BUGFIX
+    /* NVIDIA Bugfix: Avoid infinite recursion when looking for a symbol
+     * in global scope and we are currently executing within a function/method
+     * belonging to a namespace. This was returning the symbol for the blocks
+     * constructor which caused us to recurse below on TYPE_CODE_FUNC. */
+    scope_sym = lookup_global_symbol (scope.c_str (), block, SEARCH_TYPE_DOMAIN);
+#else
     scope_sym = lookup_global_symbol (scope.c_str (), block,
-				      SEARCH_TYPE_DOMAIN
-				      | SEARCH_FUNCTION_DOMAIN
-				      | SEARCH_MODULE_DOMAIN);
+                                      SEARCH_TYPE_DOMAIN
+                                      | SEARCH_FUNCTION_DOMAIN
+                                      | SEARCH_MODULE_DOMAIN);
+#endif
   if (scope_sym.symbol == NULL)
     return {};
 

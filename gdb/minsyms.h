@@ -243,6 +243,13 @@ extern bound_minimal_symbol lookup_minimal_symbol_linkage
   (program_space *pspace, const char *name, bool only_main)
   ATTRIBUTE_NONNULL (1);
 
+#ifdef NVIDIA_CUDA_GDB
+/* NVIDIA CUDA variant with is_cuda parameter */
+extern bound_minimal_symbol lookup_minimal_symbol_linkage
+  (program_space *pspace, const char *name, bool only_main, bool is_cuda)
+  ATTRIBUTE_NONNULL (1);
+#endif
+
 /* Look through all the current minimal symbol tables and find the
    first minimal symbol that matches NAME and PC.  If OBJF is non-NULL,
    limit the search to that objfile.  Returns a pointer to the minimal

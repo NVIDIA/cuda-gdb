@@ -81,6 +81,14 @@ extern observable<struct program_space */* pspace */,
    information on the inferior has been printed.  */
 extern observable<inferior */* inferior */> inferior_created;
 
+#ifdef NVIDIA_CUDA_GDB
+/* The CUDA driver has loaded and injected the debugger library, and
+   we are are now able to finish the attach procedure. */
+extern observable<inferior */* inferior */> cuda_attach_initiated;
+/* Called every time at the beginning of `cuda_initialize_target'. */
+extern observable<inferior */* inferior */> cuda_driver_preinitialized;
+#endif
+
 /* The inferior EXEC_INF has exec'ed a new executable file.
 
    Execution continues in FOLLOW_INF, which may or may not be the same as

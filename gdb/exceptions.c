@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "exceptions.h"
 #include "breakpoint.h"
 #include "target.h"
@@ -41,7 +46,15 @@ print_flush (void)
   if (target_supports_terminal_ours ())
     {
       term_state.emplace ();
+/* CUDA: Changed this to `ours` since otherwise inferior's group stays
+   in the foreground and in cases where GDB's sigmask is empty
+   (e.g. during inferior startup) `tcdrain` below would lead
+   to SIGTTOU and GDB stopping in the background in shell */
+#ifdef NVIDIA_BUGFIX
+      target_terminal::ours ();
+#else
       target_terminal::ours_for_output ();
+#endif
     }
 
   /* We want all output to appear now, before we print the error.  We

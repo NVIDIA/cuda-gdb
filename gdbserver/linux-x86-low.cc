@@ -17,10 +17,18 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include <signal.h>
 #include <limits.h>
 #include <inttypes.h>
 #include "linux-low.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "linux-cuda-low.h"
+#endif
 #include "i387-fp.h"
 #include "x86-low.h"
 #include "gdbsupport/x86-xstate.h"
@@ -196,8 +204,11 @@ private:
 };
 
 /* The singleton target ops object.  */
-
+#ifdef NVIDIA_CUDA_GDB
+static cuda_linux_process_target<x86_target> the_x86_target;
+#else
 static x86_target the_x86_target;
+#endif
 
 /* Per-process arch-specific data we want to keep.  */
 

@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "event-top.h"
 #include "extract-store-integer.h"
 #include "symtab.h"
@@ -42,6 +47,9 @@
 #include "extension.h"
 #include "gdbsupport/byte-vector.h"
 #include "typeprint.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-tdep.h"
+#endif
 
 /* Local functions.  */
 
@@ -485,9 +493,16 @@ value_cast (struct type *type, struct value *arg2)
 						 range_type->target_type (),
 						 low_bound,
 						 new_length + low_bound - 1);
+#ifdef NVIDIA_CUDA_GDB
+	  auto array_type = create_array_type (alloc, element_type, range_type);
+	  if (type->instance_flags ())
+	      array_type = make_type_with_address_space (type, type->instance_flags ());
+	  arg2->deprecated_set_type (array_type);
+#else
 	  arg2->deprecated_set_type (create_array_type (alloc,
 							element_type, 
 							range_type));
+#endif
 	  return arg2;
 	}
     }
@@ -1042,28 +1057,58 @@ value_at_lazy (struct type *type, CORE_ADDR addr, const frame_info_ptr &frame)
   return get_value_at (type, addr, frame, 1);
 }
 
+#ifdef NVIDIA_CUDA_GDB
+static void
+read_value_memory_1 (struct value *val, LONGEST bit_offset,
+		     bool stack, CORE_ADDR memaddr,
+		     gdb_byte *buffer, size_t length)
+#else
 void
 read_value_memory (struct value *val, LONGEST bit_offset,
 		   bool stack, CORE_ADDR memaddr,
 		   gdb_byte *buffer, size_t length)
+#endif
 {
   ULONGEST xfered_total = 0;
   struct gdbarch *arch = val->arch ();
   int unit_size = gdbarch_addressable_memory_unit_size (arch);
   enum target_object object;
+#ifdef NVIDIA_CHERRY_PICK
+  bool big_endian = type_byte_order (val->type ()) == BFD_ENDIAN_BIG;
+  size_t extended_length
+    = length + (bit_offset + HOST_CHAR_BIT - 1) / HOST_CHAR_BIT;
+  gdb_byte *buffer_ptr = buffer;
+  gdb::byte_vector temp_buffer;
+
+  if (bit_offset)
+    {
+      temp_buffer.resize (extended_length);
+      buffer_ptr = temp_buffer.data ();
+    }
+#endif
 
   object = stack ? TARGET_OBJECT_STACK_MEMORY : TARGET_OBJECT_MEMORY;
 
+#ifdef NVIDIA_CHERRY_PICK
+  while (xfered_total < extended_length)
+#else
   while (xfered_total < length)
+#endif
     {
       enum target_xfer_status status;
       ULONGEST xfered_partial;
 
       status = target_xfer_partial (current_inferior ()->top_target (),
 				    object, NULL,
+#ifdef NVIDIA_CHERRY_PICK
+				    buffer_ptr + xfered_total * unit_size, NULL,
+				    memaddr + xfered_total,
+				    extended_length - xfered_total,
+#else
 				    buffer + xfered_total * unit_size, NULL,
 				    memaddr + xfered_total,
 				    length - xfered_total,
+#endif
 				    &xfered_partial);
 
       if (status == TARGET_XFER_OK)
@@ -1080,8 +1125,26 @@ read_value_memory (struct value *val, LONGEST bit_offset,
       xfered_total += xfered_partial;
       QUIT;
     }
+
+#ifdef NVIDIA_CHERRY_PICK
+  if (bit_offset)
+    copy_bitwise (buffer, 0, temp_buffer.data (),
+		  bit_offset, length * HOST_CHAR_BIT, big_endian);
+#endif
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* First try to read the memory as CUDA, if that fails
+   fall back to the original implementation of read_value_memory (). */
+void
+read_value_memory (struct value *val, LONGEST bit_offset,
+		   bool stack, CORE_ADDR memaddr,
+		   gdb_byte *buffer, size_t length)
+{
+  if (cuda_read_memory (memaddr, val, val->type (), length))
+    read_value_memory_1 (val, bit_offset, stack, memaddr, buffer, length);
+}
+#endif
 /* Store the contents of FROMVAL into the location of TOVAL.
    Return a new value with the location of TOVAL and contents of FROMVAL.  */
 
@@ -1151,7 +1214,11 @@ value_assign (struct value *toval, struct value *fromval)
 	const gdb_byte *dest_buffer;
 	CORE_ADDR changed_addr;
 	int changed_len;
+#ifdef NVIDIA_CHERRY_PICK
+	gdb::byte_vector buffer;
+#else
 	gdb_byte buffer[sizeof (LONGEST)];
+#endif
 
 	if (toval->bitsize ())
 	  {
@@ -1177,10 +1244,32 @@ value_assign (struct value *toval, struct value *fromval)
 		       "don't fit in a %d bit word."),
 		     (int) sizeof (LONGEST) * HOST_CHAR_BIT);
 
+#ifndef NVIDIA_CHERRY_PICK
 	    read_memory (changed_addr, buffer, changed_len);
 	    modify_field (type, buffer, value_as_long (fromval),
 			  toval->bitpos (), toval->bitsize ());
 	    dest_buffer = buffer;
+#else
+	    buffer.resize (changed_len);
+	    read_memory (changed_addr, buffer.data (), changed_len);
+	    modify_field (type, buffer.data (), value_as_long (fromval),
+			  toval->bitpos (), toval->bitsize ());
+	    dest_buffer = buffer.data ();
+	  }
+	else if (toval->bitpos ())
+	  {
+	    int bitpos = toval->bitpos ();
+	    bool big_endian = type_byte_order (type) == BFD_ENDIAN_BIG;
+	    changed_addr = toval->address ();
+	    changed_len = type->length ()
+			  + (bitpos + HOST_CHAR_BIT - 1) / HOST_CHAR_BIT;
+	    buffer.resize (changed_len);
+	    read_memory (changed_addr, buffer.data (), changed_len);
+	    copy_bitwise (buffer.data (), bitpos,
+			  fromval->contents ().data (), 0,
+			  type->length () * HOST_CHAR_BIT, big_endian);
+	    dest_buffer = buffer.data();
+#endif
 	  }
 	else
 	  {
@@ -1189,7 +1278,16 @@ value_assign (struct value *toval, struct value *fromval)
 	    dest_buffer = fromval->contents ().data ();
 	  }
 
+#ifdef NVIDIA_CUDA_GDB
+	/* CUDA - memory segments */
+	cuda_write_memory (
+	    TYPE_CUDA_ALL (type) ? cuda_get_gdbarch () : toval->arch (),
+	    changed_addr, TYPE_CUDA_ALL (type), dest_buffer, type->length ());
+	gdb::observers::memory_changed.notify (
+	    current_inferior (), changed_addr, changed_len, dest_buffer);
+#else
 	write_memory_with_notification (changed_addr, dest_buffer, changed_len);
+#endif
       }
       break;
 
@@ -1201,6 +1299,77 @@ value_assign (struct value *toval, struct value *fromval)
 	if (next_frame == nullptr)
 	  error (_("Value being assigned to is no longer active."));
 
+#ifdef NVIDIA_CHERRY_PICK
+	gdbarch *arch = get_frame_arch (next_frame);
+	LONGEST bitpos = toval->bitpos ();
+	LONGEST bitsize = toval->bitsize ();
+	LONGEST offset = toval->offset ();
+
+	if (bitpos || bitsize)
+	  {
+	    int changed_len;
+	    bool big_endian = type_byte_order (type) == BFD_ENDIAN_BIG;
+
+	    if (bitsize)
+	      {
+		offset += toval->parent ()->offset ();
+
+		changed_len = (bitpos + bitsize + HOST_CHAR_BIT - 1)
+			      / HOST_CHAR_BIT;
+
+		if (changed_len > (int) sizeof (LONGEST))
+		  error (_("Can't handle bitfields which "
+			   "don't fit in a %d bit word."),
+			   (int) sizeof (LONGEST) * HOST_CHAR_BIT);
+	      }
+	    else
+	      {
+		changed_len = type->length ()
+			      + (bitpos + HOST_CHAR_BIT - 1) / HOST_CHAR_BIT;
+
+		bitsize = type->length () * HOST_CHAR_BIT;
+	      }
+
+	    gdb::byte_vector buffer (changed_len);
+	    int optim, unavail;
+
+	    if (!get_frame_register_bytes (next_frame, value_reg, offset,
+					   buffer, &optim, &unavail))
+	      {
+		if (optim)
+		  throw_error (OPTIMIZED_OUT_ERROR,
+			       _("value has been optimized out"));
+		if (unavail)
+		  throw_error (NOT_AVAILABLE_ERROR,
+			       _("value is not available"));
+	      }
+
+	    copy_bitwise (buffer.data (), bitpos,
+			  fromval->contents ().data (),
+			  0, bitsize, big_endian);
+
+	    put_frame_register_bytes (next_frame, value_reg, offset, buffer);
+	  }
+	else
+	  {
+	    if (gdbarch_convert_register_p (arch, value_reg, type))
+	      {
+		/* If TOVAL is a special machine register requiring
+		   conversion of program values to a special raw
+		   format.  */
+		gdbarch_value_to_register (arch, next_frame, value_reg,
+					   type, fromval->contents ().data ());
+	      }
+	    else
+	      {
+		gdb::array_view<const gdb_byte> contents
+		  = gdb::make_array_view (fromval->contents ().data (),
+					  type->length ());
+		put_frame_register_bytes (next_frame, value_reg,
+					  offset, contents);
+	      }
+	  }
+#else
 	gdbarch *gdbarch = frame_unwind_arch (next_frame);
 
 	if (toval->bitsize ())
@@ -1256,6 +1425,7 @@ value_assign (struct value *toval, struct value *fromval)
 					toval->offset (),
 					fromval->contents ());
 	  }
+#endif
 
 	gdb::observers::register_changed.notify
 	  (get_prev_frame_always (next_frame), value_reg);
@@ -1368,10 +1538,18 @@ value_repeat (struct value *arg1, int count)
 
   val->set_lval (lval_memory);
   val->set_address (arg1->address ());
+#ifdef NVIDIA_CHERRY_PICK
+  val->set_bitpos (arg1->bitpos ());
+  type *enclosing_type = val->enclosing_type ();
 
+  read_value_memory (val, val->bitpos (), val->stack (),
+		     val->address (), val->contents_all_raw ().data (),
+		     type_length_units (enclosing_type));
+#else
   read_value_memory (val, 0, val->stack (), val->address (),
 		     val->contents_all_raw ().data (),
 		     type_length_units (val->enclosing_type ()));
+#endif
 
   return val;
 }
@@ -1384,7 +1562,31 @@ value_of_variable (struct symbol *var, const struct block *b)
   if (symbol_read_needs_frame (var))
     frame = get_selected_frame (_("No frame selected."));
 
+#ifdef NVIDIA_CUDA_GDB
+  auto val = read_var_value (var, b, frame);
+  /* If this is a symbol that has objfile section -1, don't attempt to
+     find its objfile.  It may happen with template arguments.  */
+  if (var->section_index () < 0)
+    return val;
+  /* CUDA - Managed variables */
+  auto objfile = var->objfile ();
+  /* Ensure we have a section */
+  if (var->obj_section (objfile) == NULL)
+    return val;
+  /* Ensure we have a bfd for this section */
+  auto the_bfd_section = var->obj_section (objfile)->the_bfd_section;
+  if (the_bfd_section == NULL)
+    return val;
+  /* If __managed__ variable was declared as type_t var in .cu file,
+   * its host shadow would look like type_t *var,
+   * that is debugger must dereference it before returning value to user */
+  std::string name ("__nv_managed_data__");
+  if (name.compare(0, name.length(), the_bfd_section->name) == 0)
+    return value_ind (val);
+  return val;
+#else
   return read_var_value (var, b, frame);
+#endif
 }
 
 struct value *
@@ -1477,7 +1679,14 @@ value_coerce_to_target (struct value *val)
 
   length = check_typedef (val->type ())->length ();
   addr = allocate_space_in_inferior (length);
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - memory segments */
+  struct type *type = check_typedef (val->type ());
+  cuda_write_memory (val->arch (), addr, TYPE_CUDA_ALL (type),
+		     val->contents ().data (), type->length ());
+#else
   write_memory (addr, val->contents ().data (), length);
+#endif
   return value_at_lazy (val->type (), addr);
 }
 
@@ -1712,7 +1921,11 @@ value_array (int lowbound, gdb::array_view<struct value *> elemvec)
     {
       val = value::allocate (arraytype);
       for (idx = 0; idx < elemvec.size (); idx++)
+#ifdef NVIDIA_CHERRY_PICK
+	elemvec[idx]->contents_copy (val, idx * typelength, 0, 0, typelength);
+#else
 	elemvec[idx]->contents_copy (val, idx * typelength, 0, typelength);
+#endif
       return val;
     }
 
@@ -1721,7 +1934,11 @@ value_array (int lowbound, gdb::array_view<struct value *> elemvec)
 
   val = value::allocate (arraytype);
   for (idx = 0; idx < elemvec.size (); idx++)
+#ifdef NVIDIA_CHERRY_PICK
+    elemvec[idx]->contents_copy (val, idx * typelength, 0, 0, typelength);
+#else
     elemvec[idx]->contents_copy (val, idx * typelength, 0, typelength);
+#endif
   return val;
 }
 
@@ -2357,11 +2574,34 @@ value_struct_elt (struct value **argp,
 
   if (!args.has_value ())
     {
+#ifdef NVIDIA_CUDA_GDB
+      char *nname;
+      int len;
+      len = strlen(name);
+      if (current_language
+	  && current_language->case_sensitivity () == case_sensitive_off)
+	{
+	  int i;
+	  nname = (char *) xmalloc(len + 1);
+	  for (i = 0; i < len + 1; i++)
+	    {
+	      nname[i] = tolower(name[i]);
+	    }
+	}
+      else
+	{
+	  nname = (char *) xmalloc(len + 1);
+	  memcpy(nname, name, len + 1);
+	}
+      v = search_struct_field (nname, *argp, t, 0);
+      xfree(nname);
+#else
       /* if there are no arguments ...do this...  */
 
       /* Try as a field first, because if we succeed, there is less
 	 work to be done.  */
       v = search_struct_field (name, *argp, t, 0);
+#endif
       if (v)
 	return v;
 
@@ -4074,7 +4314,11 @@ value_slice (struct value *array, int lowbound, int length)
     else
       {
 	slice = value::allocate (slice_type);
+#ifdef NVIDIA_CHERRY_PICK
+	array->contents_copy (slice, 0, offset, 0,
+#else
 	array->contents_copy (slice, 0, offset,
+#endif
 			      type_length_units (slice_type));
       }
 

@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "gdbsupport/event-loop.h"
 
 #include <chrono>
@@ -34,6 +39,9 @@
 #include "gdbsupport/gdb_select.h"
 #include <optional>
 #include "gdbsupport/scope-exit.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-notifications.h"
+#endif
 
 /* See event-loop.h.  */
 
@@ -246,6 +254,15 @@ gdb_do_one_event (int mstimeout)
      they already have been checked in the loop above. */
 
   std::optional<int> timer_id;
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - notifications */
+  cuda_notification_accept ();
+  int ret = gdb_wait_for_event (1);
+  cuda_notification_block ();
+  return ret;
+#else
+  if (gdb_wait_for_event (1) < 0)
+    return -1;
 
   SCOPE_EXIT 
     {
@@ -261,6 +278,7 @@ gdb_do_one_event (int mstimeout)
 			     },
 			     &timer_id);
   return gdb_wait_for_event (1);
+#endif
 }
 
 /* See event-loop.h  */

@@ -19,6 +19,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "event-top.h"
 #include "exceptions.h"
 #include "ui-out.h"
@@ -41,11 +46,18 @@
 #include "dwarf2/frame.h"
 #include "dwarf2/leb.h"
 #include "compile/compile.h"
+#include "gdbsupport/selftest.h"
 #include <algorithm>
 #include <vector>
 #include <unordered_set>
 #include "gdbsupport/underlying.h"
 #include "gdbsupport/byte-vector.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-frame.h"
+#include "cuda/cuda-utils.h"
+#include "cuda/cuda-regmap.h"
+#include "cuda/cuda-tdep.h"
+#endif
 
 static struct value *dwarf2_evaluate_loc_desc_full
   (struct type *type, const frame_info_ptr &frame, const gdb_byte *data,
@@ -679,6 +691,7 @@ call_site_target::iterate_over_addresses (gdbarch *call_site_gdbarch,
 	  {
 	    bound_minimal_symbol msym
 	      = lookup_minimal_symbol_by_pc (call_site->pc () - 1);
+
 	    throw_error (NO_ENTRY_VALUE_ERROR,
 			 _("DW_AT_call_target DWARF block resolving "
 			   "requires known frame which is currently not "
@@ -1510,15 +1523,24 @@ dwarf2_evaluate_loc_desc_full (struct type *type, const frame_info_ptr &frame,
   if (size == 0)
     return value::allocate_optimized_out (subobj_type);
 
+#ifndef NVIDIA_CHERRY_PICK
   dwarf_expr_context ctx (per_objfile, per_cu->addr_size ());
+#endif
 
   value *retval;
   scoped_value_mark free_values;
 
   try
     {
+#ifdef NVIDIA_CHERRY_PICK
+      retval
+	= dwarf2_evaluate (data, size, as_lval, per_objfile, per_cu,
+			   frame, per_cu->addr_size (), nullptr, nullptr,
+			   type, subobj_type, subobj_byte_offset);
+#else
       retval = ctx.evaluate (data, size, as_lval, per_cu, frame, nullptr,
 			     type, subobj_type, subobj_byte_offset);
+#endif
     }
   catch (const gdb_exception_error &ex)
     {
@@ -1590,19 +1612,42 @@ dwarf2_locexpr_baton_eval (const struct dwarf2_locexpr_baton *dlbaton,
 
   dwarf2_per_objfile *per_objfile = dlbaton->per_objfile;
   dwarf2_per_cu_data *per_cu = dlbaton->per_cu;
+
+#ifndef NVIDIA_CHERRY_PICK
   dwarf_expr_context ctx (per_objfile, per_cu->addr_size ());
+#endif
 
   value *result;
   scoped_value_mark free_values;
 
+#ifdef NVIDIA_CHERRY_PICK
+  std::vector<value *> init_values;
+
   /* Place any initial values onto the expression stack.  */
   for (const auto &val : push_values)
+    {
+      struct type *type = address_type (per_objfile->objfile->arch (),
+					per_cu->addr_size ());
+
+      gdb_assert (addr_stack != nullptr);
+      init_values.push_back (value_at_lazy (type, val));
+    }
+#else
+  for (const auto &val : push_values)
     ctx.push_address (val, false);
+#endif
 
   try
     {
+#ifdef NVIDIA_CHERRY_PICK
+      result
+	= dwarf2_evaluate (dlbaton->data, dlbaton->size, true, per_objfile,
+			   per_cu, frame, per_cu->addr_size (), &init_values,
+			   addr_stack);
+#else
       result = ctx.evaluate (dlbaton->data, dlbaton->size,
 			     true, per_cu, frame, addr_stack);
+#endif
     }
   catch (const gdb_exception_error &ex)
     {
@@ -1930,6 +1975,9 @@ dwarf2_get_symbol_read_needs (gdb::array_view<const gdb_byte> expr,
 	case DW_OP_over:
 	case DW_OP_rot:
 	case DW_OP_deref:
+#ifdef NVIDIA_CUDA_GDB
+	case DW_OP_xderef:
+#endif
 	case DW_OP_abs:
 	case DW_OP_neg:
 	case DW_OP_not:
@@ -1953,6 +2001,17 @@ dwarf2_get_symbol_read_needs (gdb::array_view<const gdb_byte> expr,
 	case DW_OP_nop:
 	case DW_OP_GNU_uninit:
 	case DW_OP_push_object_address:
+#ifdef NVIDIA_CHERRY_PICK
+	case DW_OP_LLVM_offset:
+	case DW_OP_LLVM_bit_offset:
+	case DW_OP_LLVM_undefined:
+	case DW_OP_LLVM_piece_end:
+	case DW_OP_LLVM_overlay:
+	case DW_OP_LLVM_bit_overlay:
+#endif
+#ifdef NVIDIA_CUDA_GDB
+	case DW_OP_LLVM_form_aspace_address:
+#endif
 	  break;
 
 	case DW_OP_GNU_push_tls_address:
@@ -1972,6 +2031,9 @@ dwarf2_get_symbol_read_needs (gdb::array_view<const gdb_byte> expr,
 	case DW_OP_constu:
 	case DW_OP_plus_uconst:
 	case DW_OP_piece:
+#ifdef NVIDIA_CHERRY_PICK
+	case DW_OP_LLVM_offset_constu:
+#endif
 	  op_ptr = safe_skip_leb128 (op_ptr, expr_end);
 	  break;
 
@@ -1980,11 +2042,26 @@ dwarf2_get_symbol_read_needs (gdb::array_view<const gdb_byte> expr,
 	  break;
 
 	case DW_OP_bit_piece:
+#ifdef NVIDIA_CHERRY_PICK
+	case DW_OP_LLVM_extend:
+	case DW_OP_LLVM_select_bit_piece:
+#endif
 	  op_ptr = safe_skip_leb128 (op_ptr, expr_end);
 	  op_ptr = safe_skip_leb128 (op_ptr, expr_end);
 	  break;
 
+#ifdef NVIDIA_CUDA_GDB
+	case DW_OP_LLVM_aspace_bregx:
+	  op_ptr = safe_skip_leb128 (op_ptr, expr_end);
+	  op_ptr = safe_skip_leb128 (op_ptr, expr_end);
+	  symbol_needs = SYMBOL_NEEDS_FRAME;
+	  break;
+#endif
+
 	case DW_OP_deref_type:
+#ifdef NVIDIA_CUDA_GDB
+	case DW_OP_xderef_type:
+#endif
 	case DW_OP_GNU_deref_type:
 	  op_ptr++;
 	  op_ptr = safe_skip_leb128 (op_ptr, expr_end);
@@ -2105,6 +2182,9 @@ dwarf2_get_symbol_read_needs (gdb::array_view<const gdb_byte> expr,
 	  break;
 
 	case DW_OP_deref_size:
+#ifdef NVIDIA_CUDA_GDB
+	case DW_OP_xderef_size:
+#endif
 	case DW_OP_pick:
 	  op_ptr++;
 	  break;
@@ -3126,6 +3206,18 @@ locexpr_regname (struct gdbarch *gdbarch, int dwarf_regnum)
   return gdbarch_register_name (gdbarch, regnum);
 }
 
+#ifdef NVIDIA_CUDA_GDB
+static const std::string
+cuda_locexpr_regname (struct gdbarch *gdbarch, uint64_t dwarf_regnum)
+{
+  /* Use the standard implementation for non-CUDA targets or unencoded
+   * registers */
+  if (!cuda_is_cuda_gdbarch (gdbarch))
+    return locexpr_regname (gdbarch, (int)dwarf_regnum);
+  auto reg_name = cuda_regname_from_dwarf_register (dwarf_regnum);
+  return !reg_name.empty () ? reg_name : std::string ("bad_register_number");
+}
+#endif
 /* Nicely describe a single piece of a location, returning an updated
    position in the bytecode sequence.  This function cannot recognize
    all locations; if a location is not recognized, it simply returns
@@ -3154,8 +3246,15 @@ locexpr_describe_location_piece (struct symbol *symbol, struct ui_file *stream,
       uint64_t reg;
 
       data = safe_read_uleb128 (data + 1, end, &reg);
+
+#ifdef NVIDIA_CUDA_GDB
+      auto reg_name = cuda_locexpr_regname (gdbarch, reg);
+      auto prefix = (!reg_name.empty () && reg_name[0] == '%') ? "" : "$";
+      gdb_printf (stream, _ ("a variable in %s%s"), prefix, reg_name.c_str ());
+#else
       gdb_printf (stream, _("a variable in $%s"),
 		  locexpr_regname (gdbarch, reg));
+#endif
     }
   else if (data[0] == DW_OP_fbreg)
     {
@@ -3439,8 +3538,18 @@ disassemble_dwarf_expression (struct ui_file *stream,
 
 	case DW_OP_regx:
 	  data = safe_read_uleb128 (data, end, &ul);
+#ifdef NVIDIA_CUDA_GDB
+	  {
+	    auto reg_name = cuda_locexpr_regname (arch, ul);
+	    auto prefix
+		= (!reg_name.empty () && reg_name[0] == '%') ? "" : "$";
+	    gdb_printf (stream, " %s [%s%s]", pulongest (ul), prefix,
+			reg_name.c_str ());
+	  }
+#else
 	  gdb_printf (stream, " %s [$%s]", pulongest (ul),
-		      locexpr_regname (arch, (int) ul));
+		      locexpr_regname (arch, (int)ul));
+#endif
 	  break;
 
 	case DW_OP_implicit_value:
@@ -3489,10 +3598,19 @@ disassemble_dwarf_expression (struct ui_file *stream,
 	case DW_OP_bregx:
 	  data = safe_read_uleb128 (data, end, &ul);
 	  data = safe_read_sleb128 (data, end, &l);
-	  gdb_printf (stream, " register %s [$%s] offset %s",
-		      pulongest (ul),
-		      locexpr_regname (arch, (int) ul),
-		      plongest (l));
+#ifdef NVIDIA_CUDA_GDB
+	  {
+	    auto reg_name = cuda_locexpr_regname (arch, ul);
+	    auto prefix
+		= (!reg_name.empty () && reg_name[0] == '%') ? "" : "$";
+	    gdb_printf (stream, " register %s [%s%s] offset %s",
+			pulongest (ul), prefix, reg_name.c_str (),
+			plongest (l));
+	  }
+#else
+	  gdb_printf (stream, " register %s [$%s] offset %s", pulongest (ul),
+		      locexpr_regname (arch, (int)ul), plongest (l));
+#endif
 	  break;
 
 	case DW_OP_fbreg:
@@ -3500,7 +3618,9 @@ disassemble_dwarf_expression (struct ui_file *stream,
 	  gdb_printf (stream, " %s", plongest (l));
 	  break;
 
+#ifdef NVIDIA_CUDA_GDB
 	case DW_OP_xderef_size:
+#endif
 	case DW_OP_deref_size:
 	case DW_OP_pick:
 	  gdb_printf (stream, " %d", *data);
@@ -3577,6 +3697,9 @@ disassemble_dwarf_expression (struct ui_file *stream,
 	  break;
 
 	case DW_OP_deref_type:
+#ifdef NVIDIA_CUDA_GDB
+	case DW_OP_xderef_type:
+#endif
 	case DW_OP_GNU_deref_type:
 	  {
 	    int deref_addr_size = *data++;
@@ -3627,9 +3750,18 @@ disassemble_dwarf_expression (struct ui_file *stream,
 	    type = dwarf2_get_die_type (type_die, per_cu, per_objfile);
 	    gdb_printf (stream, "<");
 	    type_print (type, "", stream, -1);
+#ifdef NVIDIA_CUDA_GDB
+	    auto reg_name = cuda_locexpr_regname (arch, reg);
+	    auto prefix
+		= (!reg_name.empty () && reg_name[0] == '%') ? "" : "$";
+	    gdb_printf (stream, " [0x%s]> [%s%s]",
+			phex_nz (to_underlying (type_die), 0), prefix,
+			reg_name.c_str ());
+#else
 	    gdb_printf (stream, " [0x%s]> [$%s]",
 			phex_nz (to_underlying (type_die), 0),
 			locexpr_regname (arch, reg));
+#endif
 	  }
 	  break;
 
@@ -3692,6 +3824,52 @@ disassemble_dwarf_expression (struct ui_file *stream,
 	  data += offset_size;
 	  gdb_printf (stream, " offset %s", phex_nz (ul, offset_size));
 	  break;
+
+#ifdef NVIDIA_CHERRY_PICK
+	case DW_OP_LLVM_offset_constu:
+	  data = safe_read_uleb128 (data, end, &ul);
+	  gdb_printf (stream, " %s", pulongest (ul));
+	  break;
+#endif
+
+#ifdef NVIDIA_CUDA_GDB
+	case DW_OP_LLVM_aspace_bregx:
+	  {
+	    data = safe_read_uleb128 (data, end, &ul);
+	    data = safe_read_sleb128 (data, end, &l);
+	    auto reg_name = cuda_locexpr_regname (arch, ul);
+	    auto prefix
+		= (!reg_name.empty () && reg_name[0] == '%') ? "" : "$";
+	    gdb_printf (stream, " register %s [%s%s] offset %s",
+			pulongest (ul), prefix, reg_name.c_str (),
+			plongest (l));
+	  }
+#endif
+	  break;
+
+#ifdef NVIDIA_CHERRY_PICK
+	case DW_OP_LLVM_extend:
+	  {
+	    uint64_t count;
+
+	    data = safe_read_uleb128 (data, end, &ul);
+	    data = safe_read_uleb128 (data, end, &count);
+	    gdb_printf (stream, " piece size %s (bits) pieces count %s",
+			pulongest (ul), pulongest (count));
+	  }
+	  break;
+
+	case DW_OP_LLVM_select_bit_piece:
+	  {
+	    uint64_t count;
+
+	    data = safe_read_uleb128 (data, end, &ul);
+	    data = safe_read_uleb128 (data, end, &count);
+	    gdb_printf (stream, " piece size %s (bits) pieces count %s",
+			pulongest (ul), pulongest (count));
+	  }
+	  break;
+#endif
 	}
 
       gdb_printf (stream, "\n");
@@ -4147,3 +4325,40 @@ conversational style, when possible."),
 			   &set_dwarf_cmdlist,
 			   &show_dwarf_cmdlist);
 }
+#ifdef NVIDIA_CUDA_GDB
+/**
+ * CUDA PTX cache local variable iterator
+ * If local variable is mapped to a PTX register, we want to cache its value.
+ * Evaluate the result of the symbol. We will cache it during evaluation.
+ */
+void
+cuda_ptx_cache_local_vars_iterator (const char *name, struct symbol *symbol, frame_info_ptr frame)
+{
+  struct dwarf2_loclist_baton *dlbaton = (struct dwarf2_loclist_baton *) SYMBOL_LOCATION_BATON (symbol);
+  const gdb_byte *data;
+  size_t size;
+  if (symbol->aclass () != LOC_COMPUTED) return;
+  if (symbol->computed_ops () != &dwarf2_loclist_funcs) return;
+  data = dwarf2_find_location_expression (dlbaton, &size,
+                frame ? get_frame_address_in_block (frame): 0);
+  if (!data || size == 0 ) return;
+
+#ifdef NVIDIA_CHERRY_PICK
+  dwarf2_evaluate (data, size, true, dlbaton->per_objfile, dlbaton->per_cu,
+		   frame, dlbaton->per_cu->addr_size (), nullptr, nullptr,
+		   symbol->type ());
+#else
+  dwarf_expr_context ctx (dlbaton->per_objfile, dlbaton->per_cu->addr_size ());
+  
+  try
+    {
+      ctx.evaluate (data, size, true, dlbaton->per_cu, frame, nullptr,
+		    symbol->type ());
+    }
+  catch (const gdb_exception_error &ex)
+    {
+      return;
+    }
+#endif
+}
+#endif

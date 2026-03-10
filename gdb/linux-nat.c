@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "inferior.h"
 #include "infrun.h"
 #include "target.h"
@@ -69,6 +74,12 @@
 #include "gdbsupport/gdb-sigmask.h"
 #include "gdbsupport/common-debug.h"
 #include <unordered_map>
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-exceptions.h"
+#include "cuda/cuda-notifications.h"
+#include "cuda/cuda-tdep.h"
+#include "cuda/cuda-options.h"
+#endif
 
 /* This comment documents high-level logic of this file.
 
@@ -2168,7 +2179,13 @@ static void
 wait_for_signal ()
 {
   linux_nat_debug_printf ("about to sigsuspend");
+#ifdef NVIDIA_CUDA_GDB
+  cuda_notification_accept ();
+#endif
   sigsuspend (&suspend_mask);
+#ifdef NVIDIA_CUDA_GDB
+  cuda_notification_block ();
+#endif
 
   /* If the quit flag is set, it means that the user pressed Ctrl-C
      and we're debugging a process that is running on a separate
@@ -2542,6 +2559,11 @@ stop_wait_callback (struct lwp_info *lp)
 {
   inferior *inf = find_inferior_ptid (linux_target, lp->ptid);
 
+#ifdef NVIDIA_CUDA_GDB
+  // find_inferior_ptid() can return NULL, check for it
+  if (!inf)
+    return 0;
+#endif
   /* If this is a vfork parent, bail out, it is not going to report
      any SIGSTOP until the vfork is done with.  */
   if (inf->vfork_child != NULL)
@@ -3006,7 +3028,14 @@ linux_nat_filter_event (int lwpid, int status)
 
 		  lp = add_lwp (ptid_t (lwpid, lwpid));
 		  lp->resumed = 1;
+#ifdef NVIDIA_CUDA_GDB
+		  /* CUDA: When we re-add a zombie leader we want to mark
+		   * it as exited. */
+		  auto thr = add_thread (linux_target, lp->ptid);
+		  thr->state = THREAD_EXITED;
+#else
 		  add_thread (linux_target, lp->ptid);
+#endif
 		  break;
 		}
 	    }
@@ -3141,6 +3170,13 @@ linux_nat_filter_event (int lwpid, int status)
     {
       enum gdb_signal signo = gdb_signal_from_host (WSTOPSIG (status));
 
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - Check if we have received an urgent message (aka sync event) */
+      if (cuda_notification_received () && WSTOPSIG(status) == SIGURG)
+        {
+          lp->stopped = 1;
+        }
+#endif
       if (!target_is_non_stop_p ())
 	{
 	  /* Only do the below in all-stop, as we currently use SIGSTOP
@@ -3164,11 +3200,19 @@ linux_nat_filter_event (int lwpid, int status)
 	 Otherwise, signals in pass_mask may be short-circuited
 	 except signals that might be caused by a breakpoint, or SIGSTOP
 	 if we sent the SIGSTOP and are waiting for it to arrive.  */
+#ifdef NVIDIA_CUDA_GDB
+      else if (!lp->step && !cuda_notification_pending ()
+	  && WSTOPSIG (status) && sigismember (&pass_mask, WSTOPSIG (status)) 
+	  && (WSTOPSIG (status) != SIGSTOP
+	      || !linux_target->find_thread (lp->ptid)->stop_requested)
+	  && !linux_wstatus_maybe_breakpoint (status)) 
+#else
       if (!lp->step
 	  && WSTOPSIG (status) && sigismember (&pass_mask, WSTOPSIG (status))
 	  && (WSTOPSIG (status) != SIGSTOP
 	      || !linux_target->find_thread (lp->ptid)->stop_requested)
 	  && !linux_wstatus_maybe_breakpoint (status))
+#endif
 	{
 	  linux_resume_one_lwp (lp, lp->step, signo);
 	  linux_nat_debug_printf
@@ -3362,7 +3406,13 @@ linux_nat_wait_1 (ptid_t ptid, struct target_waitstatus *ourstatus,
 	   the TGID pid.  */
 
       errno = 0;
+#ifdef NVIDIA_CUDA_GDB
+      cuda_notification_accept ();
+#endif
       lwpid = my_waitpid (-1, &status,  __WALL | WNOHANG);
+#ifdef NVIDIA_CUDA_GDB
+      cuda_notification_block ();
+#endif
 
       linux_nat_debug_printf ("waitpid(-1, ...) returned %d, %s",
 			      lwpid,

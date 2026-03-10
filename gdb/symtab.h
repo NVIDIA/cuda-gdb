@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef GDB_SYMTAB_H
 #define GDB_SYMTAB_H
 
@@ -845,6 +850,7 @@ struct minimal_symbol : public general_symbol_info
 
   /* Minimal symbols are stored in two different hash tables.  This is
      the `next' pointer for the demangled hash table.  */
+  /* CUDA - Minimal symbols are stored in three different hash tables. */
 
   struct minimal_symbol *demangled_hash_next;
 
@@ -864,6 +870,10 @@ struct minimal_symbol : public general_symbol_info
      address in this symbol is used.  */
 
   bool maybe_copied (objfile *objfile) const;
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - This is the `next' pointer for the lowercase hash table.  */
+  struct minimal_symbol *lowercase_hash_next;
+#endif
 
 private:
   /* Return the address of this minimal symbol, in the context of OBJF.  The
@@ -1608,6 +1618,15 @@ struct rust_vtable_symbol : public symbol
   struct type *concrete_type = nullptr;
 };
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA debug_line extension information */
+struct cuda_debug_inline_info
+{
+  int line;
+  const char *filename;
+  const char *function;
+};
+#endif
 
 /* Each item represents a line-->pc (or the reverse) mapping.  This is
    somewhat more wasteful of space than one might wish, but since only
@@ -1657,6 +1676,10 @@ private:
 
   /* The address for this entry.  */
   unrelocated_addr m_pc;
+#ifdef NVIDIA_CUDA_GDB
+public:
+  struct cuda_debug_inline_info *inline_info;
+#endif
 };
 
 /* The order of entries in the linetable is significant.  They should
@@ -2422,6 +2445,11 @@ extern struct symtab_and_line find_pc_line (CORE_ADDR, int);
 extern struct symtab_and_line find_pc_sect_line (CORE_ADDR,
 						 struct obj_section *, int);
 
+#ifdef NVIDIA_CUDA_GDB
+extern struct symtab_and_line find_pc_sect_line (CORE_ADDR,
+						 struct obj_section *, int,
+						 struct cuda_debug_inline_info **inline_info);
+#endif
 /* Given PC, and assuming it is part of a range of addresses that is part of
    a line, go back through the linetable and find the starting PC of that
    line.
@@ -2449,6 +2477,10 @@ extern bool find_line_pc (struct symtab *, int, CORE_ADDR *);
 extern bool find_line_pc_range (struct symtab_and_line, CORE_ADDR *,
 				CORE_ADDR *);
 
+#ifdef NVIDIA_CUDA_GDB
+extern bool find_line_pc_range (struct symtab_and_line, CORE_ADDR *,
+				CORE_ADDR *, struct cuda_debug_inline_info **inline_info);
+#endif
 extern void resolve_sal_pc (struct symtab_and_line *);
 
 /* The reason we're calling into a completion match list collector

@@ -16,6 +16,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef GDBSERVER_SERVER_H
 #define GDBSERVER_SERVER_H
 
@@ -84,6 +89,14 @@ extern void handle_v_requests (char *own_buf, int packet_len,
 extern void handle_serial_event (int err, gdb_client_data client_data);
 extern void handle_target_event (int err, gdb_client_data client_data);
 
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - Functions from cuda-packet-manager.c */
+extern void handle_cuda_packet (char *buf);
+extern int handle_vCuda (char *, int, int *);
+/* CUDA - Fuctions from cuda-tdep-server.c */
+extern void cuda_cleanup_trace_messages (void);
+extern void cuda_append_api_finalize_res (char *buf);
+#endif
 /* Get rid of the currently pending stop replies that match PTID.  */
 extern void discard_queued_stop_replies (ptid_t ptid);
 

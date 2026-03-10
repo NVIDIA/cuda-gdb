@@ -18,6 +18,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 
 #include "extract-store-integer.h"
 #include "frame.h"
@@ -4254,7 +4259,16 @@ aarch64_remove_non_address_bits (struct gdbarch *gdbarch, CORE_ADDR pointer)
      should be the same across threads of a process.  Since we may not have
      access to the current thread (gdb may have switched to no inferiors
      momentarily), we use the inferior ptid.  */
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - The code below will cast the register cache gdbarch directly
+     to aarch64_gdbarch_tdep. However, if we have CUDA focus we
+     will have set this gdbarch to the one used for CUDA. The
+     cast will read invalid data. Skip the tagged pointer logic
+     if so. */
+  if (inferior_ptid != null_ptid && !cuda_current_focus::isDevice ())
+#else
   if (inferior_ptid != null_ptid)
+#endif
     {
       /* If we do have an inferior, attempt to fetch its thread's thread_info
 	 struct.  */

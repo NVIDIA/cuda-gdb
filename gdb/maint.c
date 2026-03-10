@@ -19,6 +19,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 
 #include "arch-utils.h"
 #include <ctype.h>
@@ -758,6 +763,13 @@ maintenance_do_deprecate (const char *text, int deprecate)
 struct cmd_list_element *maintenance_set_cmdlist;
 struct cmd_list_element *maintenance_show_cmdlist;
 
+#ifdef NVIDIA_CUDA_GDB
+/* Chain containing all defined "maintenance set cuda" subcommands.  */
+struct cmd_list_element *maintenance_set_cuda_cmdlist;
+
+/* Chain containing all defined "maintenance show cuda" subcommands.  */
+struct cmd_list_element *maintenance_show_cuda_cmdlist;
+#endif
 /* "maintenance with" command.  */
 
 static void
@@ -1016,7 +1028,14 @@ scoped_command_stats::~scoped_command_stats ()
   if (m_space_enabled && per_command_space)
     {
 #ifdef HAVE_USEFUL_SBRK
+#if defined(NVIDIA_CUDA_GDB) && defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
       char *lim = (char *) sbrk (0);
+#pragma clang diagnostic pop
+#else
+      char *lim = (char *) sbrk (0);
+#endif
 
       long space_now = lim - lim_at_start;
       long space_diff = space_now - m_start_space;
@@ -1056,7 +1075,14 @@ scoped_command_stats::scoped_command_stats (bool msg_type)
   if (!m_msg_type || per_command_space)
     {
 #ifdef HAVE_USEFUL_SBRK
+#if defined(NVIDIA_CUDA_GDB) && defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
       char *lim = (char *) sbrk (0);
+#pragma clang diagnostic pop
+#else
+      char *lim = (char *) sbrk (0);
+#endif
       m_start_space = lim - lim_at_start;
       m_space_enabled = true;
 #endif
@@ -1419,6 +1445,14 @@ Takes an optional file parameter."),
 Commands for checking internal gdb state."),
 			&maintenancechecklist, 0,
 			&maintenancelist);
+
+#ifdef NVIDIA_CUDA_GDB
+  add_setshow_prefix_cmd ("cuda", class_maintenance,
+			  _("Set CUDA maintenance-related variables."),
+			  _("Show CUDA maintenance-related variables."),
+			  &maintenance_set_cuda_cmdlist, &maintenance_show_cuda_cmdlist,
+			  &maintenance_set_cmdlist, &maintenance_show_cmdlist);
+#endif
 
   add_cmd ("translate-address", class_maintenance,
 	   maintenance_translate_address,

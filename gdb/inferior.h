@@ -18,9 +18,19 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef GDB_INFERIOR_H
 #define GDB_INFERIOR_H
 
+#ifdef NVIDIA_CUDA_GDB
+#include "observable.h"
+#endif
+
+#include <atomic>
 #include <exception>
 #include <list>
 
@@ -205,6 +215,9 @@ extern void child_interrupt (struct target_ops *self);
    STARTUP_INFERIOR.  */
 extern ptid_t gdb_startup_inferior (pid_t pid, int num_traps);
 
+#ifdef NVIDIA_CUDA_GDB
+extern void cuda_insert_step_resume_breakpoint_at_caller (frame_info_ptr);
+#endif
 /* From infcmd.c */
 
 /* Initial inferior setup.  Determines the exec file is not yet known,
@@ -658,6 +671,12 @@ public:
   /* Per inferior data-pointers required by other GDB modules.  */
   registry<inferior> registry_fields;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA can only be intialized at most once per inferior */
+  bool cuda_initialized = false;
+  gdb::observers::token cuda_preinitialization_hook_observer_token;
+  std::atomic<bool> cuda_attach_finished = false;
+#endif
 private:
 
   /* Unpush TARGET and assert that it worked.  */

@@ -19,6 +19,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "bfd.h"
 #include "symtab.h"
 #include "symfile.h"
@@ -44,6 +49,9 @@
 #include "gmp-utils.h"
 #include "rust-lang.h"
 #include "ada-lang.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-tdep.h"
+#endif
 
 /* The value of an invalid conversion badness.  */
 #define INVALID_CONVERSION 100
@@ -130,6 +138,35 @@ const struct floatformat *floatformats_bfloat16[BFD_ENDIAN_UNKNOWN] = {
   &floatformat_bfloat16_big,
   &floatformat_bfloat16_little
 };
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA - fp8 formats */
+const struct floatformat *floatformats_nv_fp8_e8m0[BFD_ENDIAN_UNKNOWN] = {
+  &floatformat_nv_fp8_e8m0_big,
+  &floatformat_nv_fp8_e8m0_little
+};
+const struct floatformat *floatformats_nv_fp8_e5m2[BFD_ENDIAN_UNKNOWN] = {
+  &floatformat_nv_fp8_e5m2_big,
+  &floatformat_nv_fp8_e5m2_little
+};
+const struct floatformat *floatformats_nv_fp8_e4m3[BFD_ENDIAN_UNKNOWN] = {
+  &floatformat_nv_fp8_e4m3_big,
+  &floatformat_nv_fp8_e4m3_little
+};
+/* CUDA - fp6 formats */
+const struct floatformat *floatformats_nv_fp6_e2m3[BFD_ENDIAN_UNKNOWN] = {
+  &floatformat_nv_fp6_e2m3_big,
+  &floatformat_nv_fp6_e2m3_little
+};
+const struct floatformat *floatformats_nv_fp6_e3m2[BFD_ENDIAN_UNKNOWN] = {
+  &floatformat_nv_fp6_e3m2_big,
+  &floatformat_nv_fp6_e3m2_little
+};
+/* CUDA - fp4 formats */
+const struct floatformat *floatformats_nv_fp4_e2m1[BFD_ENDIAN_UNKNOWN] = {
+  &floatformat_nv_fp4_e2m1_big,
+  &floatformat_nv_fp4_e2m1_little
+};
+#endif
 
 /* Should opaque types be resolved?  */
 
@@ -626,6 +663,11 @@ address_space_name_to_type_instance_flags (struct gdbarch *gdbarch,
 							space_identifier,
 							&type_flags))
     return type_flags;
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Allow global identifiers to be used from host. */
+  else if (!strcmp (space_identifier, "global"))
+    return TYPE_INSTANCE_FLAG_CUDA_GLOBAL;
+#endif
   else
     error (_("Unknown address space specifier: \"%s\""), space_identifier);
 }
@@ -1356,6 +1398,10 @@ create_array_type_with_stride (type_allocator &alloc,
 
   result_type->set_code (TYPE_CODE_ARRAY);
   result_type->set_target_type (element_type);
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Copy instance flags as well */
+  result_type->set_instance_flags (element_type->instance_flags ());
+#endif
 
   result_type->alloc_fields (1);
   result_type->set_index_type (range_type);
@@ -2609,7 +2655,13 @@ compute_variant_fields_inner (struct type *type,
 	    size = type->field (idx).type ()->length ();
 
 	  gdb_byte bits[sizeof (ULONGEST)];
+#ifdef NVIDIA_CUDA_GDB
+	  auto sub_type = type->field (idx).type ();
+	  cuda_read_memory (sub_type->arch (), addr, TYPE_CUDA_ALL (sub_type),
+			    bits, size);
+#else
 	  read_memory (addr, bits, size);
+#endif
 
 	  LONGEST bitpos = (type->field (idx).loc_bitpos ()
 			    % TARGET_CHAR_BIT);
@@ -2617,6 +2669,18 @@ compute_variant_fields_inner (struct type *type,
 	  discr_value = unpack_bits_as_long (type->field (idx).type (),
 					     bits, bitpos, bitsize);
 	}
+
+#ifdef NVIDIA_CUDA_GDB
+      /* Disable discriminant field from the view as well for polymorphic types.
+	 We only ever plan to use discriminant field for Numba polymorphic types,
+	 while this change only affects the currently requested struct value
+	 object.
+
+	 In reality, this might be acceptable behaviour in general for all
+	 languages that would like to abstract away the presence of the
+	 discriminant infrastructure.*/
+      flags[idx] = false;
+#endif
     }
 
   /* Go through each variant and see which applies.  */
@@ -2792,6 +2856,57 @@ resolve_dynamic_struct (struct type *type,
   return resolved_type;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* Worker for pointer types.  */
+static struct type *
+resolve_dynamic_pointer (struct type *type,
+			 struct property_addr_info *addr_stack,
+			 const frame_info_ptr &frame)
+{
+  type = copy_type (type);
+  CORE_ADDR value;
+  struct dynamic_prop *prop;
+
+  // Resolve the dynamic associated property on the pointer.
+  prop = TYPE_ASSOCIATED_PROP (type);
+  if (prop != NULL
+      && dwarf2_evaluate_property (prop, NULL, addr_stack, &value))
+    {
+      prop->set_const_val (value);
+    }
+  // If the pointer is associated then we may be able to resolve other dynamic
+  // properties deeper in the type.
+  // Restrict the following logic to Fortran as it breaks Ada VLA support.
+  if (!type_not_associated (type)
+      && current_language->la_language == language_fortran)
+    {
+      const int type_code = type->target_type ()->code ();
+      // If this is a pointer to a derived type then the address of the pointer
+      // is distinct from the internals and therefore the debugger needs to
+      // dereference the address before resolving the dynamic properties deeper
+      // in the type.  In the case of and array-like type the address of the
+      // pointer is the same as the array itself so no dereference is required.
+      if (!(type_code == TYPE_CODE_ARRAY || type_code == TYPE_CODE_STRING))
+	{
+	  struct property_addr_info pinfo;
+	  pinfo.type = check_typedef (type->target_type ());
+	  pinfo.valaddr = {};
+	  if (addr_stack->valaddr.data () != NULL)
+	    pinfo.addr
+		= extract_typed_address (addr_stack->valaddr.data (), type);
+	  else
+	    pinfo.addr = read_memory_typed_address (addr_stack->addr, type);
+	  pinfo.next = addr_stack;
+	  type->set_target_type (resolve_dynamic_type_internal (
+	      type->target_type (), &pinfo, frame, 0));
+	}
+      else
+	type->set_target_type (resolve_dynamic_type_internal (
+	    type->target_type (), addr_stack, frame, 0));
+    }
+  return type;
+}
+#endif
 /* Worker for resolved_dynamic_type.  */
 
 static struct type *
@@ -2832,6 +2947,14 @@ resolve_dynamic_type_internal (struct type *type,
 	case TYPE_CODE_PTR:
 	case TYPE_CODE_RVALUE_REF:
 	  {
+#ifdef NVIDIA_CUDA_GDB
+	    /* Use NVIDIA-specific pointer resolution for TYPE_CODE_PTR */
+	    if (type->code () == TYPE_CODE_PTR)
+	      {
+		resolved_type = resolve_dynamic_pointer (type, addr_stack, frame);
+		break;
+	      }
+#endif
 	    struct property_addr_info pinfo;
 
 	    pinfo.type = check_typedef (type->target_type ());
@@ -5456,7 +5579,6 @@ copy_type_recursive (struct type *type, copied_types_hash_t &copied_types)
   /* Copy the common fields of types.  For the main type, we simply
      copy the entire thing and then update specific fields as needed.  */
   *TYPE_MAIN_TYPE (new_type) = *TYPE_MAIN_TYPE (type);
-
   new_type->set_owner (type->arch ());
 
   if (type->name ())
@@ -5942,6 +6064,29 @@ create_gdbtypes_data (struct gdbarch *gdbarch)
   builtin_type->builtin_unsigned_long_long
     = init_integer_type (alloc, gdbarch_long_long_bit (gdbarch),
 			 1, "unsigned long long");
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - fp8 formats */
+  builtin_type->builtin_nv_fp8_e8m0
+    = init_float_type (alloc, gdbarch_nv_fp8_e8m0_bit (gdbarch),
+		       "__nv_fp8_e8m0", gdbarch_nv_fp8_e8m0_format (gdbarch));
+  builtin_type->builtin_nv_fp8_e5m2
+    = init_float_type (alloc, gdbarch_nv_fp8_e5m2_bit (gdbarch),
+		       "__nv_fp8_e5m2", gdbarch_nv_fp8_e5m2_format (gdbarch));
+  builtin_type->builtin_nv_fp8_e4m3
+    = init_float_type (alloc, gdbarch_nv_fp8_e4m3_bit (gdbarch),
+		       "__nv_fp8_e4m3", gdbarch_nv_fp8_e4m3_format (gdbarch));
+  /* CUDA - fp6 formats */
+  builtin_type->builtin_nv_fp6_e2m3
+    = init_float_type (alloc, gdbarch_nv_fp6_e2m3_bit (gdbarch),
+		       "__nv_fp6_e2m3", gdbarch_nv_fp6_e2m3_format (gdbarch));
+  builtin_type->builtin_nv_fp6_e3m2
+    = init_float_type (alloc, gdbarch_nv_fp6_e3m2_bit (gdbarch),
+		       "__nv_fp6_e3m2", gdbarch_nv_fp6_e3m2_format (gdbarch));
+  /* CUDA - fp4 formats */
+  builtin_type->builtin_nv_fp4_e2m1
+    = init_float_type (alloc, gdbarch_nv_fp4_e2m1_bit (gdbarch),
+		       "__nv_fp4_e2m1", gdbarch_nv_fp4_e2m1_format (gdbarch));
+#endif
   builtin_type->builtin_half
     = init_float_type (alloc, gdbarch_half_bit (gdbarch),
 		       "half", gdbarch_half_format (gdbarch));

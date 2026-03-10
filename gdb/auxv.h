@@ -47,7 +47,10 @@ extern int svr4_auxv_parse (struct gdbarch *gdbarch, const gdb_byte **readptr,
 			    CORE_ADDR *valp);
 
 /* Read auxv data from the current inferior's target stack.  */
-
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+/* CUDA: Changed this slightly from upstream QNX to provide better encapsulation. */
+extern std::optional<gdb::byte_vector> &qnx_get_auxv_data (inferior *inf);
+#endif
 extern const std::optional<gdb::byte_vector> &target_read_auxv ();
 
 /* Read auxv data from OPS.  */

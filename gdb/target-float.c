@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "gdbtypes.h"
 #include "floatformat.h"
 #include "target-float.h"
@@ -260,11 +265,54 @@ put_field (unsigned char *data, enum floatformat_byteorders order,
     }
   if (cur_bitshift > -FLOATFORMAT_CHAR_BIT)
     {
+#ifdef NVIDIA_CUDA_GDB
+      /* 
+       * Bugfix: Upstream has a long standing bug that manifests itself
+       * when assigning a negative value to a non-float/double/long double
+       * float type. The following is masking off the bits we are about to
+       * do assignment on. This has an off-by-n error when start + len fits
+       * entirely in the byte we are about to assign. 
+       *
+       * We are currently operating on the least significant byte in the 
+       * current field.
+       * 
+       * If the field fits entirely within the least significant byte,
+       * taking into account start will cause us to incorrectly calculate the mask.
+       * There is no spill. The mask would be larger than the number of bits
+       * we are about to assign.
+       *
+       * If the least significant byte has spill from the next most significant
+       * byte, we need to take into account start to determine how many bits
+       * spilled here.
+       */
+      if ((start + len) <= FLOATFORMAT_CHAR_BIT)
+	*(data + cur_byte) &=
+	  ~(((1 << (len % FLOATFORMAT_CHAR_BIT)) - 1)
+	    << (-cur_bitshift));
+      else
+	*(data + cur_byte) &=
+	  ~(((1 << ((start + len) % FLOATFORMAT_CHAR_BIT)) - 1)
+	    << (-cur_bitshift));
+      /* 
+       * Bugfix: This was potentially assigning bits beyond the starting
+       * position. Guard against that edge case. If we are spilling from
+       * the most significant bit there is no issue. If start is > 0
+       * and the field fits entirely within the byte, we should ensure
+       * we mask off the upper bits passed in from stuff_to_put.
+       */
+      int upper_mask = ((1 << FLOATFORMAT_CHAR_BIT) - 1);
+      if ((start + len) <= FLOATFORMAT_CHAR_BIT)
+	upper_mask = upper_mask >> start;
+      *(data + cur_byte) |=
+	(((stuff_to_put & ((1 << FLOATFORMAT_CHAR_BIT) - 1)) << (-cur_bitshift))
+	 & upper_mask);
+#else
       *(data + cur_byte) &=
 	~(((1 << ((start + len) % FLOATFORMAT_CHAR_BIT)) - 1)
 	  << (-cur_bitshift));
       *(data + cur_byte) |=
 	(stuff_to_put & ((1 << FLOATFORMAT_CHAR_BIT) - 1)) << (-cur_bitshift);
+#endif
     }
   cur_bitshift += FLOATFORMAT_CHAR_BIT;
   if (order == floatformat_little)
@@ -306,6 +354,11 @@ floatformat_is_negative (const struct floatformat *fmt,
   gdb_assert (fmt->totalsize
 	      <= FLOATFORMAT_LARGEST_BYTES * FLOATFORMAT_CHAR_BIT);
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Handle FMT without a sign bit. */
+  if (fmt->sign_start == fmt->exp_start)
+    return 0;
+#endif
   /* An IBM long double (a two element array of double) always takes the
      sign of the first double.  */
   if (fmt->split_half)
@@ -723,7 +776,12 @@ host_float_ops<T>::from_target (const struct floatformat *fmt,
     }
 
   /* Negate it if negative.  */
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Handle fmt without a sign bit. */
+  if ((fmt->sign_start != fmt->exp_start) && get_field (ufrom, order, fmt->totalsize, fmt->sign_start, 1))
+#else
   if (get_field (ufrom, order, fmt->totalsize, fmt->sign_start, 1))
+#endif
     dto = -dto;
   *to = dto;
 }
@@ -820,7 +878,12 @@ host_float_ops<T>::to_target (const struct floatformat *fmt,
     }
 
   /* If negative, set the sign bit.  */
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Handle fmt without a sign bit. */
+  if ((fmt->sign_start != fmt->exp_start) && dfrom < 0)
+#else
   if (dfrom < 0)
+#endif
     {
       put_field (uto, order, fmt->totalsize, fmt->sign_start, 1, 1);
       dfrom = -dfrom;
@@ -1329,7 +1392,12 @@ mpfr_float_ops::from_target (const struct floatformat *fmt,
     }
 
   /* Negate it if negative.  */
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Handle fmt without a sign bit. */
+  if ((fmt->sign_start != fmt->exp_start) && get_field (from, order, fmt->totalsize, fmt->sign_start, 1))
+#else
   if (get_field (from, order, fmt->totalsize, fmt->sign_start, 1))
+#endif
     mpfr_neg (to.val, to.val, MPFR_RNDN);
 }
 
@@ -1396,7 +1464,12 @@ mpfr_float_ops::to_target (const struct floatformat *fmt,
     }
 
   /* If negative, set the sign bit.  */
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA: Handle fmt without a sign bit. */
+  if ((fmt->sign_start != fmt->exp_start) && mpfr_sgn (tmp.val) < 0)
+#else
   if (mpfr_sgn (tmp.val) < 0)
+#endif
     {
       put_field (to, order, fmt->totalsize, fmt->sign_start, 1, 1);
       mpfr_neg (tmp.val, tmp.val, MPFR_RNDN);

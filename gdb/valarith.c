@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "extract-store-integer.h"
 #include "value.h"
 #include "symtab.h"
@@ -30,6 +35,9 @@
 #include "gdbarch.h"
 #include "rust-lang.h"
 #include "ada-lang.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-tdep.h"
+#endif
 
 /* Forward declarations.  */
 static struct value *value_subscripted_rvalue (struct value *array,
@@ -1204,11 +1212,19 @@ scalar_binop (struct value *arg1, struct value *arg2, enum exp_opcode op)
 	  break;
 	      
 	case BINOP_EQUAL:
+#ifdef NVIDIA_CUDA_GDB
+          v = !((!v1 && v2) || (v1 && !v2));
+#else
 	  v = v1 == v2;
+#endif
 	  break;
 	  
 	case BINOP_NOTEQUAL:
+#ifdef NVIDIA_CUDA_GDB
+          v = (!v1 && v2) || (v1 && !v2);
+#else
 	  v = v1 != v2;
+#endif
 	  break;
 
 	default:
@@ -1374,6 +1390,11 @@ scalar_binop (struct value *arg1, struct value *arg2, enum exp_opcode op)
       val = value_from_mpz (result_type, v);
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - register cache */
+  if (arg1->cached () || arg2->cached ())
+    val->set_cached (true);
+#endif
   return val;
 }
 

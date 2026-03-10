@@ -768,6 +768,16 @@ c_language_arch_info (struct gdbarch *gdbarch,
   add (builtin->builtin_decdouble);
   add (builtin->builtin_declong);
 
+#ifdef NVIDIA_CUDA_GDB
+  /* Add CUDA extended floating point types */
+  add (builtin->builtin_nv_fp8_e8m0);
+  add (builtin->builtin_nv_fp8_e5m2);
+  add (builtin->builtin_nv_fp8_e4m3);
+  add (builtin->builtin_nv_fp6_e2m3);
+  add (builtin->builtin_nv_fp6_e3m2);
+  add (builtin->builtin_nv_fp4_e2m1);
+#endif
+
   lai->set_string_char_type (builtin->builtin_char);
   lai->set_bool_type (builtin->builtin_int);
 }
@@ -929,6 +939,16 @@ public:
     add (builtin->builtin_char16);
     add (builtin->builtin_char32);
     add (builtin->builtin_wchar);
+
+#ifdef NVIDIA_CUDA_GDB
+    /* Add CUDA extended floating point types */
+    add (builtin->builtin_nv_fp8_e8m0);
+    add (builtin->builtin_nv_fp8_e5m2);
+    add (builtin->builtin_nv_fp8_e4m3);
+    add (builtin->builtin_nv_fp6_e2m3);
+    add (builtin->builtin_nv_fp6_e3m2);
+    add (builtin->builtin_nv_fp4_e2m1);
+#endif
 
     lai->set_string_char_type (builtin->builtin_char);
     lai->set_bool_type (builtin->builtin_bool, "bool");

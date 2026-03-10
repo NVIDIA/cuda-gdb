@@ -797,6 +797,7 @@ with_xxhash
 with_libxxhash_prefix
 with_libxxhash_type
 enable_unit_tests
+enable_cuda
 enable_werror
 enable_build_warnings
 enable_gdb_build_warnings
@@ -1449,6 +1450,7 @@ Optional Features:
                           (yes/no)
   --enable-unit-tests     Enable the inclusion of unit tests when compiling
                           GDB
+  --disable-cuda          disable CUDA support (cuda-gdb)
   --enable-werror         treat compile warnings as errors
   --enable-build-warnings enable build-time compiler warnings if gcc is used
   --enable-gdb-build-warnings
@@ -13947,6 +13949,22 @@ else
   HAVE_PIPE_OR_PIPE2_FALSE=
 fi
 
+# Enable CUDA
+# Check whether --enable-cuda was given.
+if test "${enable_cuda+set}" = set; then :
+  enableval=$enable_cuda; case "${enableval}" in
+    yes | no)	;;
+    *)		as_fn_error $? "bad value $enableval for --enable-cuda" "$LINENO" 5 ;;
+  esac
+else
+  enable_cuda=yes
+fi
+
+if test x"$enable_cuda" = xyes; then
+
+$as_echo "#define NVIDIA_CUDA_GDB 1" >>confdefs.h
+
+fi
 
 for ac_func in  \
     waitpid \

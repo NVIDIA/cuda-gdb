@@ -29,6 +29,11 @@ License along with libiberty; see the file COPYING.LIB.  If
 not, write to the Free Software Foundation, Inc., 51 Franklin Street - Fifth Floor,
 Boston, MA 02110-1301, USA.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 /* This file lives in both GCC and libiberty.  When making changes, please
    try not to break either.  */
 
@@ -99,6 +104,14 @@ const struct demangler_engine libiberty_demanglers[] =
     "Rust style demangling"
   }
   ,
+#ifdef NVIDIA_CUDA_GDB
+  {
+    CUDA_DEMANGLING_STYLE_STRING,
+    cuda_demangling,
+    "CUDA style demangling"
+  }
+  ,
+#endif
   {
     NULL, unknown_demangling, NULL
   }
@@ -168,10 +181,22 @@ cplus_demangle (const char *mangled, int options)
         return ret;
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  if (CUDA_DEMANGLING)
+    return cplus_demangle_v3 (mangled, options | DMGL_GNU_V3);
+#endif
   /* The V3 ABI demangling is implemented elsewhere.  */
   if (GNU_V3_DEMANGLING || AUTO_DEMANGLING)
     {
+#ifdef NVIDIA_CUDA_GDB
+      /* CUDA - when in auto mode, enable the cuda parser extension */
+      int supp_options = 0;
+      if (AUTO_DEMANGLING)
+	supp_options |= DMGL_CUDA;
+      ret = cplus_demangle_v3 (mangled, options | supp_options);
+#else
       ret = cplus_demangle_v3 (mangled, options);
+#endif
       if (ret || GNU_V3_DEMANGLING)
 	return ret;
     }

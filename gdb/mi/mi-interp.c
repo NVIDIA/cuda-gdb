@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2025 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 
 #include "mi-interp.h"
 
@@ -42,6 +47,9 @@
 #include "thread-fsm.h"
 #include "cli/cli-interp.h"
 #include "gdbsupport/scope-exit.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-api.h"
+#endif
 
 /* These are the interpreter setup, etc. functions for the MI
    interpreter.  */
@@ -461,6 +469,15 @@ mi_interp::on_about_to_proceed ()
 	return;
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA - Attach/Detach support
+     If cuda-gdb is attaching or detaching, the inferior might
+     have been resumed to collect more information, and it does
+     not mean that attach/detach has completed. So we need to
+     return early and not send the "running" message to the client. */
+  if (cuda_debugapi::attach_or_detach_in_progress ())
+    return;
+#endif
   this->mi_proceeded = 1;
 }
 

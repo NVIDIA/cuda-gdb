@@ -586,11 +586,44 @@ lookup_minimal_symbol_linkage (const char *name, struct objfile *objf,
 }
 
 /* See minsyms.h.  */
+#ifdef NVIDIA_CUDA_GDB
+/* CUDA: This was copied from the original lookup_minimal_symbol_linkage */
+bound_minimal_symbol
+lookup_minimal_symbol_linkage (program_space *pspace, const char *name, bool only_main, bool is_cuda)
+{
+  for (objfile *objfile : pspace->objfiles ())
+    {
+      if (objfile->separate_debug_objfile_backlink != nullptr)
+	continue;
 
+      if (objfile->cuda_objfile != is_cuda)
+        continue;
+
+      if (only_main && (objfile->flags & OBJF_MAINLINE) == 0)
+	continue;
+
+      bound_minimal_symbol minsym = lookup_minimal_symbol_linkage (name,
+								   objfile, false);
+      if (minsym.minsym != nullptr)
+	return minsym;
+    }
+
+  return {};
+}
+#endif
 bound_minimal_symbol
 lookup_minimal_symbol_linkage (program_space *pspace, const char *name,
 			       bool only_main)
 {
+#ifdef NVIDIA_CUDA_GDB
+  /* First search non-CUDA objfiles */
+  bound_minimal_symbol result = lookup_minimal_symbol_linkage (pspace, name, only_main, false);
+  if (result.minsym != nullptr)
+    return result;
+  
+  /* If not found, search CUDA objfiles */
+  return lookup_minimal_symbol_linkage (pspace, name, only_main, true);
+#else
   for (objfile *objfile : pspace->objfiles ())
     {
       if (objfile->separate_debug_objfile_backlink != nullptr)
@@ -607,6 +640,7 @@ lookup_minimal_symbol_linkage (program_space *pspace, const char *name,
     }
 
   return {};
+#endif
 }
 
 /* See minsyms.h.  */

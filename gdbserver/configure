@@ -639,6 +639,8 @@ WERROR_CFLAGS
 WARN_CFLAGS
 ustinc
 ustlibs
+ENABLE_CUDA_FALSE
+ENABLE_CUDA_TRUE
 CCDEPMODE
 CONFIG_SRC_SUBDIR
 CATOBJEXT
@@ -775,6 +777,7 @@ with_libiconv_prefix
 with_libiconv_type
 with_libintl_prefix
 with_libintl_type
+enable_cuda
 with_ust
 with_ust_include
 with_ust_lib
@@ -1425,6 +1428,7 @@ Optional Features:
   --enable-unit-tests     Enable the inclusion of unit tests when compiling
                           GDB
   --disable-nls           do not use Native Language Support
+  --disable-cuda          disable CUDA support (cuda-gdb)
   --enable-werror         treat compile warnings as errors
   --enable-build-warnings enable build-time compiler warnings if gcc is used
   --enable-gdb-build-warnings
@@ -12321,7 +12325,6 @@ int result = 0;
         iconv_close (cd_88591_to_utf8);
       }
   }
-#endif
   /* Test against HP-UX 11.11 bug: No converter from EUC-JP to UTF-8 is
      provided.  */
   {
@@ -12345,6 +12348,7 @@ int result = 0;
     if (cd4 != (iconv_t)(-1))
       iconv_close (cd4);
   }
+#endif /* NVIDIA: WAR: EUC-JP missing from P4 */
   return result;
 
   ;
@@ -13050,7 +13054,7 @@ $as_echo "$LINGUAS" >&6; }
 fi
 
 # Create sub-directories for objects and dependencies.
-CONFIG_SRC_SUBDIR="arch gdbsupport nat target"
+CONFIG_SRC_SUBDIR="arch cuda gdbsupport nat target"
 
 
 ac_config_commands="$ac_config_commands gdbdepdir"
@@ -13598,6 +13602,39 @@ cat >>confdefs.h <<_ACEOF
 #define PTRACE_TYPE_ARG5 $5
 _ACEOF
 
+fi
+
+
+# Enable CUDA
+# Check whether --enable-cuda was given.
+if test "${enable_cuda+set}" = set; then :
+  enableval=$enable_cuda; case $enableval in
+    yes | no)
+      ;;
+    *)
+      as_fn_error $? "bad value $enableval for --enable-cuda" "$LINENO" 5 ;;
+  esac
+else
+  enable_cuda=yes
+fi
+
+if test x"$enable_cuda" = xyes; then
+
+$as_echo "#define NVIDIA_CUDA_GDB 1" >>confdefs.h
+
+
+$as_echo "#define NVIDIA_CHERRY_PICK 1" >>confdefs.h
+
+
+$as_echo "#define NVIDIA_BUGFIX 1" >>confdefs.h
+
+fi
+ if test x"$enable_cuda" = xyes; then
+  ENABLE_CUDA_TRUE=
+  ENABLE_CUDA_FALSE='#'
+else
+  ENABLE_CUDA_TRUE='#'
+  ENABLE_CUDA_FALSE=
 fi
 
 
@@ -15018,7 +15055,6 @@ int result = 0;
         iconv_close (cd_88591_to_utf8);
       }
   }
-#endif
   /* Test against HP-UX 11.11 bug: No converter from EUC-JP to UTF-8 is
      provided.  */
   {
@@ -15042,6 +15078,7 @@ int result = 0;
     if (cd4 != (iconv_t)(-1))
       iconv_close (cd4);
   }
+#endif /* NVIDIA: WAR: EUC-JP missing from P4 */
   return result;
 
   ;
@@ -15278,6 +15315,10 @@ LTLIBOBJS=$ac_ltlibobjs
 
 if test -z "${MAINTAINER_MODE_TRUE}" && test -z "${MAINTAINER_MODE_FALSE}"; then
   as_fn_error $? "conditional \"MAINTAINER_MODE\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${ENABLE_CUDA_TRUE}" && test -z "${ENABLE_CUDA_FALSE}"; then
+  as_fn_error $? "conditional \"ENABLE_CUDA\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 

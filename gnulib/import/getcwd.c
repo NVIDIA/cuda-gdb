@@ -19,7 +19,13 @@
 # include <unistd.h>
 # include "pathmax.h"
 #else
-# define HAVE_OPENAT 1
+# if defined __QNX__
+/* directory fd handling in QNX differs a lot from what GDB expects, making
+   it easier to disable HAVE_OPENAT than implementing all workarounds */
+#  define HAVE_OPENAT 0
+# else
+#  define HAVE_OPENAT 1
+# endif
 # define D_INO_IN_DIRENT 1
 # define HAVE_MSVC_INVALID_PARAMETER_HANDLER 0
 # define HAVE_MINIMALLY_WORKING_GETCWD 0
