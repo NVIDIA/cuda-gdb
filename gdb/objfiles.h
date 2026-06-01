@@ -18,7 +18,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2025 NVIDIA Corporation
+   Copyright (C) 2007-2026 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -900,9 +900,6 @@ public:
 #ifdef NVIDIA_CUDA_GDB
   /* CUDA - cuda_objfile */
   bool cuda_objfile = false;
-  /* CUDA - line-table-only debug info (compiled with -lineinfo, no
-   * .debug_info). */
-  bool cuda_line_table_only = false;
   /* CUDA - Whether this objfile is in the process of being discarded or not.
      This is used as a way to tell GDB that we no longer want types associated
      with this particular CUDA objfile and therefore want the types to be

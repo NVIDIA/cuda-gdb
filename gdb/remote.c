@@ -18,7 +18,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2025 NVIDIA Corporation
+   Copyright (C) 2007-2026 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -5380,6 +5380,16 @@ remote_target::start_remote_1 (int from_tty, int extended_p)
       push_stop_reply (as_stop_reply_up (std::move (reply)));
 
       ::start_remote (from_tty); /* Initialize gdb process mechanisms.  */
+
+#ifdef NVIDIA_CUDA_GDB
+      /* If CUDA late-attach resumed the target during start_remote
+	 (e.g., to run the attach breakpoint sequence), the target is
+	 now running and we cannot send any more packets until it stops.
+	 Skip the remaining post-connect initialization; CUDA will handle
+	 the rest when the target stops and attach completes.  */
+      if (rs->waiting_for_stop_reply)
+	return true;
+#endif
     }
   else
     {
@@ -5470,9 +5480,22 @@ remote_target::start_remote_1 (int from_tty, int extended_p)
 void
 remote_target::start_remote (int from_tty, int extended_p)
 {
+#ifdef NVIDIA_CUDA_GDB
+  /* If CUDA late-attach resumed the target during start_remote_1,
+     skip breakpoint insertion - the target is running and can't
+     accept packets.  */
+  if (start_remote_1 (from_tty, extended_p)
+      && breakpoints_should_be_inserted_now ())
+    {
+      struct remote_state *rs = get_remote_state ();
+      if (!rs->waiting_for_stop_reply)
+	insert_breakpoints ();
+    }
+#else
   if (start_remote_1 (from_tty, extended_p)
       && breakpoints_should_be_inserted_now ())
     insert_breakpoints ();
+#endif
 }
 
 const char *

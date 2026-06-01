@@ -18,7 +18,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2025 NVIDIA Corporation
+   Copyright (C) 2007-2026 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -218,6 +218,31 @@ inferior::do_all_continuations ()
 #endif
     }
 }
+
+#ifdef NVIDIA_CUDA_GDB
+void
+inferior::add_pre_wait_continuation (std::function<void ()> &&cont)
+{
+  m_pre_wait_continuations.emplace_front (std::move (cont));
+}
+
+void
+inferior::do_pre_wait_continuations ()
+{
+  /* Only run continuations that were in the list on entry.  Continuations
+     may re-add themselves for the next wait cycle - those should not be
+     run immediately.  We remove the continuation before calling it so that
+     if it throws an exception, it won't be re-executed on the next cycle.  */
+  size_t count = m_pre_wait_continuations.size ();
+
+  while (count-- > 0)
+    {
+      auto cont = std::move (m_pre_wait_continuations.front ());
+      m_pre_wait_continuations.pop_front ();
+      cont ();
+    }
+}
+#endif
 
 /* Notify interpreters and observers that inferior INF was added.  */
 

@@ -18,7 +18,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2025 NVIDIA Corporation
+   Copyright (C) 2007-2026 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -393,9 +393,7 @@ struct internal_breakpoint : public code_breakpoint
 enum cuda_auto_breakpoint_type
 {
   CUDA_EVENT_APPLICATION_BP,
-  CUDA_EVENT_SYSTEM_BP,
-  CUDA_FORCED_APPLICATION_BP,
-  CUDA_FORCED_SYSTEM_BP
+  CUDA_FORCED_APPLICATION_BP
 };
 struct cuda_auto_breakpoint : public internal_breakpoint
 {
@@ -410,12 +408,10 @@ struct cuda_auto_breakpoint : public internal_breakpoint
     switch (type)
       {
       case CUDA_EVENT_APPLICATION_BP:
-      case CUDA_EVENT_SYSTEM_BP:
 	enable_state = bp_enabled;
 	disposition = disp_del;
 	break;
       case CUDA_FORCED_APPLICATION_BP:
-      case CUDA_FORCED_SYSTEM_BP:
 	enable_state = bp_disabled;
 	break;
       }
@@ -425,6 +421,13 @@ struct cuda_auto_breakpoint : public internal_breakpoint
   void re_set (program_space *filter_pspace) override;
   void check_status (struct bpstat *bs) override;
   enum print_stop_action print_it (const bpstat *bs) const override;
+  int insert_location (struct bp_location *bl) override;
+  int remove_location (struct bp_location *bl,
+		       enum remove_bp_reason reason) override;
+  int breakpoint_hit (const struct bp_location *bl,
+		      const address_space *aspace,
+		      CORE_ADDR bp_addr,
+		      const target_waitstatus &ws) override;
 };
 /* CUDA - cuda api error and internal driver error breakpoints. */
 struct cuda_api_error_breakpoint : public internal_breakpoint
@@ -635,22 +638,6 @@ show_pending_break_support (struct ui_file *file, int from_tty,
 	      value);
 }
 
-#ifdef NVIDIA_CUDA_GDB
-/* If AUTO_BOOLEAN_FALSE, gdb will not attempt to create pending breakpoints
-   conditionals. If AUTO_BOOLEAN_TRUE, gdb will automatically create pending
-   breakpoints for unrecognized breakpoint conditionals. If AUTO_BOOLEAN_AUTO,
-   gdb will query when breakpoints are unrecognized.  */
-static enum auto_boolean conditional_pending_break_support;
-static void
-show_conditional_pending_break_support (struct ui_file *file, int from_tty,
-					struct cmd_list_element *c,
-					const char *value)
-{
-  gdb_printf (file, _ ("\
-Conditional breakpoints will always be pending if the condition cannot be evaluated is %s.\n"),
-	      value);
-}
-#endif
 /* If true, gdb will automatically use hardware breakpoints for breakpoints
    set with "break" but falling in read-only memory.
    If false, gdb will warn about such breakpoints, but won't automatically
@@ -6626,7 +6613,21 @@ bpstat_what (bpstat *bs_head)
 	  this_action = BPSTAT_WHAT_STOP_NOISY;
 	  break;
 	case bp_cuda_attach_initiated:
+	  /* Handle attach breakpoint - call CUDA handler directly.
+	     This runs the attach post-injection logic and determines
+	     whether to stop (attach complete) or continue (async attach).
+	     Attach is not supported on QNX.  */
+#ifndef __QNXTARGET__
+	  {
+	    bool attach_complete = cuda_handle_attach_initiated_breakpoint ();
+	    if (attach_complete)
+	      this_action = BPSTAT_WHAT_STOP_SILENT;
+	    else
+	      this_action = BPSTAT_WHAT_SINGLE;
+	  }
+#else
 	  this_action = BPSTAT_WHAT_STOP_SILENT;
+#endif
 	  break;
 	/* CUDA - uvm detection */
 	case bp_cuda_uvm:
@@ -9052,7 +9053,6 @@ disable_cuda_breakpoints_in_freed_objfile (struct objfile *objfile)
 	  switch (cuda_b.cuda_auto_type)
 	    {
 	    case CUDA_EVENT_APPLICATION_BP:
-	    case CUDA_EVENT_SYSTEM_BP:
 	      /* Check to see if it matches the objfile we are unloading. */
 	      if (is_addr_in_objfile (cuda_b.first_loc ().address, objfile))
 		{
@@ -13436,6 +13436,26 @@ cuda_auto_breakpoint::re_set (program_space *filter_pspace)
 {
   // Don't touch these - These are managed via CUDA events.
 }
+int
+cuda_auto_breakpoint::insert_location (struct bp_location *bl)
+{
+  return code_breakpoint::insert_location (bl);
+}
+int
+cuda_auto_breakpoint::remove_location (struct bp_location *bl,
+				       enum remove_bp_reason reason)
+{
+  return code_breakpoint::remove_location (bl, reason);
+}
+int
+cuda_auto_breakpoint::breakpoint_hit (const struct bp_location *bl,
+				      const address_space *aspace,
+				      CORE_ADDR bp_addr,
+				      const target_waitstatus &ws)
+{
+  /* Use the default hit detection for all auto breakpoint types.  */
+  return code_breakpoint::breakpoint_hit (bl, aspace, bp_addr, ws);
+}
 enum print_stop_action
 cuda_auto_breakpoint::print_it (const bpstat *bs) const
 {
@@ -13448,23 +13468,13 @@ cuda_auto_breakpoint::print_it (const bpstat *bs) const
 
   if (uiout->is_mi_like_p ())
     {
-      uiout->field_string ("reason",
-			   async_reason_lookup (EXEC_ASYNC_BREAKPOINT_HIT));
+      std::string reason = async_reason_lookup (EXEC_ASYNC_BREAKPOINT_HIT);
+      reason += "/cuda-application";
+
+      uiout->field_string ("reason", reason.c_str ());
     }
 
-  switch (cuda_auto_type)
-    {
-    case CUDA_EVENT_APPLICATION_BP:
-    case CUDA_FORCED_APPLICATION_BP:
-      uiout->text ("application");
-      break;
-    case CUDA_EVENT_SYSTEM_BP:
-    case CUDA_FORCED_SYSTEM_BP:
-      uiout->text ("system");
-      break;
-    }
-
-  uiout->text (" kernel entry function breakpoint");
+  uiout->text ("kernel entry function breakpoint");
   uiout->text (", ");
 
   return PRINT_SRC_AND_LOC;
@@ -15902,6 +15912,10 @@ void
 cuda_auto_breakpoints_forced_add_location (cuda_module* module,
 					   CORE_ADDR addr)
 {
+  /* Skip if the new break-on-launch API is active - it handles this for us. */
+  if (cuda_options_break_on_launch_api_active ())
+    return;
+
   gdbarch *cuda_gdbarch = cuda_get_gdbarch ();
   if (!cuda_gdbarch)
     {
@@ -15919,17 +15933,18 @@ cuda_auto_breakpoints_forced_add_location (cuda_module* module,
   addr = adjust_breakpoint_address (cuda_gdbarch, addr, bp_cuda_auto,
 				    current_program_space);
 
+  /* Skip system kernels - only break on application kernels. */
+  if (module->system ())
+    return;
+
   /* Try to re-use existing breakpoint */
-  bool isSystem = module->system ();
   for (breakpoint &b : all_breakpoints_safe ())
     {
       if (b.type == bp_cuda_auto)
 	{
 	  cuda_auto_breakpoint &cuda_b
 	      = gdb::checked_static_cast<cuda_auto_breakpoint &> (b);
-	  if ((!isSystem
-	       && cuda_b.cuda_auto_type == CUDA_FORCED_APPLICATION_BP)
-	      || (isSystem && cuda_b.cuda_auto_type == CUDA_FORCED_SYSTEM_BP))
+	  if (cuda_b.cuda_auto_type == CUDA_FORCED_APPLICATION_BP)
 	    {
 	      struct symtab_and_line sal;
 	      sal.pc = addr;
@@ -15944,12 +15959,9 @@ cuda_auto_breakpoints_forced_add_location (cuda_module* module,
 
   /* Existing breakpoint not found - create it. */
   breakpoint *b = create_cuda_auto_breakpoint (
-      cuda_gdbarch, addr,
-      isSystem ? CUDA_FORCED_SYSTEM_BP : CUDA_FORCED_APPLICATION_BP,
-      module);
-  cuda_trace_breakpoint ("created %s auto breakpoint bp %d at 0x%llx",
-			 isSystem ? "system" : "application", b->number,
-			 (unsigned long long)addr);
+      cuda_gdbarch, addr, CUDA_FORCED_APPLICATION_BP, module);
+  cuda_trace_breakpoint ("created application auto breakpoint bp %d at 0x%llx",
+			 b->number, (unsigned long long)addr);
 }
 void
 cuda_auto_breakpoints_update (void)
@@ -15962,22 +15974,10 @@ cuda_auto_breakpoints_update (void)
 	      = gdb::checked_static_cast<cuda_auto_breakpoint &> (b);
 	  switch (cuda_b.cuda_auto_type)
 	    {
-	    /* Maybe delete the temporary breakpoint.
-	     * If it's a system breakpoint and we don't have
-	     * break_on_launch system or it's an application breakpoint and
-	     * we don't have break_on_launch application or we need forced
-	     * delete it. */
+	    /* Maybe delete the temporary breakpoint if we don't have
+	     * break_on_launch application or we need forced, delete it. */
 	    case CUDA_EVENT_APPLICATION_BP:
 	      if (!cuda_options_break_on_launch_application ()
-		  || cuda_options_auto_breakpoints_forced_needed ())
-		{
-		  cuda_trace_breakpoint ("remove auto breakpoint bp %d",
-					 b.number);
-		  delete_breakpoint (&b);
-		}
-	      break;
-	    case CUDA_EVENT_SYSTEM_BP:
-	      if (!cuda_options_break_on_launch_system ()
 		  || cuda_options_auto_breakpoints_forced_needed ())
 		{
 		  cuda_trace_breakpoint ("remove auto breakpoint bp %d",
@@ -15992,22 +15992,6 @@ cuda_auto_breakpoints_update (void)
 		  b.enable_state = bp_enabled;
 		}
 	      else if (cuda_options_show_kernel_events_application ())
-		{
-		  b.silent = true;
-		  b.enable_state = bp_enabled;
-		}
-	      else
-		{
-		  b.enable_state = bp_disabled;
-		}
-	      break;
-	    case CUDA_FORCED_SYSTEM_BP:
-	      if (cuda_options_break_on_launch_system ())
-		{
-		  b.silent = false;
-		  b.enable_state = bp_enabled;
-		}
-	      else if (cuda_options_show_kernel_events_system ())
 		{
 		  b.silent = true;
 		  b.enable_state = bp_enabled;
@@ -16040,20 +16024,17 @@ cuda_auto_breakpoints_cleanup (void)
 void
 cuda_auto_breakpoints_event_add_break (cuda_module* module, CORE_ADDR addr)
 {
-  /* Check to see if auto breakpoints are enabled for this kernel */
-  cuda_auto_breakpoint_type type;
+  /* Skip if the new break-on-launch API is active - it handles this for us. */
+  if (cuda_options_break_on_launch_api_active ())
+    return;
+
+  /* Skip system kernels - only break on application kernels. */
   if (module->system ())
-    {
-      if (!cuda_options_break_on_launch_system ())
-	return;
-      type = CUDA_EVENT_SYSTEM_BP;
-    }
-  else
-    {
-      if (!cuda_options_break_on_launch_application ())
-	return;
-      type = CUDA_EVENT_APPLICATION_BP;
-    }
+    return;
+
+  /* Check to see if auto breakpoints are enabled for this kernel */
+  if (!cuda_options_break_on_launch_application ())
+    return;
   /* Check to see if we are using the slow method of setting a breakpoint on
      every known kernel entry point. This happens when we cannot rely upon
      KERNEL_READY events for device launched kernels. If true, we already set
@@ -16074,9 +16055,51 @@ cuda_auto_breakpoints_event_add_break (cuda_module* module, CORE_ADDR addr)
 				    current_program_space);
   /* Create an internal temporary breakpoint. */
   struct breakpoint *bp
-      = create_cuda_auto_breakpoint (cuda_gdbarch, addr, type, module);
+      = create_cuda_auto_breakpoint (cuda_gdbarch, addr,
+				     CUDA_EVENT_APPLICATION_BP, module);
   cuda_trace_breakpoint ("Created event auto breakpoint bp %d at 0x%llx",
 			 bp->number, (unsigned long long)addr);
+}
+
+/* Used when the new break-on-launch API detects a BoL hit.  Creates a
+   physical breakpoint at the post-prologue PC.  The breakpoint is inserted
+   on the device, and the caller should return a spurious wait status so
+   GDB resumes execution and the kernel hits this breakpoint at the first
+   executable statement.
+
+   This approach matches the legacy break_on_launch behavior where the stop
+   occurs at the first executable line (after prologue) rather than at the
+   function entry point.
+
+   Returns true if the breakpoint was created successfully.  */
+bool
+cuda_auto_breakpoint_break_on_launch_hit (CORE_ADDR addr, cuda_module *module)
+{
+  struct gdbarch *cuda_gdbarch = cuda_get_gdbarch ();
+  if (!cuda_gdbarch)
+    {
+      warning (_ ("Could not set CUDA break-on-launch breakpoint at 0x%llx\n"),
+	       (unsigned long long)addr);
+      return false;
+    }
+
+  /* Skip prologue and adjust breakpoint address to get to the first
+     executable statement, matching legacy break_on_launch behavior.  */
+  addr = gdbarch_skip_prologue_noexcept (cuda_gdbarch, addr);
+  addr = adjust_breakpoint_address (cuda_gdbarch, addr, bp_cuda_auto,
+				    current_program_space);
+
+  /* Create an insertable breakpoint (CUDA_EVENT_APPLICATION_BP) at the
+     post-prologue address.  This breakpoint will be physically inserted
+     on the device.  When the kernel resumes, it will hit this breakpoint
+     at the first executable statement.  */
+  struct breakpoint *bp
+      = create_cuda_auto_breakpoint (cuda_gdbarch, addr,
+				     CUDA_EVENT_APPLICATION_BP, module);
+  cuda_trace_breakpoint ("Created break-on-launch auto breakpoint bp %d at "
+			 "0x%llx (post-prologue)",
+			 bp->number, (unsigned long long)addr);
+  return true;
 }
 #endif /* NVIDIA_CUDA_GDB */
 
@@ -16855,18 +16878,5 @@ No argument means enable all autosteps."),
   add_cmd ("autosteps", class_alias, delete_command, _("\
 Equivalent to ``delete breakpoints''."),
 	   &deletelist);
-  add_setshow_auto_boolean_cmd ("conditional-pending", no_class,
-				&conditional_pending_break_support, _("\
-Set debugger's behavior regarding pending breakpoints conditionals."), _("\
-Show debugger's behavior regarding pending breakpoints conditionals."), _("\
-If on, an unresolved breakpoint conditional will cause gdb to create a\n\
-pending breakpoint.  If off, an unresolved breakpoint conditionals results in\n\
-an error.  If auto, an unrecognized breakpoint conditional results in a\n\
-user-query to see if a pending breakpoint should be created."),
-				NULL,
-				show_conditional_pending_break_support,
-				&breakpoint_set_cmdlist,
-				&breakpoint_show_cmdlist);
-  conditional_pending_break_support = AUTO_BOOLEAN_AUTO;
 #endif /* NVIDIA_CUDA_GDB */
 }

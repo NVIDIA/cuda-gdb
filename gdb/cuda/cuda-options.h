@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2025 NVIDIA Corporation
+ * Copyright (C) 2007-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -38,7 +38,9 @@ bool cuda_options_debug_convenience_vars (void);
 bool cuda_options_debug_strict (void);
 bool cuda_options_coalescing (void);
 bool cuda_options_break_on_launch_application (void);
-bool cuda_options_break_on_launch_system (void);
+bool cuda_options_break_on_launch_api_active (void);
+void cuda_options_reset_break_on_launch_state (void);
+void cuda_options_initialize_break_on_launch_api (void);
 bool cuda_options_disassemble_from_device_memory (void);
 bool cuda_options_disassemble_from_elf_image (void);
 void cuda_options_set_disassemble_from_elf_image (void);
@@ -71,6 +73,7 @@ bool cuda_options_driver_logs_enabled (void);
 cuda_log_level_t cuda_options_driver_log_level (void);
 bool cuda_options_printf_flushing (void);
 bool cuda_options_preserve_tmp_data (void);
+bool cuda_options_kernel_launch_backtrace_enabled (void);
 
 /* Return true if KERNEL_READY breakpoints needs to be inserted */
 bool cuda_options_auto_breakpoints_needed (void);

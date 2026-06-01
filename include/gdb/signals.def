@@ -17,7 +17,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2025 NVIDIA Corporation
+   Copyright (C) 2007-2026 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -232,20 +232,25 @@ SET (GDB_SIGNAL_CUDA_CLUSTER_POISON,                  178, "CUDA_EXCEPTION_32", 
 SET (GDB_SIGNAL_CUDA_WARP_API_STACK_ERROR,            179, "CUDA_EXCEPTION_33", "Warp API Stack Error")
 SET (GDB_SIGNAL_CUDA_WARP_BLOCK_NOT_PRESENT,          180, "CUDA_EXCEPTION_34", "Warp Block Not Present")
 SET (GDB_SIGNAL_CUDA_WARP_USER_STACK_OVERFLOW,        181, "CUDA_EXCEPTION_35", "Warp User Stack Overflow")
+SET (GDB_SIGNAL_CUDA_WARP_TMA_SYSCALL,                182, "CUDA_EXCEPTION_36", "Warp TMA Syscall")
 /* END CUDA */
+
+/* Define the last CUDA exception number so subsequent signals can be defined
+   relative to it. This avoids renumbering everything when adding new CUDA exceptions. */
+#define GDB_SIGNAL_CUDA_END 182
 
 /* signal used for select() in QNX NTO
    All signals from GDB_SIGNAL_SELECT to GDB_SIGNAL_LAST will be ignored
    and treated as OS internal by default */
-SET (GDB_SIGNAL_SELECT,      182, "SIGSELECT", "Data available")
-SET (GDB_SIGNAL_PHOTON,      183, "SIGPHOTON", "Legacy Photon")
-SET (GDB_SIGNAL_PROCNTO_59,  184, "PROCNTO59", "NTO reserved")
-SET (GDB_SIGNAL_PROCNTO_60,  185, "PROCNTO60", "NTO reserved")
-SET (GDB_SIGNAL_PROCNTO_61,  186, "PROCNTO61", "NTO reserved")
-SET (GDB_SIGNAL_PROCNTO_62,  187, "PROCNTO62", "NTO reserved")
-SET (GDB_SIGNAL_PROCNTO_63,  188, "PROCNTO63", "NTO reserved")
-SET (GDB_SIGNAL_PROCNTO_64,  189, "PROCNTO64", "NTO reserved")
-SET (GDB_SIGNAL_DOOM,        190, "SIGDOOM", "Lack of resources")
+SET (GDB_SIGNAL_SELECT,      GDB_SIGNAL_CUDA_END + 1, "SIGSELECT", "Data available")
+SET (GDB_SIGNAL_PHOTON,      GDB_SIGNAL_CUDA_END + 2, "SIGPHOTON", "Legacy Photon")
+SET (GDB_SIGNAL_PROCNTO_59,  GDB_SIGNAL_CUDA_END + 3, "PROCNTO59", "NTO reserved")
+SET (GDB_SIGNAL_PROCNTO_60,  GDB_SIGNAL_CUDA_END + 4, "PROCNTO60", "NTO reserved")
+SET (GDB_SIGNAL_PROCNTO_61,  GDB_SIGNAL_CUDA_END + 5, "PROCNTO61", "NTO reserved")
+SET (GDB_SIGNAL_PROCNTO_62,  GDB_SIGNAL_CUDA_END + 6, "PROCNTO62", "NTO reserved")
+SET (GDB_SIGNAL_PROCNTO_63,  GDB_SIGNAL_CUDA_END + 7, "PROCNTO63", "NTO reserved")
+SET (GDB_SIGNAL_PROCNTO_64,  GDB_SIGNAL_CUDA_END + 8, "PROCNTO64", "NTO reserved")
+SET (GDB_SIGNAL_DOOM,        GDB_SIGNAL_CUDA_END + 9, "SIGDOOM", "Lack of resources")
 /* END QNX NTO */
 
 /* If you are adding a new signal, add it just above this comment.  */
@@ -255,5 +260,5 @@ SET (GDB_SIGNAL_DOOM,        190, "SIGDOOM", "Lack of resources")
 SET (GDB_SIGNAL_LAST, 152, NULL, "GDB_SIGNAL_LAST")
 ***/
 /* CUDA */
-SET (GDB_SIGNAL_LAST, 191, NULL, "GDB_SIGNAL_LAST")
+SET (GDB_SIGNAL_LAST, GDB_SIGNAL_CUDA_END + 10, NULL, "GDB_SIGNAL_LAST")
 /* END CUDA */

@@ -132,6 +132,11 @@ enum inferior_event_type
     INF_REG_EVENT,
     /* We are called to do stuff after the inferior stops.  */
     INF_EXEC_COMPLETE,
+#ifdef NVIDIA_CUDA_GDB
+    /* We are called to do stuff before target_wait is called.
+       Used for internal functors which may need multiple retries.  */
+    INF_PRE_WAIT,
+#endif
   };
 
 /* Target objects which can be transferred using target_read,

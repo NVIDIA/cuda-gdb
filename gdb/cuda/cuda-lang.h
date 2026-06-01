@@ -2,7 +2,7 @@
  * CUDA language support definitions for GDB, the GNU debugger
  *
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2025 NVIDIA Corporation
+ * Copyright (C) 2007-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify

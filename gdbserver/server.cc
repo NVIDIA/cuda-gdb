@@ -17,7 +17,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2025 NVIDIA Corporation
+   Copyright (C) 2007-2026 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -4436,6 +4436,21 @@ captured_main (int argc, char *argv[])
       exit (1);
     }
 
+#if defined(NVIDIA_CUDA_GDB)
+  /* For non-QNX platforms, cuda_debugging_enabled is set by the static
+   * cuda_linux_process_target singleton constructor (which calls
+   * cuda_get_debugger_api ()).
+   * For QNX, cuda_debugging_enabled is set by initialize_cuda_remote
+   * called by captured_main.  */
+  if (!cuda_debugging_enabled)
+    {
+      warning ("CUDA debugging cannot be enabled, exiting");
+      exit (-1);
+    }
+
+  cuda_gdb_setup ();
+#endif
+
   /* Remember stdio descriptors.  LISTEN_DESC must not be listed, it will be
      opened by remote_prepare.  */
   notice_open_fds ();
@@ -4663,32 +4678,6 @@ int
 main (int argc, char *argv[])
 {
   setlocale (LC_CTYPE, "");
-#if defined(NVIDIA_CUDA_GDB)
-#if !defined(__QNXHOST__)
-  /* For QNX cuda_debugging_enabled is only set in captured_main.
-   * Exceptions thrown there will be caught by captured_main try/catch
-   * block.  */
-  if (!cuda_debugging_enabled)
-    {
-      warning("CUDA debugging cannot be enabled, exiting");
-      return -1;
-    }
-
-  /* We use the gdb initializers for some of the CUDA sources we share between
-   * gdb and gdbserver. See gdb/make-init-c for more info. There is no
-   * equivalent concept for gdbserver today. We need to explicitly call the
-   * intializers once per execution. */
-  static bool cuda_called_initializers = false;
-  extern void _initialize_cuda_notification ();
-  extern void _initialize_cuda_utils ();
-  if (!cuda_called_initializers)
-    {
-      cuda_called_initializers = true;
-      _initialize_cuda_notification ();
-      _initialize_cuda_utils ();
-    }
-#endif
-#endif
 
   try
     {

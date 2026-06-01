@@ -16,7 +16,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2025 NVIDIA Corporation
+   Copyright (C) 2007-2026 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -193,7 +193,6 @@ extern void fetch_inferior_event ();
 
 extern void init_wait_for_inferior (void);
 #ifdef NVIDIA_CUDA_GDB
-extern void cuda_wait_for_inferior (void);
 extern void cuda_force_stop_print_frame (void);
 #endif
 

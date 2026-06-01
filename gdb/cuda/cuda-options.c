@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2025 NVIDIA Corporation
+ * Copyright (C) 2007-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -485,28 +485,99 @@ cuda_options_notify_random (void)
 /*
  * set cuda break_on_launch
  */
+static const char cuda_break_on_launch_off[] = "off";
+static const char cuda_break_on_launch_on[] = "on";
+/* Legacy values (undocumented, for backward compatibility). */
+static const char cuda_break_on_launch_all[] = "all";
 static const char cuda_break_on_launch_none[] = "none";
 static const char cuda_break_on_launch_application[] = "application";
 static const char cuda_break_on_launch_system[] = "system";
-static const char cuda_break_on_launch_all[] = "all";
 
 static const char *cuda_break_on_launch_enums[]
-    = { cuda_break_on_launch_none, cuda_break_on_launch_application,
-	cuda_break_on_launch_system, cuda_break_on_launch_all, NULL };
+    = { cuda_break_on_launch_off, cuda_break_on_launch_on,
+	/* Legacy values - not documented in help text. */
+	cuda_break_on_launch_all, cuda_break_on_launch_none,
+	cuda_break_on_launch_application, cuda_break_on_launch_system, NULL };
 
-static const char *cuda_break_on_launch = cuda_break_on_launch_none;
+static const char *cuda_break_on_launch = cuda_break_on_launch_off;
+
+/* Track whether the new break-on-launch API is currently enabled. */
+static bool s_break_on_launch_api_enabled = false;
+
+/* Helper to check if break_on_launch is effectively enabled (on or legacy
+ * equivalents). */
+static bool
+cuda_break_on_launch_is_enabled (void)
+{
+  return (cuda_break_on_launch == cuda_break_on_launch_on
+	  || cuda_break_on_launch == cuda_break_on_launch_all
+	  || cuda_break_on_launch == cuda_break_on_launch_application);
+}
 
 static void
 cuda_show_break_on_launch (struct ui_file *file, int from_tty,
 			   struct cmd_list_element *c, const char *value)
 {
-  gdb_printf ("Break on every kernel launch is set to '%s'.\n", value);
+  /* Show the canonical on/off value for clarity. */
+  const char *display_value
+      = cuda_break_on_launch_is_enabled () ? "on" : "off";
+  gdb_printf ("Break on every kernel launch is set to '%s'.\n", display_value);
 }
 
 static void
 cuda_set_break_on_launch (const char *args, int from_tty,
 			  struct cmd_list_element *c)
 {
+  /* "system" is no longer supported and is rejected. */
+  if (cuda_break_on_launch == cuda_break_on_launch_system)
+    {
+      cuda_break_on_launch = cuda_break_on_launch_off;
+      error (_ ("'system' is no longer supported for break_on_launch."));
+    }
+
+  bool want_enabled = cuda_break_on_launch_is_enabled ();
+
+#if CUDBG_API_VERSION_REVISION > 167
+  /* Try to use the new break-on-launch API if available (CUDA 13.2+). */
+  if (cuda_debugapi::is_break_on_launch_supported ())
+    {
+      if (want_enabled && !s_break_on_launch_api_enabled)
+	{
+	  /* Enable break-on-launch via the new API. */
+	  if (cuda_debugapi::enable_break_on_launch ())
+	    {
+	      s_break_on_launch_api_enabled = true;
+	      /* No need to use legacy auto-breakpoints when new API is active. */
+	      return;
+	    }
+	  /* Fall through to legacy method if new API fails. */
+	}
+      else if (!want_enabled && s_break_on_launch_api_enabled)
+	{
+	  /* Disable break-on-launch via the new API. */
+	  if (cuda_debugapi::disable_break_on_launch ())
+	    {
+	      s_break_on_launch_api_enabled = false;
+	      return;
+	    }
+	  /* Fall through to legacy method if new API fails. */
+	}
+      else if (want_enabled && s_break_on_launch_api_enabled)
+	{
+	  /* Already enabled, nothing to do. */
+	  return;
+	}
+      else
+	{
+	  /* !want_enabled && !s_break_on_launch_api_enabled - nothing to do. */
+	  return;
+	}
+    }
+#endif /* CUDBG_API_VERSION_REVISION > 167 */
+
+  /* Fall back to legacy auto-breakpoint system for older CUDA versions
+     or if the new API failed. */
+
   /* Update to receive KERNEL_READY events. */
   cuda_options_force_set_launch_notification_update ();
 
@@ -523,12 +594,9 @@ cuda_options_initialize_break_on_launch (void)
       _ ("Automatically set a breakpoint at the entrance of kernels."),
       _ ("Show if the debugger stops the application on kernel launches."),
       _ ("When enabled, a breakpoint is hit on kernel launches:\n"
-	 "  none        : no breakpoint is set (default)\n"
-	 "  application : a breakpoint is set at the entrance of all the "
-	 "application kernels\n"
-	 "  system      : a breakpoint is set at the entrance of all the "
-	 "system kernels\n"
-	 "  all         : a breakpoint is set at the entrance of all kernels"),
+	 "  off : no breakpoint is set (default)\n"
+	 "  on  : a breakpoint is set at the entrance of all "
+	 "application kernels"),
       cuda_set_break_on_launch, cuda_show_break_on_launch, &setcudalist,
       &showcudalist);
 }
@@ -536,23 +604,59 @@ cuda_options_initialize_break_on_launch (void)
 void
 cuda_options_disable_break_on_launch (void)
 {
-  cuda_break_on_launch = cuda_break_on_launch_none;
+  cuda_break_on_launch = cuda_break_on_launch_off;
 
   cuda_set_break_on_launch (NULL, 0, NULL);
 }
 
 bool
-cuda_options_break_on_launch_system (void)
+cuda_options_break_on_launch_application (void)
 {
-  return (cuda_break_on_launch == cuda_break_on_launch_system
-	  || cuda_break_on_launch == cuda_break_on_launch_all);
+  return cuda_break_on_launch_is_enabled ();
 }
 
 bool
-cuda_options_break_on_launch_application (void)
+cuda_options_break_on_launch_api_active (void)
 {
-  return (cuda_break_on_launch == cuda_break_on_launch_application
-	  || cuda_break_on_launch == cuda_break_on_launch_all);
+  return s_break_on_launch_api_enabled;
+}
+
+void
+cuda_options_reset_break_on_launch_state (void)
+{
+  /* Reset the state when the CUDA API is finalized or the inferior exits. */
+  s_break_on_launch_api_enabled = false;
+}
+
+void
+cuda_options_initialize_break_on_launch_api (void)
+{
+  /* Called during CUDA initialization to enable the new break-on-launch API
+     if the option was already set before the API was available. */
+  if (s_break_on_launch_api_enabled)
+    return;  /* Already enabled. */
+
+  if (!cuda_options_break_on_launch_application ())
+    return;  /* Option not set. */
+
+#if CUDBG_API_VERSION_REVISION > 167
+  /* Try to enable break-on-launch via the new API (CUDA 13.2+).
+     If the API is not available or fails, we fall back to the legacy
+     auto-breakpoint system automatically. */
+  if (cuda_debugapi::is_break_on_launch_supported ()
+      && cuda_debugapi::enable_break_on_launch ())
+    {
+      s_break_on_launch_api_enabled = true;
+      cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
+			 "Break-on-launch API enabled during initialization\n");
+    }
+  else
+#endif
+    {
+      cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
+			 "Break-on-launch API not available, using legacy "
+			 "auto-breakpoint system\n");
+    }
 }
 
 /*
@@ -796,7 +900,7 @@ cuda_options_show_kernel_events_application (void)
 bool
 cuda_options_auto_breakpoints_needed (void)
 {
-  return (cuda_break_on_launch != cuda_break_on_launch_none);
+  return cuda_options_break_on_launch_application ();
 }
 
 bool
@@ -881,6 +985,51 @@ cuda_options_initialize_launch_blocking (void)
 	 "starting from the next run."),
       cuda_set_launch_blocking, cuda_show_launch_blocking, &setcudalist,
       &showcudalist);
+}
+
+/*
+ * set cuda kernel_launch_backtrace
+ */
+static bool cuda_kernel_launch_backtrace = false;
+
+static void
+cuda_show_kernel_launch_backtrace (struct ui_file *file, int from_tty,
+				   struct cmd_list_element *c,
+				   const char *value)
+{
+  gdb_printf (file, _ ("CUDA kernel launch backtrace collection is %s.\n"),
+	      value);
+}
+
+bool
+cuda_options_kernel_launch_backtrace_enabled (void)
+{
+  return cuda_kernel_launch_backtrace;
+}
+
+static void
+cuda_set_kernel_launch_backtrace (const char *args, int from_tty,
+				  struct cmd_list_element *c)
+{
+  if (is_remote_target (current_inferior ()->process_target ()))
+    cuda_remote_set_option ();
+  else
+    cuda_set_kernel_launch_backtrace_capability (cuda_kernel_launch_backtrace);
+}
+
+static void
+cuda_options_initialize_kernel_launch_backtrace (void)
+{
+  add_setshow_boolean_cmd (
+      "kernel_launch_backtrace", class_cuda, &cuda_kernel_launch_backtrace,
+      _ ("Turn on/off CUDA kernel launch backtrace collection."),
+      _ ("Show whether CUDA kernel launch backtrace collection is enabled."),
+      _ ("When enabled, cuda-gdb can retrieve CPU call stacks recorded at "
+	 "kernel launch sites. This feature is disabled by default due to "
+	 "significant performance overhead that slows down the target "
+	 "application execution."),
+      cuda_set_kernel_launch_backtrace, cuda_show_kernel_launch_backtrace,
+      &setcudalist, &showcudalist);
 }
 
 bool
@@ -1611,6 +1760,7 @@ _initialize_cuda_options ()
   cuda_options_initialize_show_kernel_events ();
   cuda_options_initialize_show_context_events ();
   cuda_options_initialize_launch_blocking ();
+  cuda_options_initialize_kernel_launch_backtrace ();
   cuda_options_initialize_thread_selection ();
   cuda_options_initialize_copyright ();
   cuda_options_initialize_notify ();

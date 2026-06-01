@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2025 NVIDIA Corporation
+ * Copyright (C) 2007-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -1140,19 +1140,12 @@ cuda_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 static int
 cuda_print_insn (bfd_vma pc, disassemble_info *info)
 {
-  if (!cuda_current_focus::isDevice ())
+  /* Find the module by address - this works even without a CUDA focus,
+     allowing disassembly of device code from core dumps or when no
+     device is currently focused.  */
+  auto module = cuda_module::find_cuda_module_by_address (pc);
+  if (!module)
     return 1;
-
-  /* If this isn't a device address, don't bother */
-  if (!cuda_is_device_code_address (pc))
-    return 1;
-
-  /* decode the instruction at the pc */
-  auto kernel = cuda_current_focus::get ().logical ().kernel ();
-  gdb_assert (kernel);
-
-  auto module = kernel->module ();
-  gdb_assert (module);
 
   auto disassembler = module->disassembler ();
   gdb_assert (disassembler);
@@ -1588,6 +1581,9 @@ cuda_cleanup (void)
   cuda_sstep_reset (false);
   cuda_set_device_launch_used (false);
 
+  /* Reset break-on-launch API state before finalizing the API. */
+  cuda_options_reset_break_on_launch_state ();
+
   cuda_debugapi::finalize ();
   /* Notification reset must be called after notification thread has
    * been terminated, which is done as part of cuda_api_finalize() call. */
@@ -1635,6 +1631,9 @@ cuda_initialize (void)
       current_inferior ()->cuda_initialized = true;
 
       cuda_state::initialize ();
+
+      /* Enable break-on-launch API if the option was set before initialization. */
+      cuda_options_initialize_break_on_launch_api ();
       useExtDebuggerAddr
 	  = cuda_get_symbol_address (_STRING_ (CUDBG_USE_EXTERNAL_DEBUGGER));
 
@@ -1779,8 +1778,6 @@ cuda_initialize_target (void)
   uint32_t apiClientRev = CUDBG_API_VERSION_REVISION;
   uint32_t sessionId;
 
-  gdb::observers::cuda_driver_preinitialized.notify (current_inferior ());
-
   if (cuda_initialized)
     return true;
 
@@ -1887,6 +1884,22 @@ cuda_initialize_target (void)
 	  capabilities |= CUDBG_DEBUGGER_CAPABILITY_FLUSH_PRINTF_ON_SUSPEND;
 	}
 
+      if (cuda_options_kernel_launch_backtrace_enabled ())
+	{
+	  cuda_trace_domain (
+	      CUDA_TRACE_GENERAL,
+	      "requesting collection of CPU call stack for kernel launches\n");
+	  capabilities |= CUDBG_DEBUGGER_CAPABILITY_COLLECT_CPU_CALL_STACK_FOR_KERNEL_LAUNCHES;
+	}
+
+#if CUDBG_API_VERSION_REVISION > 167
+      /* Always request break-on-launch capability for CUDA 13.2+ support.
+	 The driver will ignore this flag if it doesn't understand it. */
+      cuda_trace_domain (CUDA_TRACE_GENERAL,
+			 "requesting break-on-launch capability\n");
+      capabilities |= CUDBG_DEBUGGER_CAPABILITY_BREAK_ON_LAUNCH;
+#endif
+
       target_write_memory (capability_addr, (const gdb_byte *)&capabilities,
 			   sizeof (capabilities));
     }
@@ -1928,6 +1941,40 @@ cuda_set_driver_log_capability (bool enable)
     capabilities |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
   else
     capabilities &= ~CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
+
+  target_write_memory (capability_addr, (const gdb_byte *)&capabilities,
+		       sizeof (capabilities));
+}
+
+void
+cuda_set_kernel_launch_backtrace_capability (bool enable)
+{
+  /* Setup our desired capabilities for the debugger backend. It is alright
+   * if the older driver doesn't understand some of these flags. We will deal
+   * with those situations after initialization. */
+  CORE_ADDR capability_addr
+      = cuda_get_symbol_address (_STRING_ (CUDBG_DEBUGGER_CAPABILITIES));
+  if (!capability_addr)
+    {
+      if (cuda_inferior_in_debug_mode ())
+	warning (_ ("Failed to set the CUDA kernel launch backtrace "
+		    "capability."));
+      return;
+    }
+
+  cuda_trace_domain (
+      CUDA_TRACE_GENERAL,
+      "requesting %s of CPU call stack collection for kernel launches\n",
+      enable ? "enablement" : "disablement");
+
+  uint32_t capabilities = CUDBG_DEBUGGER_CAPABILITY_NONE;
+  target_read_memory (capability_addr, (gdb_byte *)&capabilities,
+		      sizeof (capabilities));
+
+  if (enable)
+    capabilities |= CUDBG_DEBUGGER_CAPABILITY_COLLECT_CPU_CALL_STACK_FOR_KERNEL_LAUNCHES;
+  else
+    capabilities &= ~CUDBG_DEBUGGER_CAPABILITY_COLLECT_CPU_CALL_STACK_FOR_KERNEL_LAUNCHES;
 
   target_write_memory (capability_addr, (const gdb_byte *)&capabilities,
 		       sizeof (capabilities));

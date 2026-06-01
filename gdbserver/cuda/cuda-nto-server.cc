@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2017-2025 NVIDIA Corporation
+ * Copyright (C) 2017-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,8 +21,6 @@
 #include "server.h"
 #include "cuda-nto-protocol.h"
 #include "cuda-tdep-server.h"
-#include "cuda/cuda-utils.h"
-#include "cuda/cuda-notifications.h"
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -448,19 +446,7 @@ captured_main (int argc, char *argv[])
   /* TODO: find a better way to create pipes on QNX, see bug 1949586 */
   ensure_functional_tmpdir ();
 
-  /* We use the gdb initializers for some of the CUDA sources we share between
-   * gdb and gdbserver. See gdb/make-init-c for more info. There is no
-   * equivalent concept for gdbserver today. We need to explicitly call the
-   * intializers once per execution. */
-  static bool cuda_called_initializers = false;
-  extern void _initialize_cuda_notification ();
-  extern void _initialize_cuda_utils ();
-  if (!cuda_called_initializers)
-    {
-      cuda_called_initializers = true;
-      _initialize_cuda_notification ();
-      _initialize_cuda_utils ();
-    }
+  cuda_gdb_setup ();
 
   launch_pdebug (argv, first_pdebug_arg, argc, port + 1);
 

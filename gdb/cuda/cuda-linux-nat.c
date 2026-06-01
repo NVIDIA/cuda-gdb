@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2025 NVIDIA Corporation
+ * Copyright (C) 2007-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -21,6 +21,7 @@
 #include "defs.h"
 
 #include <objfiles.h>
+#include <string.h>
 #include <sys/ptrace.h>
 #include <sys/signal.h>
 #include <sys/stat.h>
@@ -57,13 +58,17 @@
 #endif
 #include "cuda-linux-nat.h"
 #include "event-top.h"
+#include "extension.h"
 #include "inf-child.h"
+#include "infrun.h"
 #include "inf-loop.h"
 #include "main.h"
 #include "remote-cuda.h"
 #include "remote.h"
 #include "top.h"
 #include "interps.h"
+#include "target/target.h"
+#include "ui.h"
 
 bool cuda_debugging_enabled = false;
 
@@ -318,13 +323,21 @@ cuda_request_safe_library_injection (inferior *inf)
     error (_ ("Failed to write to library injection request event pipe"));
 }
 
+/* Returns true if attach is complete (synchronous), false if async
+   continuation was added (caller should continue the target).  */
+static bool cuda_nat_attach_post_library_injection (inferior *inf);
+static void cuda_nat_attach_finish (inferior *inf, bool notify_stop);
+
 static void
 cuda_inject_debug_library_new (inferior *inf)
 {
+  cuda_trace ("cuda_inject_debug_library_new: entering");
+
   if (cuda_is_debugger_initialized ())
     {
       /* Nothing to inject, let's continue. */
-      gdb::observers::cuda_attach_initiated.notify (inf);
+      cuda_trace ("cuda_inject_debug_library_new: already initialized, calling post_library_injection");
+      cuda_nat_attach_post_library_injection (inf);
       return;
     }
 
@@ -338,8 +351,139 @@ cuda_inject_debug_library_new (inferior *inf)
   if (inferior_thread ()->state == THREAD_RUNNING)
     return;
 
+  /* Mark that we're in the library injection phase.  */
+  inf->cuda_attach_state = inferior::cuda_attach_state::INJECTING;
+
   prepare_execution_command (inf->top_target (), true);
   continue_1 (true);
+
+  /* Block user input until CUDA attach completes.  We set
+     keep_prompt_blocked to prevent async_enable_stdin() in
+     normal_stop() (called from attach_post_wait) from re-enabling
+     input.  This flag is cleared when attach completes.  */
+  current_ui->keep_prompt_blocked = true;
+}
+
+/* Clean up attach state when cancelled by user (Ctrl-C).  */
+static void
+cuda_attach_cleanup_on_cancel (inferior *inf)
+{
+  cuda_trace ("cuda_attach_cleanup_on_cancel: cleaning up");
+
+  inf->cuda_attach_state = inferior::cuda_attach_state::NONE;
+
+  if (inf->cuda_saved_sigs != nullptr)
+    {
+      cuda_nat_bypass_signals_cleanup (inf->cuda_saved_sigs);
+      inf->cuda_saved_sigs = nullptr;
+    }
+
+  /* Reset attach state so a future attach can succeed.  */
+  cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_NOT_STARTED);
+
+  /* Re-enable user input.  */
+  current_ui->keep_prompt_blocked = false;
+  async_enable_stdin ();
+}
+
+/* Pre-wait continuation for old attach protocol retry logic.
+   This runs before each target_wait, after the target has stopped
+   from our interrupt.  */
+static void
+cuda_inject_debug_library_old_continuation (inferior *inf,
+					    unsigned retry_count,
+					    unsigned retry_delay,
+					    unsigned app_init_timeout)
+{
+  struct cmd_list_element *alias = NULL;
+  struct cmd_list_element *prefix_cmd = NULL;
+  struct cmd_list_element *cmd = NULL;
+  const char *cudbgApiAttach = "(void) cudbgApiAttach()";
+
+  cuda_trace ("cuda_inject_debug_library_old_continuation: retry_count=%u",
+	      retry_count);
+
+  /* Give up if the process has exited.  */
+  if (!inf->process_target ())
+    {
+      cuda_trace ("cuda_inject_debug_library_old_continuation: process exited, giving up");
+      return;
+    }
+
+  /* Check if user cancelled with Ctrl-C.  We check both the thread's
+     stop signal and the quit flag.  */
+  {
+    bool is_sigint = false;
+    if (inferior_ptid != null_ptid)
+      {
+	thread_info *tp = inferior_thread ();
+	if (tp != nullptr)
+	  is_sigint = (tp->stop_signal () == GDB_SIGNAL_INT);
+      }
+
+    if (is_sigint || check_quit_flag ())
+      {
+	cuda_trace ("cuda_inject_debug_library_old_continuation: cancelled by user");
+	cuda_attach_cleanup_on_cancel (inf);
+	gdb_printf (_ ("CUDA attach cancelled.\n"));
+	return;
+      }
+  }
+
+  /* Mark target as stopped - it should have stopped from our interrupt.  */
+  set_running (inf->process_target (), minus_one_ptid, 0);
+
+  /* Check timeout.  */
+  if (retry_count * retry_delay >= app_init_timeout)
+    {
+      /* Timeout - proceed anyway.  */
+      cuda_nat_attach_post_library_injection (inf);
+      return;
+    }
+
+  if (!lookup_cmd_composition ("call", &alias, &prefix_cmd, &cmd))
+    error (_ ("Failed to initiate attach."));
+
+  /* Try to init debugger's backend.  */
+  unsigned char *sigs = cuda_gdb_bypass_signals ();
+  cuda_gdb_bypass_signals_cleanup cleanup (sigs);
+  cmd_func (cmd, cudbgApiAttach, 0);
+  cleanup.release ();
+  cuda_nat_bypass_signals_cleanup (sigs);
+
+  uint64_t internal_error_code = cuda_get_last_driver_internal_error_code ();
+
+  /* CUDBG_ERROR_ATTACH_NOT_POSSIBLE can be returned in two scenarios:
+   * 1. Attach is really not possible
+   * 2. Critical section's mutex is taken, attaching would cause a deadlock
+   */
+  bool need_retry = (unsigned int)internal_error_code
+		    == CUDBG_ERROR_ATTACH_NOT_POSSIBLE;
+
+  if (need_retry)
+    {
+      /* Add continuation for next retry.  */
+      unsigned next_count = retry_count + 1;
+      inf->add_pre_wait_continuation (
+	[inf, next_count, retry_delay, app_init_timeout] () {
+	  cuda_inject_debug_library_old_continuation (inf, next_count,
+						      retry_delay,
+						      app_init_timeout);
+	});
+
+      /* Resume the target.  */
+      prepare_execution_command (inf->top_target (), true);
+      continue_1 (true);
+
+      usleep (retry_delay * 1000);
+
+      /* Trigger the future wait().  */
+      interrupt_target_1 (true);
+      return;
+    }
+
+  /* Success - proceed with post-injection.  */
+  cuda_nat_attach_post_library_injection (inf);
 }
 
 static void
@@ -349,67 +493,73 @@ cuda_inject_debug_library_old (inferior *inf)
   struct cmd_list_element *prefix_cmd = NULL;
   struct cmd_list_element *cmd = NULL;
   const char *cudbgApiAttach = "(void) cudbgApiAttach()";
-  unsigned char *sigs = NULL;
-  uint64_t internal_error_code;
-  bool need_retry = 0;
-  unsigned retry_count = 0;
   unsigned retry_delay = 100;	    // ms
   unsigned app_init_timeout = 5000; // ms
+
+  cuda_trace ("cuda_inject_debug_library_old: entering");
 
   if (!lookup_cmd_composition ("call", &alias, &prefix_cmd, &cmd))
     error (_ ("Failed to initiate attach."));
 
-  do
+  /* First attempt to init debugger's backend.  */
+  unsigned char *sigs = cuda_gdb_bypass_signals ();
+  cuda_gdb_bypass_signals_cleanup cleanup (sigs);
+  cmd_func (cmd, cudbgApiAttach, 0);
+  cleanup.release ();
+  cuda_nat_bypass_signals_cleanup (sigs);
+
+  uint64_t internal_error_code = cuda_get_last_driver_internal_error_code ();
+
+  /* CUDBG_ERROR_ATTACH_NOT_POSSIBLE can be returned in two scenarios:
+   * 1. Attach is really not possible
+   * 2. Critical section's mutex is taken, attaching would cause a deadlock
+   */
+  bool need_retry = (unsigned int)internal_error_code
+		    == CUDBG_ERROR_ATTACH_NOT_POSSIBLE;
+
+  if (need_retry)
     {
-      /* Try to init debugger's backend */
-      sigs = cuda_gdb_bypass_signals ();
-      cuda_gdb_bypass_signals_cleanup cleanup (sigs);
-      cmd_func (cmd, cudbgApiAttach, 0);
-      /* Manually cleanup */
-      cleanup.release ();
-      cuda_nat_bypass_signals_cleanup (sigs);
+      /* Mark that we're in the library injection phase.  */
+      inf->cuda_attach_state = inferior::cuda_attach_state::INJECTING;
 
-      internal_error_code = cuda_get_last_driver_internal_error_code ();
+      /* Add continuation for retry - will run before next target_wait.  */
+      unsigned retry_count = 1;
+      inf->add_pre_wait_continuation (
+	[inf, retry_count, retry_delay, app_init_timeout] () {
+	  cuda_inject_debug_library_old_continuation (inf, retry_count,
+						      retry_delay,
+						      app_init_timeout);
+	});
 
-      /* CUDBG_ERROR_ATTACH_NOT_POSSIBLE can be returned in two scenarios:
-       * 1. Attach is really not possible
-       * 2. Critical section's mutex is taken, attaching would cause a deadlock
-       */
-      need_retry = (unsigned int)internal_error_code
-		   == CUDBG_ERROR_ATTACH_NOT_POSSIBLE;
+      /* Resume the target.  */
+      prepare_execution_command (inf->top_target (), true);
+      continue_1 (true);
 
-      if (need_retry)
-	{
-	  /* Resume the target */
-	  prepare_execution_command (inf->top_target (), true);
-	  continue_1 (true);
+      /* Block user input until CUDA attach completes.  */
+      current_ui->keep_prompt_blocked = true;
 
-	  usleep (retry_delay * 1000);
+      usleep (retry_delay * 1000);
 
-	  /* Trigger the future wait() */
-	  interrupt_target_1 (true);
-
-	  /* Get control back */
-	  cuda_wait_for_inferior ();
-	  set_running (inf->process_target (), minus_one_ptid, 0);
-
-	  retry_count++;
-	}
+      /* Trigger the future wait().  */
+      interrupt_target_1 (true);
+      return;
     }
-  while (need_retry && (retry_count * retry_delay < app_init_timeout));
 
-  gdb::observers::cuda_attach_initiated.notify (inf);
+  /* First attempt succeeded.  */
+  cuda_nat_attach_post_library_injection (inf);
 }
-
-static void cuda_nat_attach_post_library_injection (inferior *inf);
 
 static void
 cuda_nat_attach (inferior *inf)
 {
   CORE_ADDR attachDataAvailableFlagAddr = 0;
 
-  gdb::observers::cuda_driver_preinitialized.detach (
-      inf->cuda_preinitialization_hook_observer_token);
+  /* Give up if the process has exited.  */
+  if (!inf->process_target ())
+    {
+      cuda_trace ("cuda_nat_attach: process exited, giving up");
+      return;
+    }
 
   if (is_remote_target (inf->process_target ()))
     {
@@ -470,25 +620,184 @@ cuda_nat_attach (inferior *inf)
       cuda_inject_debug_library_new (inf);
       break;
     case cuda_attach_protocol_support::v1_supported_later:
-      /* Try later  */
+      /* The CUDA driver hasn't fully initialized yet.  We need to continue
+	 the target so the driver can finish initializing.  The pre-wait
+	 continuation (cuda_initialize_pre_wait_continuation) will check
+	 the cuda_attach_state and call cuda_nat_attach when initialization
+	 succeeds.  */
       gdb_printf (_ ("The CUDA driver has not initialized yet, the attach "
 		     "procedure will finish later.\n"));
       gdb_printf (_ ("CUDA features will not be available until the driver "
 		     "has initialized.\n"));
 
-      /* Schedule to call this function later, before initializing CUDA stuff
-       * in cuda-gdb. */
-      gdb::observers::cuda_driver_preinitialized.attach (
-	  cuda_nat_attach, inf->cuda_preinitialization_hook_observer_token,
-	  "CUDA");
+      /* Set state so pre-wait continuation knows to call cuda_nat_attach
+	 after driver initialization.  */
+      inf->cuda_attach_state = inferior::cuda_attach_state::WAITING_FOR_DRIVER;
 
-      /* In this case, unblock the attach command immediately */
-      inf->cuda_attach_finished = true;
+      /* Continue the target so the driver can finish initializing.  */
+      if (inferior_thread ()->state != THREAD_RUNNING)
+	{
+	  prepare_execution_command (inf->top_target (), true);
+	  continue_1 (true);
+	}
+
+      /* Block user input until CUDA attach completes.  */
+      current_ui->keep_prompt_blocked = true;
+      async_disable_stdin ();
       break;
     }
 }
 
+/* Normal stop observer for CUDA attach.
+   Handles Ctrl-C for any attach phase, and the resumeAppOnAttach loop.  */
 static void
+cuda_attach_normal_stop_observer (struct bpstat *bs, int print_frame)
+{
+  inferior *inf = current_inferior ();
+
+  cuda_trace ("cuda_attach_normal_stop_observer: called, inf=%p, print_frame=%d",
+	      inf, print_frame);
+
+  if (inf == nullptr)
+    {
+      cuda_trace ("cuda_attach_normal_stop_observer: inf is nullptr, returning");
+      return;
+    }
+
+  cuda_trace ("cuda_attach_normal_stop_observer: attach_state=%d",
+	      static_cast<int> (inf->cuda_attach_state));
+
+  /* Give up if the process has exited.  */
+  if (!inf->process_target ())
+    {
+      cuda_trace ("cuda_attach_normal_stop_observer: process exited, returning");
+      return;
+    }
+
+  /* Check if user cancelled with Ctrl-C during ANY attach phase.
+     We check both the thread's stop signal (SIGINT) and the quit flag.
+     The quit flag might already be cleared by other GDB code, so we
+     primarily rely on the stop signal.  */
+  if (inf->cuda_attach_state != inferior::cuda_attach_state::NONE)
+    {
+      bool is_sigint = false;
+      thread_info *tp = (inferior_ptid != null_ptid) ? inferior_thread () : nullptr;
+      if (tp != nullptr)
+	is_sigint = (tp->stop_signal () == GDB_SIGNAL_INT);
+
+      if (is_sigint || check_quit_flag ())
+	{
+	  cuda_trace ("cuda_attach_normal_stop_observer: cancelled by user (sigint=%d)",
+		      is_sigint);
+	  cuda_attach_cleanup_on_cancel (inf);
+	  gdb_printf (_ ("CUDA attach cancelled.\n"));
+	  return;
+	}
+    }
+
+  /* Not in the resumeAppOnAttach loop - nothing more to do.  */
+  if (inf->cuda_attach_state != inferior::cuda_attach_state::RESUMING)
+    return;
+
+  cuda_trace ("cuda_attach_normal_stop_observer: api_attach_state=%d",
+	      cuda_debugapi::get_attach_state ());
+
+  /* Check if attach is complete.  */
+  if (cuda_debugapi::get_attach_state () == CUDA_ATTACH_STATE_APP_READY
+      || cuda_debugapi::get_attach_state () == CUDA_ATTACH_STATE_COMPLETE)
+    {
+      cuda_trace ("cuda_attach_normal_stop_observer: attach complete, finishing");
+
+      /* Cleanup signal bypass.  */
+      cuda_nat_bypass_signals_cleanup (inf->cuda_saved_sigs);
+      inf->cuda_saved_sigs = nullptr;
+
+      /* Complete the attach.  */
+      cuda_nat_attach_finish (inf, true);
+      return;
+    }
+
+  /* Attach still in progress - resume target to receive more events.  */
+  cuda_trace ("cuda_attach_normal_stop_observer: still in progress, resuming");
+
+  /* Resume the target to continue receiving CUDA events.
+     Use proceed() which is the standard way to resume after a stop.  */
+  clear_proceed_status (0);
+  proceed ((CORE_ADDR) -1, GDB_SIGNAL_0);
+}
+
+/* Final steps of attach after all data collection is complete.  */
+static void
+cuda_nat_attach_finish (inferior *inf, bool notify_stop)
+{
+  cuda_trace ("cuda_nat_attach_finish: entering, notify_stop=%d", notify_stop);
+
+  /* Clear attach state.  */
+  inf->cuda_attach_state = inferior::cuda_attach_state::NONE;
+
+  /* The inferior just got signaled, we're not expecting any other stop */
+  inf->control.stop_soon = NO_STOP_QUIETLY;
+
+  /* After attach, force this to "unknown state".
+     This is required because we need to call `mark_async_event_handler()'
+     and will be set to true later anyways.
+     It is set to true as part of normal GDB attach code. */
+  infrun_async (-1);
+
+  /* Ensure GDB owns the terminal.  During async attach, the terminal
+     state may not be properly restored.  */
+  target_terminal::ours ();
+
+  /* Clear the prompt block that was set when attach started.
+     We set keep_prompt_blocked = true in cuda_inject_debug_library_*
+     to prevent normal_stop() from enabling input during the attach.
+     Now that attach is complete, clear it and re-enable input.  */
+  current_ui->keep_prompt_blocked = false;
+  current_ui->prompt_state = PROMPT_BLOCKED;
+  async_enable_stdin ();
+
+  /* If we completed attach via the normal_stop observer path, we need
+     to notify the stop now since the attach breakpoint is silent.  */
+  if (notify_stop)
+    interps_notify_normal_stop (nullptr, 1);
+}
+
+/* See cuda-linux-nat.h.  */
+
+bool
+cuda_complete_async_attach (struct inferior *inf)
+{
+  cuda_trace ("cuda_complete_async_attach: entering, attach_state=%d",
+	      inf ? static_cast<int> (inf->cuda_attach_state) : -1);
+
+  if (inf == nullptr)
+    return false;
+
+  /* Check if we're in the resumeAppOnAttach loop.  */
+  if (inf->cuda_attach_state != inferior::cuda_attach_state::RESUMING)
+    return false;
+
+  cuda_trace ("cuda_complete_async_attach: completing async attach");
+
+  /* Cleanup signal bypass.  */
+  if (inf->cuda_saved_sigs != nullptr)
+    {
+      cuda_nat_bypass_signals_cleanup (inf->cuda_saved_sigs);
+      inf->cuda_saved_sigs = nullptr;
+    }
+
+  /* Complete the attach.  This sets stop_soon = NO_STOP_QUIETLY, which
+     allows fetch_inferior_event to call normal_stop() after cuda_wait
+     returns.  We pass notify_stop=false because normal_stop() will
+     handle the notification.  */
+  cuda_nat_attach_finish (inf, false);
+
+  /* Return true so the template code does NOT set STOP_QUIETLY.
+     This allows normal_stop() to be called from fetch_inferior_event.  */
+  return true;
+}
+
+static bool
 cuda_nat_attach_post_library_injection (inferior *inf)
 {
   CORE_ADDR debugFlagAddr = 0;
@@ -500,7 +809,15 @@ cuda_nat_attach_post_library_injection (inferior *inf)
   unsigned dev = 0;
   const unsigned int sleepTime = 1; // ms
   uint64_t internal_error_code;
-  unsigned char *sigs = NULL;
+
+  cuda_trace ("cuda_nat_attach_post_library_injection: entering");
+
+  /* Give up if the process has exited.  */
+  if (!inf->process_target ())
+    {
+      cuda_trace ("cuda_nat_attach_post_library_injection: process exited, giving up");
+      return false;
+    }
 
   debugFlagAddr = cuda_get_symbol_address (_STRING_ (CUDBG_IPC_FLAG_NAME));
   resumeAppOnAttachFlagAddr
@@ -555,6 +872,22 @@ cuda_nat_attach_post_library_injection (inferior *inf)
 	  capabilities |= CUDBG_DEBUGGER_CAPABILITY_FLUSH_PRINTF_ON_SUSPEND;
 	}
 
+      if (cuda_options_kernel_launch_backtrace_enabled ())
+	{
+	  cuda_trace_domain (
+	      CUDA_TRACE_GENERAL,
+	      "requesting collection of CPU call stack for kernel launches\n");
+	  capabilities |= CUDBG_DEBUGGER_CAPABILITY_COLLECT_CPU_CALL_STACK_FOR_KERNEL_LAUNCHES;
+	}
+
+#if CUDBG_API_VERSION_REVISION > 167
+      /* Always request break-on-launch capability for CUDA 13.2+ support.
+	 The driver will ignore this flag if it doesn't understand it. */
+      cuda_trace_domain (CUDA_TRACE_GENERAL,
+			 "requesting break-on-launch capability\n");
+      capabilities |= CUDBG_DEBUGGER_CAPABILITY_BREAK_ON_LAUNCH;
+#endif
+
       target_write_memory (capability_addr, (const gdb_byte *)&capabilities,
 			   sizeof (capabilities));
     }
@@ -599,58 +932,34 @@ cuda_nat_attach_post_library_injection (inferior *inf)
   else
     target_read_memory (resumeAppOnAttachFlagAddr, &resumeAppOnAttach, 1);
 
+  cuda_trace ("cuda_nat_attach_post_library_injection: resumeAppOnAttach=%d",
+	      resumeAppOnAttach);
+
   if (resumeAppOnAttach)
     {
-      int cnt;
-      sigs = cuda_gdb_bypass_signals ();
-      cuda_gdb_bypass_signals_cleanup cleanup (sigs);
-      /* Resume the inferior to collect more data. CUDA_ATTACH_STATE_COMPLETE
-	 and CUDBG_IPC_FLAG_NAME will be set once this completes. */
-      for (cnt = 0; cnt < 1000
-		    && cuda_debugapi::get_attach_state ()
-			   == CUDA_ATTACH_STATE_IN_PROGRESS;
-	   cnt++)
-	{
-	  prepare_execution_command (inf->top_target (), true);
-	  continue_1 (false);
-	  /* force resumed state to false */
-	  bool resumed_state = false;
-	  if (is_remote_target (inf->process_target ()))
-	    {
-	      resumed_state = current_inferior ()
-				  ->process_target ()
-				  ->commit_resumed_state;
-	      current_inferior ()->process_target ()->commit_resumed_state
-		  = false;
-	    }
-	  cuda_wait_for_inferior ();
-	  if (is_remote_target (inf->process_target ()))
-	    {
-	      current_inferior ()->process_target ()->commit_resumed_state
-		  = resumed_state;
-	    }
-	  /* infrun's async_event_handler is in the "ready" state after running
-	     `continue_1` above. Since we've waited for inferior above, we now
-	     run the completions and reset the "ready" state by calling the
-	     below function. Doing this will lead to CUDA's wait function not
-	     being called after `cuda_nat_attach` completes. */
-	  inferior_event_handler (INF_EXEC_COMPLETE);
-	}
+      cuda_trace ("cuda_nat_attach_post_library_injection: resumeAppOnAttach=1, "
+		  "setting up async attach loop");
 
-      /* No threads are running at this point.  */
-      set_running (inf->process_target (), minus_one_ptid, 0);
+      /* Setup signal bypass - saved in inferior for cleanup later.  */
+      inf->cuda_saved_sigs = cuda_gdb_bypass_signals ();
 
-      /* Manually cleanup */
-      cleanup.release ();
-      cuda_nat_bypass_signals_cleanup (sigs);
-      if (cuda_debugapi::get_attach_state () != CUDA_ATTACH_STATE_APP_READY
-	  && cuda_debugapi::get_attach_state () != CUDA_ATTACH_STATE_COMPLETE)
-	error ("Unexpected CUDA attach state %d, further debugging session "
-	       "might be unreliable",
-	       cuda_debugapi::get_attach_state ());
+      /* Set state for the normal_stop observer to handle the loop.
+	 The observer will check attach state after each stop and either
+	 resume or complete the attach.  */
+      inf->cuda_attach_state = inferior::cuda_attach_state::RESUMING;
+
+      /* Block user input until attach completes.  The prompt will be
+	 re-enabled in cuda_nat_attach_finish when the attach loop
+	 completes via async_enable_stdin() in normal_stop().  */
+      async_disable_stdin ();
+
+      /* Return false to indicate async - caller should continue target.
+	 The normal_stop observer will handle subsequent stops.  */
+      return false;
     }
   else
     {
+      cuda_trace ("cuda_nat_attach_post_library_injection: sync path (no resume needed)");
       cuda_force_stop_print_frame ();
 
       /* Enable debugger callbacks from the CUDA driver */
@@ -665,16 +974,9 @@ cuda_nat_attach_post_library_injection (inferior *inf)
 	cuda_state::device_suspend (dev);
     }
 
-  /* The inferior just got signaled, we're not expecting any other stop */
-  inf->control.stop_soon = NO_STOP_QUIETLY;
-
-  /* After attach, force this to "unknown state".
-     This is required because we need to call `mark_async_event_handler()'
-     and will be set to true later anyways.
-     It is set to true as part of normal GDB attach code. */
-  infrun_async (-1);
-
-  inf->cuda_attach_finished = true;
+  /* Synchronous path - attach is complete.  */
+  cuda_nat_attach_finish (inf, false);
+  return true;
 }
 
 #endif /* !__QNXTARGET__ */
@@ -689,48 +991,118 @@ cuda_inferior_created (inferior *inf)
   // QNX today.
   if (inf->attach_flag)
     cuda_nat_attach (inf);
-#else
-  inf->cuda_attach_finished = true;
 #endif
 }
 
-static void
-cuda_attach_initiated (inferior *inf)
-{
 #ifndef __QNXTARGET__
-  /* This gets called after the driver has injected the debugger library
-     into the program.
-     This function is used in both old (with force call) and new (graceful)
-     attach protocols. */
-  cuda_nat_attach_post_library_injection (inf);
-#endif
+/* Called from bpstat_what when bp_cuda_attach_initiated is hit.
+   Returns true if attach is complete (should stop), false if async
+   continuation was added (should continue).
+   Attach is not supported on QNX.  */
+bool
+cuda_handle_attach_initiated_breakpoint (void)
+{
+  cuda_trace ("cuda_handle_attach_initiated_breakpoint: entering");
+
+  inferior *inf = current_inferior ();
+  bool complete = cuda_nat_attach_post_library_injection (inf);
+
+  cuda_trace ("cuda_handle_attach_initiated_breakpoint: complete=%d", complete);
+
+  return complete;
+}
+#endif /* !__QNXTARGET__ */
+
+/* Final cleanup after detach loop completes.  */
+static void
+cuda_do_detach_finish (inferior *inf, CORE_ADDR debugFlagAddr)
+{
+  cuda_trace ("cuda_do_detach_finish: entering, attach_state=%d",
+	      cuda_debugapi::get_attach_state ());
+
+  if (inf->process_target ())
+    {
+      if (cuda_debugapi::get_attach_state ()
+	  != CUDA_ATTACH_STATE_DETACH_COMPLETE)
+	warning (_ ("Unexpected CUDA API attach state %d."),
+		 cuda_debugapi::get_attach_state ());
+
+      cuda_write_bool (debugFlagAddr, false);
+    }
+
+  /* Re-enable user input now that detach is complete.  */
+  current_ui->keep_prompt_blocked = false;
+  async_enable_stdin ();
+
+  cuda_cleanup ();
 }
 
+/* Pre-wait continuation for detach cleanup loop.
+   This runs before each target_wait, handling the detach state machine.  */
 static void
-cuda_on_normal_stop (bpstat *bs, int print_frame)
+cuda_do_detach_continuation (inferior *inf, CORE_ADDR debugFlagAddr, int cnt)
 {
-  bpstat *bs_iter;
-  struct breakpoint *breakpoint_at;
+  const int max_iterations = 100;
 
-  for (bs_iter = bs; bs_iter != NULL; bs_iter = bs_iter->next)
+  cuda_trace ("cuda_do_detach_continuation: cnt=%d, attach_state=%d",
+	      cnt, cuda_debugapi::get_attach_state ());
+
+  /* Check if user cancelled with Ctrl-C.  */
+  if (check_quit_flag ())
     {
-      breakpoint_at = bs_iter->breakpoint_at;
-      if (breakpoint_at == NULL)
-	continue;
-      if (breakpoint_at->type == bp_cuda_attach_initiated)
-	{
-	  gdb::observers::cuda_attach_initiated.notify (current_inferior ());
-
-	  /* The cuda_attach_initiated breakpoint is SILENT, as it
-	     actually stops in the CPU code and setting it to NOISY
-	     would print the internal CPU callstack.  But *after* we
-	     handle it, we are most likely in CUDA code, so now we can
-	     print the backtrace. */
-	  interps_notify_normal_stop (bs_iter, 1);
-
-	  break;
-	}
+      cuda_trace ("cuda_do_detach_continuation: cancelled by user");
+      /* Re-enable user input.  */
+      current_ui->keep_prompt_blocked = false;
+      async_enable_stdin ();
+      /* Still need to clean up.  */
+      cuda_do_detach_finish (inf, debugFlagAddr);
+      return;
     }
+
+  /* Restore commit_resumed_state.  */
+  if (inf->process_target ())
+    inf->process_target ()->commit_resumed_state
+	= inf->cuda_saved_commit_resumed_state;
+
+  /* Process may have exited at this point.  */
+  if (!inf->process_target ())
+    {
+      cuda_do_detach_finish (inf, debugFlagAddr);
+      return;
+    }
+
+  /* Check if we should continue the loop.  */
+  if (cnt < max_iterations
+      && cuda_debugapi::get_attach_state () != CUDA_ATTACH_STATE_DETACH_COMPLETE)
+    {
+      /* Add continuation for next iteration.  */
+      inf->add_pre_wait_continuation ([inf, debugFlagAddr, cnt] () {
+	cuda_do_detach_continuation (inf, debugFlagAddr, cnt + 1);
+      });
+
+      prepare_execution_command (inf->top_target (), true);
+      continue_1 (false);
+
+      /* Force resumed state to false.  */
+      inf->cuda_saved_commit_resumed_state
+	  = inf->process_target ()->commit_resumed_state;
+      inf->process_target ()->commit_resumed_state = false;
+
+      /* Brief sleep to allow CUDA events to be generated.  */
+      usleep (1000);
+
+      /* Trigger the future wait() - this will run our continuation.  */
+      interrupt_target_1 (true);
+      return;
+    }
+
+  /* Loop finished - cleanup.  */
+
+  /* No threads are running at this point.  */
+  if (inf->process_target ())
+    set_running (inf->process_target (), minus_one_ptid, 0);
+
+  cuda_do_detach_finish (inf, debugFlagAddr);
 }
 
 void
@@ -745,6 +1117,8 @@ cuda_do_detach (inferior *inf)
   CORE_ADDR resumeAppOnDetachFlagAddr;
   unsigned char resumeAppOnDetach;
   unsigned char *sigs = NULL;
+
+  cuda_trace ("cuda_do_detach: entering");
 
   debugFlagAddr = cuda_get_symbol_address (_STRING_ (CUDBG_IPC_FLAG_NAME));
 
@@ -799,6 +1173,8 @@ cuda_do_detach (inferior *inf)
   /* Read the updated value of the flag */
   target_read_memory (resumeAppOnDetachFlagAddr, &resumeAppOnDetach, 1);
 
+  cuda_trace ("cuda_do_detach: resumeAppOnDetach=%d", resumeAppOnDetach);
+
   /* If this flag is set, the debugger backend needs to be notified to cleanup
    * on detach */
   if (resumeAppOnDetach)
@@ -830,45 +1206,132 @@ cuda_do_detach (inferior *inf)
      cleanup finishes. */
   if (resumeAppOnDetach)
     {
-      int cnt;
+      cuda_trace ("cuda_do_detach: adding continuation and resuming");
 
-      /* Now resume the app and wait for CUDA_ATTACH_STATE_DETACH_COMPLETE
-       * event. */
-      for (cnt = 0; cnt < 100
-		    && cuda_debugapi::get_attach_state ()
-			   != CUDA_ATTACH_STATE_DETACH_COMPLETE;
-	   cnt++)
+      /* For remote targets, handle the detach cleanup synchronously.
+	 The async continuation approach doesn't work for remote because:
+	 (a) the event loop may not run (e.g. during quit), so the
+	 continuation and deferred target_detach would never execute, and
+	 (b) the caller (BaseTarget::detach) needs to send packets
+	 immediately after cuda_do_detach returns.
+	 Loop with target_wait until the driver signals detach-complete,
+	 mirroring the native async continuation logic.  */
+      if (is_remote_target (inf->process_target ()))
 	{
-	  prepare_execution_command (inf->top_target (), true);
-	  continue_1 (false);
-	  /* force resumed state to false */
-	  auto resumed_state = inf->process_target ()->commit_resumed_state;
-	  inf->process_target ()->commit_resumed_state = false;
-	  cuda_wait_for_inferior ();
-	  /* Process may have exited at this point. */
-	  if (!inf->process_target ())
-	    break;
-	  inf->process_target ()->commit_resumed_state = resumed_state;
+	  const int max_iterations = 100;
+
+	  cuda_trace ("cuda_do_detach: remote sync detach path");
+
+	  int cnt;
+	  for (cnt = 0; cnt < max_iterations; cnt++)
+	    {
+	      prepare_execution_command (inf->top_target (), true);
+	      continue_1 (false);
+
+	      usleep (1000);
+	      interrupt_target_1 (true);
+
+	      target_waitstatus ws;
+	      ptid_t ret_ptid = target_wait (minus_one_ptid, &ws, 0);
+
+	      if (ret_ptid == minus_one_ptid)
+		{
+		  cuda_trace ("cuda_do_detach: target_wait returned "
+			      "no event, aborting detach loop");
+		  break;
+		}
+
+	      bool done = false;
+	      switch (ws.kind ())
+		{
+		case TARGET_WAITKIND_EXITED:
+		  cuda_trace ("cuda_do_detach: process exited with "
+			      "status %d during detach",
+			      ws.exit_status ());
+		  done = true;
+		  break;
+		case TARGET_WAITKIND_SIGNALLED:
+		  cuda_trace ("cuda_do_detach: process killed by "
+			      "signal %d during detach",
+			      (int) ws.sig ());
+		  done = true;
+		  break;
+		case TARGET_WAITKIND_NO_RESUMED:
+		  cuda_trace ("cuda_do_detach: no resumed threads, "
+			      "aborting detach loop");
+		  done = true;
+		  break;
+		default:
+		  break;
+		}
+
+	      if (done)
+		break;
+
+	      set_running (inf->process_target (), minus_one_ptid, 0);
+
+	      if (check_quit_flag ())
+		{
+		  cuda_trace ("cuda_do_detach: remote detach cancelled "
+			      "by user");
+		  break;
+		}
+
+	      if (cuda_debugapi::get_attach_state ()
+		  == CUDA_ATTACH_STATE_DETACH_COMPLETE)
+		break;
+
+	      cuda_trace ("cuda_do_detach: remote detach iteration %d, "
+			  "attach_state=%d", cnt,
+			  cuda_debugapi::get_attach_state ());
+	    }
+
+	  if (cnt == max_iterations)
+	    warning (_ ("CUDA detach cleanup did not complete after %d "
+			"iterations (attach_state=%d)."),
+		     max_iterations,
+		     cuda_debugapi::get_attach_state ());
+
+	  cuda_do_detach_finish (inf, debugFlagAddr);
+	  return;
 	}
 
-      /* No threads are running at this point.  */
-      if (inf->process_target ())
-	set_running (inf->process_target (), minus_one_ptid, 0);
+      /* Native targets: use async pre-wait continuation.  */
+
+      /* Add continuation for the detach cleanup loop.  */
+      inf->add_pre_wait_continuation ([inf, debugFlagAddr] () {
+	cuda_do_detach_continuation (inf, debugFlagAddr, 0);
+      });
+
+      /* Resume the app and wait for CUDA_ATTACH_STATE_DETACH_COMPLETE event.  */
+      prepare_execution_command (inf->top_target (), true);
+      continue_1 (false);
+
+      /* Force resumed state to false.  */
+      inf->cuda_saved_commit_resumed_state
+	  = inf->process_target ()->commit_resumed_state;
+      inf->process_target ()->commit_resumed_state = false;
+
+      /* Brief sleep to allow CUDA events to be generated.  */
+      usleep (1000);
+
+      /* Block user input until detach completes.  */
+      current_ui->keep_prompt_blocked = true;
+      async_disable_stdin ();
+
+      cuda_trace ("cuda_do_detach: calling interrupt_target_1");
+
+      /* Trigger the future wait() - this will run our continuation.  */
+      interrupt_target_1 (true);
+      return;
     }
   else
-    cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_DETACH_COMPLETE);
-
-  if (inf->process_target ())
     {
-      if (cuda_debugapi::get_attach_state ()
-	  != CUDA_ATTACH_STATE_DETACH_COMPLETE)
-	warning (_ ("Unexpected CUDA API attach state %d."),
-		 cuda_debugapi::get_attach_state ());
-
-      cuda_write_bool (debugFlagAddr, false);
+      cuda_trace ("cuda_do_detach: sync path (no resume needed)");
+      cuda_debugapi::set_attach_state (CUDA_ATTACH_STATE_DETACH_COMPLETE);
     }
 
-  cuda_cleanup ();
+  cuda_do_detach_finish (inf, debugFlagAddr);
 }
 
 void
@@ -1051,6 +1514,160 @@ cuda_create_builtins_objfile (void)
   return objfile;
 }
 
+/* Check if the given library name matches libcuda.so.
+   The library name can be:
+   - libcuda.so
+   - libcuda.so.1
+   - libcuda.so.XXX.YY.ZZ (versioned)
+   - /path/to/libcuda.so.XXX.YY.ZZ
+*/
+static bool
+cuda_is_libcuda (const char *name)
+{
+  if (name == nullptr || *name == '\0')
+    return false;
+
+  /* Find the basename by looking for the last '/' */
+  const char *basename = strrchr (name, '/');
+  if (basename != nullptr)
+    basename++;  /* Skip the '/' */
+  else
+    basename = name;
+
+  /* Check if it starts with "libcuda.so" */
+  return strncmp (basename, "libcuda.so", 10) == 0;
+}
+
+/* Forward declaration for the pre-wait continuation.  */
+static void cuda_initialize_pre_wait_continuation (inferior *inf);
+
+/* Pre-wait continuation that tries to initialize CUDA before each wait.
+   If the debugger API is not ready yet, re-adds itself to try again
+   on the next wait.  Once initialization succeeds, it does not re-add
+   itself and the continuation is consumed.  */
+static void
+cuda_initialize_pre_wait_continuation (inferior *inf)
+{
+  /* Don't initialize if already done */
+  if (cuda_initialized || inf->cuda_initialized)
+    {
+      cuda_trace ("cuda_initialize_pre_wait_continuation: already initialized");
+      return;
+    }
+
+  /* Give up if the process has exited.  */
+  if (!inf->process_target ())
+    {
+      cuda_trace ("cuda_initialize_pre_wait_continuation: process exited, giving up");
+      return;
+    }
+
+  /* Give up if we initiated a detach. */
+  if (cuda_debugapi::get_attach_state () == CUDA_ATTACH_STATE_DETACHING)
+    {
+      cuda_trace ("cuda_initialize_pre_wait_continuation: detach initiated, giving up!");
+      return;
+    }
+
+  /* For remote targets, initialization is done directly in cuda_wait,
+     not via continuations.  Skip if this is a remote target.  */
+  if (is_remote_target (inf->process_target ()))
+    {
+      cuda_trace ("cuda_initialize_pre_wait_continuation: remote target, "
+		  "initialization handled in cuda_wait");
+      return;
+    }
+
+  /* Try to initialize the CUDA target (native targets only).  */
+  cuda_trace ("cuda_initialize_pre_wait_continuation: attempting initialization");
+  bool res = cuda_initialize_target ();
+
+  if (!res)
+    {
+      cuda_trace ("cuda_initialize_pre_wait_continuation: symbols not ready");
+      /* Re-add continuation to try again later */
+      inf->add_pre_wait_continuation ([inf] () {
+	cuda_initialize_pre_wait_continuation (inf);
+      });
+      return;
+    }
+
+  /* cuda_initialize_target succeeded (setup done), but the API might
+     not be fully ready yet (cuda_initialized could still be false).
+     Keep retrying until fully initialized.  */
+  if (!cuda_initialized && !inf->cuda_initialized)
+    {
+      cuda_trace ("cuda_initialize_pre_wait_continuation: API not ready yet, will retry");
+      /* Re-add continuation to try again on next wait */
+      inf->add_pre_wait_continuation ([inf] () {
+	cuda_initialize_pre_wait_continuation (inf);
+      });
+      return;
+    }
+
+  cuda_trace ("cuda_initialize_pre_wait_continuation: CUDA fully initialized");
+
+#ifndef __QNXTARGET__
+  /* If we were waiting for the driver to initialize before completing
+     attach (v1_supported_later case), call cuda_nat_attach now.
+     Attach is not supported on QNX.  */
+  if (inf->cuda_attach_state == inferior::cuda_attach_state::WAITING_FOR_DRIVER)
+    {
+      cuda_trace ("cuda_initialize_pre_wait_continuation: completing deferred attach");
+      cuda_nat_attach (inf);
+    }
+#endif
+}
+
+/* Observer callback for objfile (symbol file) loading.
+   When libcuda.so symbols are loaded, we set up a pre-wait continuation
+   to initialize the CUDA debugger.  The continuation will keep retrying
+   until the debugger API is ready.  */
+static void
+cuda_new_objfile_observer (struct objfile *objfile)
+{
+  /* Only process if CUDA debugging is enabled and not already initialized */
+  if (!cuda_debugging_enabled)
+    return;
+
+  if (cuda_initialized)
+    return;
+
+  inferior *inf = current_inferior ();
+  if (inf == nullptr)
+    return;
+
+  if (inf->cuda_initialized)
+    return;
+
+  /* Skip null objfiles */
+  if (objfile == nullptr)
+    return;
+
+  /* Check if this is libcuda.so */
+  if (!cuda_is_libcuda (objfile->original_name))
+    return;
+
+  cuda_trace ("cuda_new_objfile_observer: detected libcuda.so symbols loaded (%s)",
+	      objfile->original_name);
+
+  /* For remote targets, initialization is done directly in cuda_wait.
+     For native targets, add a pre-wait continuation that will try to
+     initialize CUDA in cuda_wait.  The continuation will re-add itself
+     if the API is not ready yet.  */
+  if (is_remote_target (inf->process_target ()))
+    {
+      cuda_trace ("cuda_new_objfile_observer: remote target, "
+		  "initialization will be done in cuda_wait");
+      return;
+    }
+
+  cuda_trace ("cuda_new_objfile_observer: adding pre-wait initialization continuation");
+  inf->add_pre_wait_continuation ([inf] () {
+    cuda_initialize_pre_wait_continuation (inf);
+  });
+}
+
 void _initialize_cuda_nat ();
 void
 _initialize_cuda_nat ()
@@ -1059,8 +1676,11 @@ _initialize_cuda_nat ()
   add_final_cleanup ([] () { cuda_final_cleanup (nullptr); });
 
   gdb::observers::inferior_created.attach (cuda_inferior_created, "CUDA");
-  gdb::observers::cuda_attach_initiated.attach (cuda_attach_initiated, "CUDA");
-  gdb::observers::normal_stop.attach (cuda_on_normal_stop, "CUDA");
+  gdb::observers::new_objfile.attach (cuda_new_objfile_observer, "CUDA");
+#ifndef __QNXTARGET__
+  /* Attach observer is only used for attach, which is not supported on QNX.  */
+  gdb::observers::normal_stop.attach (cuda_attach_normal_stop_observer, "CUDA");
+#endif
 
   cuda_debugging_enabled = true;
 }

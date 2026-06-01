@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2025 NVIDIA Corporation
+ * Copyright (C) 2007-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -637,6 +637,25 @@ cuda_state::update_kernels_terminated (void)
     }
   for (auto kernel : kernel_destroy_list)
     destroy_kernel (kernel);
+}
+
+void
+cuda_state::lane_get_cuda_exception_string (uint32_t dev_id, uint32_t sm_id,
+					    uint32_t wp_id, uint32_t ln_id,
+					    char *buf, uint32_t bufSz)
+{
+  gdb_assert (buf && bufSz > 0);
+  if (lane_valid (dev_id, sm_id, wp_id, ln_id))
+    {
+      lane (dev_id, sm_id, wp_id, ln_id)
+	  ->get_cuda_exception_string (buf, bufSz);
+    }
+  else
+    {
+      CUDA_STATE_TRACE ("invalid lane: dev_id %u sm_id %u wp_id %u ln_id %u",
+			dev_id, sm_id, wp_id, ln_id);
+      buf[0] = '\0';
+    }
 }
 
 /******************************************************************************
@@ -1604,8 +1623,9 @@ cuda_warp::get_lowest_active_lane ()
     if (lane_active (ln_id))
       return ln_id;
 
-  // Shouldn't ever get here as we asserted on valid and active_lanes_mask
-  // above. Note that error() does not return.
+  // Shouldn't normally get here.  This can happen in CNP/CDP if called on a
+  // blocked parent warp with no active lanes.  Note that error() does not
+  // return.
   error ("get_lowest_active_lane(%u, %u, %u): no active lanes in warp",
 	 dev_idx (), sm_idx (), warp_idx ());
 
@@ -1699,12 +1719,11 @@ cuda_warp::get_active_lanes_mask ()
   if (sm ()->device ()->incremental () && !valid ())
     update_state ();
 
-  // This is an internal consistency check within cuda-state, so we use
-  // gdb_assert() If the warp is valid, m_active_lanes_mask should be non-0 as
-  // there's always one active lane if the warp is valid (valid_lanes != 0). If
-  // the warp is invalid, m_active_lanes_mask should be 0.
-  gdb_assert ((valid () && m_active_lanes_mask != 0)
-	      || (!valid () && m_active_lanes_mask == 0));
+  // Internal consistency check: if the warp is invalid, m_active_lanes_mask
+  // must be 0 (no stale data).  A valid warp CAN have m_active_lanes_mask == 0
+  // in CNP/CDP scenarios where the warp is blocked waiting for child kernel
+  // completion -- all lanes are valid but none are currently active.
+  gdb_assert (valid () || m_active_lanes_mask == 0);
 
   return m_active_lanes_mask;
 }
@@ -2167,6 +2186,7 @@ void
 cuda_lane::get_cuda_exception_string (char *buf, uint32_t bufSz)
 {
   CUDA_STATE_ERROR_IF (!valid (), "invalid lane");
+  gdb_assert (buf && bufSz > 0);
 
   cuda_debugapi::get_cuda_exception_string (dev_idx (), sm_idx (), warp_idx (),
 					    lane_idx (), buf, bufSz, nullptr);

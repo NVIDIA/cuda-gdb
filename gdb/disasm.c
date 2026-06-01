@@ -36,6 +36,10 @@
 #include "objfiles.h"
 #include "inferior.h"
 
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-tdep.h"
+#endif
+
 /* Disassemble functions.
    FIXME: We should get rid of all the duplicate code in gdb that does
    the same thing: disassemble_command() and the gdbtk variation.  */
@@ -1051,6 +1055,19 @@ static int
 gdb_print_insn_1 (struct gdbarch *gdbarch, CORE_ADDR vma,
 		  struct disassemble_info *info)
 {
+#ifdef NVIDIA_CUDA_GDB
+  /* Use CUDA gdbarch for CUDA device addresses.  This allows disassembly
+     of device code even when no CUDA device is focused (e.g., in core
+     dumps).  This check is done here at the lowest level to ensure it
+     works for all interfaces (CLI, MI, Python, etc.).  */
+  if (cuda_is_device_code_address (vma))
+    {
+      struct gdbarch *cuda_gdbarch = cuda_get_gdbarch ();
+      if (cuda_gdbarch != nullptr)
+	gdbarch = cuda_gdbarch;
+    }
+#endif
+
   /* Call into the extension languages to do the disassembly.  */
   std::optional<int> length = ext_lang_print_insn (gdbarch, vma, info);
   if (length.has_value ())
@@ -1149,6 +1166,20 @@ gdb_disassembly (struct gdbarch *gdbarch, struct ui_out *uiout,
 {
   struct symtab *symtab;
   int nlines = -1;
+
+#ifdef NVIDIA_CUDA_GDB
+  /* Use CUDA gdbarch for CUDA device addresses.  This allows disassembly
+     of device code even when no CUDA device is focused (e.g., in core
+     dumps).  This must be done here so that all downstream functions
+     (address printing, instruction decoding, etc.) use the correct
+     architecture.  */
+  if (cuda_is_device_code_address (low))
+    {
+      struct gdbarch *cuda_gdbarch = cuda_get_gdbarch ();
+      if (cuda_gdbarch != nullptr)
+	gdbarch = cuda_gdbarch;
+    }
+#endif
 
   /* Assume symtab is valid for whole PC range.  */
   symtab = find_pc_line_symtab (low);

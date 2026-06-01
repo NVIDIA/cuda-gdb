@@ -19,7 +19,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2025 NVIDIA Corporation
+   Copyright (C) 2007-2026 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -517,6 +517,16 @@ public:
   void add_continuation (std::function<void ()> &&cont);
   void do_all_continuations ();
 
+#ifdef NVIDIA_CUDA_GDB
+  /* Pre-wait continuations are called on INF_PRE_WAIT, before every
+     target_wait.  Unlike regular continuations which only run on
+     INF_EXEC_COMPLETE, these run before every wait, allowing for
+     retry-based initialization.  A pre-wait continuation can re-add
+     itself if it needs to retry.  */
+  void add_pre_wait_continuation (std::function<void ()> &&cont);
+  void do_pre_wait_continuations ();
+#endif
+
   /* Set/get file name for default use for standard in/out in the inferior.
 
      On Unix systems, we try to make TERMINAL_NAME the inferior's controlling
@@ -674,8 +684,24 @@ public:
 #ifdef NVIDIA_CUDA_GDB
   /* CUDA can only be intialized at most once per inferior */
   bool cuda_initialized = false;
-  gdb::observers::token cuda_preinitialization_hook_observer_token;
-  std::atomic<bool> cuda_attach_finished = false;
+
+  /* Saved state for async attach continuation.
+     cuda_saved_sigs is owned by this inferior - allocated by
+     cuda_gdb_bypass_signals() and must be freed with
+     cuda_nat_bypass_signals_cleanup() when non-null.  */
+  unsigned char *cuda_saved_sigs = nullptr;
+  bool cuda_saved_commit_resumed_state = false;
+
+  /* State machine for async CUDA attach.  Used for Ctrl-C handling and
+     determining what action to take in the normal_stop observer.  */
+  enum class cuda_attach_state
+  {
+    NONE,                  /* Not in an async attach phase.  */
+    INJECTING,             /* Library injection phase (before attach breakpoint).  */
+    RESUMING,              /* In the resumeAppOnAttach loop.  */
+    WAITING_FOR_DRIVER,    /* Waiting for driver to initialize (v1_supported_later).  */
+  };
+  cuda_attach_state cuda_attach_state = cuda_attach_state::NONE;
 #endif
 private:
 
@@ -690,6 +716,11 @@ private:
 
   /* The list of continuations.  */
   std::list<std::function<void ()>> m_continuations;
+
+#ifdef NVIDIA_CUDA_GDB
+  /* The list of pre-wait continuations.  */
+  std::list<std::function<void ()>> m_pre_wait_continuations;
+#endif
 
   /* The arguments string to use when running.  */
   std::string m_args;

@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2025 NVIDIA Corporation
+ * Copyright (C) 2007-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -29,6 +29,7 @@
 #endif
 
 #include "gdbsupport/rsp-low.h"
+#include "gdbsupport/block-signals.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
@@ -765,6 +766,8 @@ cudbgipcInitialize (void)
     return CUDBG_ERROR_COMMUNICATION_FAILURE;
 
   cudagdbMainThreadHandle = pthread_self ();
+  /* block signals for the callback thread before it starts */
+  gdb::block_signals blocker;
   if (pthread_create (&callbackEventThreadHandle, NULL, cudbgCallbackHandler,
 		      NULL))
     return CUDBG_ERROR_COMMUNICATION_FAILURE;

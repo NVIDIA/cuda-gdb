@@ -18,7 +18,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2025 NVIDIA Corporation
+   Copyright (C) 2007-2026 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -31,6 +31,9 @@
 #include "objfiles.h"
 #include "value.h"
 #include "language.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "gdbsupport/block-signals.h"
+#endif
 #include "gdbsupport/event-loop.h"
 #include "readline/tilde.h"
 #include "python.h"
@@ -2475,6 +2478,11 @@ py_initialize ()
       }
   }
 #endif
+#ifdef NVIDIA_CUDA_GDB
+  /* Block signals before calling python interpreter to avoid intereference
+   * between GDB and Python threads that can cause GDB hangs. */
+  gdb::block_signals blocker;
+#endif
 
   /* Py_SetProgramName was deprecated in Python 3.11.  Use PyConfig
      mechanisms for Python 3.10 and newer.  */
@@ -2543,6 +2551,11 @@ do_start_initialization ()
 #ifdef NVIDIA_PYTHON_DYNLIB
   if (!is_python_available ())
     return false;
+#endif
+#ifdef NVIDIA_CUDA_GDB
+  /* Block signals before calling python interpreter to avoid intereference
+   * between GDB and Python threads that can cause GDB hangs. */
+  gdb::block_signals blocker;
 #endif
   if (PyImport_ExtendInittab (mods) < 0)
     return false;

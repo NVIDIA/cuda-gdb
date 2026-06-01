@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2013-2025 NVIDIA Corporation
+ * Copyright (C) 2013-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -365,8 +365,6 @@ cuda_process_update_thread_idx_in_warp_packet (char *buf)
 static void
 cuda_process_notification_analyze_packet (char *buf)
 {
-  int trap_expected;
-
 #ifdef __QNXHOST__
   /* On QNX, ptid and ws are passed in from host */
   ptid_t cuda_last_ptid;
@@ -375,8 +373,11 @@ cuda_process_notification_analyze_packet (char *buf)
   extract_bin (NULL, (unsigned char *) &cuda_last_ptid, sizeof (cuda_last_ptid));
   extract_bin (NULL, (unsigned char *) &cuda_last_ws, sizeof (cuda_last_ws));
 #endif /* __QNXHOST__ */
+  /* trap_expected was historically sent but is no longer used — consume
+     it from the packet to maintain wire compatibility.  */
+  int trap_expected;
   extract_bin (NULL, (unsigned char *) &trap_expected, sizeof (trap_expected));
-  cuda_notification_analyze (cuda_last_ptid, &cuda_last_ws, trap_expected);
+  cuda_notification_analyze (cuda_last_ptid, &cuda_last_ws);
   append_string ("OK", buf, false);
 }
 

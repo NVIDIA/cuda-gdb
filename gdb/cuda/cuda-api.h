@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2025 NVIDIA Corporation
+ * Copyright (C) 2007-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -182,9 +182,27 @@ public:
 				     cuda_api_warpmask *warp_mask,
 				     uint64_t virt_pc);
 
-  // Device Breakpoint Handling
+  // Device Breakpoint Handling (legacy address-based API)
   static bool set_breakpoint (uint32_t dev, uint64_t addr);
   static bool unset_breakpoint (uint32_t dev, uint64_t addr);
+
+#if CUDBG_API_VERSION_REVISION > 167
+  // Handle-based Breakpoint API (CUDA 13.2+)
+  static bool insert_breakpoint (uint32_t dev, uint64_t addr,
+				 CUDBGBreakpointHandle *handle);
+  static bool remove_breakpoint (CUDBGBreakpointHandle handle);
+  static bool enable_breakpoint (CUDBGBreakpointHandle handle);
+  static bool disable_breakpoint (CUDBGBreakpointHandle handle);
+  static bool is_breakpoint_enabled (CUDBGBreakpointHandle handle,
+				     uint32_t *enabled);
+  static bool get_warp_hit_breakpoint (uint32_t dev, uint32_t sm, uint32_t wp,
+				       CUDBGBreakpointHandle *handle);
+
+  // Break-on-Launch helper methods
+  static bool enable_break_on_launch ();
+  static bool disable_break_on_launch ();
+#endif
+  static bool is_break_on_launch_supported ();
 
   // Device State Inspection
   static void read_thread_idx (uint32_t dev, uint32_t sm, uint32_t wp,
@@ -369,6 +387,10 @@ public:
   static void consume_cuda_logs (CUDBGCudaLogMessage *logMessages,
 				 uint32_t numMessages, uint32_t *numConsumed);
 
+  static void read_cpu_call_stack (uint32_t dev, uint64_t grid_id,
+				   uint64_t *addrs, uint32_t num_addrs,
+				   uint32_t *total_num_addrs);
+
   static void get_const_bank_address (uint32_t dev, uint32_t sm, uint32_t wp,
 				      uint32_t bank, uint32_t offset,
 				      uint64_t *address);
@@ -397,9 +419,10 @@ public:
 					 uint32_t wp, uint32_t ln, char *buf,
 					 uint32_t bufSz, uint32_t *msgSz);
 
-  static void get_hardware_barrier_info (uint32_t dev, uint32_t sm, 
-           uint32_t wp, uint32_t ln, CUDBGBarrierScope *scope, 
-           char *buf, uint32_t bufSz, uint32_t *msgSz);
+  static void get_hardware_barrier_info (uint32_t dev, uint32_t sm,
+					 uint32_t wp, uint32_t ln,
+					 CUDBGBarrierScope *scope, char *buf,
+					 uint32_t bufSz, uint32_t *msgSz);
 
   static cuda_statistics_table &
   api_call_statistics ()

@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2025 NVIDIA Corporation
+ * Copyright (C) 2007-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -2454,6 +2454,41 @@ cuda_debugapi::consume_cuda_logs (CUDBGCudaLogMessage *logMessages,
 }
 
 void
+cuda_debugapi::read_cpu_call_stack (uint32_t dev, uint64_t grid_id,
+				    uint64_t *addrs, uint32_t num_addrs,
+				    uint32_t *total_num_addrs)
+{
+  gdb_assert (total_num_addrs);
+  gdb_assert (addrs || num_addrs == 0);
+
+  if (!api_state_initialized ())
+    {
+      *total_num_addrs = 0;
+      return;
+    }
+
+  CUDA_API_PROFILE ();
+
+  if (addrs && num_addrs)
+    memset (addrs, 0, sizeof (*addrs) * num_addrs);
+  *total_num_addrs = 0;
+
+  CUDBGResult res = CUDBG_ERROR_NOT_SUPPORTED;
+  if (api_version ().m_revision >= 155)
+    res = s_instance.m_cudbgAPI->readCPUCallStack (dev, grid_id, addrs,
+						   num_addrs, total_num_addrs);
+  cuda_api_print_api_call_result (__FUNCTION__, res);
+
+  if ((res != CUDBG_SUCCESS) && (res != CUDBG_ERROR_NOT_SUPPORTED))
+    CUDA_API_ERROR_DEV (res, dev,
+			"failed to read CPU call stack for grid %llu",
+			(unsigned long long)grid_id);
+
+  CUDA_API_TRACE_DEV (dev, "grid_id %llu total_addrs %u",
+		      (unsigned long long)grid_id, *total_num_addrs);
+}
+
+void
 cuda_debugapi::get_cuda_exception_string (uint32_t dev, uint32_t sm,
 					  uint32_t wp, uint32_t ln, char *buf,
 					  uint32_t bufSz, uint32_t *msgSz)
@@ -2517,3 +2552,244 @@ cuda_debugapi::get_hardware_barrier_info (uint32_t dev, uint32_t sm,
 	}
     }
 }
+
+#if CUDBG_API_VERSION_REVISION > 167
+/* Handle-based Breakpoint API (CUDA 13.2+) */
+
+bool
+cuda_debugapi::insert_breakpoint (uint32_t dev, uint64_t addr,
+				  CUDBGBreakpointHandle *handle)
+{
+  gdb_assert (handle);
+
+  if (!api_state_initialized ())
+    return false;
+
+  /* Runtime check: ensure the driver supports this API (CUDA 13.2+). */
+  if (api_version ().m_revision < 168)
+    return false;
+
+  CUDA_API_PROFILE ();
+
+  CUDBGResult res = s_instance.m_cudbgAPI->insertBreakpoint (dev, addr, handle);
+  cuda_api_print_api_call_result (__FUNCTION__, res);
+
+  if (res != CUDBG_SUCCESS)
+    {
+      CUDA_API_ERROR_DEV (res, dev,
+			  "failed to insert breakpoint at address 0x%lx", addr);
+      return false;
+    }
+
+  CUDA_API_TRACE_DEV (dev, "addr 0x%lx handle 0x%lx", addr, *handle);
+  return true;
+}
+
+bool
+cuda_debugapi::remove_breakpoint (CUDBGBreakpointHandle handle)
+{
+  if (!api_state_initialized ())
+    return false;
+
+  /* Runtime check: ensure the driver supports this API (CUDA 13.2+). */
+  if (api_version ().m_revision < 168)
+    return false;
+
+  CUDA_API_PROFILE ();
+
+  CUDBGResult res = s_instance.m_cudbgAPI->removeBreakpoint (handle);
+  cuda_api_print_api_call_result (__FUNCTION__, res);
+
+  if (res != CUDBG_SUCCESS)
+    {
+      CUDA_API_TRACE ("failed to remove breakpoint handle 0x%lx: %s",
+		      (uint64_t)handle, cudbgGetErrorString (res));
+      return false;
+    }
+
+  CUDA_API_TRACE ("removed breakpoint handle 0x%lx", (uint64_t)handle);
+  return true;
+}
+
+bool
+cuda_debugapi::enable_breakpoint (CUDBGBreakpointHandle handle)
+{
+  if (!api_state_initialized ())
+    return false;
+
+  /* Runtime check: ensure the driver supports this API (CUDA 13.2+). */
+  if (api_version ().m_revision < 168)
+    return false;
+
+  CUDA_API_PROFILE ();
+
+  CUDBGResult res = s_instance.m_cudbgAPI->enableBreakpoint (handle);
+  cuda_api_print_api_call_result (__FUNCTION__, res);
+
+  if (res != CUDBG_SUCCESS)
+    {
+      CUDA_API_TRACE ("failed to enable breakpoint handle 0x%lx: %s",
+		      (uint64_t)handle, cudbgGetErrorString (res));
+      return false;
+    }
+
+  CUDA_API_TRACE ("enabled breakpoint handle 0x%lx", (uint64_t)handle);
+  return true;
+}
+
+bool
+cuda_debugapi::disable_breakpoint (CUDBGBreakpointHandle handle)
+{
+  if (!api_state_initialized ())
+    return false;
+
+  /* Runtime check: ensure the driver supports this API (CUDA 13.2+). */
+  if (api_version ().m_revision < 168)
+    return false;
+
+  CUDA_API_PROFILE ();
+
+  CUDBGResult res = s_instance.m_cudbgAPI->disableBreakpoint (handle);
+  cuda_api_print_api_call_result (__FUNCTION__, res);
+
+  if (res != CUDBG_SUCCESS)
+    {
+      CUDA_API_TRACE ("failed to disable breakpoint handle 0x%lx: %s",
+		      (uint64_t)handle, cudbgGetErrorString (res));
+      return false;
+    }
+
+  CUDA_API_TRACE ("disabled breakpoint handle 0x%lx", (uint64_t)handle);
+  return true;
+}
+
+bool
+cuda_debugapi::is_breakpoint_enabled (CUDBGBreakpointHandle handle,
+				      uint32_t *enabled)
+{
+  gdb_assert (enabled);
+
+  if (!api_state_initialized ())
+    return false;
+
+  /* Runtime check: ensure the driver supports this API (CUDA 13.2+). */
+  if (api_version ().m_revision < 168)
+    return false;
+
+  CUDA_API_PROFILE ();
+
+  CUDBGResult res = s_instance.m_cudbgAPI->isBreakpointEnabled (handle,
+								enabled);
+  cuda_api_print_api_call_result (__FUNCTION__, res);
+
+  if (res != CUDBG_SUCCESS)
+    {
+      CUDA_API_TRACE ("failed to query breakpoint handle 0x%lx: %s",
+		      (uint64_t)handle, cudbgGetErrorString (res));
+      return false;
+    }
+
+  CUDA_API_TRACE ("breakpoint handle 0x%lx enabled=%u", (uint64_t)handle,
+		  *enabled);
+  return true;
+}
+
+bool
+cuda_debugapi::get_warp_hit_breakpoint (uint32_t dev, uint32_t sm, uint32_t wp,
+					CUDBGBreakpointHandle *handle)
+{
+  gdb_assert (handle);
+
+  if (!api_state_initialized ())
+    return false;
+
+  /* Runtime check: ensure the driver supports this API (CUDA 13.2+). */
+  if (api_version ().m_revision < 168)
+    return false;
+
+  CUDA_API_PROFILE ();
+
+  CUDBGResult res
+      = s_instance.m_cudbgAPI->getWarpHitBreakpoint (dev, sm, wp, handle);
+  cuda_api_print_api_call_result (__FUNCTION__, res);
+
+  if (res != CUDBG_SUCCESS)
+    {
+      CUDA_API_TRACE_DEV_SM_WARP (dev, sm, wp,
+				  "failed to get warp hit breakpoint: %s",
+				  cudbgGetErrorString (res));
+      return false;
+    }
+
+  CUDA_API_TRACE_DEV_SM_WARP (dev, sm, wp, "hit breakpoint handle 0x%lx",
+			      (uint64_t)*handle);
+  return true;
+}
+#endif /* CUDBG_API_VERSION_REVISION > 167 */
+
+/* Break-on-Launch helper methods */
+
+bool
+cuda_debugapi::is_break_on_launch_supported ()
+{
+  if (!api_state_initialized ())
+    return false;
+
+#if CUDBG_API_VERSION_REVISION > 167
+  /* Break-on-launch requires CUDA 13.2+ (revision 168) */
+  if (api_version ().m_revision < 168)
+    return false;
+
+  /* Check if the capability is supported by the driver */
+  CUDBGCapabilityFlags supported = get_supported_capabilities ();
+  return (supported & CUDBG_DEBUGGER_CAPABILITY_BREAK_ON_LAUNCH) != 0;
+#else
+  return false;
+#endif
+}
+
+#if CUDBG_API_VERSION_REVISION > 167
+bool
+cuda_debugapi::enable_break_on_launch ()
+{
+  if (!api_state_initialized ())
+    return false;
+
+  /* Runtime check: ensure the driver supports this API (CUDA 13.2+). */
+  if (api_version ().m_revision < 168)
+    return false;
+
+  CUDA_API_TRACE ("enabling break-on-launch");
+
+  bool result = enable_breakpoint (CUDBG_BREAKPOINT_HANDLE_BREAK_ON_LAUNCH);
+
+  if (result)
+    CUDA_API_TRACE ("break-on-launch enabled successfully");
+  else
+    CUDA_API_TRACE ("failed to enable break-on-launch");
+
+  return result;
+}
+
+bool
+cuda_debugapi::disable_break_on_launch ()
+{
+  if (!api_state_initialized ())
+    return false;
+
+  /* Runtime check: ensure the driver supports this API (CUDA 13.2+). */
+  if (api_version ().m_revision < 168)
+    return false;
+
+  CUDA_API_TRACE ("disabling break-on-launch");
+
+  bool result = disable_breakpoint (CUDBG_BREAKPOINT_HANDLE_BREAK_ON_LAUNCH);
+
+  if (result)
+    CUDA_API_TRACE ("break-on-launch disabled successfully");
+  else
+    CUDA_API_TRACE ("failed to disable break-on-launch");
+
+  return result;
+}
+#endif /* CUDBG_API_VERSION_REVISION > 167 */

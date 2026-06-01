@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2025 NVIDIA Corporation
+ * Copyright (C) 2007-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -315,6 +315,7 @@ bool cuda_initialize_target (void);
 void cuda_initialize (void);
 bool cuda_inferior_in_debug_mode (void);
 void cuda_set_driver_log_capability (bool enable);
+void cuda_set_kernel_launch_backtrace_capability (bool enable);
 void cuda_load_device_info (char *, struct partial_symtab *);
 void cuda_signals_initialize (void);
 void cuda_update_report_driver_api_error_flags (void);

@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2013-2025 NVIDIA Corporation
+ * Copyright (C) 2013-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -77,6 +77,7 @@ struct cuda_sym
 extern void ATTRIBUTE_NORETURN captured_main (int argc, char *argv[]);
 #endif
 
+void cuda_gdb_setup (void);
 void cuda_cleanup (void);
 bool cuda_inferior_in_debug_mode (void);
 bool cuda_initialize_target ();

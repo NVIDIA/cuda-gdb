@@ -18,7 +18,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2025 NVIDIA Corporation
+   Copyright (C) 2007-2026 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -65,6 +65,7 @@
 #include "inferior.h"
 #ifdef NVIDIA_CUDA_GDB
 #include "cuda/cuda-state.h"
+#include "cuda/cuda-tdep.h"
 #endif
 
 /* Chain containing all defined memory-tag subcommands.  */
@@ -785,6 +786,40 @@ print_address (struct gdbarch *gdbarch,
  * "*> " for errorpc instruction.
  * "*=>" for current instruction and errorpc instruction. */
 
+#ifdef NVIDIA_CUDA_GDB
+/* Helper function to check if an address matches any error PC across all
+   devices/SMs/warps.  This is used when there's no CUDA focus (e.g., in
+   core dumps) but we still want to mark the error PC instruction.  */
+static bool
+cuda_is_error_pc_address (CORE_ADDR addr)
+{
+  for (uint32_t dev = 0; dev < cuda_state::get_num_devices (); dev++)
+    {
+      uint32_t num_sms = cuda_state::device_get_num_sms (dev);
+      uint32_t num_warps = cuda_state::device_get_num_warps (dev);
+      for (uint32_t sm = 0; sm < num_sms; sm++)
+	{
+	  /* Check SM-level error PC.  */
+	  if (cuda_state::sm_has_error_pc (dev, sm))
+	    {
+	      if (cuda_state::sm_get_error_pc (dev, sm) == addr)
+		return true;
+	    }
+	  /* Check warp-level error PCs.  */
+	  for (uint32_t wp = 0; wp < num_warps; wp++)
+	    {
+	      if (cuda_state::warp_has_error_pc (dev, sm, wp))
+		{
+		  if (cuda_state::warp_get_error_pc (dev, sm, wp) == addr)
+		    return true;
+		}
+	    }
+	}
+    }
+  return false;
+}
+#endif
+
 const char *
 pc_prefix (CORE_ADDR addr)
 {
@@ -813,6 +848,14 @@ pc_prefix (CORE_ADDR addr)
 		}
 	    }
 	}
+      else if (cuda_is_device_code_address (addr))
+	{
+	  /* No CUDA focus, but this is a CUDA device address.  Check if it
+	     matches any error PC across all devices/SMs/warps.  This enables
+	     error PC marking when disassembling from core dumps.  */
+	  if (cuda_is_error_pc_address (addr))
+	    return "*> ";
+	}
       /* If we get here - we didn't match any errorpc cases. */
       if (has_pc && pc == addr)
 	return "=> ";
@@ -821,6 +864,15 @@ pc_prefix (CORE_ADDR addr)
 	return "=> ";
 #endif
     }
+#ifdef NVIDIA_CUDA_GDB
+  else if (cuda_is_device_code_address (addr))
+    {
+      /* No stack frames, but this is a CUDA device address.  Check if it
+	 matches any error PC.  This can happen in core dumps.  */
+      if (cuda_is_error_pc_address (addr))
+	return "*> ";
+    }
+#endif
   return "   ";
 }
 
@@ -1075,6 +1127,18 @@ do_examine (struct format_data fmt, struct gdbarch *gdbarch, CORE_ADDR addr)
   count = fmt.count;
   next_gdbarch = gdbarch;
   next_address = addr;
+
+#ifdef NVIDIA_CUDA_GDB
+  /* Use CUDA gdbarch for CUDA device addresses.  This allows the x/i
+     command to correctly format addresses when examining device code
+     from core dumps or when no CUDA device is focused.  */
+  if (cuda_is_device_code_address (addr))
+    {
+      struct gdbarch *cuda_gdbarch = cuda_get_gdbarch ();
+      if (cuda_gdbarch != nullptr)
+	next_gdbarch = cuda_gdbarch;
+    }
+#endif
 
   /* Instruction format implies fetch single bytes
      regardless of the specified size.

@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2025 NVIDIA Corporation
+ * Copyright (C) 2007-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -532,8 +532,7 @@ cuda_notification_received (void)
 }
 
 void
-cuda_notification_analyze (ptid_t ptid, struct target_waitstatus *ws,
-			   int trap_expected)
+cuda_notification_analyze (ptid_t ptid, struct target_waitstatus *ws)
 {
 #ifndef GDBSERVER
   if (is_remote_target (current_inferior ()->process_target ()))
@@ -546,16 +545,18 @@ cuda_notification_analyze (ptid_t ptid, struct target_waitstatus *ws,
   cuda_notification_acquire_lock ();
 
   /* A notification is deemed received when its corresponding signal is the
-     reason we stopped. */
+     reason we stopped.  Only match the actual notification signal (SIGURG
+     on Linux, alternating EMT/ILL on QNX).  SIGTRAP must NOT be matched
+     here.  Matching SIGTRAP caused real breakpoint hits (e.g., bp_cuda_api_error) 
+     to be misidentified as notifications and silently consumed.  */
   if (cuda_notification_info.sent
       && cuda_notification_info.tid == cuda_gdb_get_tid_or_pid (ptid)
       && ws->kind () == TARGET_WAITKIND_STOPPED
-      && (ws->sig () == GDB_SIGNAL_URG ||
+      && (ws->sig () == GDB_SIGNAL_URG
 #ifdef __QNXHOST__
-	  ws->sig () == GDB_SIGNAL_EMT || ws->sig () == GDB_SIGNAL_ILL ||
+	  || ws->sig () == GDB_SIGNAL_EMT || ws->sig () == GDB_SIGNAL_ILL
 #endif
-	  ws->sig () == GDB_SIGNAL_TRAP)
-      && !trap_expected)
+	  ))
     {
       cuda_notification_trace ("received notification to thread %d",
 			       cuda_notification_info.tid);
@@ -602,6 +603,27 @@ cuda_notification_consume_pending (void)
 #endif
 
   cuda_notification_info.pending_send = false;
+}
+
+void
+cuda_notification_resend (void)
+{
+  cuda_notification_acquire_lock ();
+
+  if (!cuda_notification_info.pending_send && !cuda_notification_info.sent)
+    {
+      cuda_notification_trace ("resend: scheduling notification for next "
+			       "wait cycle");
+      cuda_notification_info.pending_send = true;
+      memset (&cuda_notification_info.pending_send_data, 0,
+	      sizeof cuda_notification_info.pending_send_data);
+    }
+  else
+    {
+      cuda_notification_trace ("resend: notification already pending or sent");
+    }
+
+  cuda_notification_release_lock ();
 }
 
 void _initialize_cuda_notification ();

@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2025 NVIDIA Corporation
+ * Copyright (C) 2007-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -54,6 +54,21 @@ extern void cuda_sigtrap_restore_settings (void);
 extern void cuda_sigtrap_set_silent (void);
 extern bool cuda_check_pending_sigint (pid_t pid);
 
+#ifndef __QNXTARGET__
+/* Called from bpstat_what when bp_cuda_attach_initiated is hit.
+   Returns true if attach is complete (should stop), false if async
+   continuation was added (should continue).
+   Attach is not supported on QNX.  */
+extern bool cuda_handle_attach_initiated_breakpoint (void);
+
+/* Called from cuda_wait when attach completes.
+   Handles cleanup for async attach if in the RESUMING state.
+   Returns true if async attach was completed and caller should NOT
+   set stop_soon = STOP_QUIETLY.  Returns false otherwise.
+   Attach is not supported on QNX.  */
+extern bool cuda_complete_async_attach (struct inferior *inf);
+#endif
+
 class inf_child_target;
 
 template <class BaseTarget> struct cuda_nat_linux : public BaseTarget
@@ -91,8 +106,6 @@ public:
   virtual void resume (ptid_t arg0,
 		       int TARGET_DEBUG_PRINTER (target_debug_print_step) arg1,
 		       enum gdb_signal arg2) override;
-
-  void resume (ptid_t ptid, int sstep, int host_sstep, enum gdb_signal ts);
 
   virtual ptid_t wait (ptid_t arg0, struct target_waitstatus *arg1,
 		       target_wait_flags arg2) override;

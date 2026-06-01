@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2015-2025 NVIDIA Corporation
+ * Copyright (C) 2015-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -212,6 +212,7 @@ cuda_exception::print_message () const
     case GDB_SIGNAL_CUDA_WARP_API_STACK_ERROR:
     case GDB_SIGNAL_CUDA_WARP_USER_STACK_OVERFLOW:
     case GDB_SIGNAL_CUDA_CLUSTER_POISON:
+    case GDB_SIGNAL_CUDA_WARP_TMA_SYSCALL:
       print_exception_name ();
       print_exception_origin ();
       break;
@@ -464,6 +465,11 @@ cuda_exception::cuda_exception ()
       m_valid = true;
       m_recoverable = false;
       break;
+    case CUDBG_EXCEPTION_TMA_SYSCALL:
+      m_gdb_sig = GDB_SIGNAL_CUDA_WARP_TMA_SYSCALL;
+      m_valid = true;
+      m_recoverable = false;
+      break;
     case CUDBG_EXCEPTION_UNKNOWN:
     default:
       /* If for some reason the device encounters an unknown exception, we
@@ -549,6 +555,8 @@ cuda_exception::type_to_name (CUDBGException_t type)
       return gdb_signal_to_string(GDB_SIGNAL_CUDA_WARP_BLOCK_NOT_PRESENT);
     case CUDBG_EXCEPTION_WARP_USER_STACK_OVERFLOW:
       return gdb_signal_to_string(GDB_SIGNAL_CUDA_WARP_USER_STACK_OVERFLOW);
+    case CUDBG_EXCEPTION_TMA_SYSCALL:
+      return gdb_signal_to_string(GDB_SIGNAL_CUDA_WARP_TMA_SYSCALL);
     default:
       return gdb_signal_to_string (GDB_SIGNAL_CUDA_UNKNOWN_EXCEPTION);
     }

@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2025 NVIDIA Corporation
+ * Copyright (C) 2007-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -387,8 +387,12 @@ public:
 	      continue;
 
 	    // Is this sm at an exception?
+	    // Only skip if ONLY looking for exceptions (not also breakpoints
+	    // or traps). When multiple flags are set, the lane-level check
+	    // handles the OR semantics.
 	    if ((atException || atAnyException)
-		&& !cuda_state::sm_has_exception (dev, sm))
+		&& !cuda_state::sm_has_exception (dev, sm)
+		&& !(atBreakpoint || atTrap))
 	      continue;
 
 	    // Is this sm valid?
@@ -421,8 +425,12 @@ public:
 			< cuda_clock ()))
 		  continue;
 
-		// If looking for traps, skip non-broken warps
-		if (atTrap && !cuda_state::warp_broken (dev, sm, wp))
+		// If looking for traps, skip non-broken warps.
+		// Only skip if ONLY looking for traps (not also breakpoints
+		// or exceptions). When multiple flags are set, the lane-level
+		// check handles the OR semantics.
+		if (atTrap && !cuda_state::warp_broken (dev, sm, wp)
+		    && !(atBreakpoint || atException))
 		  continue;
 
 		// Get the coord info
@@ -536,41 +544,55 @@ public:
 			    < cuda_clock ()))
 		      continue;
 
-		    // Skip if not at a breakpoint
+		    // Evaluate each selection condition independently.
+		    // When multiple flags are ORed together (e.g., select_bkpt
+		    // | select_trap), we want lanes matching ANY condition.
+		    const bool laneValidAndActive
+			= cuda_state::sm_valid (dev, sm)
+			  && cuda_state::warp_valid (dev, sm, wp)
+			  && cuda_state::lane_valid (dev, sm, wp, ln)
+			  && cuda_state::lane_active (dev, sm, wp, ln);
+
+		    // Check GDB breakpoint condition
+		    bool foundBkpt = false;
 		    if (atBreakpoint)
 		      {
 			// Obtain the aspace if we haven't already.
 			if ((aspace == nullptr)
 			    && (inferior_ptid != null_ptid))
 			  aspace = current_inferior ()->aspace.get ();
-			// Skip non-broken kernels
-			if (!cuda_state::sm_valid (dev, sm)
-			    || !cuda_state::warp_valid (dev, sm, wp)
-			    || !cuda_state::lane_valid (dev, sm, wp, ln)
-			    || !cuda_state::lane_active (dev, sm, wp, ln)
-			    || !breakpoint_here_p (
-				aspace,
-				cuda_state::lane_get_pc (dev, sm, wp, ln)))
-			  continue;
+			foundBkpt
+			    = laneValidAndActive
+			      && breakpoint_here_p (
+				  aspace,
+				  cuda_state::lane_get_pc (dev, sm, wp, ln));
 		      }
 
-		    // Skip if kernel is healthy
-		    if (atException
-			&& (!cuda_state::sm_valid (dev, sm)
-			    || !cuda_state::warp_valid (dev, sm, wp)
-			    || !cuda_state::lane_valid (dev, sm, wp, ln)
-			    || !cuda_state::lane_active (dev, sm, wp, ln)
-			    || !cuda_state::lane_get_exception (dev, sm, wp,
-								ln)))
-		      continue;
+		    // Check trap condition (broken warp with valid lane)
+		    bool foundTrap = false;
+		    if (atTrap)
+		      {
+			foundTrap = laneValidAndActive
+				    && cuda_state::warp_broken (dev, sm, wp);
+		      }
 
-		    // Skip if this lane is invalid for traps. We already
-		    // verified the warp is broken.
-		    if (atTrap
-			&& (!cuda_state::sm_valid (dev, sm)
-			    || !cuda_state::warp_valid (dev, sm, wp)
-			    || !cuda_state::lane_valid (dev, sm, wp, ln)
-			    || !cuda_state::lane_active (dev, sm, wp, ln)))
+		    // Check exception condition
+		    bool foundExcpt = false;
+		    if (atException)
+		      {
+			foundExcpt
+			    = laneValidAndActive
+			      && cuda_state::lane_get_exception (dev, sm, wp,
+								 ln);
+		      }
+
+		    // If any selection flags are set, at least one must be
+		    // found (OR semantics between flags).
+		    const bool needsSelection
+			= atBreakpoint || atTrap || atException;
+		    const bool anyFound
+			= foundBkpt || foundTrap || foundExcpt;
+		    if (needsSelection && !anyFound)
 		      continue;
 
 		    const CuDim3 threadIdx

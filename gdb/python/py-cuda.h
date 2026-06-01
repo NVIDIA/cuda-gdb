@@ -1,7 +1,7 @@
 /* Python interface for CUDA debugging
 
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2024-2025 NVIDIA Corporation
+ * Copyright (C) 2024-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify

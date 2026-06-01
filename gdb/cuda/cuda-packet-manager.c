@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2025 NVIDIA Corporation
+ * Copyright (C) 2007-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -209,23 +209,10 @@ cuda_remote_notification_aliased_event ()
 void
 cuda_remote_notification_analyze (ptid_t ptid, struct target_waitstatus *ws)
 {
+  /* trap_expected is no longer used by the analyze function, but we
+     still send a zero value to maintain wire compatibility with
+     existing gdbserver builds that expect this field.  */
   int trap_expected = 0;
-
-  /* Upon connecting to gdbserver, we may not have stablished an inferior_ptid,
-     so it is still null_ptid.  In that case, use the event ptid that should be
-     the thread that triggered this code path.  */
-  if (inferior_ptid == null_ptid)
-    {
-      struct thread_info *tp
-	  = current_inferior ()->process_target ()->find_thread (ptid);
-      if (tp != nullptr)
-	trap_expected = tp->control.trap_expected;
-    }
-  else
-    {
-      struct thread_info *tp = inferior_thread ();
-      trap_expected = tp->control.trap_expected;
-    }
 
   remote_callbacks.append_string ("qnv.");
   cuda_packet_type_t packet_type = NOTIFICATION_ANALYZE;

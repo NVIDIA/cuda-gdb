@@ -17,7 +17,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2025 NVIDIA Corporation
+   Copyright (C) 2007-2026 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -2120,6 +2120,10 @@ void cuda_auto_breakpoints_forced_add_location (cuda_module* module, CORE_ADDR a
 void cuda_auto_breakpoints_update (void);
 void cuda_auto_breakpoints_cleanup (void);
 void cuda_auto_breakpoints_event_add_break (cuda_module* module, CORE_ADDR addr);
+/* Create a physical breakpoint for a break-on-launch hit at the post-prologue
+   address.  This is used when the new break-on-launch API is active.
+   Returns true if the breakpoint was created successfully.  */
+bool cuda_auto_breakpoint_break_on_launch_hit (CORE_ADDR addr, cuda_module *module);
 #endif
 /* Command element for the 'commands' command.  */
 extern cmd_list_element *commands_cmd_element;

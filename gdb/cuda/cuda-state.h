@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2025 NVIDIA Corporation
+ * Copyright (C) 2007-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -1408,13 +1408,9 @@ public:
     return lane (dev_id, sm_id, wp_id, ln_id)->get_return_address (level);
   }
 
-  static void
-  lane_get_cuda_exception_string (uint32_t dev_id, uint32_t sm_id,
-				  uint32_t wp_id, uint32_t ln_id, char *buf,
-				  uint32_t bufSz)
-  {
-    lane (dev_id, sm_id, wp_id, ln_id)->get_cuda_exception_string (buf, bufSz);
-  }
+  static void lane_get_cuda_exception_string (uint32_t dev_id, uint32_t sm_id,
+					      uint32_t wp_id, uint32_t ln_id,
+					      char *buf, uint32_t bufSz);
 
 private:
   static cuda_kernel *add_parent_kernel (uint32_t dev_id, uint64_t grid_id);

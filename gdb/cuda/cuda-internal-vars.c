@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2025 NVIDIA Corporation
+ * Copyright (C) 2025-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -281,6 +281,16 @@ cuda_internal_var_api_failure_func_name ()
   return value_from_pointer (
       builtin_type (cuda_get_gdbarch ())->builtin_data_ptr,
       error_func_name_addr);
+}
+
+/* Debug API version */
+static inline uint32_t
+cuda_internal_var_debug_api_version ()
+{
+  if (!cuda_debugapi::api_state_initialized ())
+    error (_ ("CUDA is not initialized."));
+  const cuda_debugapi_version &ver = cuda_debugapi::api_version ();
+  return ver.m_major * 1000 + ver.m_minor * 10;
 }
 
 /* Convenience variables */
@@ -574,6 +584,10 @@ static cuda_internal_var cuda_internal_variables[] = {
   { "cuda_api_failure_func_name",
     wrap (cuda_internal_var_api_failure_func_name), true },
   { "cuda_api_failure_return_code", wrap (cuda_get_last_driver_api_error_code),
+    true },
+
+  /* Debug API version */
+  { "cuda_debug_api_version", wrap (cuda_internal_var_debug_api_version),
     true },
 
   /* Convenience variables */

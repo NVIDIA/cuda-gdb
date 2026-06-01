@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2013-2025 NVIDIA Corporation
+ * Copyright (C) 2013-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -338,6 +338,25 @@ cuda_options_printf_flushing (void)
   return cuda_printf_flushing;
 }
 
+/* We use the gdb initializers for some of the CUDA sources we share between
+ * gdb and gdbserver. See gdb/make-init-c for more info. There is no
+ * equivalent concept for gdbserver today. We need to explicitly call the
+ * intializers once per execution. */
+
+ void
+ cuda_gdb_setup (void)
+ {
+   static bool cuda_called_initializers = false;
+   extern void _initialize_cuda_notification ();
+   extern void _initialize_cuda_utils ();
+   if (!cuda_called_initializers)
+     {
+       cuda_called_initializers = true;
+       _initialize_cuda_notification ();
+       _initialize_cuda_utils ();
+     }
+ }
+ 
 void
 cuda_cleanup (void)
 {
@@ -565,6 +584,9 @@ cuda_initialize_target (void)
       cuda_trace ("requesting CUDA suspend events\n");
       debugger_capabilities |= CUDBG_DEBUGGER_CAPABILITY_SUSPEND_EVENTS;
 
+      cuda_trace ("requesting no context push / pop events be delivered\n");
+      debugger_capabilities |= CUDBG_DEBUGGER_CAPABILITY_NO_CONTEXT_PUSH_POP_EVENTS;
+
       if (cuda_options_driver_logs ())
         {
           cuda_trace ("requesting CUDA driver logging\n");
@@ -576,6 +598,11 @@ cuda_initialize_target (void)
           cuda_trace ("requesting CUDA printf flushing on suspend\n");
           debugger_capabilities |= CUDBG_DEBUGGER_CAPABILITY_FLUSH_PRINTF_ON_SUSPEND;
         }
+
+#if CUDBG_API_VERSION_REVISION > 167
+      cuda_trace ("requesting break-on-launch capability\n");
+      debugger_capabilities |= CUDBG_DEBUGGER_CAPABILITY_BREAK_ON_LAUNCH;
+#endif
 
       write_memory (capability_addr, (const gdb_byte *)&debugger_capabilities,
 		    sizeof (debugger_capabilities));

@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2021-2025 NVIDIA Corporation
+ * Copyright (C) 2021-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -30,7 +30,7 @@
 
 /* Globals */
 
-static const char nvidia_copyright_currrent_year[] = "2025";
+static const char nvidia_copyright_currrent_year[] = "2026";
 
 const int
 cuda_major_version (void)

@@ -85,6 +85,16 @@ inferior_event_handler (enum inferior_event_type event_type)
 	}
       break;
 
+#ifdef NVIDIA_CUDA_GDB
+    case INF_PRE_WAIT:
+      /* Do all pre-wait continuations.  These are used for CUDA
+	 initialization which may need to retry multiple times until
+	 the debugger API is ready.  */
+      if (current_inferior () != nullptr)
+	current_inferior ()->do_pre_wait_continuations ();
+      break;
+#endif
+
     default:
       gdb_printf (gdb_stderr, _("Event type not recognized.\n"));
       break;

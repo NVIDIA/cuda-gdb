@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2025 NVIDIA Corporation
+ * Copyright (C) 2007-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -20,7 +20,9 @@
 
 #include "arch-utils.h"
 #include "block.h"
+#include "cli/cli-cmds.h"
 #include "command.h"
+#include "cuda-api.h"
 #include "cuda-commands.h"
 #include "cuda-context.h"
 #include "cuda-coord-set.h"
@@ -34,8 +36,8 @@
 #include "cuda-utils.h"
 #include "exceptions.h"
 #include "filenames.h"
-#include "command.h"
-#include "cli/cli-cmds.h"
+#include "frame.h"
+#include "gdbsupport/buildargv.h"
 #include "gdbsupport/forward-scope-exit.h"
 #include "gdbsupport/pathstuff.h"
 #include "language.h"
@@ -49,8 +51,10 @@
 #include "demangle.h"
 #include "interps.h"
 
+#include <algorithm>
 #include <array>
 #include <bitset>
+#include <cstdlib>
 #include <iomanip>
 #include <sstream>
 #include <unordered_map>
@@ -108,14 +112,21 @@ public:
 	if (cuda_coord_is_special (p.dev ())
 	    && cuda_coord_is_special (l.kernelId ()))
 	  {
-	    /* Fix to current focus */
-	    dev = c_p.dev ();
-	    kernel = c_l.kernelId ();
+	    bool multiGpu = cuda_state::get_num_devices () > 1;
+
+	    /* Only assume the device id if system has 1 GPU. */
+	    if (!multiGpu)
+	      {
+		/* Fix to current focus */
+		dev = c_p.dev ();
+	      }
+
 	    /* Check grid */
 	    if (cuda_coord_is_special (l.gridId ()))
 	      {
-		/* Fix to current focus */
-		grid = c_l.gridId ();
+		/* No kernel + no grid -> implicit kernel ID */
+		kernel = c_l.kernelId ();
+		
 		/* Check cluster */
 		if (cuda_coord_is_special (l.clusterIdx ())
 		    && cuda_coord_is_special (l.clusterDim ()))
@@ -134,6 +145,15 @@ public:
 		      }
 		  }
 	      }
+	    else /* No kernel + grid -> valid only with single GPU */
+	      {
+		if (multiGpu)
+		{
+		  /* Will cause an invalid coordinates error */
+		  kernel = c_l.kernelId ();
+		}
+	      }
+
 	  }
 	/* Reset the coords */
 	m_coords = cuda_coords{ dev,  sm,      warp,	   lane,  kernel,
@@ -3240,7 +3260,7 @@ public:
     auto kernel
 	= cuda_state::find_kernel_by_kernel_id (coords.logical ().kernelId ());
     if (!kernel)
-      error ("Incorrect kernel specified or the focus is not set on a kernel");
+      error ("Invalid kernel specified or the focus is not set on a kernel");
 
     size_t level = 0;
     while (kernel)
@@ -3366,7 +3386,7 @@ public:
     auto kernel
 	= cuda_state::find_kernel_by_kernel_id (coords.logical ().kernelId ());
     if (!kernel)
-      error ("Incorrect kernel specified or the focus is not set on a kernel");
+      error ("Invalid kernel specified or the focus is not set on a kernel");
 
     // Recursively add this kernel and all its children
     add_kernel_and_children (kernel, 0);
@@ -3465,6 +3485,183 @@ info_cuda_launch_children_command (const char *arg)
       uiout->field_string ("invocation", k.invocation ());
       uiout->text ("\n");
     }
+
+  gdb_flush (gdb_stdout);
+}
+
+static cuda_kernel *
+cuda_kernel_from_arg_or_focus (const char *arg)
+{
+  gdb_argv argv (arg ? arg : "");
+  if (argv.count () == 0)
+    {
+      if (!cuda_current_focus::isDevice ())
+	error (
+	    _ ("Focus is not set on any active CUDA kernel. Specify a kernel "
+	       "number."));
+      auto kernel = cuda_current_focus::get ().logical ().kernel ();
+      if (!kernel)
+	error (
+	    _ ("Focus is not set on any active CUDA kernel. Specify a kernel "
+	       "number."));
+      return kernel;
+    }
+
+  if (argv.count () != 1)
+    error (_ ("Too many arguments provided."));
+
+  char *end = nullptr;
+  const auto kernel_id = strtoull (argv[0], &end, 0);
+  if (end == argv[0] || *end != '\0')
+    error (_ ("Invalid kernel number: '%s'."), argv[0]);
+
+  auto kernel = cuda_state::find_kernel_by_kernel_id (kernel_id);
+  if (!kernel)
+    error (_ ("Invalid kernel specified or the focus is not set on a "
+	      "kernel"));
+  return kernel;
+}
+
+static void
+cuda_print_cpu_backtrace_frame (struct ui_out *uiout, uint32_t level,
+				CORE_ADDR pc)
+{
+  gdb::unique_xmalloc_ptr<char> func
+      = cuda_find_function_name_from_pc (pc, true);
+  symtab_and_line sal = find_pc_line (pc, 0);
+  const char *filename
+      = sal.symtab ? symtab_to_filename_for_display (sal.symtab) : NULL;
+
+  uiout->text ("#");
+  uiout->field_signed ("frame", level);
+  uiout->text (" ");
+  uiout->field_string ("function", func ? func.get () : "<unknown>");
+
+  if (filename)
+    {
+      uiout->text (" at ");
+      uiout->field_string ("filename", filename);
+      uiout->text (":");
+      uiout->field_signed ("line", sal.line);
+    }
+  else
+    {
+      uiout->text (" at <unknown>");
+    }
+
+  uiout->text (" (");
+  uiout->field_fmt ("pc", "0x%llx", (unsigned long long)pc);
+  uiout->text (")\n");
+}
+
+static void
+cuda_print_device_backtrace (struct ui_out *uiout, cuda_kernel *kernel,
+			     uint32_t *device_frame_count)
+{
+  gdb_assert (device_frame_count);
+  *device_frame_count = 0;
+  uiout->text ("Device Stack Frames:\n");
+
+  if (!cuda_current_focus::isDevice ())
+    {
+      uiout->text ("  <no CUDA device focus>\n\n");
+      return;
+    }
+
+  const auto focus_kernel = cuda_current_focus::get ().logical ().kernel ();
+  if (!focus_kernel || focus_kernel->id () != kernel->id ())
+    {
+      uiout->text ("  <device focus is not on requested kernel>\n\n");
+      return;
+    }
+
+  try
+    {
+      frame_info_ptr frame = get_current_frame ();
+      if (!frame)
+	{
+	  uiout->text ("  <no device stack>\n\n");
+	  return;
+	}
+
+      uint32_t level = 0;
+      for (; frame; frame = get_prev_frame (frame), ++level)
+	{
+	  uiout->text ("#");
+	  uiout->field_signed ("frame", level);
+	  uiout->text (" ");
+	  print_frame_info (user_frame_print_options, frame, 0, LOCATION, 1,
+			    0);
+	}
+      uiout->text ("\n");
+      *device_frame_count = level;
+      return;
+    }
+  catch (const gdb_exception_error &)
+    {
+      uiout->text ("  <no device stack>\n\n");
+      return;
+    }
+}
+
+void
+info_cuda_kernel_launch_backtrace_command (const char *arg)
+{
+  if (!cuda_options_kernel_launch_backtrace_enabled ())
+    error (
+	_ ("CUDA kernel launch backtrace is disabled. Use "
+	   "\"set cuda kernel_launch_backtrace on\" to enable and restart the "
+	   "target application.\nEnabling this feature slows down the target "
+	   "application execution due to the additional overhead of "
+	   "collecting the CPU call stack at kernel launch sites."));
+
+  cuda_kernel *kernel = cuda_kernel_from_arg_or_focus (arg);
+  gdb_assert (kernel);
+
+  const auto dev = kernel->dev_id ();
+  const auto grid_id = kernel->grid_id ();
+
+  constexpr uint32_t initial_capacity = 0;
+  std::vector<uint64_t> addrs (initial_capacity);
+  uint32_t total_num_addrs = 0;
+
+  cuda_debugapi::read_cpu_call_stack (dev, grid_id, nullptr, 0,
+				      &total_num_addrs);
+  if (total_num_addrs == 0)
+    {
+      current_uiout->field_string (
+	  NULL, _ ("No CUDA kernel launch backtrace available.\n"));
+      return;
+    }
+
+  addrs.resize (total_num_addrs);
+  cuda_debugapi::read_cpu_call_stack (dev, grid_id, addrs.data (),
+				      addrs.size (), &total_num_addrs);
+
+  struct ui_out *uiout = current_uiout;
+  const std::string invocation
+      = invocation_to_string (kernel->name (), kernel->args ());
+
+  const std::string header_kernel{ "Kernel" };
+  const std::string header_invocation{ "Invocation" };
+  uiout->text (header_kernel.c_str ());
+  uiout->text (" ");
+  uiout->text (header_invocation.c_str ());
+  uiout->text ("\n");
+
+  uiout->field_fmt ("kernel", "%-*llu",
+		    static_cast<int> (header_kernel.length ()),
+		    (unsigned long long)kernel->id ());
+  uiout->text (" ");
+  uiout->field_string ("invocation", invocation);
+  uiout->text ("\n\n");
+  uint32_t device_frame_count = 0;
+  cuda_print_device_backtrace (uiout, kernel, &device_frame_count);
+  uiout->text ("Host Stack Frames:\n");
+
+  const auto count = std::min<uint32_t> (total_num_addrs, addrs.size ());
+  for (auto i = 0u; i < count; ++i)
+    cuda_print_cpu_backtrace_frame (uiout, device_frame_count + i, addrs[i]);
 
   gdb_flush (gdb_stdout);
 }
@@ -3646,8 +3843,9 @@ info_cuda_contexts_command (const char *arg)
 static void
 print_managed_msymbol (struct ui_file *stb, struct bound_minimal_symbol &bmsym)
 {
-  auto bsym = lookup_global_symbol_from_objfile (
-      bmsym.objfile, STATIC_BLOCK, bmsym.minsym->search_name (), SEARCH_VAR_DOMAIN);
+  auto bsym = lookup_global_symbol_from_objfile (bmsym.objfile, STATIC_BLOCK,
+						 bmsym.minsym->search_name (),
+						 SEARCH_VAR_DOMAIN);
   if (!bsym.symbol)
     return;
   auto val = read_var_value (bsym.symbol, bsym.block, NULL);
@@ -3694,7 +3892,10 @@ info_cuda_managed_command (const char *arg)
       for (minimal_symbol *msym : obj->msymbols ())
 	{
 	  /* Create a bound minsym based on the msym and the obj file. */
-	  struct bound_minimal_symbol minsym{ msym, obj };
+	  struct bound_minimal_symbol minsym
+	  {
+	    msym, obj
+	  };
 	  if (!cuda_managed_msymbol_p (minsym))
 	    continue;
 	  print_managed_msymbol (gdb_stdout, minsym);
@@ -3797,6 +3998,8 @@ static struct
     "information about all the active blocks in the current kernel" },
   { "threads", info_cuda_threads_command,
     "information about all the active threads in the current kernel" },
+  { "kernel_launch_backtrace", info_cuda_kernel_launch_backtrace_command,
+    "CPU call stack collected at kernel launch (kernel in focus by default)" },
   { "launch trace", info_cuda_launch_trace_command,
     "information about the parent kernels of the kernel in focus" },
   { "launch children", info_cuda_launch_children_command,
@@ -4068,31 +4271,24 @@ cuda_command (const char *arg, int from_tty)
     error (_ ("Missing argument(s)."));
 }
 
-static char cuda_info_cmd_help_str[1024];
+static std::string cuda_info_cmd_help_str;
 
 /* Prepare help for info cuda command */
 static void
 cuda_build_info_cuda_help_message (void)
 {
-  char *ptr = cuda_info_cmd_help_str;
-  int size = sizeof (cuda_info_cmd_help_str);
-  int rc, cnt;
+  cuda_info_cmd_help_str
+      = _ ("Print informations about the current CUDA activities. "
+	   "Available options:\n");
 
-  rc = snprintf (ptr, size,
-		 _ ("Print informations about the current CUDA activities. "
-		    "Available options:\n"));
-  ptr += rc;
-  size -= rc;
-  for (cnt = 0; cuda_info_subcommands[cnt].name; cnt++)
+  for (const auto &subcmd : cuda_info_subcommands)
     {
-      rc = snprintf (ptr, size, " %*s : %s\n",
-		     cuda_info_subcommands_max_name_length (),
-		     cuda_info_subcommands[cnt].name,
-		     _ (cuda_info_subcommands[cnt].help));
-      if (rc <= 0)
+      if (!subcmd.name)
 	break;
-      ptr += rc;
-      size -= rc;
+
+      cuda_info_cmd_help_str += string_printf (
+	  " %*s : %s\n", cuda_info_subcommands_max_name_length (), subcmd.name,
+	  _ (subcmd.help));
     }
 }
 
@@ -4161,6 +4357,6 @@ _initialize_cuda_commands ()
 	   _ ("Print or select the current CUDA thread."), &cudalist);
 
   cuda_build_info_cuda_help_message ();
-  cmd = add_info ("cuda", info_cuda_command, cuda_info_cmd_help_str);
+  cmd = add_info ("cuda", info_cuda_command, cuda_info_cmd_help_str.c_str ());
   set_cmd_completer (cmd, cuda_info_command_completer);
 }

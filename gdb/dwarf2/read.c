@@ -25,7 +25,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2025 NVIDIA Corporation
+   Copyright (C) 2007-2026 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -23042,8 +23042,6 @@ cuda_decode_line_table (struct objfile *objfile)
   if (dwarf2_has_info (objfile, NULL, true))
     return;
   
-  /* Mark this objfile as having line-table-only debug info */
-  objfile->cuda_line_table_only = true;
   struct dwarf2_per_objfile *dwarf2_per_objfile = get_dwarf2_per_objfile (objfile);
   if (!dwarf2_per_objfile->per_bfd->line.s.section)
     return;

@@ -1,6 +1,6 @@
 /*
  * NVIDIA CUDA Debugger CUDA-GDB
- * Copyright (C) 2007-2025 NVIDIA Corporation
+ * Copyright (C) 2007-2026 NVIDIA Corporation
  * Written by CUDA-GDB team at NVIDIA <cudatools@nvidia.com>
  *
  * This program is free software; you can redistribute it and/or modify
@@ -34,6 +34,7 @@ void info_cuda_blocks_command (const char *arg);
 void info_cuda_threads_command (const char *arg);
 void info_cuda_launch_trace_command (const char *arg);
 void info_cuda_launch_children_command (const char *arg);
+void info_cuda_kernel_launch_backtrace_command (const char *arg);
 void info_cuda_managed_command (const char *arg);
 void info_cuda_line_command (const char *arg);
 void info_cuda_barriers_command (const char *arg);

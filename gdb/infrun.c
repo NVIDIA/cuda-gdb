@@ -19,7 +19,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* NVIDIA CUDA Debugger CUDA-GDB
-   Copyright (C) 2007-2025 NVIDIA Corporation
+   Copyright (C) 2007-2026 NVIDIA Corporation
    Modified from the original GDB file referenced above by the CUDA-GDB
    team at NVIDIA <cudatools@nvidia.com>. */
 
@@ -86,6 +86,7 @@
 #ifdef NVIDIA_CUDA_GDB
 #include "cuda/cuda-autostep.h"
 #include "cuda/cuda-exceptions.h"
+#include "cuda/cuda-linux-nat.h"
 #include "cuda/cuda-options.h"
 #include "cuda/cuda-state.h"
 #include "nat/linux-waitpid.h"
@@ -113,9 +114,6 @@ static bool maybe_software_singlestep (struct gdbarch *gdbarch);
 static void resume (gdb_signal sig);
 
 static void wait_for_inferior (inferior *inf);
-#ifdef NVIDIA_CUDA_GDB
-void cuda_wait_for_inferior (void);
-#endif
 
 static void restart_threads (struct thread_info *event_thread,
 			     inferior *inf = nullptr);
@@ -777,10 +775,10 @@ follow_fork ()
 
   bool follow_child = (follow_fork_mode_string == follow_fork_mode_child);
 #ifdef NVIDIA_CUDA_GDB
-  /* Disallow follow-fork child if we already started initialization of the
-   * CUDA debug API */
+  /* Disallow follow-fork child when CUDA debugging is enabled.  CUDA
+     debugging does not support following the child process after a fork.  */
   if (follow_child
-      && (!cuda_debugapi::api_state_uninitialized ()
+      && (cuda_debugging_enabled
 	  || is_remote_target (current_inferior ()->process_target ())))
     {
       warning (
@@ -4508,11 +4506,6 @@ wait_for_inferior (inferior *inf)
 }
 #ifdef NVIDIA_CUDA_GDB
 void
-cuda_wait_for_inferior (void)
-{
-  wait_for_inferior (current_inferior ());
-}
-void
 cuda_force_stop_print_frame (void)
 {
   stop_print_frame = true;
@@ -4775,6 +4768,11 @@ fetch_inferior_event ()
        an event from the current thread.  Otherwise, wait for an event from
        any thread.  */
     ptid_t waiton_ptid = in_cond_eval ? inferior_ptid : minus_one_ptid;
+
+#ifdef NVIDIA_CUDA_GDB
+    /* Run pre-wait continuations via the event handler.  */
+    inferior_event_handler (INF_PRE_WAIT);
+#endif
 
     if (!do_target_wait (waiton_ptid, &ecs, TARGET_WNOHANG))
       {
@@ -6548,10 +6546,11 @@ handle_inferior_event (struct execution_control_state *ecs)
 	    = (ecs->ws.kind () != TARGET_WAITKIND_THREAD_CLONED
 	       && follow_fork_mode_string == follow_fork_mode_child);
 #ifdef NVIDIA_CUDA_GDB
-	  /* Disallow follow-fork child if we already started initialization of
-	   * the CUDA debug API */
+	  /* Disallow follow-fork child when CUDA debugging is enabled.  CUDA
+	     debugging does not support following the child process after a
+	     fork.  */
 	  if (follow_child
-	      && (!cuda_debugapi::api_state_uninitialized ()
+	      && (cuda_debugging_enabled
 		  || is_remote_target (
 		      ecs->event_thread->inf->process_target ())))
 	    {

@@ -25,6 +25,9 @@
 #include "python.h"
 #include "python-internal.h"
 #include "cli/cli-style.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "gdbsupport/block-signals.h"
+#endif
 
 extern PyTypeObject printer_object_type;
 
@@ -588,6 +591,12 @@ gdbpy_apply_val_pretty_printer (const struct extension_language_defn *extlang,
 
   if (!gdb_python_initialized)
     return EXT_LANG_RC_NOP;
+
+#ifdef NVIDIA_CUDA_GDB
+  /* Block signals before calling python interpreter to avoid intereference
+   * between GDB and Python threads that can cause GDB hangs. */
+  gdb::block_signals blocker;
+#endif
 
   gdbpy_enter enter_py (gdbarch, language);
 
