@@ -37,6 +37,25 @@
 
 class cuda_module;
 
+struct cuda_sass_instruction_record
+{
+  uint32_t number;
+  uint64_t offset;
+  CORE_ADDR pc;
+  std::string text;
+};
+
+struct cuda_sass_function_symbol
+{
+  std::string linkage_name;
+  std::string display_name;
+  CORE_ADDR entry_pc;
+};
+
+std::vector<cuda_sass_function_symbol>
+cuda_sass_find_function_symbols (cuda_module *module,
+				 const std::string &function_name);
+
 class cuda_instruction
 {
 public:
@@ -147,8 +166,8 @@ private:
 class cuda_module_disassembly_cache
 {
 public:
-  cuda_module_disassembly_cache (uint32_t insn_size)
-      : m_insn_size (insn_size), m_cuobjdump_json (true)
+  cuda_module_disassembly_cache (cuda_module *module, uint32_t insn_size)
+      : m_module (module), m_insn_size (insn_size), m_cuobjdump_json (true)
   {
   }
 
@@ -161,10 +180,23 @@ public:
   /* Public API */
   std::optional<cuda_instruction> disassemble_instruction (uint64_t pc);
 
+  bool get_function_listing (
+      const std::string &function_name, CORE_ADDR entry_pc,
+      std::vector<cuda_sass_instruction_record> &listing);
+
+  std::optional<cuda_sass_instruction_record>
+  get_instruction_by_number (const std::string &function_name,
+			     CORE_ADDR entry_pc, uint32_t number);
+
+  std::optional<cuda_sass_instruction_record>
+  get_instruction_by_offset (const std::string &function_name,
+			     CORE_ADDR entry_pc, uint64_t offset);
+
   inline void
   flush_elf_cache ()
   {
     m_elf_map.clear ();
+    m_elf_function_map.clear ();
   }
 
   inline void
@@ -198,6 +230,11 @@ private:
   std::optional<cuda_instruction>
   cache_lookup (uint64_t pc, disassembly_source source) const;
 
+  void add_listing_record (const std::string &function_name,
+			   uint32_t number, uint64_t offset, CORE_ADDR pc,
+			   const cuda_instruction &instruction);
+
+  cuda_module *m_module;
   uint32_t m_insn_size;
   /* Set to false if cuobjdump doesn't support -json */
   bool m_cuobjdump_json;
@@ -205,6 +242,10 @@ private:
   /* Holder for pc->insn mappings from the cubin/ELF file.
      These are flushed at the end of LFL event processing. */
   std::unordered_map<uint64_t, cuda_instruction> m_elf_map;
+
+  std::unordered_map<std::string,
+		     std::vector<cuda_sass_instruction_record>>
+      m_elf_function_map;
 
   /* Holder for pc->insn mappings from the device.
      These are flushed at the end of LFL event processing. */
