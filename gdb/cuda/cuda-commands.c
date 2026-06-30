@@ -23,6 +23,7 @@
 #include "cli/cli-cmds.h"
 #include "command.h"
 #include "cuda-api.h"
+#include "cuda-asm.h"
 #include "cuda-commands.h"
 #include "cuda-context.h"
 #include "cuda-coord-set.h"
@@ -4049,6 +4050,97 @@ info_cuda_command (const char *arg, int from_tty)
 
 struct cmd_list_element *cudalist;
 
+struct cuda_sass_command_match
+{
+  cuda_module *module;
+  cuda_sass_function_symbol function;
+};
+
+static std::string
+cuda_trim_command_arg (const char *arg)
+{
+  if (arg == nullptr)
+    return std::string ();
+
+  std::string str (arg);
+  const auto start = str.find_first_not_of (" \t\r\n");
+  if (start == std::string::npos)
+    return std::string ();
+
+  const auto end = str.find_last_not_of (" \t\r\n");
+  return str.substr (start, end - start + 1);
+}
+
+static std::vector<cuda_sass_command_match>
+cuda_sass_collect_matches (const std::string &function_name)
+{
+  std::vector<cuda_sass_command_match> matches;
+
+  for (auto &iter : cuda_state::modules ())
+    {
+      cuda_module *module = iter.second.get ();
+      if (module == nullptr || !module->loaded ())
+	continue;
+
+      auto module_matches
+	  = cuda_sass_find_function_symbols (module, function_name);
+      for (const auto &match : module_matches)
+	matches.push_back ({ module, match });
+    }
+
+  return matches;
+}
+
+static void
+cuda_sass_print_ambiguous_matches (
+    const std::string &function_name,
+    const std::vector<cuda_sass_command_match> &matches)
+{
+  gdb_printf (_ ("Multiple SASS functions match '%s':\n"),
+	      function_name.c_str ());
+  for (const auto &match : matches)
+    gdb_printf (_ ("  module 0x%llx %s (%s) at 0x%llx\n"),
+		(unsigned long long) match.module->id (),
+		match.function.display_name.c_str (),
+		match.function.linkage_name.c_str (),
+		(unsigned long long) match.function.entry_pc);
+}
+
+static void
+cuda_sass_command (const char *arg, int from_tty)
+{
+  const std::string function_name = cuda_trim_command_arg (arg);
+  if (function_name.empty ())
+    error (_ ("Missing CUDA kernel/function name."));
+
+  auto matches = cuda_sass_collect_matches (function_name);
+  if (matches.empty ())
+    error (_ ("No loaded SASS function matches '%s'."),
+	   function_name.c_str ());
+  if (matches.size () > 1)
+    {
+      cuda_sass_print_ambiguous_matches (function_name, matches);
+      error (_ ("Ambiguous SASS function '%s'. Use a mangled name or a "
+		"more specific name."),
+	     function_name.c_str ());
+    }
+
+  const auto &match = matches.front ();
+  std::vector<cuda_sass_instruction_record> listing;
+  if (!match.module->disassembler ()->get_function_listing (
+	  match.function.linkage_name, match.function.entry_pc, listing))
+    error (_ ("Could not build SASS listing for '%s'."),
+	   function_name.c_str ());
+
+  gdb_printf (_ ("SASS for %s (%s), module 0x%llx:\n"),
+	      match.function.display_name.c_str (),
+	      match.function.linkage_name.c_str (),
+	      (unsigned long long) match.module->id ());
+  for (const auto &record : listing)
+    gdb_printf ("  [%u] /*%04llx*/ %s\n", record.number,
+		(unsigned long long) record.offset, record.text.c_str ());
+}
+
 void
 cuda_command_switch (const char *switch_string)
 {
@@ -4355,6 +4447,11 @@ _initialize_cuda_commands ()
 
   add_cmd ("thread", no_class, cuda_thread_command,
 	   _ ("Print or select the current CUDA thread."), &cudalist);
+
+  add_cmd ("sass", class_cuda, cuda_sass_command,
+	   _ ("Print a numbered SASS listing for a loaded CUDA "
+	      "kernel/function."),
+	   &cmdlist);
 
   cuda_build_info_cuda_help_message ();
   cmd = add_info ("cuda", info_cuda_command, cuda_info_cmd_help_str.c_str ());

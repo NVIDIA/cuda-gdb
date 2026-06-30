@@ -225,6 +225,97 @@ static void inline map_insert_or_assign (M &map, const K &key, V &&value)
     }
 }
 
+static bool
+cuda_sass_msymbol_is_text (minimal_symbol *msym)
+{
+  switch (msym->type ())
+    {
+    case mst_text:
+    case mst_text_gnu_ifunc:
+    case mst_file_text:
+      return true;
+    default:
+      return false;
+    }
+}
+
+static bool
+cuda_sass_symbol_name_matches (minimal_symbol *msym,
+			       const std::string &function_name)
+{
+  const char *linkage_name = msym->linkage_name ();
+  if (linkage_name != nullptr && function_name == linkage_name)
+    return true;
+
+  const char *natural_name = msym->natural_name ();
+  if (natural_name != nullptr)
+    {
+      std::string natural (natural_name);
+      if (function_name == natural)
+	return true;
+
+      if (startswith (natural.c_str (), function_name.c_str ()))
+	{
+	  const char next = natural[function_name.size ()];
+	  if (next == '(' || next == '<')
+	    return true;
+	}
+
+      const std::string qualified_suffix = "::" + function_name;
+      const auto pos = natural.rfind (qualified_suffix);
+      if (pos != std::string::npos)
+	{
+	  const size_t end = pos + qualified_suffix.size ();
+	  if (end == natural.size () || natural[end] == '('
+	      || natural[end] == '<')
+	    return true;
+	}
+    }
+
+  return false;
+}
+
+std::vector<cuda_sass_function_symbol>
+cuda_sass_find_function_symbols (cuda_module *module,
+				 const std::string &function_name)
+{
+  std::vector<cuda_sass_function_symbol> matches;
+
+  if (module == nullptr || !module->loaded () || module->objfile () == nullptr)
+    return matches;
+
+  for (minimal_symbol *msym : module->objfile ()->msymbols ())
+    {
+      if (!cuda_sass_msymbol_is_text (msym))
+	continue;
+
+      if (!cuda_sass_symbol_name_matches (msym, function_name))
+	continue;
+
+      CORE_ADDR entry_pc = msym->value_address (module->objfile ());
+      const char *linkage_name = msym->linkage_name ();
+      const char *natural_name = msym->natural_name ();
+      if (entry_pc == 0 || linkage_name == nullptr)
+	continue;
+
+      bool duplicate = false;
+      for (const auto &match : matches)
+	if (match.entry_pc == entry_pc && match.linkage_name == linkage_name)
+	  {
+	    duplicate = true;
+	    break;
+	  }
+      if (duplicate)
+	continue;
+
+      matches.push_back ({ linkage_name,
+			   natural_name != nullptr ? natural_name : linkage_name,
+			   entry_pc });
+    }
+
+  return matches;
+}
+
 std::optional<cuda_instruction>
 cuda_module_disassembly_cache::disassemble_instruction (uint64_t pc)
 {
@@ -293,13 +384,20 @@ cuda_module_disassembly_cache::add_function_to_cache (
     const cuda_function &function, const disassembly_source source)
 {
   uint64_t pc = function.start_address ();
+  uint32_t number = 1;
+  uint64_t offset = 0;
+
   switch (source)
     {
     case disassembly_source::ELF:
+      m_elf_function_map[function.name ()].clear ();
       for (const cuda_instruction &insn : function.instructions ())
 	{
 	  map_insert_or_assign (m_elf_map, pc, cuda_instruction (insn));
+	  add_listing_record (function.name (), number, offset, pc, insn);
 	  pc += m_insn_size;
+	  offset += m_insn_size;
+	  ++number;
 	}
       break;
     case disassembly_source::DEVICE:
@@ -312,6 +410,68 @@ cuda_module_disassembly_cache::add_function_to_cache (
     default:
       error ("Unknown disassembly source");
     }
+}
+
+void
+cuda_module_disassembly_cache::add_listing_record (
+    const std::string &function_name, const uint32_t number,
+    const uint64_t offset, const CORE_ADDR pc,
+    const cuda_instruction &instruction)
+{
+  m_elf_function_map[function_name].push_back (
+      { number, offset, pc, instruction.to_string () });
+}
+
+bool
+cuda_module_disassembly_cache::get_function_listing (
+    const std::string &function_name, const CORE_ADDR entry_pc,
+    std::vector<cuda_sass_instruction_record> &listing)
+{
+  listing.clear ();
+
+  if (entry_pc == 0)
+    return false;
+
+  disassemble_instruction (entry_pc, disassembly_source::ELF);
+
+  auto iter = m_elf_function_map.find (function_name);
+  if (iter == m_elf_function_map.end () || iter->second.empty ())
+    return false;
+
+  listing = iter->second;
+  return true;
+}
+
+std::optional<cuda_sass_instruction_record>
+cuda_module_disassembly_cache::get_instruction_by_number (
+    const std::string &function_name, const CORE_ADDR entry_pc,
+    const uint32_t number)
+{
+  std::vector<cuda_sass_instruction_record> listing;
+  if (!get_function_listing (function_name, entry_pc, listing))
+    return std::optional<cuda_sass_instruction_record> ();
+
+  for (const auto &record : listing)
+    if (record.number == number)
+      return record;
+
+  return std::optional<cuda_sass_instruction_record> ();
+}
+
+std::optional<cuda_sass_instruction_record>
+cuda_module_disassembly_cache::get_instruction_by_offset (
+    const std::string &function_name, const CORE_ADDR entry_pc,
+    const uint64_t offset)
+{
+  std::vector<cuda_sass_instruction_record> listing;
+  if (!get_function_listing (function_name, entry_pc, listing))
+    return std::optional<cuda_sass_instruction_record> ();
+
+  for (const auto &record : listing)
+    if (record.offset == offset)
+      return record;
+
+  return std::optional<cuda_sass_instruction_record> ();
 }
 
 class posix_spawn_file_actions
@@ -692,7 +852,8 @@ cuda_module_disassembly_cache::populate_from_elf_image (const uint64_t pc)
 {
   // If we couldn't find the cubin, we can't disassemble from the elf
   // image.
-  const auto module = cuda_state::find_module_by_address (pc);
+  const auto module = m_module != nullptr ? m_module
+					  : cuda_state::find_module_by_address (pc);
   if (!module)
     {
       warning ("Could not find cubin to disassemble for pc 0x%lx", pc);
@@ -1021,6 +1182,8 @@ cuda_module_disassembly_cache::parse_disasm_output (const int fd,
   std::string current_func;
   std::string current_line;
   std::string current_section;
+  std::string active_func;
+  uint32_t active_insn_number = 0;
   while (true)
     {
       uint64_t pc = 0;
@@ -1040,6 +1203,10 @@ cuda_module_disassembly_cache::parse_disasm_output (const int fd,
 	case disassembler_line_type::function_header:
 	  if (!current_func.empty ())
 	    {
+	      active_func = current_func;
+	      active_insn_number = 0;
+	      m_elf_function_map[active_func].clear ();
+
 	      cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
 				 "function header: %s", current_func.c_str ());
 	      /* Lookup the symbol to get the entry_pc value from the bound
@@ -1129,8 +1296,12 @@ cuda_module_disassembly_cache::parse_disasm_output (const int fd,
 	      pc = entry_pc + current_offset;
 
 	      /* insert the disassembled instruction into the map */
+	      cuda_instruction instruction (current_insn);
 	      map_insert_or_assign (m_elf_map, pc,
-				    cuda_instruction (current_insn));
+				    cuda_instruction (instruction));
+	      if (!active_func.empty ())
+		add_listing_record (active_func, ++active_insn_number,
+				    current_offset, pc, instruction);
 	      last_pc = pc;
 	      cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
 				 "offset-insn: cache pc 0x%lx insn: %s", pc,
@@ -1162,7 +1333,14 @@ cuda_module_disassembly_cache::parse_disasm_output (const int fd,
 	  if (!pc)
 	    complaint (_ ("code-only line with pc of 0"));
 	  else
-	    map_insert_or_assign (m_elf_map, pc, cuda_instruction (""));
+	    {
+	      cuda_instruction instruction ("");
+	      map_insert_or_assign (m_elf_map, pc,
+				    cuda_instruction (instruction));
+	      if (!active_func.empty () && entry_pc)
+		add_listing_record (active_func, ++active_insn_number,
+				    pc - entry_pc, pc, instruction);
+	    }
 	  last_pc = pc;
 	  break;
 

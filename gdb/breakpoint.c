@@ -112,6 +112,8 @@ static void autostep_command (const char *, int);
 static bool is_autostep (const struct breakpoint *bpt);
 static void autosteps_info (const char *, int);
 static void delete_cuda_uvm_breakpoint (void);
+static bool cuda_sass_break_command_p (const char *);
+static void cuda_sass_break_command_1 (const char *, int, int);
 #endif
 /* Prototypes for local functions.  */
 
@@ -362,6 +364,58 @@ struct ordinary_breakpoint : public code_breakpoint
   void print_mention () const override;
   void print_recreate (struct ui_file *fp) const override;
 };
+
+#ifdef NVIDIA_CUDA_GDB
+static const char cuda_sass_break_prefix[] = "-sass";
+
+enum cuda_sass_breakpoint_selector_kind
+{
+  cuda_sass_selector_none = 0,
+  cuda_sass_selector_instruction_number,
+  cuda_sass_selector_offset
+};
+
+struct cuda_sass_breakpoint : public ordinary_breakpoint
+{
+  cuda_sass_breakpoint (
+      struct gdbarch *gdbarch, std::string kernel,
+      enum cuda_sass_breakpoint_selector_kind selector_kind,
+      uint64_t selector_value, std::string location,
+      enum bpdisp disposition_, int enabled_)
+      : ordinary_breakpoint (gdbarch, bp_breakpoint),
+	m_kernel (std::move (kernel)),
+	m_selector_kind (selector_kind),
+	m_selector_value (selector_value),
+	m_location (std::move (location))
+  {
+    disposition = disposition_;
+    enable_state = enabled_ ? bp_enabled : bp_disabled;
+    condition_not_parsed = 1;
+
+    const char *locspec_arg = m_kernel.c_str ();
+    locspec = new_linespec_location_spec (&locspec_arg,
+					  symbol_name_match_type::WILD);
+    locspec->set_string (std::string (cuda_sass_break_prefix) + " "
+			 + m_location);
+  }
+
+  void re_set (program_space *filter_pspace) override;
+  void resolve_initial_locations ()
+  {
+    resolve_locations (nullptr, false);
+  }
+
+private:
+  bool resolve_locations (program_space *filter_pspace, bool notify);
+  bool add_location_for_module (cuda_module *module);
+
+  std::string m_kernel;
+  enum cuda_sass_breakpoint_selector_kind m_selector_kind
+      = cuda_sass_selector_none;
+  uint64_t m_selector_value = 0;
+  std::string m_location;
+};
+#endif
 
 /* Internal breakpoints.  These typically have a lifetime the same as
    the program, and they end up installed on the breakpoint chain with
@@ -10346,9 +10400,135 @@ create_breakpoint (struct gdbarch *gdbarch,
    and if breakpoint is temporary, using BP_HARDWARE_FLAG
    and BP_TEMPFLAG.  */
 
+#ifdef NVIDIA_CUDA_GDB
+static bool
+cuda_sass_break_command_p (const char *arg)
+{
+  if (arg == nullptr)
+    return false;
+
+  arg = skip_spaces (arg);
+  const size_t prefix_len = strlen (cuda_sass_break_prefix);
+  return (strncmp (arg, cuda_sass_break_prefix, prefix_len) == 0
+	  && (arg[prefix_len] == '\0' || isspace (arg[prefix_len])));
+}
+
+static bool
+cuda_sass_parse_uint64 (const std::string &str, uint64_t *value)
+{
+  if (str.empty ())
+    return false;
+
+  char *end = nullptr;
+  errno = 0;
+  unsigned long long parsed = strtoull (str.c_str (), &end, 0);
+  if (errno != 0 || end == nullptr || *end != '\0')
+    return false;
+
+  *value = parsed;
+  return true;
+}
+
+static void
+cuda_sass_parse_location (const std::string &location,
+			  std::string &kernel_name,
+			  enum cuda_sass_breakpoint_selector_kind &kind,
+			  uint64_t &value)
+{
+  const auto plus = location.rfind ('+');
+  const auto colon = location.rfind (':');
+
+  if (plus != std::string::npos
+      && (colon == std::string::npos || plus > colon))
+    {
+      kernel_name = location.substr (0, plus);
+      const std::string offset_str = location.substr (plus + 1);
+      if (kernel_name.empty ()
+	  || !cuda_sass_parse_uint64 (offset_str, &value))
+	error (_ ("Invalid SASS offset location '%s'."),
+	       location.c_str ());
+
+      kind = cuda_sass_selector_offset;
+      return;
+    }
+
+  if (colon != std::string::npos)
+    {
+      kernel_name = location.substr (0, colon);
+      const std::string number_str = location.substr (colon + 1);
+      if (kernel_name.empty ()
+	  || !cuda_sass_parse_uint64 (number_str, &value)
+	  || value == 0 || value > UINT32_MAX)
+	error (_ ("Invalid SASS instruction location '%s'."),
+	       location.c_str ());
+
+      kind = cuda_sass_selector_instruction_number;
+      return;
+    }
+
+  error (_ ("SASS breakpoint location must be KERNEL:NUMBER or "
+	    "KERNEL+OFFSET."));
+}
+
+static void
+cuda_sass_break_command_1 (const char *arg, int flag, int from_tty)
+{
+  if ((flag & BP_HARDWAREFLAG) != 0)
+    error (_ ("SASS breakpoints do not support hardware breakpoint "
+	      "commands."));
+
+  const int tempflag = flag & BP_TEMPFLAG;
+  const size_t prefix_len = strlen (cuda_sass_break_prefix);
+
+  arg = skip_spaces (arg);
+  arg += prefix_len;
+  arg = skip_spaces (arg);
+  if (*arg == '\0')
+    error (_ ("Missing SASS breakpoint location."));
+
+  const char *location_start = arg;
+  while (*arg != '\0' && !isspace (*arg))
+    ++arg;
+
+  std::string location (location_start, arg - location_start);
+  arg = skip_spaces (arg);
+  if (*arg != '\0')
+    error (_ ("Extra arguments are not supported for SASS "
+	      "breakpoints."));
+
+  std::string kernel_name;
+  enum cuda_sass_breakpoint_selector_kind selector_kind
+      = cuda_sass_selector_none;
+  uint64_t selector_value = 0;
+  cuda_sass_parse_location (location, kernel_name, selector_kind,
+			    selector_value);
+
+  std::unique_ptr<cuda_sass_breakpoint> b (new cuda_sass_breakpoint (
+      get_current_arch (), std::move (kernel_name), selector_kind,
+      selector_value, location, tempflag ? disp_del : disp_donttouch,
+      1 /* enabled */));
+
+  cuda_sass_breakpoint *raw_b = b.get ();
+  breakpoint *installed = add_to_breakpoint_chain (std::move (b));
+  set_breakpoint_number (0, installed);
+  raw_b->resolve_initial_locations ();
+  mention (installed);
+  notify_breakpoint_created (installed);
+  update_global_location_list (UGLL_MAY_INSERT);
+}
+#endif
+
 static void
 break_command_1 (const char *arg, int flag, int from_tty)
 {
+#ifdef NVIDIA_CUDA_GDB
+  if (cuda_sass_break_command_p (arg))
+    {
+      cuda_sass_break_command_1 (arg, flag, from_tty);
+      return;
+    }
+#endif
+
   int tempflag = flag & BP_TEMPFLAG;
   enum bptype type_wanted = (flag & BP_HARDWAREFLAG
 			     ? bp_hardware_breakpoint
@@ -14269,6 +14449,126 @@ breakpoint::steal_locations (program_space *pspace)
   return ret;
 }
 
+#ifdef NVIDIA_CUDA_GDB
+bool
+cuda_sass_breakpoint::add_location_for_module (cuda_module *module)
+{
+  gdb_assert (module != nullptr);
+  gdb_assert (module->loaded ());
+
+  auto matches = cuda_sass_find_function_symbols (module, m_kernel);
+  if (matches.empty ())
+    return false;
+
+  if (matches.size () > 1)
+    {
+      warning (_ ("SASS breakpoint %d is ambiguous in module 0x%llx; "
+		  "use a mangled kernel/function name."),
+	       number, (unsigned long long) module->id ());
+      return false;
+    }
+
+  const auto &match = matches.front ();
+  std::optional<cuda_sass_instruction_record> record;
+  switch (m_selector_kind)
+    {
+    case cuda_sass_selector_instruction_number:
+      record = module->disassembler ()->get_instruction_by_number (
+	  match.linkage_name, match.entry_pc, (uint32_t) m_selector_value);
+      break;
+    case cuda_sass_selector_offset:
+      record = module->disassembler ()->get_instruction_by_offset (
+	  match.linkage_name, match.entry_pc, m_selector_value);
+      break;
+    default:
+      break;
+    }
+
+  if (!record.has_value ())
+    {
+      const char *location
+	  = locspec != nullptr ? locspec->to_string () : nullptr;
+      if (location == nullptr)
+	location = "<unknown>";
+      warning (_ ("SASS breakpoint %d could not resolve %s in "
+		  "module 0x%llx."),
+	       number, location,
+	       (unsigned long long) module->id ());
+      return false;
+    }
+
+  CORE_ADDR addr = record->pc;
+  if (!cuda_is_device_code_address (addr))
+    return false;
+
+  struct gdbarch *arch = cuda_get_gdbarch ();
+  if (arch == nullptr)
+    return false;
+
+  program_space *module_pspace = module->objfile ()->pspace ();
+  scoped_restore_current_pspace_and_thread restore_pspace_thread;
+  switch_to_program_space_and_thread (module_pspace);
+
+  addr = adjust_breakpoint_address (arch, addr, type, module_pspace);
+
+  for (bp_location &loc : locations ())
+    if (loc.pspace == module_pspace
+	&& (loc.address == addr || loc.requested_address == addr))
+      return false;
+
+  symtab_and_line sal = find_pc_line (addr, 0);
+  sal.pc = addr;
+  sal.section = find_pc_overlay (addr);
+  sal.pspace = module_pspace;
+  sal.explicit_pc = 0;
+
+  bp_location *loc = add_location (sal);
+  loc->address = addr;
+  loc->requested_address = addr;
+  gdbarch = arch;
+
+  cuda_trace_breakpoint (
+      "added SASS breakpoint location: breakpoint %d address 0x%llx "
+      "module 0x%llx",
+      number, (unsigned long long) addr, (unsigned long long) module->id ());
+
+  return true;
+}
+
+bool
+cuda_sass_breakpoint::resolve_locations (program_space *filter_pspace,
+					 bool notify)
+{
+  bp_location_list existing_locations = steal_locations (filter_pspace);
+  bool resolved = false;
+
+  for (auto &iter : cuda_state::modules ())
+    {
+      cuda_module *module = iter.second.get ();
+      if (module == nullptr || !module->loaded ()
+	  || module->objfile () == nullptr)
+	continue;
+
+      if (filter_pspace != nullptr
+	  && module->objfile ()->pspace () != filter_pspace)
+	continue;
+
+      resolved |= add_location_for_module (module);
+    }
+
+  if (notify && !locations_are_equal (existing_locations, locations ()))
+    notify_breakpoint_modified (this);
+
+  return resolved;
+}
+
+void
+cuda_sass_breakpoint::re_set (program_space *filter_pspace)
+{
+  resolve_locations (filter_pspace, true);
+}
+#endif
+
 /* Create new breakpoint locations for B (a hardware or software
    breakpoint) based on SALS and SALS_END.  If SALS_END.NELTS is not
    zero, then B is a ranged breakpoint.  Only recreates locations for
@@ -16135,6 +16435,16 @@ specified name as a complete fully-qualified name instead."
    COMMAND should be a string constant containing the name of the
    command.  */
 
+#ifdef NVIDIA_CUDA_GDB
+#define CUDA_SASS_BREAK_ARGS_HELP \
+"SASS locations are selected with `-sass KERNEL:NUMBER' or\n\
+`-sass KERNEL+OFFSET'.  NUMBER is the one-based instruction number\n\
+shown by `sass KERNEL'; OFFSET is a SASS offset in the function.\n\
+\n"
+#else
+#define CUDA_SASS_BREAK_ARGS_HELP ""
+#endif
+
 #define BREAK_ARGS_HELP(command) \
 command" [PROBE_MODIFIER] [LOCATION] [thread THREADNUM]\n\
 \t[-force-condition] [if CONDITION]\n\
@@ -16153,7 +16463,7 @@ CONDITION is a boolean expression.\n\
 \n\
 With the \"-force-condition\" flag, the condition is defined even when\n\
 it is invalid for all current locations.\n\
-\n" LOCATION_SPEC_HELP_STRING "\n\n\
+\n" CUDA_SASS_BREAK_ARGS_HELP LOCATION_SPEC_HELP_STRING "\n\n\
 Multiple breakpoints at one place are permitted, and useful if their\n\
 conditions are different.\n\
 \n\
