@@ -815,7 +815,6 @@ DEF_API_CALL(getGridInfo)(uint32_t devId, uint64_t gridId, CUDBGGridInfo *info)
 	info->blockDim.x = gte->blockDimX;
 	info->blockDim.y = gte->blockDimY;
 	info->blockDim.z = gte->blockDimZ;
-	info->parentGridId = gte->parentGridId64;
 	info->origin = gte->origin;
 	if (offsetof(CudbgGridTableEntry, clusterDimZ) < gteSize)
 	{
@@ -1955,44 +1954,15 @@ DEF_API_CALL (getHardwareBarrierInfo) (uint32_t dev, uint32_t sm, uint32_t wp,
   /* Set the barrier scope */
   *scope = (CUDBGBarrierScope)wte->barrierScope;
 
-  /* Check if additional barrier info is available */
   if (offsetof (CudbgWarpTableEntry, additionalBarrierInfo) < wteSize
       && wte->additionalBarrierInfo != 0)
     {
-      /* Try to interpret additionalBarrierInfo as a string table index */
       barrierInfoString
 	= cuCoreGetStrTabByIndex (curcc, wte->additionalBarrierInfo);
     }
 
-  /* If no string available, provide a default based on scope */
   if (!barrierInfoString || strlen (barrierInfoString) == 0)
-    {
-      switch (*scope)
-	{
-	case CUDBG_BARRIER_SCOPE_NONE:
-	  barrierInfoString = "No barrier";
-	  break;
-	case CUDBG_BARRIER_SCOPE_WARP:
-	  barrierInfoString = "Warp barrier";
-	  break;
-	case CUDBG_BARRIER_SCOPE_WARP_GROUP:
-	  barrierInfoString = "Warp group barrier";
-	  break;
-	case CUDBG_BARRIER_SCOPE_BLOCK:
-	  barrierInfoString = "Thread block barrier";
-	  break;
-	case CUDBG_BARRIER_SCOPE_CLUSTER:
-	  barrierInfoString = "Cluster barrier";
-	  break;
-	case CUDBG_BARRIER_SCOPE_KERNEL:
-	  barrierInfoString = "Kernel barrier";
-	  break;
-	case CUDBG_BARRIER_SCOPE_INVALID:
-	default:
-	  barrierInfoString = "No barrier information";
-	  break;
-	}
-    }
+    barrierInfoString = "";
 
   const size_t requiredBufSz = strlen (barrierInfoString) + 1;
   if (msgSz)
@@ -2006,6 +1976,35 @@ DEF_API_CALL (getHardwareBarrierInfo) (uint32_t dev, uint32_t sm, uint32_t wp,
 
   return CUDBG_SUCCESS;
 }
+
+#if CUDBG_API_VERSION_REVISION >= 192
+DEF_API_CALL (readRpcRegisters)
+(uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln, uint32_t *rpcLo,
+ uint32_t *rpcHi)
+{
+  CudbgThreadTableEntry *tte;
+  size_t tteSize;
+
+  TRACE_FUNC ("dev=%u sm=%u wp=%u ln=%u rpcLo=%p rpcHi=%p", dev, sm, wp, ln,
+	      rpcLo, rpcHi);
+
+  GET_TABLE_ENTRY (tte, &tteSize, CUDBG_ERROR_INVALID_LANE,
+		   "ln%u_wp%u_sm%u_dev%u", ln, wp, sm, dev);
+
+  /* RPC.LO/RPC.HI were added to the per-thread coredump entry in
+     CUDA Driver r615; older coredumps don't have these fields.  */
+  if (offsetof (CudbgThreadTableEntry, rpcLo) >= tteSize
+      || offsetof (CudbgThreadTableEntry, rpcHi) >= tteSize)
+    return CUDBG_ERROR_NOT_SUPPORTED;
+
+  if (rpcLo)
+    *rpcLo = tte->rpcLo;
+  if (rpcHi)
+    *rpcHi = tte->rpcHi;
+
+  return CUDBG_SUCCESS;
+}
+#endif
 
 static const struct CUDBGAPI_st cudbgCoreApi = {
   /* Initialization */
@@ -2214,7 +2213,7 @@ static const struct CUDBGAPI_st cudbgCoreApi = {
   /* 12.9 Extensions */
   API_CALL (getCbuWarpState),
   API_CALL (readWarpState),
-  API_CALL (notSupported), /* consumeCudaLogs */
+  API_CALL (notSupported), /* consumeCudaLogs129 */
   API_CALL (notSupported), /* readCPUCallStack */
 
   /* 13.0 Extensions */
@@ -2223,6 +2222,29 @@ static const struct CUDBGAPI_st cudbgCoreApi = {
 
   /* 13.1 Extensions */
   API_CALL (getHardwareBarrierInfo), /* getHardwareBarrierInfo */
+
+  /* 13.2 Extensions */
+  API_CALL (notSupported), /* readRegisterRange */
+  API_CALL (notSupported), /* insertBreakpoint */
+  API_CALL (notSupported), /* removeBreakpoint */
+  API_CALL (notSupported), /* enableBreakpoint */
+  API_CALL (notSupported), /* disableBreakpoint */
+  API_CALL (notSupported), /* isBreakpointEnabled */
+  API_CALL (notSupported), /* getWarpHitBreakpoint */
+  API_CALL (notSupported), /* resumeWarpsUntilPC */
+  API_CALL (notSupported), /* suspendAllDevices */
+  API_CALL (notSupported), /* resumeAllDevices */
+
+  /* 13.4 Extensions */
+#if CUDBG_API_VERSION_REVISION >= 189
+  API_CALL (notSupported), /* getBindlessConstAddress */
+#endif
+#if CUDBG_API_VERSION_REVISION >= 192
+  API_CALL (notSupported), /* setCudaLogRules */
+  API_CALL (notSupported), /* consumeCudaLogs */
+  API_CALL (readRpcRegisters),
+  API_CALL (notSupported), /* writeRpcRegisters */
+#endif
 };
 
 CUDBGAPI cuCoreGetApi(CudaCore *cc)

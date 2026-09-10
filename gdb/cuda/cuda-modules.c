@@ -363,7 +363,7 @@ cuda_module::unload_objfile (bool unlink_file)
 	      m_objfile->original_name, m_id);
 
   // Mark this objfile as being discarded.
-  m_objfile->discarding = 1;
+  m_objfile->discarding = true;
 
   // Use the helper function to add sections
   foreach_cuda_objfile_section ([] (asection *section) {
@@ -381,6 +381,11 @@ cuda_module::unload_objfile (bool unlink_file)
       unlink (m_filename.c_str ());
       m_filename = "";
     }
+
+  // Tell the free_objfile observer whether this is a permanent
+  // removal (device breakpoint handles are stale) or a temporary
+  // rebuild during FUNCTIONS_LOADED (handles are still live).
+  m_objfile->unlinked = unlink_file;
 
   // Request the objfile be destroyed
   m_objfile->unlink ();

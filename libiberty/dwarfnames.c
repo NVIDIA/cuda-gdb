@@ -27,6 +27,11 @@ along with GNU CC; see the file COPYING.  If not, write to
 the Free Software Foundation, 51 Franklin Street - Fifth Floor,
 Boston, MA 02110-1301, USA.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2026 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "dwarf2.h"
 
 #define DW_FIRST_TAG(name, value) \
@@ -49,6 +54,11 @@ Boston, MA 02110-1301, USA.  */
   switch (op) { \
   DW_OP (name, value)
 #define DW_END_OP } return 0; }
+#define DW_BEGIN_OP_LLVM_USER(name, value) \
+  const char *get_DW_OP_LLVM_USER_name (unsigned int op) {     \
+  switch (op) { \
+  DW_OP_LLVM_USER (name, value)
+#define DW_END_OP_LLVM_USER } return 0; }
 #define DW_FIRST_ATE(name, value)			\
   const char *get_DW_ATE_name (unsigned int enc) {	\
   switch (enc) { \
@@ -77,6 +87,7 @@ Boston, MA 02110-1301, USA.  */
 #define DW_AT_DUP(name, value)
 #define DW_OP(name, value) case name: return # name ;
 #define DW_OP_DUP(name, value)
+#define DW_OP_LLVM_USER(name, value) case name: return #name ;
 #define DW_ATE(name, value) case name: return # name ;
 #define DW_ATE_DUP(name, value)
 #define DW_CFA(name, value) case name: return # name ;
@@ -95,6 +106,8 @@ Boston, MA 02110-1301, USA.  */
 #undef DW_END_AT
 #undef DW_FIRST_OP
 #undef DW_END_OP
+#undef DW_BEGIN_OP_LLVM_USER
+#undef DW_END_OP_LLVM_USER
 #undef DW_FIRST_ATE
 #undef DW_END_ATE
 #undef DW_FIRST_CFA

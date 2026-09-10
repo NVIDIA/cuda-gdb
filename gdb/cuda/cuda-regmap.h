@@ -37,6 +37,7 @@ uint32_t regmap_get_register (regmap_t regmap, uint32_t idx);
 uint32_t regmap_get_sp_register (regmap_t regmap, uint32_t idx);
 uint32_t regmap_get_sp_offset (regmap_t regmap, uint32_t idx);
 uint32_t regmap_get_offset (regmap_t regmap, uint32_t idx);
+uint32_t regmap_get_rpc_register (regmap_t regmap, uint32_t idx);
 uint32_t regmap_get_half_register (regmap_t regmap, uint32_t idx,
 				   bool *in_higher_16_bits);
 uint32_t regmap_get_predicate (regmap_t regmap, uint32_t idx);

@@ -202,22 +202,24 @@ cuda_event_unload_elf_image (const uint32_t &dev_id,
   cuda_state::destroy_module (module_id);
 }
 
+/* TODO: CUDBG_EVENT_KERNEL_READY is being removed from the CUDA
+   debugger API. Once the minimum supported driver no longer delivers this
+   event, this handler (along with the legacy break-on-launch fallback that
+   relies on it) becomes dead code and should be removed in the next major
+   release. The new break-on-launch API path (CUDA 13.2+) does not depend on
+   this event - see cuda_options_break_on_launch_api_active(). */
 static void
 cuda_event_kernel_ready (const uint32_t &dev_id, const uint64_t &context_id,
 			 const uint64_t &module_id, const uint64_t &grid_id,
 			 const uint32_t &tid, const uint64_t &virt_code_base,
 			 const CuDim3 &grid_dim, const CuDim3 &block_dim,
-			 const CUDBGKernelType &type,
-			 const uint64_t &parent_grid_id,
-			 const CUDBGKernelOrigin &origin)
+			 const CUDBGKernelType &type)
 {
   CUDA_EVENT_PROFILE (KERNEL_READY);
 
   cuda_trace_event ("CUDBG_EVENT_KERNEL_READY dev_id=%u context_id=0x%lx"
-		    " module_id=0x%lx grid_id=%ld tid=%u type=%u"
-		    " parent_grid_id=%ld",
-		    dev_id, context_id, module_id, (int64_t)grid_id, tid, type,
-		    (int64_t)parent_grid_id);
+		    " module_id=0x%lx grid_id=%ld tid=%u type=%u",
+		    dev_id, context_id, module_id, (int64_t)grid_id, tid, type);
 
   /* Allow smart resumption of device upon breakpoint insertion */
   cuda_device::cuda_device_execution_state_watcher watcher (
@@ -251,7 +253,7 @@ cuda_event_kernel_ready (const uint32_t &dev_id, const uint64_t &context_id,
 
   const auto kernel = cuda_state::create_kernel (
       dev_id, grid_id, virt_code_base, module_id, grid_dim, block_dim,
-      CuDim3{ 0 }, CuDim3{ 0 }, type, origin, parent_grid_id);
+      CuDim3{ 0 }, CuDim3{ 0 }, type);
 
   // Add auto-breakpoints if necessary
   if (cuda_options_auto_breakpoints_needed ())
@@ -266,6 +268,10 @@ cuda_event_kernel_ready (const uint32_t &dev_id, const uint64_t &context_id,
   insert_breakpoints ();
 }
 
+/* TODO: CUDBG_EVENT_KERNEL_FINISHED is being removed from the CUDA
+   debugger API. Once the minimum supported driver no longer delivers this
+   event, this handler becomes dead code and should be removed in the next
+   major release. */
 static void
 cuda_event_kernel_finished (const uint32_t &dev_id, const uint64_t &grid_id)
 {
@@ -386,6 +392,11 @@ cuda_process_event (const CUDBGEvent &event)
 				   elf_image_size, properties);
 	break;
       }
+    /* TODO: CUDBG_EVENT_KERNEL_READY / CUDBG_EVENT_KERNEL_FINISHED are being
+       removed from the CUDA debugger API. These dispatch arms (and the
+       handlers they call) are dead once the minimum supported driver no
+       longer delivers the events, and should be removed in the next major
+       release. */
     case CUDBG_EVENT_KERNEL_READY:
       {
 	const auto &dev_id = event.cases.kernelReady.dev;
@@ -397,11 +408,8 @@ cuda_process_event (const CUDBGEvent &event)
 	const auto &grid_dim = event.cases.kernelReady.gridDim;
 	const auto &block_dim = event.cases.kernelReady.blockDim;
 	const auto &type = event.cases.kernelReady.type;
-	const auto &parent_grid_id = event.cases.kernelReady.parentGridId;
-	const auto &origin = event.cases.kernelReady.origin;
 	cuda_event_kernel_ready (dev_id, context_id, module_id, grid_id, tid,
-				 virt_code_base, grid_dim, block_dim, type,
-				 parent_grid_id, origin);
+				 virt_code_base, grid_dim, block_dim, type);
 	break;
       }
     case CUDBG_EVENT_KERNEL_FINISHED:

@@ -61,8 +61,6 @@ extern mi_cmd_argv_ftype mi_cmd_cuda_info_kernels;
 extern mi_cmd_argv_ftype mi_cmd_cuda_info_clusters;
 extern mi_cmd_argv_ftype mi_cmd_cuda_info_blocks;
 extern mi_cmd_argv_ftype mi_cmd_cuda_info_threads;
-extern mi_cmd_argv_ftype mi_cmd_cuda_info_launch_trace;
-extern mi_cmd_argv_ftype mi_cmd_cuda_info_launch_children;
 extern mi_cmd_argv_ftype mi_cmd_cuda_info_contexts;
 extern mi_cmd_argv_ftype mi_cmd_cuda_info_managed;
 extern mi_cmd_argv_ftype mi_cmd_cuda_info_line;

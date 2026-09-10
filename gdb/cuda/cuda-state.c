@@ -199,7 +199,9 @@ cuda_state::initialize (void)
   // Collect information about this system that doesn't change
   // during the debug session
   cuda_debugapi::get_num_devices (&m_instance.m_num_devices);
-  gdb_assert (m_instance.m_num_devices > 0);
+  // Return early if no devices are found. This can be the case when reading invalid core files.
+  if (m_instance.m_num_devices == 0)
+    return;
 
   // Size and clear the suspended devices mask
   m_instance.m_suspended_devices_mask
@@ -488,12 +490,10 @@ cuda_state::create_kernel (uint32_t dev_id, uint64_t grid_id)
   const auto cluster_dim_preferred = grid_info.preferredClusterDim;
 
   const auto type = grid_info.type;
-  const auto origin = grid_info.origin;
-  const auto parent_grid_id = grid_info.parentGridId;
 
   return create_kernel (dev_id, grid_id, virt_code_base, module_id, grid_dim,
 			block_dim, cluster_dim_default, cluster_dim_preferred,
-			type, origin, parent_grid_id);
+			type);
 }
 
 cuda_kernel *
@@ -501,15 +501,9 @@ cuda_state::create_kernel (uint32_t dev_id, uint64_t grid_id,
 			   uint64_t virt_code_base, uint64_t module_id,
 			   CuDim3 grid_dim, CuDim3 block_dim,
 			   CuDim3 cluster_dim_default,
-			   CuDim3 cluster_dim_preferred, CUDBGKernelType type,
-			   CUDBGKernelOrigin origin, uint64_t parent_grid_id)
+			   CuDim3 cluster_dim_preferred, CUDBGKernelType type)
 {
   gdb_assert (dev_id < m_instance.m_num_devices);
-  // First see if there's a parent kernel for this grid.
-  // If not, create one before proceeding
-  if (parent_grid_id
-      && !cuda_state::find_kernel_by_grid_id (dev_id, parent_grid_id))
-    cuda_state::add_parent_kernel (dev_id, grid_id);
 
   auto module = find_module_by_id (module_id);
   gdb_assert (module);
@@ -517,44 +511,11 @@ cuda_state::create_kernel (uint32_t dev_id, uint64_t grid_id,
   auto kernel_id = m_instance.m_next_kernel_id++;
   auto kernel = std::make_unique<cuda_kernel> (
       kernel_id, dev_id, grid_id, virt_code_base, module, grid_dim, block_dim,
-      cluster_dim_default, cluster_dim_preferred, type, origin,
-      parent_grid_id);
-
-  if (kernel->should_print_kernel_event ())
-    printf_unfiltered (
-	_ ("[Launch of CUDA Kernel %lu (%s%s) on Device %u, level %u]\n"),
-	kernel->id (), kernel->name ().c_str (),
-	kernel->dimensions ().c_str (), kernel->dev_id (), kernel->depth ());
+      cluster_dim_default, cluster_dim_preferred, type);
 
   m_instance.m_kernel_map.emplace (kernel_id, std::move (kernel));
 
   return m_instance.m_kernel_map[kernel_id].get ();
-}
-
-cuda_kernel *
-cuda_state::add_parent_kernel (uint32_t dev_id, uint64_t grid_id)
-{
-  if (!grid_id)
-    return nullptr;
-
-  CUDBGGridStatus grid_status;
-  cuda_debugapi::get_grid_status (dev_id, grid_id, &grid_status);
-  if (grid_status == CUDBG_GRID_STATUS_INVALID)
-    return nullptr;
-
-  CUDBGGridInfo grid_info;
-  cuda_debugapi::get_grid_info (dev_id, grid_id, &grid_info);
-
-  CUDBGGridStatus parent_grid_status;
-  cuda_debugapi::get_grid_status (dev_id, grid_info.parentGridId,
-				  &parent_grid_status);
-  if (parent_grid_status == CUDBG_GRID_STATUS_INVALID)
-    return nullptr;
-
-  CUDBGGridInfo parent_grid_info;
-  cuda_debugapi::get_grid_info (dev_id, grid_info.parentGridId,
-				&parent_grid_info);
-  return cuda_state::create_kernel (dev_id, parent_grid_info.gridId64);
 }
 
 void
@@ -578,12 +539,6 @@ cuda_state::destroy_kernel (cuda_kernel *kernel)
   CUDA_STATE_TRACE_DEV (device (kernel->dev_id ()),
 			"kernel %lu dev_id %u grid_id %ld", kernel->id (),
 			kernel->dev_id (), (int64_t)kernel->grid_id ());
-
-  if (kernel->should_print_kernel_event ())
-    printf_unfiltered (
-	_ ("[Termination of CUDA Kernel %lu (%s%s) on Device %u, level %u]\n"),
-	kernel->id (), kernel->name ().c_str (),
-	kernel->dimensions ().c_str (), kernel->dev_id (), kernel->depth ());
 
   m_instance.m_kernel_map.erase (kernel->id ());
 }
@@ -656,6 +611,50 @@ cuda_state::lane_get_cuda_exception_string (uint32_t dev_id, uint32_t sm_id,
 			dev_id, sm_id, wp_id, ln_id);
       buf[0] = '\0';
     }
+}
+
+/******************************************************************************
+ *
+ *			      Breakpoint Facades
+ *
+ ******************************************************************************/
+
+bool
+cuda_state::insert_breakpoint (uint32_t dev_id, uint64_t addr,
+			       CUDBGBreakpointHandle *handle)
+{
+  CUDA_STATE_TRACE ("dev %u addr 0x%lx", dev_id, addr);
+  gdb_assert (dev_id < m_instance.m_num_devices);
+
+  return cuda_debugapi::insert_breakpoint (dev_id, addr, handle);
+}
+
+bool
+cuda_state::remove_breakpoint (CUDBGBreakpointHandle handle)
+{
+  CUDA_STATE_TRACE ("handle 0x%lx", (uint64_t)handle);
+
+  return cuda_debugapi::remove_breakpoint (handle);
+}
+
+bool
+cuda_state::is_break_on_launch_supported ()
+{
+  return cuda_debugapi::is_break_on_launch_supported ();
+}
+
+bool
+cuda_state::enable_break_on_launch ()
+{
+  CUDA_STATE_TRACE ("");
+  return cuda_debugapi::enable_break_on_launch ();
+}
+
+bool
+cuda_state::disable_break_on_launch ()
+{
+  CUDA_STATE_TRACE ("");
+  return cuda_debugapi::disable_break_on_launch ();
 }
 
 /******************************************************************************
@@ -1606,6 +1605,11 @@ cuda_warp::invalidate (bool quietly, bool recurse)
   m_cbu_state_p = false;
   m_cbu_state = { 0 };
 
+  // Reset cached breakpoint handle
+  m_hit_bp_handle_p = false;
+  m_hit_bp_handle_valid = false;
+  m_hit_bp_handle = CUDBG_BREAKPOINT_HANDLE_INVALID;
+
   // Quietly invalidate the lanes
   if (recurse)
     for (auto &ln : m_lanes)
@@ -1818,6 +1822,35 @@ cuda_warp::get_cbu_state ()
   return m_cbu_state;
 }
 
+// Lazy-fetch the hit-breakpoint handle.
+//
+// Batch mode, rev >= 176: decode() sets _p=true (attribute present or
+//   absent), so the guard is false and no API call is made.
+// Batch mode, rev < 176: decode() leaves _p=false; the API call runs
+//   but short-circuits at its own revision guard, then _p is set true
+//   to prevent repeated calls.
+// Incremental mode: decode() is never called; the API fetch proceeds
+//   on first access as the sole source of truth.
+void
+cuda_warp::update_hit_breakpoint_handle ()
+{
+  if (valid () && !m_hit_bp_handle_p)
+    {
+      m_hit_bp_handle_valid = cuda_debugapi::get_warp_hit_breakpoint (
+	  dev_idx (), sm_idx (), warp_idx (), &m_hit_bp_handle);
+      m_hit_bp_handle_p = true;
+    }
+}
+
+bool
+cuda_warp::get_hit_breakpoint_handle (CUDBGBreakpointHandle *handle)
+{
+  update_hit_breakpoint_handle ();
+  if (m_hit_bp_handle_valid)
+    *handle = m_hit_bp_handle;
+  return m_hit_bp_handle_valid;
+}
+
 uint32_t
 cuda_warp::registers_allocated ()
 {
@@ -1979,6 +2012,10 @@ cuda_lane::invalidate (bool quietly)
   // Just clear the valid predicate bits
   m_predicates_p = false;
 
+  // Just clear the RPC registers
+  m_rpc_registers_p[0] = false;
+  m_rpc_registers_p[1] = false;
+
   set_timestamp (0);
 }
 
@@ -2097,6 +2134,47 @@ cuda_lane::set_register (uint32_t regno, uint32_t value)
 
   m_registers[regno] = value;
   m_registers_p.set (regno, true);
+}
+
+uint32_t
+cuda_lane::get_rpc_register (uint32_t regno)
+{
+  CUDA_STATE_ERROR_IF (!valid (), "invalid lane");
+
+  // Validate the parameters
+  CUDA_STATE_ERROR_IF (regno >= CUDA_REG_MAX_RPC_REGISTERS,
+		       "Attempting to get beyond RPC register: register out of range "
+		       "for this device");
+
+  if (!m_rpc_registers_p[regno])
+    {
+	cuda_debugapi::read_rpc_register (dev_idx (), sm_idx (), warp_idx (),
+					  lane_idx (), regno, &m_rpc_registers[regno]);
+	m_rpc_registers_p[regno] = true;
+    }
+  // Internal consistency checks
+  gdb_assert (m_rpc_registers_p[regno]);
+
+  CUDA_STATE_TRACE_LANE (this, "RPC.%s = 0x%08x", regno == 0 ? "LO" : "HI", m_rpc_registers[regno]);
+
+  return m_rpc_registers[regno];
+}
+
+void
+cuda_lane::set_rpc_register (uint32_t regno, uint32_t value)
+{
+  CUDA_STATE_ERROR_IF (!valid (), "invalid lane");
+
+  // Validate the parameters
+  CUDA_STATE_ERROR_IF (regno >= CUDA_REG_MAX_RPC_REGISTERS,
+		       "Attempting to set beyond RPC register: register out of range "
+		       "for this device");
+
+  cuda_debugapi::write_rpc_register (dev_idx (), sm_idx (), warp_idx (),
+				 lane_idx (), regno, value);
+
+  m_rpc_registers[regno] = value;
+  m_rpc_registers_p[regno] = true;
 }
 
 bool
@@ -2378,6 +2456,11 @@ cuda_warp::decode (const CUDBGDeviceInfoSizes &info_sizes,
   m_cbu_state_p = false;
   m_cbu_state = { 0 };
 
+  // Clear cached breakpoint handle
+  m_hit_bp_handle_p = false;
+  m_hit_bp_handle_valid = false;
+  m_hit_bp_handle = CUDBG_BREAKPOINT_HANDLE_INVALID;
+
   // Clear warp resources
   m_shared_mem_size = 0;
   m_registers_allocated = 0;
@@ -2464,6 +2547,16 @@ cuda_warp::decode (const CUDBGDeviceInfoSizes &info_sizes,
 		  m_cluster_exception_target_block_idx.z);
 	      break;
 
+	    case CUDBG_WARP_ATTRIBUTE_HIT_BREAKPOINT_HANDLE:
+	      m_hit_bp_handle = *(CUDBGBreakpointHandle *)ptr;
+	      m_hit_bp_handle_p = true;
+	      m_hit_bp_handle_valid = true;
+	      CUDA_STATE_TRACE_DOMAIN_WARP (
+		  CUDA_TRACE_STATE_DECODE, this,
+		  "Decoding Warp HIT_BREAKPOINT_HANDLE 0x%lx",
+		  (uint64_t)m_hit_bp_handle);
+	      break;
+
 	      // Ignore anything we don't understand
 	    default:
 	      // Unknown warp attribute, warn if we've not seen it before
@@ -2520,6 +2613,12 @@ cuda_warp::decode (const CUDBGDeviceInfoSizes &info_sizes,
       "exception %u errorpc 0x%lx",
       start_offset, updated_lane_mask, warp_info->validLanes,
       warp_info->activeLanes, exception, m_error_pc);
+
+  // Rev >= 176 backends always encode HIT_BREAKPOINT_HANDLE when
+  // applicable, so mark the cached bp handle value as valid to skip
+  // the API call fallback.
+  if (cuda_debugapi::api_version ().m_revision >= 176)
+    m_hit_bp_handle_p = true;
 
   // We are now valid
   set_timestamp (cuda_clock ());

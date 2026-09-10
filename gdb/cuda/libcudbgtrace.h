@@ -340,6 +340,10 @@ cudbgTraceValue (CUDBGEvent *value)
       PRINT_EVENT_FIELD (value, elfImageLoaded, handle);
       PRINT_EVENT_FIELD (value, elfImageLoaded, properties);
       break;
+      /* TODO: CUDBG_EVENT_KERNEL_READY / CUDBG_EVENT_KERNEL_FINISHED are
+	 being removed from the CUDA debugger API. These trace arms become
+	 unreachable once the minimum supported driver no longer delivers
+	 the events, and should be removed in the next major release. */
       CASE_PRINT_ENUM_VALUE (CUDBG_EVENT_KERNEL_READY)
       PRINT_EVENT_FIELD (value, kernelReady, dev);
       PRINT_EVENT_FIELD (value, kernelReady, tid);
@@ -351,7 +355,6 @@ cudbgTraceValue (CUDBGEvent *value)
       PRINT_EVENT_FIELD (value, kernelReady, gridDim);
       PRINT_EVENT_FIELD (value, kernelReady, blockDim);
       PRINT_EVENT_FIELD (value, kernelReady, type);
-      PRINT_EVENT_FIELD (value, kernelReady, parentGridId);
       PRINT_EVENT_FIELD (value, kernelReady, origin);
       break;
       CASE_PRINT_ENUM_VALUE (CUDBG_EVENT_KERNEL_FINISHED)
@@ -484,7 +487,6 @@ cudbgTraceValue (CUDBGGridInfo *value)
   PRINT_CUDBG_GRID_INFO_FIELD (value, gridDim);
   PRINT_CUDBG_GRID_INFO_FIELD (value, blockDim);
   PRINT_CUDBG_GRID_INFO_FIELD (value, type);
-  PRINT_CUDBG_GRID_INFO_FIELD (value, parentGridId);
   PRINT_CUDBG_GRID_INFO_FIELD (value, origin);
   PRINT_CUDBG_GRID_INFO_FIELD (value, clusterDim);
 }

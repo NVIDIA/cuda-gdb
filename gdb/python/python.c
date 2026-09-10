@@ -239,20 +239,8 @@ gdbpy_enter::gdbpy_enter  (struct gdbarch *gdbarch,
   m_language (language == nullptr ? nullptr : current_language)
 {
   /* We should not ever enter Python unless initialized.  */
-#ifdef NVIDIA_PYTHON_DYNLIB
-  if (!is_python_available () || !gdb_python_initialized)
-    {
-      /* Try to use the init error string if there is one. */
-      auto err_str = get_python_init_error ();
-      if (err_str)
-	error(_("%s"), err_str);
-      else
-	error (_("Python not initialized"));
-    }
-#else
   if (!gdb_python_initialized)
     error (_("Python not initialized"));
-#endif
 
   m_previous_active = set_active_ext_lang (&extension_language_python);
 
@@ -305,9 +293,6 @@ gdbpy_enter::finalize ()
 static void
 gdbpy_set_quit_flag (const struct extension_language_defn *extlang)
 {
-#ifdef NVIDIA_PYTHON_DYNLIB
-  if (is_python_available ())
-#endif
   PyErr_SetInterrupt ();
 }
 
@@ -316,10 +301,6 @@ gdbpy_set_quit_flag (const struct extension_language_defn *extlang)
 static bool
 gdbpy_check_quit_flag (const struct extension_language_defn *extlang)
 {
-#ifdef NVIDIA_PYTHON_DYNLIB
-  if (!is_python_available ())
-    return false;
-#endif
   if (!gdb_python_initialized)
     return false;
 
@@ -339,9 +320,6 @@ eval_python_command (const char *command, int start_symbol,
 {
   PyObject *m, *d;
 
-#ifdef NVIDIA_PYTHON_DYNLIB
-  python_print_library ();
-#endif
   m = PyImport_AddModule ("__main__");
   if (m == NULL)
     return -1;
@@ -423,9 +401,6 @@ python_interactive_command (const char *arg, int from_tty)
   struct ui *ui = current_ui;
   int err;
 
-#ifdef NVIDIA_PYTHON_DYNLIB
-  python_print_library ();
-#endif
   scoped_restore save_async = make_scoped_restore (&current_ui->async, 0);
 
   arg = skip_spaces (arg);
@@ -464,9 +439,6 @@ python_interactive_command (const char *arg, int from_tty)
 static int
 python_run_simple_file (FILE *file, const char *filename)
 {
-#ifdef NVIDIA_PYTHON_DYNLIB
-  python_print_library ();
-#endif
   std::string contents = read_remainder_of_file (file);
   return eval_python_command (contents.c_str (), Py_file_input, filename);
 }
@@ -495,9 +467,6 @@ static void
 gdbpy_eval_from_control_command (const struct extension_language_defn *extlang,
 				 struct command_line *cmd)
 {
-#ifdef NVIDIA_PYTHON_DYNLIB
-  python_print_library ();
-#endif
   if (cmd->body_list_1 != nullptr)
     error (_("Invalid \"python\" block structure."));
 
@@ -516,9 +485,6 @@ python_command (const char *arg, int from_tty)
 {
   gdbpy_enter enter_py;
 
-#ifdef NVIDIA_PYTHON_DYNLIB
-  python_print_library ();
-#endif
   scoped_restore save_async = make_scoped_restore (&current_ui->async, 0);
 
   arg = skip_spaces (arg);
@@ -2136,10 +2102,6 @@ python_interactive_command (const char *arg, int from_tty)
 static void
 python_command (const char *arg, int from_tty)
 {
-#ifdef NVIDIA_PYTHON_DYNLIB
-  if (!is_python_available ())
-    error (_("Python scripting is not supported(libpython could not be found)."));
-#endif
   python_interactive_command (arg, from_tty);
 }
 
@@ -2284,15 +2246,6 @@ static struct cmd_list_element *user_set_python_list;
 static struct cmd_list_element *user_show_python_list;
 
 /* Initialize the Python code.  */
-#ifdef NVIDIA_PYTHON_DYNLIB
-#ifndef HAVE_PYTHON
-bool
-is_python_available (void)
-{
-  return false;
-}
-#endif
-#endif
 #ifdef HAVE_PYTHON
 
 /* This is installed as a final cleanup and cleans up the
@@ -2548,10 +2501,6 @@ do_start_initialization ()
     { nullptr, nullptr }
   };
 
-#ifdef NVIDIA_PYTHON_DYNLIB
-  if (!is_python_available ())
-    return false;
-#endif
 #ifdef NVIDIA_CUDA_GDB
   /* Block signals before calling python interpreter to avoid intereference
    * between GDB and Python threads that can cause GDB hangs. */
@@ -2941,10 +2890,6 @@ python_initialization_failed_warnings ()
 static void
 gdbpy_initialize (const struct extension_language_defn *extlang)
 {
-#ifdef NVIDIA_PYTHON_DYNLIB
-  if (!is_python_available ())
-    return;
-#endif
   if (!do_start_initialization ())
     {
       if (py_isinitialized)

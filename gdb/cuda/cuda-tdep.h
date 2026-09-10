@@ -58,6 +58,9 @@ struct gdbarch;
 // Encoded register for the zero register
 #define CUDA_UREG_ZERO_REGISTER 255u
 
+// Maximum numbers of RPC Registers - RPC.HI and RPC.LO
+#define CUDA_REG_MAX_RPC_REGISTERS 2u
+
 /*Return values that exceed 384-bits in size are returned in memory.
    (R4-R15 = 12 4-byte registers = 48-bytes = 384-bits that can be
    used to return values in registers). */
@@ -138,8 +141,13 @@ struct cuda_gdbarch_tdep : gdbarch_tdep_base
       = first_upred_regnum + (CUDA_UREG_MAX_PREDICATES - 1);
   static constexpr int true_upred_regnum = last_upred_regnum;
 
+  // RPC Registers
+  static constexpr int first_rpc_regnum = last_upred_regnum + 1;
+  static constexpr int last_rpc_regnum
+      = first_rpc_regnum + (CUDA_REG_MAX_RPC_REGISTERS - 1);
+
   // Regular registers, predicates, uniform registers, uniform predicates, PC
-  static constexpr int num_regs = last_upred_regnum + 1;
+  static constexpr int num_regs = last_rpc_regnum + 1;
 
   // Pseudo-Registers
   static constexpr int first_pseudo_regnum = num_regs;
@@ -286,6 +294,13 @@ cuda_pc_regnum (struct gdbarch *gdbarch)
 {
   cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
   return tdep->pc_regnum;
+}
+
+static inline bool
+cuda_rpc_register_p (struct gdbarch *gdbarch, int regnum)
+{
+  cuda_gdbarch_tdep *tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+  return regnum >= tdep->first_rpc_regnum && regnum <= tdep->last_rpc_regnum;
 }
 
 // Signal handling information

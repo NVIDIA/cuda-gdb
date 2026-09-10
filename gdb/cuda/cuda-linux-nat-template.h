@@ -126,11 +126,11 @@ cuda_nat_linux<BaseTarget>::cuda_xfer_siginfo (enum target_object object,
   if (readbuf)
     {
       siginfo->si_signo = cuda_get_signo ();
-      memcpy (readbuf, siginfo + offset, len);
+      memcpy (readbuf, buf + offset, len);
     }
   else
     {
-      memcpy (siginfo + offset, writebuf, len);
+      memcpy (buf + offset, writebuf, len);
       cuda_set_signo (siginfo->si_signo);
     }
 
@@ -454,22 +454,32 @@ cuda_nat_linux<BaseTarget>::resume (ptid_t ptid, int sstep, enum gdb_signal ts)
   cuda_notification_mark_consumed ();
   cuda_sigtrap_restore_settings ();
 
-  /* If a notification arrived while a previous event was being serviced
-     (aliased event), the devices may already be suspended at a breakpoint.
-     Don't process the event inline (the generic handler treats
-     ALL_DEVICES_SUSPENDED as a NOP) and don't resume the devices (that
-     would blow past the breakpoint).  Only resume the host so it can
-     receive the SIGURG, then schedule a new notification so the next
-     ::wait cycle handles the event with full suspend/breakpoint context.  */
+  /* Aliased event: a notification fired while a previous event was being
+     serviced.  Two cases:
+       - A real suspend event is queued behind the aliased
+	 SIGURG.  Resend so the next cuda_wait drains it; do NOT resume the
+	 devices (would blow past the breakpoint).
+       - The suspend event was already drained alongside the
+	 original notification, so the alias is phantom.  Fall through to the
+	 normal resume path so cuda_sstep_execute can step past the BRK.
+     cuda_notification_suspend_drained() distinguishes the two: it's set by
+     handle_suspended_event when an ALL_DEVICES_SUSPENDED is drained in this
+     wait epoch.  */
   if (cuda_notification_aliased_event ())
     {
       cuda_notification_reset_aliased_event ();
-      int host_sstep = cuda_current_focus::isDevice () ? 0 : sstep;
-      BaseTarget::resume (ptid, host_sstep, ts);
-      cuda_notification_resend ();
-      cuda_clock_increment ();
-      cuda_trace ("cuda_resume: done (aliased event resend)");
-      return;
+
+      if (!cuda_notification_suspend_drained ())
+	{
+	  int host_sstep = cuda_current_focus::isDevice () ? 0 : sstep;
+	  BaseTarget::resume (ptid, host_sstep, ts);
+	  cuda_notification_resend ();
+	  cuda_clock_increment ();
+	  cuda_trace ("cuda_resume: done (aliased event resend)");
+	  return;
+	}
+
+      cuda_trace ("cuda_resume: phantom aliased event, falling through");
     }
 
   cuda_trace ("cuda_resume: sstep %d host_sstep %d device focus %u",
@@ -539,23 +549,27 @@ cuda_nat_linux<BaseTarget>::resume (ptid_t ptid, int sstep, enum gdb_signal ts)
   cuda_trace ("cuda_resume: done");
 }
 
-#if CUDBG_API_VERSION_REVISION > 167
 /* Check all broken warps for Break-on-Launch (BoL) hits.
 
    Iterates over every warp with a breakpoint/trap indicator using a coord_set,
-   queries each with get_warp_hit_breakpoint, and creates auto breakpoints for
-   any that report CUDBG_BREAKPOINT_HANDLE_BREAK_ON_LAUNCH.
+   queries each via the cached hit-breakpoint handle on the warp state object,
+   and creates auto breakpoints for any that report
+   CUDBG_BREAKPOINT_HANDLE_BREAK_ON_LAUNCH.
 
    Multiple warps from the same kernel share the same PC, so we track seen
    PCs locally to avoid calling cuda_auto_breakpoint_break_on_launch_hit
    (which involves prologue skipping, address adjustment, and a breakpoint
-   scan) multiple times for redundant warps. This is a performance optimization.
+   scan) multiple times for redundant warps. This is a performance
+   optimization.
 
-   Returns true if at least one BoL auto breakpoint was created.  */
-static bool
+   Inserts the auto breakpoints it creates and returns report if any was placed
+   at a warp's current PC (so the caller must report now rather than resume past
+   it), resume if all were placed ahead of their warps, or none if there were no
+   BoL warps to handle.  */
+static cuda_bol_action
 check_break_on_launch_warps ()
 {
-  bool bol_found = false;
+  cuda_bol_action result = cuda_bol_action::none;
   std::unordered_set<uint64_t> seen_pcs;
 
   cuda_coord_set<cuda_coord_set_type::warps,
@@ -569,8 +583,8 @@ check_break_on_launch_warps ()
       uint32_t sm = coord.physical ().sm ();
       uint32_t wp = coord.physical ().wp ();
 
-      CUDBGBreakpointHandle handle = 0;
-      if (!cuda_debugapi::get_warp_hit_breakpoint (dev, sm, wp, &handle))
+      CUDBGBreakpointHandle handle = CUDBG_BREAKPOINT_HANDLE_INVALID;
+      if (!cuda_state::warp_get_hit_breakpoint_handle (dev, sm, wp, &handle))
 	continue;
 
       if (handle != CUDBG_BREAKPOINT_HANDLE_BREAK_ON_LAUNCH)
@@ -603,13 +617,26 @@ check_break_on_launch_warps ()
 	  continue;
 	}
 
-      if (cuda_auto_breakpoint_break_on_launch_hit (pc, module))
-	bol_found = true;
+      /* "report" dominates "resume": if any warp is already sitting on its
+	 breakpoint we must report now, otherwise resuming would step it past
+	 and miss it.  Warps whose breakpoint was placed ahead are already
+	 inserted and will be hit on the next manual resume.  */
+      cuda_bol_action action
+	  = cuda_auto_breakpoint_break_on_launch_hit (pc, module);
+      if (action == cuda_bol_action::report)
+	result = cuda_bol_action::report;
+      else if (result == cuda_bol_action::none)
+	result = cuda_bol_action::resume;
     }
 
-  return bol_found;
+  /* Insert the auto breakpoints we just created so they take effect (for the
+     resume case) and so bpstat can attribute the stop to them (for the
+     report case).  */
+  if (result != cuda_bol_action::none)
+    insert_breakpoints ();
+
+  return result;
 }
-#endif /* CUDBG_API_VERSION_REVISION > 167 */
 
 /*CUDA_WAIT:
 
@@ -638,6 +665,9 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
   ptid_t r = null_ptid;
 
   cuda_trace ("cuda_wait");
+
+  /* Reset per-epoch suspend-drained flag.  */
+  cuda_notification_clear_suspend_drained ();
 
   /*
    * Check if any thread is currently in a dynamic function call.
@@ -814,6 +844,8 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
 	  for (auto dev = 0; dev < cuda_state::get_num_devices (); ++dev)
 	    cuda_state::set_suspended_devices_mask (dev);
 	  cuda_state::update_all_state (CUDBG_RESPONSE_TYPE_UPDATE);
+	  /* Mark this epoch for cuda_resume's aliased-event discriminator.  */
+	  cuda_notification_set_suspend_drained ();
 	  return false;
 	}
       default:
@@ -944,29 +976,30 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
 	    {
 	      gdb_assert (tp->new_cuda_coords.valid ());
 
-#if CUDBG_API_VERSION_REVISION > 167
 	      /* Check ALL broken warps for Break-on-Launch hits.  This is
 		 independent of which warp cuda_breakpoint_hit_p selected,
-		 ensuring every BoL warp is handled.  */
-	      bool bol_found = check_break_on_launch_warps ();
-	      if (bol_found)
-		insert_breakpoints ();
+		 ensuring every BoL warp is handled.  It creates and inserts
+		 the auto breakpoints and returns whether we must resume.  */
+	      cuda_bol_action bol_action = check_break_on_launch_warps ();
 
 	      /* Query the handle for the warp that cuda_breakpoint_hit_p
 		 selected so we can decide whether to report the stop or
 		 treat it as spurious.  */
-	      CUDBGBreakpointHandle handle = 0;
-	      bool got_handle = cuda_debugapi::get_warp_hit_breakpoint (
+	      CUDBGBreakpointHandle handle = CUDBG_BREAKPOINT_HANDLE_INVALID;
+	      bool got_handle = cuda_state::warp_get_hit_breakpoint_handle (
 		  tp->new_cuda_coords.physical ().dev (),
 		  tp->new_cuda_coords.physical ().sm (),
 		  tp->new_cuda_coords.physical ().wp (), &handle);
 
-	      /* If BoL warps were found and the selected warp is itself a
-		 BoL hit (not a real breakpoint), treat the stop as spurious
-		 so GDB resumes and hits the auto breakpoint we just
-		 placed.  If the selected warp hit a real breakpoint at the
-		 same time, fall through and report the stop.  */
-	      if (bol_found
+	      /* If a BoL breakpoint was placed ahead of the warps and the
+		 selected warp is itself a BoL hit (not a real breakpoint),
+		 treat the stop as spurious so GDB resumes and the kernel hits
+		 the auto breakpoint we just placed.  For a zero-length
+		 prologue the warp is already at the breakpoint, so we fall
+		 through and report the stop instead of resuming past it.  If
+		 the selected warp hit a real breakpoint at the same time, also
+		 fall through and report the stop.  */
+	      if (bol_action == cuda_bol_action::resume
 		  && (!got_handle
 		      || handle == CUDBG_BREAKPOINT_HANDLE_BREAK_ON_LAUNCH))
 		{
@@ -1011,20 +1044,16 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
 		}
 	      else
 		{
+		  /* Legacy drivers (revision < 176) do not support
+		     get_warp_hit_breakpoint so we cannot distinguish a
+		     GDB breakpoint from a hardcoded SIGTRAP/BRK
+		     instruction.  cuda_breakpoint_hit_p returned true
+		     above, but the warp may have broken for either
+		     reason.  */
 		  cuda_trace (
 		      "cuda_wait: stopped because there are broken warps "
 		      "(induced trap?)");
 		}
-#else
-	      /* Legacy path for CUDA < 13.2: use old breakpoint detection
-	       * logic.  */
-	      if (cuda_breakpoint_hit_p (tp->new_cuda_coords))
-		cuda_trace ("cuda_wait: stopped because of a breakpoint");
-	      else
-		cuda_trace (
-		    "cuda_wait: stopped because there are broken warps "
-		    "(induced trap?)");
-#endif
 	      /* Alias received signal to SIGTRAP when hitting a breakpoint
 	       */
 	      cuda_set_signo (GDB_SIGNAL_TRAP);
@@ -1098,6 +1127,13 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
     }
   else if (handled_events)
     cuda_trace ("cuda_wait: waited for handling CUDA events.");
+  else if (cuda_notification_received ())
+    {
+      /* Spurious CUDA-notification wake-up.  cuda_notification_analyze
+	 above identified the SIGURG as ours (matched tid + sent flag),
+	 but we drained no events from either queue in this wait cycle. */
+      cuda_trace ("cuda_wait: spurious CUDA notification, nothing drained");
+    }
   else if (ws->kind () == TARGET_WAITKIND_STOPPED
 	   || ws->kind () == TARGET_WAITKIND_SIGNALLED)
     {
@@ -1269,6 +1305,19 @@ cuda_nat_linux<BaseTarget>::insert_breakpoint (struct gdbarch *gdbarch,
     return BaseTarget::insert_breakpoint (current_inferior ()->arch (),
 					  bp_tgt);
 
+  /* If the handle is already valid the breakpoint is still physically
+     present on the device (e.g. after an incremental FUNCTIONS_LOADED
+     reload of the same module).  Skip the redundant API call.  */
+  if (bp_tgt->cuda_bp_handle != CUDBG_BREAKPOINT_HANDLE_INVALID)
+    {
+      cuda_trace ("insert_breakpoint: addr 0x%llx already inserted "
+		  "with handle 0x%llx, skipping",
+		  (unsigned long long)bp_tgt->reqstd_address,
+		  (unsigned long long)bp_tgt->cuda_bp_handle);
+      bp_tgt->placed_address = bp_tgt->reqstd_address;
+      return 0;
+    }
+
   /* Insert the breakpoint on whatever device accepts it (valid address). */
   bool inserted = false;
   cuda_module *module
@@ -1291,8 +1340,10 @@ cuda_nat_linux<BaseTarget>::insert_breakpoint (struct gdbarch *gdbarch,
 	  if (!device->suspend (true))
 	    need_resume = false;
 	}
-      inserted
-	  |= cuda_debugapi::set_breakpoint (dev_id, bp_tgt->reqstd_address);
+
+      inserted = cuda_state::insert_breakpoint (
+	  dev_id, bp_tgt->reqstd_address, &bp_tgt->cuda_bp_handle);
+
       if (need_resume)
 	device->resume ();
     }
@@ -1315,35 +1366,41 @@ cuda_nat_linux<BaseTarget>::remove_breakpoint (struct gdbarch *gdbarch,
     return BaseTarget::remove_breakpoint (current_inferior ()->arch (), bp_tgt,
 					  reason);
 
-  /* Removed the breakpoint on whatever device accepts it (valid address). */
-  bool removed = false;
-  cuda_module *module
+  const auto *module
       = cuda_module::find_cuda_module_by_address (bp_tgt->placed_address);
-  if (module)
+  if (!module)
     {
-      uint32_t dev_id = module->context ()->dev_id ();
-      /* If the device is currently executing, we want to halt it temporarily
-	 in order to remove the breakpoint. We don't want
-	 to update the state object when we do this since we will be
-	 temporarily halting execution. */
-      bool need_resume = false;
-      auto device = cuda_state::device (dev_id);
-      if (!device->suspended ())
-	{
-	  /* We need to stop the device to remove the breakpoint */
-	  need_resume = true;
-	  /* The device may have already been suspended. In that case,
-	     don't resume. */
-	  if (!device->suspend (true))
-	    need_resume = false;
-	}
-      /* We need to remove breakpoints even if no kernels remain on the
-       * device*/
-      removed
-	  |= cuda_debugapi::unset_breakpoint (dev_id, bp_tgt->placed_address);
-      if (need_resume)
-	device->resume ();
+      /* Module already unloaded -- the debugger backend automatically
+	 removes breakpoints for unloaded modules, so there is nothing
+	 to do on the device side.  Just clear the stale handle.  */
+      bp_tgt->cuda_bp_handle = CUDBG_BREAKPOINT_HANDLE_INVALID;
+      return 0;
     }
+
+  const uint32_t dev_id = module->context ()->dev_id ();
+  /* If the device is currently executing, we want to halt it temporarily
+     in order to remove the breakpoint. We don't want to update the state
+     object when we do this since we will be temporarily halting
+     execution. */
+  bool need_resume = false;
+  auto device = cuda_state::device (dev_id);
+  if (!device->suspended ())
+    {
+      /* We need to stop the device to remove the breakpoint.
+	 If the device was already suspended, don't resume it
+	 afterwards.  */
+      need_resume = device->suspend (true);
+    }
+
+  const bool removed
+      = cuda_state::remove_breakpoint (bp_tgt->cuda_bp_handle);
+
+  if (removed)
+    bp_tgt->cuda_bp_handle = CUDBG_BREAKPOINT_HANDLE_INVALID;
+
+  if (need_resume)
+    device->resume ();
+
   return !removed;
 }
 

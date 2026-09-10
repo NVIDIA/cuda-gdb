@@ -506,8 +506,10 @@ cuda_initialize_device_autostep (CORE_ADDR pc)
   switch_to_cuda_thread (astep_state.device.cur_coords);
 
   /* Now that we've got the basic things out of the way, set the first
-   * iteration next.  */
-  set_next_device_iteration ();
+   * iteration next.  Bail out if step planning fails so we don't leave
+   * astep_state with stale/zeroed end_pc, nsteps and inst_size.  */
+  if (set_next_device_iteration () != 0)
+    return 1;
 
   return 0;
 }
@@ -534,7 +536,14 @@ cuda_initialize_autostep (CORE_ADDR pc)
   if (cuda_current_focus::isDevice ())
     {
       if (cuda_initialize_device_autostep (pc) != 0)
-	return 1;
+	{
+	  /* The caller (handle_cuda_autostep_event) sets autostep_pending
+	     to true before invoking us and ignores our return value.  Make
+	     sure we clear it here so a failed initialization does not leave
+	     autostepping marked active with stale state.  */
+	  cuda_cleanup_autostep_state ();
+	  return 1;
+	}
     }
   else
     cuda_initialize_host_autostep (pc);
@@ -640,8 +649,10 @@ update_device_autostep_state (CORE_ADDR pc)
 	return 1;
 
       /* Set things up to we can autostep the warp that is currently
-	 selected.  */
-      set_next_device_iteration ();
+	 selected.  Propagate failure so cuda_update_autostep_state cleans
+	 up rather than continuing with a stale step plan.  */
+      if (set_next_device_iteration () != 0)
+	return 1;
       return 0;
     }
 
@@ -748,8 +759,11 @@ update_device_autostep_state (CORE_ADDR pc)
       astep_state.remaining = remaining;
     }
 
-  /* Set the next iteration for the currently-selected warp.  */
-  set_next_device_iteration ();
+  /* Set the next iteration for the currently-selected warp.  Propagate
+     failure so cuda_update_autostep_state cleans up rather than continuing
+     with a stale step plan.  */
+  if (set_next_device_iteration () != 0)
+    return 1;
 
   return 0;
 }

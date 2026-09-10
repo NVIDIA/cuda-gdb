@@ -539,12 +539,12 @@ cuda_set_break_on_launch (const char *args, int from_tty,
 
 #if CUDBG_API_VERSION_REVISION > 167
   /* Try to use the new break-on-launch API if available (CUDA 13.2+). */
-  if (cuda_debugapi::is_break_on_launch_supported ())
+  if (cuda_state::is_break_on_launch_supported ())
     {
       if (want_enabled && !s_break_on_launch_api_enabled)
 	{
 	  /* Enable break-on-launch via the new API. */
-	  if (cuda_debugapi::enable_break_on_launch ())
+	  if (cuda_state::enable_break_on_launch ())
 	    {
 	      s_break_on_launch_api_enabled = true;
 	      /* No need to use legacy auto-breakpoints when new API is active. */
@@ -555,7 +555,7 @@ cuda_set_break_on_launch (const char *args, int from_tty,
       else if (!want_enabled && s_break_on_launch_api_enabled)
 	{
 	  /* Disable break-on-launch via the new API. */
-	  if (cuda_debugapi::disable_break_on_launch ())
+	  if (cuda_state::disable_break_on_launch ())
 	    {
 	      s_break_on_launch_api_enabled = false;
 	      return;
@@ -576,7 +576,12 @@ cuda_set_break_on_launch (const char *args, int from_tty,
 #endif /* CUDBG_API_VERSION_REVISION > 167 */
 
   /* Fall back to legacy auto-breakpoint system for older CUDA versions
-     or if the new API failed. */
+     or if the new API failed.
+
+     TODO: This fallback relies on CUDBG_EVENT_KERNEL_READY, which
+     is being removed from the CUDA debugger API. Once the minimum supported
+     driver always provides the new break-on-launch API, this entire fallback
+     block is dead and should be removed in the next major release. */
 
   /* Update to receive KERNEL_READY events. */
   cuda_options_force_set_launch_notification_update ();
@@ -643,8 +648,8 @@ cuda_options_initialize_break_on_launch_api (void)
   /* Try to enable break-on-launch via the new API (CUDA 13.2+).
      If the API is not available or fails, we fall back to the legacy
      auto-breakpoint system automatically. */
-  if (cuda_debugapi::is_break_on_launch_supported ()
-      && cuda_debugapi::enable_break_on_launch ())
+  if (cuda_state::is_break_on_launch_supported ()
+      && cuda_state::enable_break_on_launch ())
     {
       s_break_on_launch_api_enabled = true;
       cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
@@ -786,115 +791,25 @@ cuda_options_disassemble_per_file (void)
   return cuda_disassemble_per == cuda_disassemble_per_file;
 }
 
-/*
- * set cuda show_kernel_events
- */
-static const char cuda_show_kernel_events_none[] = "none";
-static const char cuda_show_kernel_events_application[] = "application";
-static const char cuda_show_kernel_events_system[] = "system";
-static const char cuda_show_kernel_events_all[] = "all";
-
-static const char *cuda_show_kernel_events_enums[]
-    = { cuda_show_kernel_events_none, cuda_show_kernel_events_application,
-	cuda_show_kernel_events_system, cuda_show_kernel_events_all, NULL };
-
-static const char *cuda_show_kernel_events = cuda_show_kernel_events_none;
-/* Only host kernel events by default */
-static unsigned int cuda_show_kernel_events_depth = 1;
-
-static void
-cuda_show_show_kernel_events (struct ui_file *file, int from_tty,
-			      struct cmd_list_element *c, const char *value)
-{
-  gdb_printf (file, _ ("Show CUDA kernel events is set to '%s'.\n"), value);
-}
-
+/* TODO: CUDBG_EVENT_KERNEL_READY is being removed from the CUDA
+   debugger API, which makes CUDBG_KNL_LAUNCH_NOTIFY_EVENT a no-op (the driver
+   will never deliver the events the mode requests). This function exists only
+   to drive the legacy break-on-launch fallback path; once the event is gone,
+   that path is dead and this whole helper should be removed in the next
+   major release together with cuda_event_kernel_ready /
+   cuda_auto_breakpoints_event_add_break. */
 void
 cuda_options_force_set_launch_notification_update (void)
 {
-  /* Only use KERNEL_READY events if we are using auto breakpoints or kernel
-     ready events and we don't need to use the forced method. */
-  if ((cuda_options_auto_breakpoints_needed ()
-       || (cuda_show_kernel_events != cuda_show_kernel_events_none))
-      && (!cuda_options_auto_breakpoints_forced_needed ()))
+  /* Only use KERNEL_READY events if we are using auto breakpoints
+     and we don't need to use the forced method. */
+  if (cuda_options_auto_breakpoints_needed ()
+      && !cuda_options_auto_breakpoints_forced_needed ())
     cuda_debugapi::set_kernel_launch_notification_mode (
 	CUDBG_KNL_LAUNCH_NOTIFY_EVENT);
   else
     cuda_debugapi::set_kernel_launch_notification_mode (
 	CUDBG_KNL_LAUNCH_NOTIFY_DEFER);
-}
-
-static void
-cuda_set_show_kernel_events (const char *args, int from_tty,
-			     struct cmd_list_element *c)
-{
-  /* Update to receive KERNEL_READY events. */
-  cuda_options_force_set_launch_notification_update ();
-
-  /* Update kernel entry bpts if needed. */
-  cuda_module::auto_breakpoints_update_locations ();
-}
-
-static void
-cuda_show_show_kernel_events_depth (struct ui_file *file, int from_tty,
-				    struct cmd_list_element *c,
-				    const char *value)
-{
-  gdb_printf (file, _ ("Show CUDA kernel events depth is set to %s.\n"),
-	      value);
-}
-
-static void
-cuda_options_initialize_show_kernel_events (void)
-{
-  add_setshow_enum_cmd (
-      "kernel_events", class_cuda, cuda_show_kernel_events_enums,
-      &cuda_show_kernel_events,
-      _ ("Turn on/off kernel events (launch/termination) output messages."),
-      _ ("Show kernel events."),
-      _ ("When enabled, the kernel launch and termination events are "
-	 "displayed:\n"
-	 "  none        : no kernel events are displayed\n"
-	 "  application : application kernels events are displayed\n"
-	 "  system      : system kernel events are displayed\n"
-	 "  all         : all kernel events are displayed"),
-      cuda_set_show_kernel_events, cuda_show_show_kernel_events, &setcudalist,
-      &showcudalist);
-
-  add_setshow_uinteger_cmd (
-      "kernel_events_depth", class_cuda, &cuda_show_kernel_events_depth,
-      _ ("Set the maximum depth of nested kernels event notifications."),
-      _ ("Show the maximum depth of nested kernels event notifications."),
-      _ ("Controls the maximum depth of the kernels after which no kernel "
-	 "event notifications will be displayed.\n"
-	 "A value of zero means that there is no maximum and that all the "
-	 "kernel notifications are displayed.\n"
-	 "A value of one means that the debugger will display kernel event "
-	 "notifications only for kernels launched from the CPU (default)."),
-      cuda_set_show_kernel_events, cuda_show_show_kernel_events_depth,
-      &setcudalist, &showcudalist);
-
-  cuda_options_force_set_launch_notification_update ();
-}
-
-unsigned int
-cuda_options_show_kernel_events_depth (void)
-{
-  return cuda_show_kernel_events_depth;
-}
-
-bool
-cuda_options_show_kernel_events_system (void)
-{
-  return (cuda_show_kernel_events == cuda_show_kernel_events_system
-	  || cuda_show_kernel_events == cuda_show_kernel_events_all);
-}
-
-bool
-cuda_options_show_kernel_events_application (void)
-{
-  return (cuda_show_kernel_events == cuda_show_kernel_events_application
-	  || cuda_show_kernel_events == cuda_show_kernel_events_all);
 }
 
 bool
@@ -906,10 +821,8 @@ cuda_options_auto_breakpoints_needed (void)
 bool
 cuda_options_auto_breakpoints_forced_needed (void)
 {
-  return ((cuda_show_kernel_events_depth > 1
-	   && cuda_show_kernel_events != cuda_show_kernel_events_none)
-	  || (cuda_options_auto_breakpoints_needed ()
-	      && cuda_is_device_launch_used ()));
+  return (cuda_options_auto_breakpoints_needed ()
+	  && cuda_is_device_launch_used ());
 }
 
 /*
@@ -1757,7 +1670,6 @@ _initialize_cuda_options ()
   cuda_options_initialize_api_failures ();
   cuda_options_initialize_disassemble_from ();
   cuda_options_initialize_disassemble_per ();
-  cuda_options_initialize_show_kernel_events ();
   cuda_options_initialize_show_context_events ();
   cuda_options_initialize_launch_blocking ();
   cuda_options_initialize_kernel_launch_backtrace ();

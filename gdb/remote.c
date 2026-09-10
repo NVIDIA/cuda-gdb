@@ -90,6 +90,8 @@
 #ifdef NVIDIA_CUDA_GDB
 #include "cuda/cuda-linux-nat-template.h"
 #include "cuda/cuda-linux-nat.h"
+#include "cuda/cuda-protocol-hash.h"
+#include <string_view>
 #endif
 #if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
 #include "remote-nto.h"
@@ -413,8 +415,8 @@ enum {
   PACKET_accept_error_message,
 
 #ifdef NVIDIA_CUDA_GDB
-  /* CUDA - version handshake */
-  PACKET_CUDAVersion,
+  /* CUDA - exact-match protocol-hash handshake.  */
+  PACKET_CUDAProtocolHash,
 #endif
   PACKET_MAX
 };
@@ -5707,43 +5709,24 @@ remote_supported_packet (remote_target *remote,
 }
 #ifdef NVIDIA_CUDA_GDB
 static void
-cuda_remote_version_handshake (remote_target *remote,
-			       const struct protocol_feature *feature,
-			       enum packet_support support,
-			       const char *version_string)
+cuda_remote_protocol_hash_handshake (remote_target *remote,
+				  const struct protocol_feature *feature,
+				  enum packet_support support,
+				  const char *server_hash)
 {
-  uint32_t server_major, server_minor, server_rev;
-
-  gdb_assert (strcmp (feature->name, "CUDAVersion") == 0);
+  gdb_assert (std::string_view (feature->name) == "CUDAProtocolHash");
   if (support != PACKET_ENABLE)
     error (_ ("Server doesn't support CUDA.\n"));
 
-  gdb_assert (version_string);
-  sscanf (version_string, "%d.%d.%d", &server_major, &server_minor,
-	  &server_rev);
-
-  if (server_major == CUDBG_API_VERSION_MAJOR
-      && server_minor == CUDBG_API_VERSION_MINOR
-      && server_rev == CUDBG_API_VERSION_REVISION)
-    return;
-
-  error (_ ("cuda-gdb version (%d.%d.%d) is not compatible with "
-	    "cuda-gdbserver version (%d.%d.%d).\n"
-	    "Please use the same version of cuda-gdb and cuda-gdbserver."),
-	 CUDBG_API_VERSION_MAJOR, CUDBG_API_VERSION_MINOR,
-	 CUDBG_API_VERSION_REVISION, server_major, server_minor, server_rev);
+  gdb_assert (server_hash);
+  if (std::string_view (server_hash) != CUDA_PROTOCOL_HASH)
+    error (_ ("cuda-gdb (build hash %s) is not compatible with "
+	      "cuda-gdbserver (build hash %s).\n"
+	      "Please use cuda-gdb and cuda-gdbserver built from the "
+	      "same sources."),
+	   CUDA_PROTOCOL_HASH, server_hash);
 }
-#ifdef __QNXTARGET__
-/* QNX specific version check */
-void
-cuda_qnx_version_handshake_check (const char *version_string)
-{
-  struct protocol_feature feature;
-  feature.name = "CUDAVersion";
-  return cuda_remote_version_handshake (NULL, &feature, PACKET_ENABLE,
-					version_string);
-}
-#endif
+
 /* Signal that we have another remote event to handle.  */
 void
 cuda_remote_report_event ()
@@ -5950,7 +5933,8 @@ static const struct protocol_feature remote_protocol_features[] = {
     PACKET_memory_tagging_feature },
 #ifdef NVIDIA_CUDA_GDB
   /* CUDA - version handshake */
-  { "CUDAVersion", PACKET_DISABLE, cuda_remote_version_handshake, PACKET_CUDAVersion },
+  { "CUDAProtocolHash", PACKET_DISABLE, cuda_remote_protocol_hash_handshake,
+    PACKET_CUDAProtocolHash },
 #endif
 };
 
@@ -6073,6 +6057,11 @@ remote_target::remote_query_supported ()
       if (m_features.packet_set_cmd_state (PACKET_accept_error_message)
 	  != AUTO_BOOLEAN_FALSE)
 	remote_query_supported_append (&q, "error-message+");
+
+#ifdef NVIDIA_CUDA_GDB
+      remote_query_supported_append (&q,
+				     "CUDAProtocolHash=" CUDA_PROTOCOL_HASH);
+#endif
 
       q = "qSupported:" + q;
       putpkt (q.c_str ());
@@ -16666,8 +16655,8 @@ Show the maximum size of the address (in bits) in a memory packet."), NULL,
 			 "error-message", "error-message", 0);
 
 #ifdef NVIDIA_CUDA_GDB
-  add_packet_config_cmd (PACKET_CUDAVersion,
-			 "CUDAVersion packet", "CUDAVersion-packet", 0);
+  add_packet_config_cmd (PACKET_CUDAProtocolHash,
+			 "CUDAProtocolHash packet", "CUDAProtocolHash-packet", 0);
 #endif
   /* Assert that we've registered "set remote foo-packet" commands
      for all packet configs.  */

@@ -1172,12 +1172,16 @@ public:
       : dwarf_location (arch, offset, ULONGEST_MAX / HOST_CHAR_BIT),
 	m_flags (flags), m_address_class (address_class), m_stack (stack)
   {
-    /* If a non-zero address class is provided, use it. Otherwise, determine
-     * the address class from the type instance flags. */
-    m_address_class
-	= address_class != 0
-	      ? address_class
-	      : gdbarch_type_instance_flags_to_address_class (arch, flags);
+    /* If a non-zero address class is provided, use it for both address class and type instance flags.
+     * Otherwise, determine the address class from the type instance flags. */
+    if (address_class != 0)
+      {
+	m_flags = gdbarch_address_class_type_flags (arch, 0, address_class);
+      }
+    else
+      {
+	m_address_class = gdbarch_type_instance_flags_to_address_class (arch, flags);
+      }
   }
 #else
   dwarf_memory (gdbarch *arch, LONGEST offset, bool stack = false)
@@ -3079,6 +3083,14 @@ private:
   void create_overlay_composite (loc_offset overlay_size,
 				 loc_offset overlay_offset);
 
+#ifdef NVIDIA_CHERRY_PICK
+  /* Evaluator for the LLVM extension opcodes.  Using the context in
+     this object, evaluate the following LLVM operation.  */
+  const gdb_byte *execute_llvm_stack_op (dwarf_llvm_user op,
+					 const gdb_byte *op_ptr,
+					 const gdb_byte *op_end);
+#endif
+
   /* The engine for the expression evaluator.  Using the context in this
      object, evaluate the expression between OP_PTR and OP_END.  */
   void execute_stack_op (const gdb_byte *op_ptr, const gdb_byte *op_end);
@@ -3794,6 +3806,170 @@ dwarf_block_to_sp_offset (struct gdbarch *gdbarch, const gdb_byte *buf,
 
   return 1;
 }
+
+#ifdef NVIDIA_CHERRY_PICK
+const gdb_byte *
+dwarf_expr_context::execute_llvm_stack_op (dwarf_llvm_user op,
+					   const gdb_byte *op_ptr,
+					   const gdb_byte *op_end)
+{
+  gdbarch *arch = this->m_per_objfile->objfile->arch ();
+  type *address_type = this->address_type ();
+
+  switch (op)
+    {
+      case DW_OP_LLVM_USER_form_aspace_address:
+	{
+	  dwarf_value_up aspace_value = to_value (pop (), address_type);
+	  dwarf_value_up address_value = to_value (pop (), address_type);
+	  dwarf_require_integral (aspace_value->type ());
+	  dwarf_require_integral (address_value->type ());
+	  auto location = std::make_unique<dwarf_memory> (
+	  arch, address_value->to_long (), false, (type_instance_flags)0,
+	  aspace_value->to_long ());
+	  push (std::move (location));
+	  break;
+	}
+
+      case DW_OP_LLVM_USER_offset:
+	{
+	  dwarf_value_up value = to_value (pop (), address_type);
+	  dwarf_require_integral (value->type ());
+	  dwarf_location_up location = to_location (pop (), arch);
+	  LONGEST offset = value->to_long ();
+
+	  if (offset < 0)
+	    ill_formed_expression ();
+
+	  location->add_byte_offset (offset);
+	  push (std::move (location));
+	  break;
+	}
+
+      case DW_OP_LLVM_USER_offset_constu:
+	{
+	  uint64_t uoffset;
+	  op_ptr = safe_read_uleb128 (op_ptr, op_end, &uoffset);
+	  ULONGEST result = uoffset;
+	  dwarf_location_up location = to_location (pop (), arch);
+
+	  location->add_offset ({result, 0});
+	  push (std::move (location));
+	  break;
+	}
+
+      case DW_OP_LLVM_USER_bit_offset:
+	{
+	  dwarf_value_up value = to_value (pop (), address_type);
+	  dwarf_require_integral (value->type ());
+	  dwarf_location_up location = to_location (pop (), arch);
+	  LONGEST bit_offset = value->to_long ();
+
+	  if (bit_offset < 0)
+	    ill_formed_expression ();
+
+	  location->add_offset (bit_offset);
+	  push (std::move (location));
+	  break;
+	}
+
+      case DW_OP_LLVM_USER_undefined:
+	push (make_unique<dwarf_undefined> (arch));
+	break;
+
+      case DW_OP_LLVM_USER_select_bit_piece:
+	{
+	  uint64_t piece_bit_size, pieces_count;
+
+	  /* Record the piece.  */
+	  op_ptr = safe_read_uleb128 (op_ptr, op_end, &piece_bit_size);
+	  op_ptr = safe_read_uleb128 (op_ptr, op_end, &pieces_count);
+	  create_select_composite (piece_bit_size, pieces_count);
+	  break;
+	}
+
+      case DW_OP_LLVM_USER_extend:
+	{
+	  uint64_t piece_bit_size, pieces_count;
+
+	  /* Record the piece.  */
+	  op_ptr = safe_read_uleb128 (op_ptr, op_end, &piece_bit_size);
+	  op_ptr = safe_read_uleb128 (op_ptr, op_end, &pieces_count);
+	  create_extend_composite (piece_bit_size, pieces_count);
+	  break;
+	}
+
+      case DW_OP_LLVM_USER_aspace_bregx:
+	{
+	  uint64_t reg;
+	  int64_t offset;
+	  op_ptr = safe_read_uleb128 (op_ptr, op_end, &reg);
+	  op_ptr = safe_read_sleb128 (op_ptr, op_end, &offset);
+
+	  ensure_have_frame (this->m_frame, "DW_OP_LLVM_USER_aspace_bregx");
+
+	  int regnum = dwarf_reg_to_regnum_or_error (arch, reg);
+	  ULONGEST reg_size = register_size (arch, regnum);
+	  std::unique_ptr<dwarf_location> location
+	    = std::make_unique<dwarf_register> (arch, reg);
+	  std::unique_ptr<dwarf_value> address_value
+	    = location->deref (this->m_frame, this->m_addr_info,
+			 address_type, reg_size);
+	  location = address_value->to_location (arch);
+
+	  dwarf_memory *memory = dynamic_cast<dwarf_memory *> (location.get ());
+
+	  if (memory == nullptr)
+	    ill_formed_expression ();
+
+	  memory->add_offset (offset);
+
+	  dwarf_value_up aspace_value = to_value (pop (), address_type);
+	  dwarf_require_integral (aspace_value->type ());
+	  memory->set_address_class (aspace_value->to_long ());
+
+	  push (std::move (location));
+	  break;
+	}
+
+      case DW_OP_LLVM_USER_overlay:
+      case DW_OP_LLVM_USER_bit_overlay:
+	{
+	  if (stack_empty_p ())
+	    ill_formed_expression ();
+
+	  dwarf_value_up overlay_size_val
+	    = to_value (pop (), address_type);
+	  dwarf_require_integral (overlay_size_val->type ());
+	  LONGEST overlay_size = overlay_size_val->to_long ();
+
+	  if (stack_empty_p () || overlay_size < 0)
+	    ill_formed_expression ();
+
+	  dwarf_value_up overlay_offset_val
+	    = to_value (pop (), address_type);
+	  dwarf_require_integral (overlay_offset_val->type ());
+	  LONGEST overlay_offset = overlay_offset_val->to_long ();
+
+	  if (overlay_offset < 0)
+	    ill_formed_expression ();
+
+	  if (op == DW_OP_LLVM_USER_overlay)
+	    create_overlay_composite ({(ULONGEST) overlay_size, 0},
+			{(ULONGEST) overlay_offset, 0});
+	  else
+	      create_overlay_composite ((ULONGEST) overlay_size,
+			(ULONGEST) overlay_offset);
+	  break;
+	}
+
+      default:
+	error (_("Unhandled DWARF llvm user op: %s"), get_DW_OP_LLVM_USER_name (op));
+    }
+
+  return op_ptr;
+}
+#endif
 
 void
 dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
@@ -4825,169 +5001,16 @@ dwarf_expr_context::execute_stack_op (const gdb_byte *op_ptr,
 	  push (make_unique<dwarf_memory> (arch, this->m_addr_info->addr));
 	  break;
 
-#ifdef NVIDIA_CUDA_GDB
-	case DW_OP_LLVM_form_aspace_address:
-	  {
-	    dwarf_value_up aspace_value = to_value (pop (), address_type);
-	    dwarf_value_up address_value = to_value (pop (), address_type);
-	    dwarf_require_integral (aspace_value->type ());
-	    dwarf_require_integral (address_value->type ());
-	    auto location = std::make_unique<dwarf_memory> (
-		arch, address_value->to_long (), false, (type_instance_flags)0,
-		aspace_value->to_long ());
-	    push (std::move (location));
-	  }
-	  break;
-#endif
-
-	case DW_OP_LLVM_offset:
-	  {
-	    dwarf_value_up value = to_value (pop (), address_type);
-	    dwarf_require_integral (value->type ());
-	    dwarf_location_up location = to_location (pop (), arch);
-	    LONGEST offset = value->to_long ();
-
-	    if (offset < 0)
-	      ill_formed_expression ();
-
-	    location->add_byte_offset (offset);
-	    push (std::move (location));
-	    break;
-	  }
-
-	case DW_OP_LLVM_offset_constu:
+#ifdef NVIDIA_CHERRY_PICK
+	case DW_OP_LLVM_user:
 	  {
 	    uint64_t uoffset;
 	    op_ptr = safe_read_uleb128 (op_ptr, op_end, &uoffset);
-	    ULONGEST result = uoffset;
-	    dwarf_location_up location = to_location (pop (), arch);
-
-	    location->add_offset ({result, 0});
-	    push (std::move (location));
-	    break;
-	  }
-
-	case DW_OP_LLVM_bit_offset:
-	  {
-	    dwarf_value_up value = to_value (pop (), address_type);
-	    dwarf_require_integral (value->type ());
-	    dwarf_location_up location = to_location (pop (), arch);
-	    LONGEST bit_offset = value->to_long ();
-
-	    if (bit_offset < 0)
-	      ill_formed_expression ();
-
-	    location->add_offset (bit_offset);
-	    push (std::move (location));
-	    break;
-	  }
-
-	case DW_OP_LLVM_undefined:
-	  push (make_unique<dwarf_undefined> (arch));
-	  break;
-
-#ifdef NVIDIA_CUDA_GDB
-	case DW_OP_LLVM_aspace_bregx:
-	  {
-	    uint64_t reg;
-	    int64_t offset;
-	    op_ptr = safe_read_uleb128 (op_ptr, op_end, &reg);
-	    op_ptr = safe_read_sleb128 (op_ptr, op_end, &offset);
-
-	    ensure_have_frame (this->m_frame, "DW_OP_LLVM_aspace_bregx");
-
-	    int regnum = dwarf_reg_to_regnum_or_error (arch, reg);
-	    ULONGEST reg_size = register_size (arch, regnum);
-	    std::unique_ptr<dwarf_location> location
-	      = std::make_unique<dwarf_register> (arch, reg);
-	    std::unique_ptr<dwarf_value> address_value
-	      = location->deref (this->m_frame, this->m_addr_info,
-				 address_type, reg_size);
-	    location = address_value->to_location (arch);
-
-	    dwarf_memory *memory = dynamic_cast<dwarf_memory *> (location.get ());
-
-	    if (memory == nullptr)
-	      ill_formed_expression ();
-
-	    memory->add_offset (offset);
-
-	    dwarf_value_up aspace_value = to_value (pop (), address_type);
-	    dwarf_require_integral (aspace_value->type ());
-	    memory->set_address_class (aspace_value->to_long ());
-
-	    push (std::move (location));
+	    op_ptr = execute_llvm_stack_op ((dwarf_llvm_user) uoffset,
+					    op_ptr, op_end);
 	    break;
 	  }
 #endif
-
-	case DW_OP_LLVM_piece_end:
-	  {
-	    dwarf_entry &entry = fetch (0);
-	    dwarf_composite *composite
-	      = dynamic_cast<dwarf_composite *> (&entry);
-
-	    if (composite == nullptr || composite->is_completed ())
-	      ill_formed_expression ();
-
-	    composite->set_completed (true);
-	    break;
-	  }
-
-	case DW_OP_LLVM_extend:
-	  {
-	    uint64_t piece_bit_size, pieces_count;
-
-	    /* Record the piece.  */
-	    op_ptr = safe_read_uleb128 (op_ptr, op_end, &piece_bit_size);
-	    op_ptr = safe_read_uleb128 (op_ptr, op_end, &pieces_count);
-	    create_extend_composite (piece_bit_size,
-				     pieces_count);
-	    break;
-	  }
-
-	case DW_OP_LLVM_select_bit_piece:
-	  {
-	    uint64_t piece_bit_size, pieces_count;
-
-	    /* Record the piece.  */
-	    op_ptr = safe_read_uleb128 (op_ptr, op_end, &piece_bit_size);
-	    op_ptr = safe_read_uleb128 (op_ptr, op_end, &pieces_count);
-	    create_select_composite (piece_bit_size,
-				     pieces_count);
-	    break;
-	  }
-
-	case DW_OP_LLVM_overlay:
-	case DW_OP_LLVM_bit_overlay:
-	  {
-	    if (stack_empty_p ())
-	      ill_formed_expression ();
-
-	    dwarf_value_up overlay_size_val
-	      = to_value (pop (), address_type);
-	    dwarf_require_integral (overlay_size_val->type ());
-	    LONGEST overlay_size = overlay_size_val->to_long ();
-
-	    if (stack_empty_p () || overlay_size < 0)
-	      ill_formed_expression ();
-
-	    dwarf_value_up overlay_offset_val
-	       = to_value (pop (), address_type);
-	    dwarf_require_integral (overlay_offset_val->type ());
-	    LONGEST overlay_offset = overlay_offset_val->to_long ();
-
-	    if (overlay_offset < 0)
-	      ill_formed_expression ();
-
-	    if (op == DW_OP_LLVM_overlay)
-	      create_overlay_composite ({(ULONGEST) overlay_size, 0},
-					{(ULONGEST) overlay_offset, 0});
-	    else
-	      create_overlay_composite ((ULONGEST) overlay_size,
-					(ULONGEST) overlay_offset);
-	    break;
-	  }
 
 	default:
 	  error (_("Unhandled dwarf expression opcode 0x%x"), op);

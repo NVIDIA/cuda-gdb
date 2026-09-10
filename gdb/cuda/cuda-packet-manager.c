@@ -18,22 +18,24 @@
 
 #include "defs.h"
 
-#include "cuda-context.h"
-#include "cuda-events.h"
 #include "cuda-options.h"
+#include "cuda-packet-format.h"
 #include "cuda-packet-manager.h"
-#include "cuda-state.h"
-#include "cuda-utils.h"
-#include "gdbthread.h"
 #include "inferior.h"
 #include "remote.h"
+#include <cstdio>
+#include <optional>
+#include <string.h>
 #include <stdbool.h>
 #include <string>
-
-#include "gdbsupport/rsp-low.h"
+#include <string_view>
 
 #ifdef __QNXTARGET__
+#include "cuda-tdep.h"
+#include "cuda-utils.h"
+#include "cuda/cuda-protocol-hash.h"
 #include "remote-nto.h"
+#include "target/waitstatus.h"
 /* Maximum supported data size in QNX protocol is DS_DATA_MAX_SIZE (1024).
    cuda-gdbserver can be modified to handle 16384 instead, but in order to
    use bigger packets for CUDA, we would need first ensure that they can be
@@ -52,94 +54,46 @@ struct cuda_remote_callbacks : public send_remote_packet_callbacks
 public:
   cuda_remote_callbacks ()
   {
-    m_send_buf.reserve (PBUFSIZE);
     m_recv_buf.reserve (PBUFSIZE);
   }
 
-  void
-  append_string (std::string str)
+  cuda_packet_encoder &
+  encoder (cuda_packet_type_t packet_type)
   {
-    if (m_send_buf.size () + str.size () >= m_send_buf.capacity ())
-      error (_ ("Exceed the size of cuda packet.\n"));
-
-    m_send_buf.insert (m_send_buf.end (), str.begin (), str.end ());
+    m_encoder.emplace (PBUFSIZE, packet_type);
+    return *m_encoder;
   }
 
+  template<typename T>
   void
-  append_bin (const gdb_byte *src, int size)
+  get (T *value)
   {
-    if (m_send_buf.size () + size >= m_send_buf.capacity ())
-      error (_ ("Exceed the size of cuda packet.\n"));
-
-    std::string hex_str = bin2hex (src, size);
-    m_send_buf.insert (m_send_buf.end (), hex_str.begin (), hex_str.end ());
-  }
-
-  void
-  append_separator ()
-  {
-    m_send_buf.push_back (';');
+    *value = m_decoder.get<T> ();
   }
 
   void
   send_request (void)
   {
-    gdb::array_view<const char> view (m_send_buf.data (), m_send_buf.size ());
-    send_remote_packet (view, this);
+    gdb_assert (m_encoder.has_value ());
+    const std::string_view view = m_encoder->view ();
+    gdb::array_view<const char> packet { view.data (), view.size () };
+    send_remote_packet (packet, this);
   }
 
+  /* Return a NUL-terminated C string into m_recv_buf for the next
+     field.  Pointer is invalidated by the next received ().  */
   char *
-  extract_string ()
+  get_string ()
   {
-    /* Locate the first string in the buffer */
-    auto pos = m_recv_buf.find (';', m_recv_pos);
+    const std::string_view field = m_decoder.get<std::string_view> ();
+    char *const recv_begin = m_recv_buf.data ();
+    const size_t offset = field.data () - recv_begin;
 
-    /* Allow for one final lookup to grab the ending data */
-    if (pos == std::string::npos && m_recv_pos == std::string::npos)
-      error (_ ("The data in the cuda packet is not complete (cuda-gdb).\n"));
+    gdb_assert (field.data () >= recv_begin
+		&& offset + field.size () < m_recv_buf.size ());
 
-    /* Null terminate substring and advance recv position
-     * Handle the case where we are accessing the last piece of data. */
-    if (pos != std::string::npos)
-      m_recv_buf[pos] = '\0';
-    else
-      m_recv_buf.push_back ('\0');
-
-    char *ret = (char *)m_recv_buf.data () + m_recv_pos;
-
-    if (pos != std::string::npos)
-      m_recv_pos = pos + 1;
-    else
-      m_recv_pos = std::string::npos;
-
-    /* TODO: Maybe rethink this as we are exposing the underlying m_recv_buf to
-     * the outside world */
-    return ret;
-  }
-
-  void
-  extract_bin (gdb_byte *dest, int size)
-  {
-    /* Locate the first string in the buffer */
-    auto pos = m_recv_buf.find (';', m_recv_pos);
-
-    /* Allow for one final lookup to grab the ending data */
-    if (pos == std::string::npos && m_recv_pos == std::string::npos)
-      error (_ ("The data in the cuda packet is not complete (cuda-gdb).\n"));
-    if (((pos == std::string::npos ? m_recv_buf.size () : pos) - m_recv_pos)
-	< size)
-      error (_ ("The data in the cuda packet is not complete (cuda-gdb).\n"));
-
-    /* Extract binary data */
-    if (pos != std::string::npos)
-      m_recv_buf[pos] = '\0';
-
-    hex2bin (m_recv_buf.data () + m_recv_pos, dest, size);
-
-    if (pos != std::string::npos)
-      m_recv_pos = pos + 1;
-    else
-      m_recv_pos = std::string::npos;
+    m_recv_buf[offset + field.size ()] = '\0';
+    return recv_begin + offset;
   }
 
   void
@@ -150,37 +104,41 @@ public:
   void
   received (gdb::array_view<const char> &buf) override
   {
-    /* Clear the recv buffer */
-    m_recv_buf.clear ();
-    /* Copy result to pktbuf */
-    m_recv_buf.insert (m_recv_buf.begin (), buf.begin (), buf.end ());
-    /* Reset position offset in recv buffer */
-    m_recv_pos = 0;
-    /* Clear send buffer */
-    m_send_buf.clear ();
+    m_recv_buf.assign (buf.begin (), buf.end ());
+    const size_t packet_size = m_recv_buf.size ();
+    m_recv_buf.push_back ('\0');
+    m_decoder.reset (std::string_view (m_recv_buf.data (), packet_size));
   }
 
 private:
-  std::string m_send_buf;
+  std::optional<cuda_packet_encoder> m_encoder;
   std::string m_recv_buf;
-  std::string::size_type m_recv_pos;
+  cuda_packet_decoder m_decoder;
 };
 static cuda_remote_callbacks remote_callbacks;
 
 static void
 cuda_remote_send_packet (cuda_packet_type_t packet_type)
 {
-  remote_callbacks.append_string ("qnv.");
-  remote_callbacks.append_bin ((gdb_byte *)&packet_type, sizeof (packet_type));
+  remote_callbacks.encoder (packet_type);
 
   remote_callbacks.send_request ();
+}
+
+static void
+cuda_remote_check_ok_response (const char *operation)
+{
+  const std::string_view response = remote_callbacks.get_string ();
+  if (response != "OK")
+    error (_("Unexpected CUDA remote %s response: %.*s"), operation,
+	   static_cast<int> (response.size ()), response.data ());
 }
 
 static bool
 cuda_remote_get_return_value ()
 {
   bool ret_val;
-  remote_callbacks.extract_bin ((gdb_byte *)&ret_val, sizeof (ret_val));
+  remote_callbacks.get (&ret_val);
 
   return ret_val;
 }
@@ -207,41 +165,43 @@ cuda_remote_notification_aliased_event ()
 }
 
 void
-cuda_remote_notification_analyze (ptid_t ptid, struct target_waitstatus *ws)
+cuda_remote_notification_analyze ([[maybe_unused]] ptid_t ptid,
+				  [[maybe_unused]] struct target_waitstatus *ws)
 {
-  /* trap_expected is no longer used by the analyze function, but we
-     still send a zero value to maintain wire compatibility with
-     existing gdbserver builds that expect this field.  */
-  int trap_expected = 0;
-
-  remote_callbacks.append_string ("qnv.");
-  cuda_packet_type_t packet_type = NOTIFICATION_ANALYZE;
-  remote_callbacks.append_bin ((gdb_byte *)&packet_type, sizeof (packet_type));
-  remote_callbacks.append_separator ();
 #ifdef __QNXTARGET__
-  /* We only send the wait status for QNX as we don't have an easy way of
-     getting that server side. */
-  remote_callbacks.append_bin ((gdb_byte *)&ptid, sizeof (ptid));
-  remote_callbacks.append_separator ();
-  remote_callbacks.append_bin ((gdb_byte *)ws, sizeof (*ws));
-  remote_callbacks.append_separator ();
+  auto &encoder = remote_callbacks.encoder (NOTIFICATION_ANALYZE);
+  gdb_assert (ws != nullptr);
+  const uint32_t wait_kind = static_cast<uint32_t> (ws->kind ());
+  const uint32_t wait_signal
+      = (ws->kind () == TARGET_WAITKIND_STOPPED
+	 || ws->kind () == TARGET_WAITKIND_SIGNALLED)
+	    ? static_cast<uint32_t> (ws->sig ())
+	    : static_cast<uint32_t> (GDB_SIGNAL_0);
+
+  encoder.put (static_cast<int32_t> (ptid.pid ()));
+  encoder.put (static_cast<int64_t> (ptid.lwp ()));
+  encoder.put (wait_kind);
+  encoder.put (wait_signal);
+#else
+  remote_callbacks.encoder (NOTIFICATION_ANALYZE);
 #endif
-  remote_callbacks.append_bin ((gdb_byte *)&trap_expected,
-			       sizeof (trap_expected));
 
   remote_callbacks.send_request ();
+  cuda_remote_check_ok_response ("notification analyze");
 }
 
 void
 cuda_remote_notification_mark_consumed ()
 {
   cuda_remote_send_packet (NOTIFICATION_MARK_CONSUMED);
+  cuda_remote_check_ok_response ("notification mark-consumed");
 }
 
 void
 cuda_remote_notification_consume_pending ()
 {
   cuda_remote_send_packet (NOTIFICATION_CONSUME_PENDING);
+  cuda_remote_check_ok_response ("notification consume-pending");
 }
 
 #ifdef __QNXTARGET__
@@ -270,45 +230,30 @@ cuda_remote_set_symbols (bool set_extra_symbols, bool *symbols_are_set)
       symbols_count += EXTRA_SYMBOLS_COUNT;
     }
 
-  remote_callbacks.append_string ("qnv.");
-  cuda_packet_type_t packet_type = SET_SYMBOLS;
-  remote_callbacks.append_bin ((gdb_byte *)&packet_type, sizeof (packet_type));
-  remote_callbacks.append_separator ();
-  remote_callbacks.append_bin ((gdb_byte *)&symbols_count,
-			       sizeof (symbols_count));
-  remote_callbacks.append_separator ();
-  remote_callbacks.append_bin ((gdb_byte *)&address, sizeof (address));
-  remote_callbacks.append_separator ();
+  auto &encoder = remote_callbacks.encoder (SET_SYMBOLS);
+  encoder.put (symbols_count);
+  encoder.put (address);
   address = cuda_get_symbol_address (_STRING_ (CUDBG_RPC_ENABLED));
-  remote_callbacks.append_bin ((gdb_byte *)&address, sizeof (address));
-  remote_callbacks.append_separator ();
+  encoder.put (address);
   address = cuda_get_symbol_address (_STRING_ (CUDBG_APICLIENT_PID));
-  remote_callbacks.append_bin ((gdb_byte *)&address, sizeof (address));
-  remote_callbacks.append_separator ();
+  encoder.put (address);
   address = cuda_get_symbol_address (_STRING_ (CUDBG_APICLIENT_REVISION));
-  remote_callbacks.append_bin ((gdb_byte *)&address, sizeof (address));
-  remote_callbacks.append_separator ();
+  encoder.put (address);
   address = cuda_get_symbol_address (_STRING_ (CUDBG_SESSION_ID));
-  remote_callbacks.append_bin ((gdb_byte *)&address, sizeof (address));
-  remote_callbacks.append_separator ();
+  encoder.put (address);
   address
       = cuda_get_symbol_address (_STRING_ (CUDBG_ATTACH_HANDLER_AVAILABLE));
-  remote_callbacks.append_bin ((gdb_byte *)&address, sizeof (address));
-  remote_callbacks.append_separator ();
+  encoder.put (address);
   address = cuda_get_symbol_address (_STRING_ (CUDBG_DEBUGGER_INITIALIZED));
-  remote_callbacks.append_bin ((gdb_byte *)&address, sizeof (address));
-  remote_callbacks.append_separator ();
+  encoder.put (address);
   address = cuda_get_symbol_address (
       _STRING_ (CUDBG_REPORTED_DRIVER_API_ERROR_CODE));
-  remote_callbacks.append_bin ((gdb_byte *)&address, sizeof (address));
-  remote_callbacks.append_separator ();
+  encoder.put (address);
   address = cuda_get_symbol_address (
       _STRING_ (CUDBG_REPORTED_DRIVER_INTERNAL_ERROR_CODE));
-  remote_callbacks.append_bin ((gdb_byte *)&address, sizeof (address));
-  remote_callbacks.append_separator ();
+  encoder.put (address);
   address = cuda_get_symbol_address (_STRING_ (CUDBG_ENABLE_LAUNCH_BLOCKING));
-  remote_callbacks.append_bin ((gdb_byte *)&address, sizeof (address));
-  /* No seperator for last entry */
+  encoder.put (address);
 
   /* All new symbols should be placed under this condition to preserve
      compatibility between newer cuda-gdb and older cuda-gdbserver.
@@ -317,21 +262,16 @@ cuda_remote_set_symbols (bool set_extra_symbols, bool *symbols_are_set)
      the exact core symbols that they expect, those are defined above. */
   if (set_extra_symbols)
     {
-      remote_callbacks.append_separator ();
       address = cuda_get_symbol_address (_STRING_ (cudbgInjectionPath));
-      remote_callbacks.append_bin ((gdb_byte *)&address, sizeof (address));
-      remote_callbacks.append_separator ();
+      encoder.put (address);
       address
 	  = cuda_get_symbol_address (_STRING_ (CUDBG_DEBUGGER_CAPABILITIES));
-      remote_callbacks.append_bin ((gdb_byte *)&address, sizeof (address));
-      /* NOTE: When adding new symbols, add a call to append_separator and
-       * update `EXTRA_SYMBOLS_COUNT`. */
+      encoder.put (address);
     }
 
   remote_callbacks.send_request ();
 
-  remote_callbacks.extract_bin ((gdb_byte *)symbols_are_set,
-				sizeof (*symbols_are_set));
+  remote_callbacks.get (symbols_are_set);
 }
 #endif /* __QNXTARGET__ */
 
@@ -343,31 +283,21 @@ cuda_remote_initialize (CUDBGResult *get_debugger_api_res,
 			bool *driver_is_compatible, uint32_t *major,
 			uint32_t *minor, uint32_t *revision)
 {
-  remote_callbacks.append_string ("qnv.");
-  cuda_packet_type_t packet_type = INITIALIZE_TARGET;
-  remote_callbacks.append_bin ((gdb_byte *)&packet_type, sizeof (packet_type));
-  remote_callbacks.append_separator ();
-  bool launch_blocking = cuda_options_launch_blocking ();
-  remote_callbacks.append_bin ((gdb_byte *)&launch_blocking,
-			       sizeof (launch_blocking));
+  auto &encoder = remote_callbacks.encoder (INITIALIZE_TARGET);
+  const bool launch_blocking = cuda_options_launch_blocking ();
+  encoder.put (launch_blocking);
 
   remote_callbacks.send_request ();
 
-  remote_callbacks.extract_bin ((gdb_byte *)get_debugger_api_res,
-				sizeof (*get_debugger_api_res));
-  remote_callbacks.extract_bin ((gdb_byte *)set_callback_api_res,
-				sizeof (*set_callback_api_res));
-  remote_callbacks.extract_bin ((gdb_byte *)initialize_api_res,
-				sizeof (*initialize_api_res));
-  remote_callbacks.extract_bin ((gdb_byte *)cuda_initialized,
-				sizeof (*cuda_initialized));
-  remote_callbacks.extract_bin ((gdb_byte *)cuda_debugging_enabled,
-				sizeof (*cuda_debugging_enabled));
-  remote_callbacks.extract_bin ((gdb_byte *)driver_is_compatible,
-				sizeof (*driver_is_compatible));
-  remote_callbacks.extract_bin ((gdb_byte *)major, sizeof (*major));
-  remote_callbacks.extract_bin ((gdb_byte *)minor, sizeof (*minor));
-  remote_callbacks.extract_bin ((gdb_byte *)revision, sizeof (*revision));
+  remote_callbacks.get (get_debugger_api_res);
+  remote_callbacks.get (set_callback_api_res);
+  remote_callbacks.get (initialize_api_res);
+  remote_callbacks.get (cuda_initialized);
+  remote_callbacks.get (cuda_debugging_enabled);
+  remote_callbacks.get (driver_is_compatible);
+  remote_callbacks.get (major);
+  remote_callbacks.get (minor);
+  remote_callbacks.get (revision);
 }
 
 void
@@ -376,39 +306,33 @@ cuda_remote_query_device_spec (uint32_t dev_id, uint32_t *num_sms,
 			       uint32_t *num_registers, char **dev_type,
 			       char **sm_type)
 {
-  remote_callbacks.append_string ("qnv.");
-  cuda_packet_type_t packet_type = QUERY_DEVICE_SPEC;
-  remote_callbacks.append_bin ((gdb_byte *)&packet_type, sizeof (packet_type));
-  remote_callbacks.append_separator ();
-  remote_callbacks.append_bin ((gdb_byte *)&dev_id, sizeof (dev_id));
+  auto &encoder = remote_callbacks.encoder (QUERY_DEVICE_SPEC);
+  encoder.put (dev_id);
 
   remote_callbacks.send_request ();
 
   CUDBGResult res;
-  remote_callbacks.extract_bin ((gdb_byte *)&res, sizeof (res));
+  remote_callbacks.get (&res);
   if (res != CUDBG_SUCCESS)
     error (_ ("Error: Failed to read device specification (error=%u).\n"),
 	   res);
-  remote_callbacks.extract_bin ((gdb_byte *)num_sms, sizeof (*num_sms));
-  remote_callbacks.extract_bin ((gdb_byte *)num_warps, sizeof (*num_warps));
-  remote_callbacks.extract_bin ((gdb_byte *)num_lanes, sizeof (*num_lanes));
-  remote_callbacks.extract_bin ((gdb_byte *)num_registers,
-				sizeof (*num_registers));
-  *dev_type = remote_callbacks.extract_string ();
-  *sm_type = remote_callbacks.extract_string ();
+  remote_callbacks.get (num_sms);
+  remote_callbacks.get (num_warps);
+  remote_callbacks.get (num_lanes);
+  remote_callbacks.get (num_registers);
+  *dev_type = remote_callbacks.get_string ();
+  *sm_type = remote_callbacks.get_string ();
 }
 
 bool
-cuda_remote_check_pending_sigint (ptid_t ptid)
+cuda_remote_check_pending_sigint ([[maybe_unused]] ptid_t ptid)
 {
-  remote_callbacks.append_string ("qnv.");
-  cuda_packet_type_t packet_type = CHECK_PENDING_SIGINT;
-  remote_callbacks.append_bin ((gdb_byte *)&packet_type, sizeof (packet_type));
 #ifdef __QNXTARGET__
-  /* Only send ptid for QNX targets since the server has trouble grabbing that
-   */
-  remote_callbacks.append_separator ();
-  remote_callbacks.append_bin ((gdb_byte *)&ptid, sizeof (ptid));
+  auto &encoder = remote_callbacks.encoder (CHECK_PENDING_SIGINT);
+  encoder.put (static_cast<int32_t> (ptid.pid ()));
+  encoder.put (static_cast<int64_t> (ptid.lwp ()));
+#else
+  remote_callbacks.encoder (CHECK_PENDING_SIGINT);
 #endif
 
   remote_callbacks.send_request ();
@@ -422,40 +346,26 @@ cuda_remote_api_finalize ()
   cuda_remote_send_packet (API_FINALIZE);
 
   CUDBGResult res;
-  remote_callbacks.extract_bin ((gdb_byte *)&res, sizeof (res));
+  remote_callbacks.get (&res);
   return res;
 }
 
 void
 cuda_remote_set_option ()
 {
-  remote_callbacks.append_string ("qnv.");
-  cuda_packet_type_t packet_type = SET_OPTION;
-  remote_callbacks.append_bin ((gdb_byte *)&packet_type, sizeof (packet_type));
-  remote_callbacks.append_separator ();
-  bool general_trace = cuda_options_debug_general ();
-  remote_callbacks.append_bin ((gdb_byte *)&general_trace,
-			       sizeof (general_trace));
-  remote_callbacks.append_separator ();
-  bool libcudbg_trace = cuda_options_debug_libcudbg ();
-  remote_callbacks.append_bin ((gdb_byte *)&libcudbg_trace,
-			       sizeof (libcudbg_trace));
-  remote_callbacks.append_separator ();
-  bool notifications_trace = cuda_options_debug_notifications ();
-  remote_callbacks.append_bin ((gdb_byte *)&notifications_trace,
-			       sizeof (notifications_trace));
-  remote_callbacks.append_separator ();
-  bool notify_youngest = cuda_options_notify_youngest ();
-  remote_callbacks.append_bin ((gdb_byte *)&notify_youngest,
-			       sizeof (notify_youngest));
-  remote_callbacks.append_separator ();
-  bool driver_logs = cuda_options_driver_logs_enabled ();
-  remote_callbacks.append_bin ((gdb_byte *)&driver_logs, sizeof (driver_logs));
-  remote_callbacks.append_separator ();
-  bool printf_flushing = cuda_options_printf_flushing ();
-  remote_callbacks.append_bin ((gdb_byte *)&printf_flushing,
-             sizeof (printf_flushing));
-  remote_callbacks.append_separator ();
+  auto &encoder = remote_callbacks.encoder (SET_OPTION);
+  const bool general_trace = cuda_options_debug_general ();
+  encoder.put (general_trace);
+  const bool libcudbg_trace = cuda_options_debug_libcudbg ();
+  encoder.put (libcudbg_trace);
+  const bool notifications_trace = cuda_options_debug_notifications ();
+  encoder.put (notifications_trace);
+  const bool notify_youngest = cuda_options_notify_youngest ();
+  encoder.put (notify_youngest);
+  const bool driver_logs = cuda_options_driver_logs_enabled ();
+  encoder.put (driver_logs);
+  const bool printf_flushing = cuda_options_printf_flushing ();
+  encoder.put (printf_flushing);
 
   remote_callbacks.send_request ();
 }
@@ -469,25 +379,32 @@ cuda_remote_query_trace_message ()
 
   cuda_remote_send_packet (QUERY_TRACE_MESSAGE);
 
-  const char *str = remote_callbacks.extract_string ();
-  while (strcmp ("NO_TRACE_MESSAGE", str) != 0)
+  const char *str = remote_callbacks.get_string ();
+  while (std::string_view (str) != "NO_TRACE_MESSAGE")
     {
       fprintf (stderr, "%s\n", str);
 
       cuda_remote_send_packet (QUERY_TRACE_MESSAGE);
-      str = remote_callbacks.extract_string ();
+      str = remote_callbacks.get_string ();
     }
   fflush (stderr);
 }
 
 #ifdef __QNXTARGET__
-/* On QNX targets version is queried explicitly */
 void
-cuda_qnx_version_handshake ()
+cuda_qnx_protocol_hash_handshake ()
 {
-  cuda_remote_send_packet (VERSION_HANDSHAKE);
+  auto &encoder = remote_callbacks.encoder (CUDA_PROTOCOL_HASH_HANDSHAKE);
+  encoder.put (CUDA_PROTOCOL_HASH);
 
-  const char *version = remote_callbacks.extract_string ();
-  cuda_qnx_version_handshake_check (version);
+  remote_callbacks.send_request ();
+
+  const char *const server_hash = remote_callbacks.get_string ();
+  if (std::string_view (server_hash) != CUDA_PROTOCOL_HASH)
+    error (_ ("CUDA GDB / cuda-gdbserver mismatch: protocol-hash mismatch "
+	      "(cuda-gdb=%s, cuda-gdbserver=%s).  Please use cuda-gdb "
+	      "and cuda-gdbserver built from the same sources."),
+	   CUDA_PROTOCOL_HASH,
+	   server_hash);
 }
 #endif /* __QNXTARGET__ */

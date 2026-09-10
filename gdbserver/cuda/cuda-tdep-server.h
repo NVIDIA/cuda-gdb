@@ -27,6 +27,10 @@
 #include "cuda/cuda-utils.h"
 #include "cudadebugger.h"
 
+#include <cstdarg>
+#include <deque>
+#include <string>
+
 #define CUDA_SYM(SYM)   \
   {             \
     _STRING_(SYM),       \
@@ -56,15 +60,17 @@ extern bool cuda_printf_flushing;
 extern ptid_t cuda_last_ptid;
 extern struct target_waitstatus cuda_last_ws;
 
-struct cuda_trace_msg
-{
-  char buf [1024];
-  struct cuda_trace_msg *next;
-};
+/* Queue of pending trace messages drained by `qnv.QUERY_TRACE_MESSAGE`.
+Producers should call `cuda_enqueue_trace_message` instead of pushing to the
+deque directly */
+extern std::deque<std::string> cuda_trace_messages;
 
-extern struct cuda_trace_msg *cuda_first_trace_msg;
-
-extern struct cuda_trace_msg *cuda_last_trace_msg;
+/* Format `"<prefix>" + vsprintf(fmt, ap)` and enqueue it as a single
+   trace message. Truncates if the message is too long for the transport
+   protocol. Caller retains ownership of `ap` and is responsible for its
+   `va_end`.  */
+void cuda_enqueue_trace_message (const char *prefix, const char *fmt,
+				 va_list ap) ATTRIBUTE_PRINTF (2, 0);
 
 struct cuda_sym
 {

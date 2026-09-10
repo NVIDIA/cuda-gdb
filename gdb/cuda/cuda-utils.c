@@ -737,7 +737,12 @@ cuda_format_log_timestamp_string (uint64_t timestamp_ns)
 void
 cuda_consume_and_print_driver_logs (void)
 {
+#if CUDBG_API_VERSION_REVISION >= 181
+  CUDBGCudaLogMessage129 logMessages[cuda_debugapi::CudaLogMessagesFetchLimit];
+#else
   CUDBGCudaLogMessage logMessages[cuda_debugapi::CudaLogMessagesFetchLimit];
+#endif
+
   uint32_t num_consumed = 0;
 
   // Keep fetching logs until no more are available

@@ -318,6 +318,18 @@ solib_find_1 (const char *in_pathname, int *fd, bool is_solib)
 	       OPF_TRY_CWD_FIRST | OPF_RETURN_REALPATH, in_pathname,
 	       O_RDONLY | O_BINARY, &temp_pathname);
 
+#if defined(NVIDIA_CUDA_GDB) && defined(__QNXTARGET__)
+  if (is_solib && found_file < 0)
+    {
+      const solib_ops *ops
+	= gdbarch_so_ops (current_inferior ()->arch ());
+      if (ops->find_and_open_solib)
+	found_file = ops->find_and_open_solib (in_pathname,
+					       O_RDONLY | O_BINARY,
+					       &temp_pathname);
+    }
+#endif
+
   if (fd == NULL)
     {
       if (found_file >= 0)

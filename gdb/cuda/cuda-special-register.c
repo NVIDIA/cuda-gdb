@@ -110,7 +110,7 @@ cuda_special_register_p (regmap_t regmap)
   if (num_regs == 1)
     {
       const auto reg_class = regmap_get_class (regmap, 0);
-      if (reg_class == REG_CLASS_REG_FULL || reg_class == REG_CLASS_UREG_FULL)
+      if (reg_class == REG_CLASS_REG_FULL || reg_class == REG_CLASS_UREG_FULL || reg_class == REG_CLASS_TEMP_REG_SPILL)
 	return false;
     }
 
@@ -201,6 +201,12 @@ cuda_special_register_read_entry (regmap_t regmap, uint32_t entry_idx,
       regnum = regmap_get_upredicate (regmap, entry_idx);
       *buf = cuda_state::warp_get_upredicate (c.dev (), c.sm (), c.wp (),
 					      regnum);
+      break;
+
+    case REG_CLASS_TEMP_REG_SPILL:
+      regnum = regmap_get_rpc_register (regmap, entry_idx);
+      *buf = cuda_state::lane_get_rpc_register (c.dev (), c.sm (), c.wp (),
+					      c.ln (), regnum);
       break;
 
     case REG_CLASS_REG_CC:
@@ -301,6 +307,11 @@ cuda_special_register_write_entry (regmap_t regmap, uint32_t entry_idx,
       regnum = regmap_get_upredicate (regmap, entry_idx);
       cuda_state::warp_set_upredicate (c.dev (), c.sm (), c.wp (), regnum,
 				       *buf);
+      break;
+    case REG_CLASS_TEMP_REG_SPILL:
+      regnum = regmap_get_rpc_register (regmap, entry_idx);
+      cuda_state::lane_set_rpc_register (c.dev (), c.sm (), c.wp (), c.ln (), regnum,
+					 *buf);
       break;
 
     case REG_CLASS_REG_CC:
@@ -430,6 +441,11 @@ cuda_special_register_to_value (regmap_t regmap, frame_info_ptr frame,
 	  get_frame_register (frame, regnum + tdep->first_upred_regnum,
 			      (gdb_byte *)&p[idx]);
 	  break;
+	case REG_CLASS_TEMP_REG_SPILL:
+	  regnum = regmap_get_rpc_register (regmap, i);
+	  get_frame_register (frame, regnum + tdep->first_rpc_regnum,
+			      (gdb_byte *)&p[idx]);
+	  break;
 
 	case REG_CLASS_REG_CC:
 	case REG_CLASS_REG_ADDR:
@@ -534,6 +550,12 @@ cuda_value_to_special_register (regmap_t regmap, frame_info_ptr frame,
 			      gdb::make_array_view ((gdb_byte *)&p[idx], sizeof (p[idx])));
 	  break;
 
+	case REG_CLASS_TEMP_REG_SPILL:
+	  regnum = regmap_get_rpc_register (regmap, i);
+	  put_frame_register (frame, regnum + tdep->first_rpc_regnum,
+			      gdb::make_array_view ((gdb_byte *)&p[idx], sizeof (p[idx])));
+	  break;
+
 	case REG_CLASS_REG_CC:
 	case REG_CLASS_REG_ADDR:
 	  error (_ ("CUDA Register Class 0x%x not supported yet."),
@@ -617,6 +639,11 @@ cuda_special_register_name (regmap_t regmap, char *buf, const int size)
 	case REG_CLASS_UREG_PRED:
 	  regnum = regmap_get_upredicate (regmap, regs[i]);
 	  d += snprintf (buf + d, size - 1 - d, "UP%d", regnum);
+	  break;
+
+	case REG_CLASS_TEMP_REG_SPILL:
+	  regnum = regmap_get_rpc_register (regmap, regs[i]);
+	  d += snprintf (buf + d, size - 1 - d, "RPC.%s", regnum == 0 ? "LO" : "HI");
 	  break;
 
 	case REG_CLASS_REG_CC:

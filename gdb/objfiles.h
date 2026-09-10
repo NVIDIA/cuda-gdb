@@ -904,7 +904,11 @@ public:
      This is used as a way to tell GDB that we no longer want types associated
      with this particular CUDA objfile and therefore want the types to be
      architecture-based.  */
-  int discarding = 0;
+  bool discarding = false;
+  /* CUDA - Set when the module's cubin is being permanently removed
+     from the driver (context / module destruction) as opposed to a
+     temporary objfile removal during FUNCTIONS_LOADED.  */
+  bool unlinked = false;
   /* CUDA - regmap */
   struct cuda_regmap_table *cuda_regmap = NULL;
   /* A unique sequence identifier for the global linked list */

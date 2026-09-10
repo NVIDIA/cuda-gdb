@@ -54,6 +54,7 @@
 #define DW_AT_DUP(name, value) , name = value
 #define DW_OP(name, value) , name = value
 #define DW_OP_DUP(name, value) , name = value
+#define DW_OP_LLVM_USER(name, value) , name = value
 #define DW_ATE(name, value) , name = value
 #define DW_ATE_DUP(name, value) , name = value
 #define DW_CFA(name, value) , name = value
@@ -74,6 +75,9 @@
 #define DW_FIRST_OP(name, value) enum dwarf_location_atom { \
   name = value
 #define DW_END_OP };
+#define DW_BEGIN_OP_LLVM_USER(name, value) enum dwarf_llvm_user { \
+  name = value
+#define DW_END_OP_LLVM_USER };
 #define DW_FIRST_ATE(name, value) enum dwarf_type { \
   name = value
 #define DW_END_ATE };
@@ -102,6 +106,8 @@
 #undef DW_END_AT
 #undef DW_FIRST_OP
 #undef DW_END_OP
+#undef DW_BEGIN_OP_LLVM_USER
+#undef DW_END_OP_LLVM_USER
 #undef DW_FIRST_ATE
 #undef DW_END_ATE
 #undef DW_FIRST_CFA
@@ -118,6 +124,7 @@
 #undef DW_AT_DUP
 #undef DW_OP
 #undef DW_OP_DUP
+#undef DW_OP_LLVM_USER
 #undef DW_ATE
 #undef DW_ATE_DUP
 #undef DW_CFA
@@ -576,6 +583,10 @@ extern const char *get_DW_FORM_name (unsigned int form);
 /* Return the name of a DW_OP_ constant, or NULL if the value is not
    recognized.  */
 extern const char *get_DW_OP_name (unsigned int op);
+
+/* Return the name of a DW_OP_LLVM_USER_ constant, or NULL if the
+   value is not recognized.  */
+extern const char *get_DW_OP_LLVM_USER_name (unsigned int op);
 
 /* Return the name of a DW_ATE_ constant, or NULL if the value is not
    recognized.  */

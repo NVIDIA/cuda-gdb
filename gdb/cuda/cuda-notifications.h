@@ -69,6 +69,12 @@ bool cuda_notification_received (void);
 
 void cuda_notification_consume_pending (void);
 
+/* Per-wait-epoch flag: did handle_suspended_event drain an
+   ALL_DEVICES_SUSPENDED in this cycle? */
+void cuda_notification_set_suspend_drained (void);
+void cuda_notification_clear_suspend_drained (void);
+bool cuda_notification_suspend_drained (void);
+
 class cuda_statistic;
 cuda_statistic &get_cuda_notification_statistics (void);
 

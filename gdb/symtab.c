@@ -3152,7 +3152,15 @@ find_pc_sect_compunit_symtab (CORE_ADDR pc, struct obj_section *section)
 	      if (bv->map ()->find (pc) == nullptr)
 		continue;
 
-	      return cust;
+#ifdef NVIDIA_CUDA_GDB
+	      /* CUDA - don't shortcut.  An addrmap hit only tells us PC
+		 is in this cust; for CUDA objfiles we still need the
+		 device/host overlap filter, blockvector_for_pc_sect
+		 narrowing, and smallest-range selection across
+		 (potentially overlapping) cubins applied below.  */
+	      if (!obj_file->cuda_objfile)
+#endif
+		return cust;
 	    }
 
 	  CORE_ADDR range = end - start;
@@ -3169,6 +3177,20 @@ find_pc_sect_compunit_symtab (CORE_ADDR pc, struct obj_section *section)
 	  if (obj_file->cuda_objfile
 	      && !blockvector_for_pc_sect (pc, section, &global_block, cust))
 	    continue;
+	  /* CUDA - refresh range after possible narrowing.
+	     For CUDA objfiles, blockvector_for_pc_sect above may replace
+	     global_block with an inner block that actually contains PC, so
+	     the range computed earlier from bv->global_block () is stale.
+	     Recompute it from the current global_block and re-apply the
+	     best_cust skip-check so the comparisons against best_cust_range
+	     (and the value we eventually store into best_cust_range) reflect
+	     the CUDA-narrowed scope of this cust at PC.  */
+	  if (obj_file->cuda_objfile)
+	    {
+	      range = global_block->end () - global_block->start ();
+	      if (best_cust != nullptr && range >= best_cust_range)
+		continue;
+	    }
 	  /* CUDA - overlapping objfiles */
           /* For reasons yet not fully understood, it sometimes happens that the PC
              passed as argument appears to belong to the wrong objfile. In other
@@ -3194,6 +3216,27 @@ find_pc_sect_compunit_symtab (CORE_ADDR pc, struct obj_section *section)
 	  if (result != nullptr)
 	    return result;
 
+#ifdef NVIDIA_CUDA_GDB
+	  /* CUDA - skip section matching for CUDA objfiles.
+	     Block-function symbols synthesized for CUDA objfiles (e.g.
+	     by cuda_add_minsyms for -lineinfo cubins) have their section
+	     index overwritten by finish_block_internal to SECT_OFF_TEXT
+	     (objfile), which is the index of a section literally named
+	     ".text".  CUDA cubins use per-kernel sections such as
+	     .text.<kernel>, so SECT_OFF_TEXT defaults to either a segment-
+	     derived index or 0 and does not actually match the section
+	     containing the PC.  This causes matching_obj_sections below
+	     to spuriously reject every symbol in the blockvector and the
+	     cust to be skipped, even though it is the right one.  The
+	     in_range_p + blockvector_for_pc_sect checks above already
+	     scope the search to the correct cust.  */
+	  if (obj_file->cuda_objfile)
+	    {
+	      best_cust = cust;
+	      best_cust_range = range;
+	      continue;
+	    }
+#endif
 	  if (section != 0)
 	    {
 	      struct symbol *found_sym = nullptr;

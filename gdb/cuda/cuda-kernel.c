@@ -29,7 +29,6 @@
 #include "cuda-coord-set.h"
 #include "cuda-kernel.h"
 #include "cuda-modules.h"
-#include "cuda-options.h"
 #include "cuda-state.h"
 #include "cuda-tdep.h"
 
@@ -45,8 +44,7 @@ cuda_kernel::cuda_kernel (uint64_t kernel_id, uint32_t dev_id,
 			  const CuDim3 &block_dim,
 			  const CuDim3 &cluster_dim_default,
 			  const CuDim3 &cluster_dim_preferred,
-			  CUDBGKernelType type, CUDBGKernelOrigin origin,
-			  uint64_t parent_grid_id)
+			  CUDBGKernelType type)
     : m_id (kernel_id), m_dev_id (dev_id), m_grid_id (grid_id),
       m_module (module), m_virt_code_base (virt_code_base),
       m_grid_dim (grid_dim), m_block_dim (block_dim),
@@ -57,8 +55,7 @@ cuda_kernel::cuda_kernel (uint64_t kernel_id, uint32_t dev_id,
       m_cluster_dim_preferred_p (m_cluster_dim_default_p),
       m_cluster_dim_preferred (cluster_dim_preferred), m_grid_status_p (false),
       m_grid_status (CUDBG_GRID_STATUS_INVALID), m_type (type),
-      m_origin (origin), m_parent_grid_id (parent_grid_id), m_depth_p (false),
-      m_depth (0), m_launched (false)
+      m_launched (false)
 {
   // NOTE: Not having an entry function is a normal situation, this means
   // an internal kernel contained in a public module was launched.
@@ -73,37 +70,6 @@ cuda_kernel::cuda_kernel (uint64_t kernel_id, uint32_t dev_id,
 	    m_grid_dim.x, m_grid_dim.y, m_grid_dim.z, m_block_dim.x,
 	    m_block_dim.y, m_block_dim.z);
   m_dimensions = dimensions;
-}
-
-uint32_t
-cuda_kernel::depth ()
-{
-  if (!m_depth_p)
-    {
-      if (m_parent_grid_id)
-	{
-	  auto parent = cuda_state::find_kernel_by_grid_id (m_dev_id,
-							    m_parent_grid_id);
-	  gdb_assert (parent);
-	  m_depth = parent->depth () + 1;
-	}
-      else
-	m_depth = 0;
-      m_depth_p = true;
-    }
-  return m_depth;
-}
-
-std::vector<cuda_kernel *>
-cuda_kernel::children ()
-{
-  // Find all kernels that are direct children of this kernel
-  std::vector<cuda_kernel *> children;
-  for (auto &iter : cuda_state::kernels ())
-    if ((iter.second->dev_id () == m_dev_id)
-	&& (iter.second->parent_grid_id () == m_grid_id))
-      children.push_back (iter.second.get ());
-  return children;
 }
 
 void
@@ -130,27 +96,10 @@ cuda_kernel::compute_sms_mask (cuda_bitset &mask)
     mask.set (coord.physical ().sm ());
 }
 
-bool
-cuda_kernel::should_print_kernel_event ()
-{
-  const auto depth_or_disabled = cuda_options_show_kernel_events_depth ();
-
-  if (depth_or_disabled && (depth () > (depth_or_disabled - 1)))
-    return false;
-
-  return (m_type == CUDBG_KNL_TYPE_SYSTEM
-	  && cuda_options_show_kernel_events_system ())
-	 || (m_type == CUDBG_KNL_TYPE_APPLICATION
-	     && cuda_options_show_kernel_events_application ());
-}
-
 void
 cuda_kernel::invalidate ()
 {
   cuda_trace ("kernel %lu: invalidate", m_id);
-
-  // No need to clear m_depth_p as while it's computed lazily, it's
-  // also constant for the lifetime of the kernel.
 
   m_grid_status_p = false;
   m_cluster_dim_default_p = false;

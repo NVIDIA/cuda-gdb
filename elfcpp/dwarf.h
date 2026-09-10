@@ -29,6 +29,11 @@
 // Foundation, Inc., 51 Franklin Street - Fifth Floor, Boston, MA
 // 02110-1301, USA.
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2026 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #ifndef ELFCPP_DWARF_H
 #define ELFCPP_DWARF_H
 
@@ -62,6 +67,11 @@ namespace elfcpp
 #define DW_OP(name, value) , name = value
 #define DW_OP_DUP(name, value) , name = value
 #define DW_END_OP };
+
+#define DW_BEGIN_OP_LLVM_USER(name, value) enum DW_OP_LLVM_USER { \
+  name = value
+#define DW_OP_LLVM_USER(name, value) , name = value
+#define DW_END_OP_LLVM_USER };
 
 #define DW_FIRST_ATE(name, value) enum DW_ENCODING { \
   name = value
@@ -106,6 +116,10 @@ namespace elfcpp
 #undef DW_OP
 #undef DW_OP_DUP
 #undef DW_END_OP
+
+#undef DW_BEGIN_OP_LLVM_USER
+#undef DW_OP_LLVM_USER
+#undef DW_END_OP_LLVM_USER
 
 #undef DW_FIRST_ATE
 #undef DW_ATE

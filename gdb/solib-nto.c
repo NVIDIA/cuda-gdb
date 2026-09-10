@@ -553,6 +553,11 @@ nto_find_and_open_solib (const char *solib, unsigned o_flags,
 #define PATH_FMT "%s/lib:%s/usr/lib:%s/lib/dll:%s/lib/dll/pci:%s/bin:%s/usr/bin"
 #endif
 
+#ifdef NVIDIA_CUDA_GDB
+#define SYSROOT_PATH_FMT \
+  "%s/lib:%s/usr/lib:%s/lib/dll:%s/lib/dll/pci:%s/bin:%s/usr/bin:%s/usr/libnvidia"
+#endif
+
   base = lbasename (solib);
 
   nto_trace(1)("  basename %s\n", base);
@@ -596,6 +601,25 @@ nto_find_and_open_solib (const char *solib, unsigned o_flags,
   nto_trace(1)("  searching %s in %s\n", base, buf);
   ret = openp (buf, OPF_TRY_CWD_FIRST | OPF_RETURN_REALPATH, base, o_flags,
 	 temp_pathname);
+
+#ifdef NVIDIA_CUDA_GDB
+  if (ret < 0 && !gdb_sysroot.empty ())
+    {
+      const char *sysroot = gdb_sysroot.c_str ();
+      constexpr int sysroot_count = 7;
+      int sysroot_plen = strlen (SYSROOT_PATH_FMT)
+			 + (sysroot_count * strlen (sysroot)) + 1;
+      if (sysroot_plen < MAXPATHLEN)
+	sysroot_plen = MAXPATHLEN;
+      char *sysroot_buf = (char *) alloca (sysroot_plen);
+      xsnprintf (sysroot_buf, sysroot_plen, SYSROOT_PATH_FMT,
+		 sysroot, sysroot, sysroot, sysroot,
+		 sysroot, sysroot, sysroot);
+      nto_trace(1)("  searching %s in sysroot paths %s\n", base, sysroot_buf);
+      ret = openp (sysroot_buf, OPF_TRY_CWD_FIRST | OPF_RETURN_REALPATH,
+		   base, o_flags, temp_pathname);
+    }
+#endif
 
   if ( ret >= 0 )
     {

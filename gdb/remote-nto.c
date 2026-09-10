@@ -71,6 +71,7 @@
 
 #ifdef NVIDIA_CUDA_GDB
 #include "cuda/cuda-linux-nat-template.h"
+#include "cuda/cuda-packet-manager.h"
 #include "remote-nto.h"
 #endif
 
@@ -147,6 +148,12 @@ typedef union
    to the pdebug target - cuda-gdb and cuda-gdbserver and `mid` must be kept
    in sync between them. */
 static unsigned char mid;
+
+static bool
+nto_mid_forward_or_equal (unsigned char recv_mid, unsigned char request_mid)
+{
+  return (unsigned char) (recv_mid - request_mid) < 128;
+}
 #endif
 
 static bool nto_force_hwbp = false;
@@ -1119,8 +1126,8 @@ nto_send_recv (const DScomm_t *const tran, DScomm_t *const recv,
 {
   int rlen;
   unsigned tries;
-#ifdef NVIDIA_BUGFIX
-  bool stashed = false;
+#if defined (NVIDIA_BUGFIX) || defined (NVIDIA_CUDA_GDB)
+  bool skip_send = false;
 #endif
 
   if (current_session->desc == NULL)
@@ -1147,11 +1154,11 @@ nto_send_recv (const DScomm_t *const tran, DScomm_t *const recv,
 	  current_session->desc = NULL;
 	  break;
 	}
-#ifdef NVIDIA_BUGFIX
-      if (!stashed)
-        putpkt (tran, len);
+#if defined (NVIDIA_BUGFIX) || defined (NVIDIA_CUDA_GDB)
+      if (!skip_send)
+	putpkt (tran, len);
       else
-        stashed = false;
+	skip_send = false;
 #else
       putpkt (tran, len);
 #endif
@@ -1168,24 +1175,40 @@ nto_send_recv (const DScomm_t *const tran, DScomm_t *const recv,
 	  printf_unfiltered ("MsgNak received - resending\n");
 	  continue;
 	}
+#if defined (NVIDIA_BUGFIX) || defined (NVIDIA_CUDA_GDB)
+      const bool got_header = rlen >= (int) sizeof (struct DShdr);
+      if (got_header && recv->pkt.hdr.mid == tran->pkt.hdr.mid)
+#else
       if ((rlen >= 0) && (recv->pkt.hdr.mid == tran->pkt.hdr.mid))
+#endif
 	break;
 #ifdef NVIDIA_CUDA_GDB
-      if ((rlen >= 0) && (recv->pkt.hdr.cmd == DSrMsg_okcuda))
+      const unsigned char tran_cmd = tran->pkt.hdr.cmd & ~DSHDR_MSG_BIG_ENDIAN;
+      if (got_header
+	  && ((recv->pkt.hdr.cmd & ~DSHDR_MSG_BIG_ENDIAN) == DSrMsg_okcuda))
 	{
-	  /* We need to keep mid in sync. cuda-gdbserver always returns
-	     the latest unused mid in okcuda packets. */
-	  mid = recv->pkt.hdr.mid;
-	  const_cast<DScomm_t *>(tran)->pkt.hdr.mid = mid;
-	  break;
+	  if (tran_cmd == DStMsg_cuda
+	      && nto_mid_forward_or_equal (recv->pkt.hdr.mid,
+					tran->pkt.hdr.mid))
+	    {
+	      mid = recv->pkt.hdr.mid;
+	      const_cast<DScomm_t *>(tran)->pkt.hdr.mid = mid;
+	      break;
+	    }
+
+	  nto_trace (1) ("stale okcuda mid %u for request mid %u\n",
+			 recv->pkt.hdr.mid, tran->pkt.hdr.mid);
+	  tries--;
+	  skip_send = true;
+	  continue;
 	}
 #endif
 #ifdef NVIDIA_BUGFIX
-      if (recv->pkt.hdr.cmd == DShMsg_notify)
+      if (got_header && recv->pkt.hdr.cmd == DShMsg_notify)
         {
 	  nto_trace (1) ("Received notify message\n");
 	  current_session->pending.push (*recv);
-	  stashed = true;
+	  skip_send = true;
 	  /* Let's not consider this an attempt. */
 	  tries--;
 	  continue;
@@ -1677,8 +1700,8 @@ nto_start_remote ( )
        HOST_QNX_PROTOVER_MAJOR, HOST_QNX_PROTOVER_MINOR);
 
 #ifdef NVIDIA_CUDA_GDB
-  /* Fail if remote is pdebug or a different CUDA version in cuda-gdbserver */
-  cuda_qnx_version_handshake ();
+  /* Fail if remote is pdebug or a different cuda-gdbserver build.  */
+  cuda_qnx_protocol_hash_handshake ();
 #endif
 
   /* If we had an inferior running previously, gdb will have some internal
@@ -3603,6 +3626,7 @@ upload_command (const char *args, int fromtty)
       inf_rdata->remote_exe = std::string {to};
       if (only_session.remote_exe.length () == 0)
 	only_session.remote_exe = std::string {to};
+      exec_file_attach (from, 0);
 #else
       xfree (inf_rdata->remote_exe);
       inf_rdata->remote_exe = xstrdup (to);
@@ -4633,12 +4657,24 @@ send_qnx_packet (gdb::array_view<const char> &buf,
   DScomm_t tran, recv;
   nto_send_init (&tran, DStMsg_cuda, 0, SET_CHANNEL_DEBUG);
   memcpy (tran.pkt.cuda.data, buf.data (), buf.size ());
+  const unsigned char request_mid = tran.pkt.hdr.mid;
+  const int request_prefix_len = buf.size () < 16 ? (int) buf.size () : 16;
+  nto_trace (1) ("send_qnx_packet req mid %u prefix %.*s\n",
+		 request_mid, request_prefix_len, buf.data ());
+
   int bytes = nto_send_recv (&tran, &recv,
 			     offsetof (DStMsg_cuda_t, data) + buf.size (), 1);
 
   if (bytes < 0)
     error (_("error while fetching packet from remote target"));
-  else if (recv.pkt.hdr.cmd == DSrMsg_err)
+  if (bytes < (int) sizeof (struct DShdr))
+    error (_("truncated packet received from remote target"));
+
+  nto_trace (1) ("send_qnx_packet resp req mid %u cmd %u mid %u bytes %d\n",
+		 request_mid, recv.pkt.hdr.cmd & ~DSHDR_MSG_BIG_ENDIAN,
+		 recv.pkt.hdr.mid, bytes);
+
+  if (recv.pkt.hdr.cmd == DSrMsg_err)
     {
       nto_trace (1) ("  errno=%d (%s)\n", recv.pkt.err.err,
 		     strerror (recv.pkt.err.err));
@@ -4648,6 +4684,11 @@ send_qnx_packet (gdb::array_view<const char> &buf,
     error (_("unexpected packet received from remote target"));
 
   bytes -= sizeof (struct DShdr);
+  const int reply_prefix_len = bytes < 16 ? bytes : 16;
+  nto_trace (1) ("send_qnx_packet resp req mid %u prefix %.*s\n",
+		 request_mid, reply_prefix_len,
+		 (const char *) recv.pkt.cuda.data);
+
   gdb::array_view<const char> view ((const char *)recv.pkt.cuda.data, bytes);
   callbacks->received (view);
 }

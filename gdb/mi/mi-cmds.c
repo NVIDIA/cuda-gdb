@@ -252,9 +252,7 @@ add_builtin_mi_commands ()
   add_mi_cmd_mi ("cuda-info-clusters", mi_cmd_cuda_info_clusters);
   add_mi_cmd_mi ("cuda-info-blocks", mi_cmd_cuda_info_blocks);
   add_mi_cmd_mi ("cuda-info-threads", mi_cmd_cuda_info_threads);
-  add_mi_cmd_mi ("cuda-info-launch-trace", mi_cmd_cuda_info_launch_trace);
   add_mi_cmd_mi ("cuda-info-contexts", mi_cmd_cuda_info_contexts);
-  add_mi_cmd_mi ("cuda-info-launch-children", mi_cmd_cuda_info_launch_children);
   add_mi_cmd_mi ("cuda-info-managed",  mi_cmd_cuda_info_managed);
   add_mi_cmd_mi ("cuda-info-line",  mi_cmd_cuda_info_line);
   add_mi_cmd_mi ("cuda-info-ptx-special-registers", mi_cmd_cuda_info_ptx_special_registers);

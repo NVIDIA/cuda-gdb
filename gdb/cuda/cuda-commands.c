@@ -1467,10 +1467,9 @@ info_cuda_barriers_command (const char *arg)
       return;
     }
 
-  char barrierInfo[256];
+  char barrierInfo[256] = "";
   uint32_t msgSz = 0;
   CUDBGBarrierScope scope = CUDBG_BARRIER_SCOPE_NONE;
-  std::string barrier_str;
 
   /* Get the current focus or return if there is none */
   if (!cuda_current_focus::isDevice ())
@@ -1491,43 +1490,36 @@ info_cuda_barriers_command (const char *arg)
 	  warning (_ ("WARNING: Lane not found for focus!\n"));
 	  continue;
 	}
+      barrierInfo[0] = '\0';
+      msgSz = 0;
+      scope = CUDBG_BARRIER_SCOPE_NONE;
       cuda_debugapi::get_hardware_barrier_info (
 	  cuda_warp_state.device (), cuda_warp_state.sm (),
 	  cuda_warp_state.warp (), lane, &scope, barrierInfo,
 	  sizeof (barrierInfo), &msgSz);
       switch (scope)
 	{
-	case CUDBG_BARRIER_SCOPE_NONE:
-	  barrier_str = "not blocked on a barrier.";
-	  break;
-	case CUDBG_BARRIER_SCOPE_INVALID:
-	  barrier_str = "blocked on an Invalid Barrier.";
-	  break;
 	case CUDBG_BARRIER_SCOPE_WARP:
-	  barrier_str = "blocked on a Warp Barrier.";
+	  current_uiout->message ("Focus is on a Warp Barrier.\n");
 	  break;
 	case CUDBG_BARRIER_SCOPE_WARP_GROUP:
-	  barrier_str = "blocked on a Warp Group Barrier.";
+	  current_uiout->message ("Focus is on a Warp Group Barrier.\n");
 	  break;
 	case CUDBG_BARRIER_SCOPE_BLOCK:
-	  barrier_str = "blocked on a Block Barrier.";
+	  current_uiout->message ("Focus is on a Block Barrier.\n");
 	  break;
 	case CUDBG_BARRIER_SCOPE_CLUSTER:
-	  barrier_str = "blocked on a Cluster Barrier.";
+	  current_uiout->message ("Focus is on a Cluster Barrier.\n");
 	  break;
 	case CUDBG_BARRIER_SCOPE_KERNEL:
-	  barrier_str = "blocked on a Kernel Barrier.";
+	  current_uiout->message ("Focus is on a Kernel Barrier.\n");
 	  break;
 	default:
-	  barrier_str = "not blocked on a barrier.";
 	  break;
 	}
 
-      if (scope != CUDBG_BARRIER_SCOPE_NONE
-	  && scope != CUDBG_BARRIER_SCOPE_INVALID)
-	{
-	  current_uiout->message ("Focus is %s\n", barrier_str.c_str ());
-	}
+      if (barrierInfo[0] != '\0')
+	current_uiout->message ("%s\n", barrierInfo);
 
       current_uiout->message ("Device %u SM %u Wp %u\n",
 			      cuda_warp_state.device (), cuda_warp_state.sm (),
@@ -1762,7 +1754,6 @@ private:
   uint32_t m_device;
   int64_t m_grid_id;
   std::string m_sms_mask;
-  std::string m_parent;
   std::string m_status;
   std::string m_grid_dim;
   std::string m_block_dim;
@@ -1807,12 +1798,6 @@ public:
     kernel->compute_sms_mask (active_sms_mask);
     m_sms_mask = active_sms_mask.to_hex_string ();
 
-    auto parent = kernel->parent_grid_id ()
-		      ? cuda_state::find_kernel_by_grid_id (
-			    kernel->dev_id (), kernel->parent_grid_id ())
-		      : nullptr;
-    m_parent = parent ? std::to_string (parent->id ()) : std::string ("-");
-
     auto status = kernel->grid_status ();
     m_status = std::string{ status_string[status] };
     m_grid_dim = dim3_to_string (kernel->grid_dim ());
@@ -1845,11 +1830,6 @@ public:
   sms_mask () const noexcept
   {
     return m_sms_mask;
-  }
-  const std::string &
-  parent () const noexcept
-  {
-    return m_parent;
   }
   const std::string &
   status () const noexcept
@@ -1919,7 +1899,7 @@ info_cuda_kernels_command (const char *arg)
 {
   struct
   {
-    size_t current, kernel, device, grid, parent, status, sms_mask, grid_dim,
+    size_t current, kernel, device, grid, status, sms_mask, grid_dim,
 	block_dim, invocation;
   } width;
 
@@ -1927,7 +1907,6 @@ info_cuda_kernels_command (const char *arg)
   const std::string header_current{ " " };
   const std::string header_kernel{ "Kernel" };
   const std::string header_device{ "Dev" };
-  const std::string header_parent{ "Parent" };
   const std::string header_grid{ "Grid" };
   const std::string header_status{ "Status" };
   const std::string header_sms_mask{ "SMs Mask" };
@@ -1952,7 +1931,6 @@ info_cuda_kernels_command (const char *arg)
   width.device = header_device.length ();
   width.grid = header_grid.length ();
   width.status = header_status.length ();
-  width.parent = header_parent.length ();
   width.sms_mask = header_sms_mask.length ();
   width.grid_dim = header_grid_dim.length ();
   width.block_dim = header_block_dim.length ();
@@ -1961,7 +1939,6 @@ info_cuda_kernels_command (const char *arg)
   for (const auto &k : kernels)
     {
       width.status = std::max (width.status, k.status ().length ());
-      width.parent = std::max (width.parent, k.parent ().length ());
       width.sms_mask = std::max (width.sms_mask, k.sms_mask ().length ());
       width.grid_dim = std::max (width.grid_dim, k.grid_dim ().length ());
       width.block_dim = std::max (width.block_dim, k.block_dim ().length ());
@@ -1970,11 +1947,10 @@ info_cuda_kernels_command (const char *arg)
     }
 
   /* print table header */
-  ui_out_emit_table table_emitter (uiout, 10, kernels.size (),
+  ui_out_emit_table table_emitter (uiout, 9, kernels.size (),
 				   "InfoCudaKernelsTable");
   uiout->table_header (width.current, ui_right, "current", header_current);
   uiout->table_header (width.kernel, ui_right, "kernel", header_kernel);
-  uiout->table_header (width.parent, ui_right, "parent", header_parent);
   uiout->table_header (width.device, ui_right, "device", header_device);
   uiout->table_header (width.grid, ui_right, "grid", header_grid);
   uiout->table_header (width.status, ui_right, "status", header_status);
@@ -1992,7 +1968,6 @@ info_cuda_kernels_command (const char *arg)
       ui_out_emit_tuple tuple_emitter (uiout, "InfoCudaKernelsRow");
       uiout->field_string ("current", k.current () ? "*" : " ");
       uiout->field_signed ("kernel", k.kernel_id ());
-      uiout->field_string ("parent", k.parent ());
       uiout->field_signed ("device", k.device ());
       uiout->field_signed ("grid", k.grid_id ());
       uiout->field_string ("status", k.status ());
@@ -3129,366 +3104,6 @@ info_cuda_threads_command (const char *arg)
   gdb_flush (gdb_stdout);
 }
 
-class cuda_launch_trace
-{
-private:
-  bool m_current;
-  uint32_t m_level;
-  uint64_t m_kernel_id;
-  uint32_t m_device;
-  int64_t m_grid_id;
-  std::string m_status;
-  std::string m_grid_dim;
-  std::string m_block_dim;
-  std::string m_invocation;
-
-public:
-  /* Static members */
-  constexpr static cuda_coord_set_type iterator_type
-      = cuda_coord_set_type::kernels;
-  constexpr static underlying_type_t<cuda_coord_set_mask_t> iterator_mask
-      = select_all;
-  constexpr static cuda_coord_compare_type compare_type
-      = cuda_coord_compare_type::logical;
-  constexpr static command_t parser_command = CMD_FILTER_KERNEL;
-  static cuda_filters
-  default_filter ()
-  {
-    /* Default to current kernel */
-    cuda_coords c{ CUDA_WILDCARD,     CUDA_WILDCARD,	 CUDA_WILDCARD,
-		   CUDA_WILDCARD,     CUDA_CURRENT,	 CUDA_WILDCARD,
-		   CUDA_WILDCARD_DIM, CUDA_WILDCARD_DIM, CUDA_WILDCARD_DIM,
-		   CUDA_WILDCARD_DIM };
-    return cuda_filters{ c };
-  }
-  static void
-  check_invalid_filter (const cuda_filters &filter)
-  {
-  }
-
-  /* Non-static members */
-  explicit cuda_launch_trace (const cuda_coords &coords)
-  {
-    error (_ ("cuda_launch_trace cannot be constructed via coords!"));
-  }
-
-  explicit cuda_launch_trace (cuda_kernel *kernel, size_t level)
-  {
-    gdb_assert (kernel);
-    m_current = (kernel == cuda_current_focus::get ().logical ().kernel ());
-    m_level = level;
-    m_kernel_id = kernel->id ();
-    m_device = kernel->dev_id ();
-    m_grid_id = kernel->grid_id ();
-    m_status = std::string{ status_string[kernel->grid_status ()] };
-    m_grid_dim = dim3_to_string (kernel->grid_dim ());
-    m_block_dim = dim3_to_string (kernel->block_dim ());
-    m_invocation = invocation_to_string (kernel->name (), kernel->args ());
-  }
-
-  /* Getters */
-  bool
-  current () const noexcept
-  {
-    return m_current;
-  }
-  uint32_t
-  level () const noexcept
-  {
-    return m_level;
-  }
-  uint64_t
-  kernel () const noexcept
-  {
-    return m_kernel_id;
-  }
-  uint32_t
-  device () const noexcept
-  {
-    return m_device;
-  }
-  int64_t
-  grid () const noexcept
-  {
-    return m_grid_id;
-  }
-  const std::string &
-  status () const noexcept
-  {
-    return m_status;
-  }
-  const std::string &
-  grid_dim () const noexcept
-  {
-    return m_grid_dim;
-  }
-  const std::string &
-  block_dim () const noexcept
-  {
-    return m_block_dim;
-  }
-  const std::string &
-  invocation () const noexcept
-  {
-    return m_invocation;
-  }
-
-  /* Init other destructors/constructors */
-  ~cuda_launch_trace () = default;
-  cuda_launch_trace () = delete;
-  cuda_launch_trace (const cuda_launch_trace &) = default;
-  cuda_launch_trace (cuda_launch_trace &&) = default;
-  cuda_launch_trace &operator= (const cuda_launch_trace &) = default;
-  cuda_launch_trace &operator= (cuda_launch_trace &&) = default;
-};
-
-/* Special handling for lists of cuda_launch_trace */
-class cuda_launch_trace_info final : public cuda_info<cuda_launch_trace>
-{
-public:
-  explicit cuda_launch_trace_info (const char *filter_string)
-      : cuda_info{ filter_string }
-  {
-  }
-
-  /* FIXME: We don't have a proper cuda iterator for kernel launch tracing...
-   */
-  bool
-  ignore_coord (const cuda_coords &coords) override
-  {
-    /* Add each kernel in the chain to the list */
-    auto kernel
-	= cuda_state::find_kernel_by_kernel_id (coords.logical ().kernelId ());
-    if (!kernel)
-      error ("Invalid kernel specified or the focus is not set on a kernel");
-
-    size_t level = 0;
-    while (kernel)
-      {
-	m_underlying.emplace_back (kernel, level);
-	kernel = kernel->parent_grid_id ()
-		     ? cuda_state::find_kernel_by_grid_id (
-			   kernel->dev_id (), kernel->parent_grid_id ())
-		     : nullptr;
-	++level;
-      }
-
-    /* We fully constructed the list for every kernel in the chain at this
-     * point. */
-    return true;
-  }
-};
-
-void
-info_cuda_launch_trace_command (const char *arg)
-{
-  struct
-  {
-    size_t current, level, kernel, device, grid, status, invocation, grid_dim,
-	block_dim;
-  } width;
-
-  /* column headers */
-  const std::string header_current{ " " };
-  const std::string header_level{ "Lvl" };
-  const std::string header_kernel{ "Kernel" };
-  const std::string header_device{ "Dev" };
-  const std::string header_grid{ "Grid" };
-  const std::string header_status{ "Status" };
-  const std::string header_grid_dim{ "GridDim" };
-  const std::string header_block_dim{ "BlockDim" };
-  const std::string header_invocation{ "Invocation" };
-  struct ui_out *uiout = current_uiout;
-
-  /* get the information */
-  cuda_launch_trace_info kernels{ arg };
-
-  /* output message if the list is empty */
-  if (kernels.size () == 0 && !uiout->is_mi_like_p ())
-    {
-      uiout->field_string (NULL, _ ("No CUDA kernels.\n"));
-      return;
-    }
-
-  /* column widths */
-  width.current = header_current.length ();
-  width.level = header_level.length ();
-  width.kernel = header_kernel.length ();
-  width.device = header_device.length ();
-  width.grid = header_grid.length ();
-  width.status = header_status.length ();
-  width.invocation = header_invocation.length ();
-  width.grid_dim = header_grid_dim.length ();
-  width.block_dim = header_block_dim.length ();
-
-  for (const auto &k : kernels)
-    {
-      width.status = std::max (width.status, k.status ().length ());
-      width.invocation
-	  = std::max (width.invocation, k.invocation ().length ());
-      width.grid_dim = std::max (width.grid_dim, k.grid_dim ().length ());
-      width.block_dim = std::max (width.block_dim, k.block_dim ().length ());
-    }
-
-  /* print table header */
-  ui_out_emit_table table_emitter (uiout, 9, kernels.size (),
-				   "InfoCudaLaunchTraceTable");
-  uiout->table_header (width.current, ui_right, "current", header_current);
-  uiout->table_header (width.level, ui_left, "level", header_level);
-  uiout->table_header (width.kernel, ui_right, "kernel", header_kernel);
-  uiout->table_header (width.device, ui_right, "device", header_device);
-  uiout->table_header (width.grid, ui_right, "grid", header_grid);
-  uiout->table_header (width.status, ui_right, "status", header_status);
-  uiout->table_header (width.grid_dim, ui_right, "gridDim", header_grid_dim);
-  uiout->table_header (width.block_dim, ui_right, "blockDim",
-		       header_block_dim);
-  uiout->table_header (width.invocation, ui_left, "invocation",
-		       header_invocation);
-  uiout->table_body ();
-
-  /* print table rows */
-  for (const auto &k : kernels)
-    {
-      ui_out_emit_tuple tuple_emitter (uiout, "InfoCudaLaunchTraceRow");
-      uiout->field_string ("current", k.current () ? "*" : " ");
-      uiout->text ("#");
-      uiout->field_signed ("level", k.level ());
-      uiout->field_signed ("kernel", k.kernel ());
-      uiout->field_signed ("device", k.device ());
-      uiout->field_signed ("grid", k.grid ());
-      uiout->field_string ("status", k.status ());
-      uiout->field_string ("gridDim", k.grid_dim ());
-      uiout->field_string ("blockDim", k.block_dim ());
-      uiout->field_string ("invocation", k.invocation ());
-      uiout->text ("\n");
-    }
-
-  gdb_flush (gdb_stdout);
-}
-
-/* Special handling for lists of cuda_launch_trace for child tracing
-   This is nearly identical to cuda_launch_trace, we just build for
-   children instead of parents. */
-class cuda_launch_children_info final : public cuda_info<cuda_launch_trace>
-{
-public:
-  explicit cuda_launch_children_info (const char *filter_string)
-      : cuda_info{ filter_string }
-  {
-  }
-
-  /* FIXME: We don't have a proper cuda iterator for kernel launch tracing...
-   */
-  bool
-  ignore_coord (const cuda_coords &coords) override
-  {
-    /* Add each kernel in the chain to the list */
-    auto kernel
-	= cuda_state::find_kernel_by_kernel_id (coords.logical ().kernelId ());
-    if (!kernel)
-      error ("Invalid kernel specified or the focus is not set on a kernel");
-
-    // Recursively add this kernel and all its children
-    add_kernel_and_children (kernel, 0);
-
-    /* We fully constructed the list for every kernel in the chain at this
-     * point. */
-    return true;
-  }
-
-private:
-  void
-  add_kernel_and_children (cuda_kernel *kernel, uint32_t level)
-  {
-    m_underlying.emplace_back (kernel, level);
-
-    for (const auto &child : kernel->children ())
-      add_kernel_and_children (child, level + 1);
-  }
-};
-
-void
-info_cuda_launch_children_command (const char *arg)
-{
-  struct
-  {
-    size_t current, kernel, device, grid, status, grid_dim, block_dim,
-	invocation;
-  } width;
-
-  /* column headers */
-  const std::string header_current{ " " };
-  const std::string header_kernel{ "Kernel" };
-  const std::string header_device{ "Dev" };
-  const std::string header_grid{ "Grid" };
-  const std::string header_status{ "Status" };
-  const std::string header_grid_dim{ "GridDim" };
-  const std::string header_block_dim{ "BlockDim" };
-  const std::string header_invocation{ "Invocation" };
-  struct ui_out *uiout = current_uiout;
-
-  /* get the information */
-  cuda_launch_children_info kernels{ arg };
-
-  /* output message if the list is empty */
-  if (kernels.size () == 0 && !uiout->is_mi_like_p ())
-    {
-      uiout->field_string (NULL, _ ("No CUDA kernels.\n"));
-      return;
-    }
-
-  /* column widths */
-  width.current = header_current.length ();
-  width.kernel = header_kernel.length ();
-  width.device = header_device.length ();
-  width.grid = header_grid.length ();
-  width.status = header_status.length ();
-  width.invocation = header_invocation.length ();
-  width.grid_dim = header_grid_dim.length ();
-  width.block_dim = header_block_dim.length ();
-
-  for (const auto &k : kernels)
-    {
-      width.status = std::max (width.status, k.status ().length ());
-      width.invocation
-	  = std::max (width.invocation, k.invocation ().length ());
-      width.grid_dim = std::max (width.grid_dim, k.grid_dim ().length ());
-      width.block_dim = std::max (width.block_dim, k.block_dim ().length ());
-    }
-
-  /* print table header */
-  ui_out_emit_table table_emitter (uiout, 8, kernels.size (),
-				   "InfoCudaLaunchChildrenTable");
-  uiout->table_header (width.current, ui_right, "current", header_current);
-  uiout->table_header (width.kernel, ui_right, "kernel", header_kernel);
-  uiout->table_header (width.device, ui_right, "device", header_device);
-  uiout->table_header (width.grid, ui_right, "grid", header_grid);
-  uiout->table_header (width.status, ui_right, "status", header_status);
-  uiout->table_header (width.grid_dim, ui_right, "gridDim", header_grid_dim);
-  uiout->table_header (width.block_dim, ui_right, "blockDim",
-		       header_block_dim);
-  uiout->table_header (width.invocation, ui_left, "invocation",
-		       header_invocation);
-  uiout->table_body ();
-
-  /* print table rows */
-  for (const auto &k : kernels)
-    {
-      ui_out_emit_tuple tuple_emitter (uiout, "InfoCudaLaunchChildrenRow");
-      uiout->field_string ("current", k.current () ? "*" : " ");
-      uiout->field_signed ("kernel", k.kernel ());
-      uiout->field_signed ("device", k.device ());
-      uiout->field_signed ("grid", k.grid ());
-      uiout->field_string ("status", k.status ());
-      uiout->field_string ("gridDim", k.grid_dim ());
-      uiout->field_string ("blockDim", k.block_dim ());
-      uiout->field_string ("invocation", k.invocation ());
-      uiout->text ("\n");
-    }
-
-  gdb_flush (gdb_stdout);
-}
-
 static cuda_kernel *
 cuda_kernel_from_arg_or_focus (const char *arg)
 {
@@ -4000,10 +3615,6 @@ static struct
     "information about all the active threads in the current kernel" },
   { "kernel_launch_backtrace", info_cuda_kernel_launch_backtrace_command,
     "CPU call stack collected at kernel launch (kernel in focus by default)" },
-  { "launch trace", info_cuda_launch_trace_command,
-    "information about the parent kernels of the kernel in focus" },
-  { "launch children", info_cuda_launch_children_command,
-    "information about the kernels launched by the kernels in focus" },
   { "managed", info_cuda_managed_command,
     "information about global managed variables" },
   { "line", info_cuda_line_command,

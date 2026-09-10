@@ -22955,18 +22955,43 @@ cuda_add_minsyms (struct dwarf2_cu *cu,
       CORE_ADDR start;
       CORE_ADDR end;
     };
-  /* Convert the list of minimal_symbols into a vector of cuda_symbol data */
+  /* Convert the list of minimal_symbols into a vector of cuda_symbol data.
+     Only consider text (code) symbols.  Including data / BSS / shared-memory
+     minsyms here is wrong for two reasons:
+
+       1. CUDA cubins place BSS shared-memory symbols at low addresses
+	  (e.g. 0x40) and global-init data symbols in the gigabyte range
+	  (e.g. 0xfffa1f085800).  If both kinds of minsyms feed into
+	  low_pc/high_pc, the synthesized compunit's GLOBAL_BLOCK ends up
+	  spanning ~the entire 64-bit address space.  Every device PC then
+	  appears "in range" of every loaded CUDA cubin's compunit, and
+	  find_pc_sect_compunit_symtab's "smallest-range cust wins" tie-
+	  breaker picks whichever cust the iterator visited first instead
+	  of the one that actually owns the PC.
+
+       2. Synthesizing LOC_BLOCK function symbols from data minsyms is
+	  semantically wrong - they aren't functions.
+
+     The linetable from .debug_line only describes code addresses anyway,
+     so bounding the synthesized blocks to code symbols matches what we're
+     actually trying to describe.  */
   std::vector<struct cuda_symbol> cuda_symbols;
   for (auto msym : objfile->msymbols ())
     {
+      /* Only include text (code) symbols.  See comment above.  */
+      if (msym->type () != mst_text
+	  && msym->type () != mst_file_text
+	  && msym->type () != mst_text_gnu_ifunc)
+	continue;
+
       CORE_ADDR addr = msym->value_address (objfile);
-      
+
       /* Skip symbols for unloaded sections (CUDA lazy loading).
 	 Sections that haven't been loaded to device memory have VMA=0.
 	 We skip these to avoid creating overlapping address ranges. */
       if (addr == 0)
 	continue;
-      
+
       cuda_symbols.push_back ({ msym, addr, addr + msym->size () });
     }
   /* In the case of function cloning, the minimal symbol for the name of the CUDA
@@ -23018,6 +23043,16 @@ cuda_add_minsyms (struct dwarf2_cu *cu,
       sym->set_type (builtin_type (objfile)->nodebug_text_symbol);
       sym->set_value_address (msym->value_address (objfile));
       sym->set_linkage_name (msym->linkage_name ());
+      /* Preserve the minsym's section index so that section-based lookups
+	 (e.g. matching_obj_sections in find_pc_sect_compunit_symtab) can
+	 find this symbol.  CUDA cubins use per-kernel sections such as
+	 .text.<kernel>, so the objfile's SECT_OFF_TEXT (which targets a
+	 section literally named ".text") is not meaningful here.  Note
+	 that finish_block_internal unconditionally overwrites this with
+	 SECT_OFF_TEXT, so this set is currently only useful before that
+	 call; the matching filter is also gated on cuda_objfile in
+	 find_pc_sect_compunit_symtab to handle the post-overwrite case.  */
+      sym->set_section_index (msym->section_index ());
       /* Try to determine the language, falling back to language_cplus
 	 if necessary. */
       enum language selected_language = msym->m_language;

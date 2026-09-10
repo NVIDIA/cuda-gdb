@@ -27,13 +27,6 @@
 #include "language.h"
 #include "arch-utils.h"
 
-#ifdef NVIDIA_PYTHON_DYNLIB
-/* Redefine NULL to nullptr to avoid warnings due to passing
- * NULL to long int with the generated wrappers. */
-#undef NULL
-#define NULL nullptr
-#endif
-
 /* Python parameter types as in PARM_CONSTANTS below.  */
 
 enum py_param_types

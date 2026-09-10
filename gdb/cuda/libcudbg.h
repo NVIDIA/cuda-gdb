@@ -211,7 +211,7 @@ typedef enum
   /* 12.9 extensions */
   CUDBGAPIREQ_getCbuWarpState,
   CUDBGAPIREQ_readWarpState,
-  CUDBGAPIREQ_consumeCudaLogs,
+  CUDBGAPIREQ_consumeCudaLogs129,
   CUDBGAPIREQ_readCPUCallStack,
 
   /* 13.0 Extensions */
@@ -232,6 +232,13 @@ typedef enum
   CUDBGAPIREQ_resumeWarpsUntilPC,
   CUDBGAPIREQ_suspendAllDevices,
   CUDBGAPIREQ_resumeAllDevices,
+
+  /* 13.4 Extensions */
+  CUDBGAPIREQ_getBindlessConstAddress,
+  CUDBGAPIREQ_setCudaLogRules,
+  CUDBGAPIREQ_consumeCudaLogs,
+  CUDBGAPIREQ_readRpcRegisters,
+  CUDBGAPIREQ_writeRpcRegisters,
 } CUDBGAPIREQ_t;
 
 typedef enum

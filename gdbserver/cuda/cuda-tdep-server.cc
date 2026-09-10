@@ -84,8 +84,7 @@ bool cuda_debug_notifications;
 bool cuda_notify_youngest;
 bool cuda_driver_logs = true;
 bool cuda_printf_flushing = false;
-struct cuda_trace_msg *cuda_first_trace_msg = NULL;
-struct cuda_trace_msg *cuda_last_trace_msg = NULL;
+std::deque<std::string> cuda_trace_messages;
 
 ptid_t cuda_last_ptid;
 struct target_waitstatus cuda_last_ws;
@@ -254,46 +253,43 @@ cuda_options_statistics_collection_enabled (void)
   return false;
 }
 
+void
+cuda_enqueue_trace_message (const char *prefix, const char *fmt, va_list ap)
+{
+  static constexpr char truncated_marker[] = "[truncated]";
+#ifdef __QNXHOST__
+  constexpr size_t max_trace_msg_len
+      = DS_DATA_MAX_SIZE - sizeof (truncated_marker);
+#else
+  constexpr size_t max_trace_msg_len = PBUFSIZ - sizeof (truncated_marker);
+#endif
+
+  std::string msg = prefix;
+  msg += string_vprintf (fmt, ap);
+  if (msg.size () > max_trace_msg_len)
+    {
+      msg.resize (max_trace_msg_len);
+      msg += truncated_marker;
+    }
+  cuda_trace_messages.emplace_back (std::move (msg));
+}
+
 ATTRIBUTE_PRINTF(1, 2) void
 cuda_trace (const char *fmt, ...)
 {
-  struct cuda_trace_msg *msg;
-  va_list ap;
-  int prefixLength;
-  size_t maxLength;
-
   if (!cuda_options_debug_general())
     return;
 
+  va_list ap;
   va_start (ap, fmt);
-  msg = (struct cuda_trace_msg *) xmalloc (sizeof (*msg));
-  if (!cuda_first_trace_msg)
-    cuda_first_trace_msg = msg;
-  else
-    cuda_last_trace_msg->next = msg;
-
-  prefixLength = sprintf (msg->buf, "[CUDAGDB] ");
-  maxLength = sizeof (msg->buf) - prefixLength;
-  if (vsnprintf (msg->buf + prefixLength, maxLength, fmt, ap) >= (int) maxLength)
-    sprintf (msg->buf + sizeof (msg->buf) - 12, "[truncated]");
-
-  msg->next = NULL;
-  cuda_last_trace_msg = msg;
+  cuda_enqueue_trace_message ("[CUDAGDB] ", fmt, ap);
+  va_end (ap);
 }
 
 void
 cuda_cleanup_trace_messages (void)
 {
-  struct cuda_trace_msg *msg;
-  if (!cuda_first_trace_msg)
-    return;
-
-  while (cuda_first_trace_msg)
-    {
-       msg = cuda_first_trace_msg;
-       cuda_first_trace_msg = cuda_first_trace_msg->next;
-       xfree (msg);
-    }
+  cuda_trace_messages.clear ();
 }
 
 bool

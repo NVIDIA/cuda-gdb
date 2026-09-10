@@ -77,7 +77,9 @@
 #include "valprint.h"
 #include "value.h"
 
+#include "async-event.h"
 #include "elf-bfd.h"
+#include "top.h"
 
 #include "cuda-asm.h"
 #include "cuda-autostep.h"
@@ -619,6 +621,14 @@ cuda_register_name (struct gdbarch *gdbarch, int regnum)
 	}
     }
 
+  // RPC SASS registers
+  if (cuda_rpc_register_p (gdbarch, regnum))
+    {
+      const auto tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+      snprintf (buf, sizeof (buf), "RPC.%s", regnum - tdep->first_rpc_regnum == 0 ? "LO" : "HI");
+      return buf;
+    }
+
   // (everything else) - zero length string
   return "";
 }
@@ -770,6 +780,11 @@ cuda_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 	  regno = regmap_get_uregister (regmap, 0);
 	  return regno + tdep->first_uregnum;
 	}
+      else if (regmap_get_class (regmap, 0) == REG_CLASS_TEMP_REG_SPILL)
+	{
+	  regno = regmap_get_rpc_register (regmap, 0);
+	  return regno + tdep->first_rpc_regnum;
+	}
     }
 
   /* Every situation that requires us to store data that cannot be
@@ -831,6 +846,9 @@ cuda_reg_to_regnum_extrapolated (struct gdbarch *gdbarch, frame_info_ptr frame,
 
       if (regmap_get_class (regmap, 1) == REG_CLASS_UREG_FULL)
 	return (int)(regmap_get_uregister (regmap, 1) + tdep->first_uregnum);
+
+      if (regmap_get_class (regmap, 1) == REG_CLASS_TEMP_REG_SPILL)
+	return (int)(regmap_get_rpc_register (regmap, 1) + tdep->first_rpc_regnum);
     }
 
   /* This will be treated as an "optimized out" register */
@@ -857,6 +875,9 @@ cuda_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 
   if (REGMAP_CLASS (reg) == REG_CLASS_UREG_PRED)
     return REGMAP_REG (reg) + tdep->first_upred_regnum;
+
+  if (REGMAP_CLASS (reg) == REG_CLASS_TEMP_REG_SPILL)
+    return REGMAP_REG (reg) + tdep->first_rpc_regnum;
 
   error (_ ("%s: Invalid CUDA register 0x%08x"), __FUNCTION__, reg);
 }
@@ -889,6 +910,10 @@ cuda_regnum_to_reg (struct gdbarch *gdbarch, uint32_t regnum)
   if (cuda_upred_regnum_p (gdbarch, regnum))
     return CUDA_REG_CLASS_AND_REGNO (REG_CLASS_UREG_PRED,
 				     regnum - tdep->first_upred_regnum);
+
+  if (cuda_rpc_register_p (gdbarch, regnum))
+    return CUDA_REG_CLASS_AND_REGNO (REG_CLASS_TEMP_REG_SPILL,
+				     regnum - tdep->first_rpc_regnum);
 
   // regnum is the GDB register number (0...n), not the encoded 32-bit value
   error (_ ("%s: Invalid GDB register %d"), __FUNCTION__, regnum);
@@ -989,6 +1014,38 @@ cuda_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
 	}
     }
 
+  // RPC registers
+  if (cuda_rpc_register_p (gdbarch, regnum))
+    {
+      // RPC.LO/RPC.HI may be unavailable on older drivers that don't
+      // implement readRpcRegisters or on coredumps whose on-disk
+      // CudbgThreadTableEntry predates the rpcLo/rpcHi fields.  In those
+      // cases the underlying read throws CUDBG_ERROR_NOT_SUPPORTED via
+      // cuda_debugapi::cuda_api_error.  Treat that one error as "register
+      // unavailable" so target_fetch_registers (-1) on coredump open does
+      // not abort the whole fetch; rethrow anything else so real failures
+      // (invalid lane, transient comm errors, ...) still surface.
+      try
+	{
+	  const auto tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+	  const uint32_t regval = cuda_state::lane_get_rpc_register (
+	      c.dev (), c.sm (), c.wp (), c.ln (),
+	      regnum - tdep->first_rpc_regnum);
+	  regcache->raw_supply (regnum, &regval);
+	}
+      catch (const gdb_exception_error &e)
+	{
+	  // The CUDBGResult is encoded in the message text by
+	  // cuda_api_error () via cudbgGetErrorString () (see
+	  // cudadebugger.h); the substring is a stable public-API token.
+	  if (std::string (e.what ()).find ("CUDBG_ERROR_NOT_SUPPORTED")
+	      == std::string::npos)
+	    throw;
+	  regcache->raw_supply (regnum, nullptr);
+	}
+      return;
+    }
+
   // Invalid register
   regcache->raw_supply (regnum, nullptr);
 }
@@ -1079,6 +1136,16 @@ cuda_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
 					  *(uint32_t *)buf);
 	  return;
 	}
+    }
+
+  // RPC registers
+  if (cuda_rpc_register_p (gdbarch, regnum))
+    {
+      const auto tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
+      cuda_state::lane_set_rpc_register (c.dev (), c.sm (), c.wp (), c.ln (),
+				     regnum - tdep->first_rpc_regnum,
+				     *(uint32_t *)buf);
+      return;
     }
 
   error (_ ("%s: Invalid GDB register %d"), __FUNCTION__, regnum);
@@ -1549,20 +1616,32 @@ cuda_get_last_driver_internal_error_code (void)
   return res;
 }
 
+static struct async_signal_handler *cuda_sigpipe_token;
+
 static void
 cuda_sigpipe_handler (int signo)
 {
+  signal (signo, cuda_sigpipe_handler);
+  mark_async_signal_handler (cuda_sigpipe_token);
+}
+
+static void
+async_cuda_sigpipe_handler (gdb_client_data arg)
+{
   fprintf (stderr, "Error: A SIGPIPE has been received, this is likely due to "
 		   "a crash from the CUDA backend.\n");
-  fflush (stderr);
 
-  cuda_cleanup ();
-  exit (1);
+  // Clear the CUDA API state to avoid any further API calls.
+  cuda_debugapi::clear_state ();
+  quit_force (NULL, 0);
 }
 
 void
 cuda_signals_initialize (void)
 {
+  cuda_sigpipe_token
+    = create_async_signal_handler (async_cuda_sigpipe_handler, NULL,
+				   "cuda-sigpipe");
   signal (SIGPIPE, cuda_sigpipe_handler);
 }
 
@@ -2880,8 +2959,7 @@ cuda_get_const_bank_address (uint32_t bank, uint32_t offset)
 {
   if (!cuda_current_focus::isDevice ())
     {
-      warning (_ ("A CUDA device isn't focused.\n"));
-      return 0;
+      error (_ ("A CUDA device isn't focused."));
     }
 
   uint64_t addr = 0;
@@ -2897,9 +2975,7 @@ cuda_get_const_bank_address (uint32_t bank, uint32_t offset)
 					     &size);
 
       if (addr == 0 || offset >= size)
-	throw_error (GENERIC_ERROR,
-		     "The requested value c[0x%x][0x%x] is not valid.", bank,
-		     offset);
+	error (_ ("The requested value c[0x%x][0x%x] is not valid."), bank, offset);
 
       addr += offset;
     }
@@ -2918,6 +2994,40 @@ cuda_get_const_bank_address_val (struct gdbarch *gdbarch, uint32_t bank,
   struct type *const_bank_uint = builtin_type (gdbarch)->builtin_unsigned_int;
   const_bank_uint->set_instance_flags (TYPE_INSTANCE_FLAG_CUDA_CONST);
   struct type *uint_ptr_type = lookup_pointer_type (const_bank_uint);
+
+  return value_from_pointer (uint_ptr_type, addr);
+}
+
+static CORE_ADDR
+cuda_get_bindless_const_address (uint64_t header, uint64_t offset)
+{
+  if (!cuda_current_focus::isDevice ())
+    {
+      error (_ ("A CUDA device isn't focused."));
+    }
+
+  uint64_t addr = 0;
+  uint32_t size = 0;
+  const auto &c = cuda_current_focus::get ().physical ();
+
+  cuda_debugapi::get_bindless_const_address (c.dev (), header, &addr, &size);
+
+  if (addr == 0 || offset >= size)
+    error (_ ("Bindless constant header 0x%llx does not describe a valid "
+	      "range for offset 0x%llx."),
+	   (unsigned long long) header, (unsigned long long) offset);
+
+  return addr + offset;
+}
+
+static struct value *
+cuda_get_bindless_const_address_val (struct gdbarch *gdbarch, uint64_t header,
+				     uint64_t offset)
+{
+  CORE_ADDR addr = cuda_get_bindless_const_address (header, offset);
+  struct type *const_uint = builtin_type (gdbarch)->builtin_unsigned_int;
+  const_uint->set_instance_flags (TYPE_INSTANCE_FLAG_CUDA_CONST);
+  struct type *uint_ptr_type = lookup_pointer_type (const_uint);
 
   return value_from_pointer (uint_ptr_type, addr);
 }
@@ -3221,30 +3331,8 @@ cuda_sstep_fast (ptid_t ptid)
 		     "%s: trying to step from %lx to %lx", __func__, pc,
 		     end_pc);
 
-  /* If breakpoint is set at the current (or current active) PC - temporarily
-   * unset it*/
-  struct address_space *aspace = current_inferior ()->aspace.get ();
-  uint64_t active_pc
-      = cuda_state::warp_get_active_pc (c.dev (), c.sm (), c.wp ());
-
-  if (breakpoint_here_p (aspace, pc))
-    cuda_debugapi::unset_breakpoint (c.dev (), pc);
-
-  if (active_pc != pc && breakpoint_here_p (aspace, active_pc))
-    cuda_debugapi::unset_breakpoint (c.dev (), active_pc);
-
-  /* Resume warp(s) until one of the lanes reaches end_pc */
-  bool rc = cuda_state::resume_warps_until_pc (
+  return cuda_state::resume_warps_until_pc (
       c.dev (), c.sm (), &cuda_sstep_info.warp_mask, end_pc);
-
-  /* Reset the breakpoint if warps_resume_until call failed */
-  if (!rc && breakpoint_here_p (aspace, pc))
-    cuda_debugapi::set_breakpoint (c.dev (), pc);
-
-  if (!rc && active_pc != pc && breakpoint_here_p (aspace, active_pc))
-    cuda_debugapi::set_breakpoint (c.dev (), active_pc);
-
-  return rc;
 }
 
 static bool
@@ -3861,6 +3949,28 @@ cuda_constant_bank_addr_internal_fn (struct gdbarch *gdbarch,
 					  value_as_long (argv[1]));
 }
 
+static uint64_t
+cuda_value_as_uint64 (struct value *val)
+{
+  return value_as_mpz (val).as_integer<uint64_t> ();
+}
+
+static struct value *
+cuda_bindless_const_addr_internal_fn (struct gdbarch *gdbarch,
+				      const struct language_defn *language,
+				      void *cookie, int argc,
+				      struct value **argv)
+{
+  if (argc != 2)
+    error (_ ("This function requires two parameters (header, offset)."));
+
+  if (!cuda_debugapi::api_state_initialized ())
+    error (_ ("API isn't initialized yet."));
+
+  return cuda_get_bindless_const_address_val (
+      gdbarch, cuda_value_as_uint64 (argv[0]), cuda_value_as_uint64 (argv[1]));
+}
+
 bool
 cuda_is_cuda_gdbarch (struct gdbarch *arch)
 {
@@ -4151,6 +4261,10 @@ _initialize_cuda_tdep ()
 $_cuda_const_bank - returns the GPU address of an offset within a constant bank.\n\
 Usage: $_cuda_const_bank(bank, offset)\n"),
 			 cuda_constant_bank_addr_internal_fn, nullptr);
+  add_internal_function ("_cuda_bindless_const", _ ("\
+$_cuda_bindless_const - returns the GPU address of an offset within a bindless constant.\n\
+Usage: $_cuda_bindless_const(header, offset)\n"),
+			 cuda_bindless_const_addr_internal_fn, nullptr);
   /* Register observers */
   gdb::observers::about_to_proceed.attach (cuda_sstep_about_to_proceed,
 					   "cuda-tdep");

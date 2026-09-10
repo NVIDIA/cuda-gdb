@@ -91,8 +91,12 @@ extern void handle_target_event (int err, gdb_client_data client_data);
 
 #ifdef NVIDIA_CUDA_GDB
 /* CUDA - Functions from cuda-packet-manager.c */
-extern void handle_cuda_packet (char *buf);
-extern int handle_vCuda (char *, int, int *);
+class cuda_packet_decoder;
+class cuda_packet_encoder;
+extern void handle_cuda_packet (cuda_packet_decoder &decoder,
+				cuda_packet_encoder &encoder);
+extern int handle_vCuda (std::string_view request,
+			 gdb::array_view<char> response, int *new_packet_len);
 /* CUDA - Fuctions from cuda-tdep-server.c */
 extern void cuda_cleanup_trace_messages (void);
 extern void cuda_append_api_finalize_res (char *buf);

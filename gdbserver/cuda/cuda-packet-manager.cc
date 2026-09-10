@@ -16,1536 +16,334 @@
  * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef __QNXHOST__
-#include <sys/stat.h>
-#endif
-#include "server.h"
-#include <unistd.h>
-#include "cudadebugger.h"
+#include "cuda/cuda-packet-manager.h"
 #include "cuda-tdep-server.h"
 #include "cuda/cuda-notifications.h"
-#include "cuda/cuda-packet-manager.h"
-#include "cuda/cuda-utils.h"
-#include "cuda/cuda-events.h"
 #include "cuda/libcudbgipc.h"
+#include "cudadebugger.h"
+#include "server.h"
 #ifdef __QNXHOST__
-# include "remote-nto.h"
+#include "cuda/cuda-protocol-hash.h"
+#include "remote-nto.h"
 #endif /* __QNXHOST__ */
+#include "cuda/cuda-packet-format.h"
+#include "gdbsupport/array-view.h"
+#include "gdbsupport/byte-vector.h"
 #include "gdbsupport/rsp-low.h"
 
+#include <array>
+#include <cstdlib>
 #ifdef __QNXHOST__
-/* On QNX the packet size is much smaller */
-# undef PBUFSIZ
-# define PBUFSIZ DS_DATA_MAX_SIZE
+#include <string>
 #endif
+#include <string_view>
 
 #ifndef __QNXHOST__
 /* We don't have gdbserver-managed structures on QNX */
 extern ptid_t cuda_last_ptid;
 extern struct target_waitstatus cuda_last_ws;
 #endif
-char *buf_head = NULL;
 
 static uint32_t cuda_debugapi_version_major;
 static uint32_t cuda_debugapi_version_minor;
 static uint32_t cuda_debugapi_version_revision;
 
-extern void
-cuda_gdbserver_set_api_version (uint32_t major, uint32_t minor, uint32_t revision);
+extern void cuda_gdbserver_set_api_version (uint32_t major, uint32_t minor,
+					    uint32_t revision);
 
 void
-cuda_gdbserver_set_api_version (uint32_t major, uint32_t minor, uint32_t revision)
+cuda_gdbserver_set_api_version (uint32_t major, uint32_t minor,
+				uint32_t revision)
 {
   cuda_debugapi_version_major = major;
   cuda_debugapi_version_minor = minor;
   cuda_debugapi_version_revision = revision;
 }
 
-static char *
-append_string (const char *src, char *dest, bool sep)
-{
-  char *p;
-
-  if (dest + strlen (src) - buf_head >= PBUFSIZ)
-    error ("Exceed the size of cuda packet.\n");
-
-  sprintf (dest, "%s", src);
-  p = strchr (dest, '\0');
-  if (sep)
-    {
-      *p = ';';
-      *(++p) = '\0';
-    }
-  return p;
-}
-
-static char *
-append_bin (const unsigned char *src, char *dest, int size, bool sep)
-{
-  char *p;
-
-  if (dest + size * 2 - buf_head >= PBUFSIZ)
-    error ("Exceed the size of cuda packet.\n");
-
-  bin2hex (src, dest, size);
-  p = strchr (dest, '\0');
-  if (sep)
-    {
-      *p = ';';
-      *(++p) = '\0';
-    }
-  return p;
-}
-
-static char *
-extract_string (char *src)
-{
-  return strtok (src, ";");
-}
-
-static char *
-extract_bin (char *src, unsigned char *dest, int size)
-{
-  char *p;
-
-  p = extract_string (src);
-  if (!p)
-    error ("The data in the cuda packet is not complete (cuda-gdbserver).\n");
-  hex2bin (p, dest, size);
-  return p;
-}
-
 static void
-cuda_process_suspend_device_packet (char *buf)
-{
-  CUDBGResult res;
-  uint32_t dev;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  res = cudbgAPI->suspendDevice (dev);
-  append_bin ((unsigned char *) &res, buf, sizeof (res), false);
-}
-
-
-static void
-cuda_process_resume_device_packet (char *buf)
-{
-  CUDBGResult res;
-  uint32_t dev;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  res = cudbgAPI->resumeDevice (dev);
-  append_bin ((unsigned char *) &res, buf, sizeof (res), false);
-}
-
-static void
-cuda_process_disassemble_packet (char *buf)
-{
-  CUDBGResult res;
-  uint32_t dev;
-  uint64_t addr;
-  uint32_t inst_buf_size;
-  uint32_t inst_size;
-  char *inst_buf;
-  char *p;
-
-  extract_bin (NULL, (unsigned char *) &dev,  sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &addr, sizeof (addr));
-  extract_bin (NULL, (unsigned char *) &inst_buf_size, sizeof (inst_buf_size));
-
-  inst_buf = (char *) xmalloc (inst_buf_size);
-  res = cudbgAPI->disassemble (dev, addr, &inst_size, inst_buf, inst_buf_size);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &inst_size, buf, sizeof (inst_size), true);
-  p = append_bin ((unsigned char *) inst_buf, p, inst_buf_size, false);
-  xfree (inst_buf);
-}
-
-static void
-cuda_process_set_breakpoint_packet (char *buf)
-{
-  CUDBGResult res;
-  uint32_t dev;
-  uint64_t addr;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &addr, sizeof (addr));
-  res = cudbgAPI->setBreakpoint (dev, addr);
-  append_bin ((unsigned char *) &res, buf, sizeof (res), false);
-}
-
-static void
-cuda_process_unset_breakpoint_packet (char *buf)
-{
-  CUDBGResult res;
-  uint32_t dev;
-  uint64_t addr;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &addr, sizeof (addr));
-
-  res = cudbgAPI->unsetBreakpoint (dev, addr);
-  append_bin ((unsigned char *) &res, buf, sizeof (res), false);
-}
-
-static void
-cuda_process_get_adjusted_code_address (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint64_t addr;
-  uint64_t adjusted_addr;
-  CUDBGAdjAddrAction adj_action;
-
-  extract_bin (NULL, (unsigned char *) &dev,  sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &addr, sizeof (addr));
-  extract_bin (NULL, (unsigned char *) &adj_action, sizeof (adj_action));
-
-  res = cudbgAPI->getAdjustedCodeAddress (dev, addr, &adjusted_addr, adj_action);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &adjusted_addr, p, sizeof (adjusted_addr), false);
-}
-
-static void
-cuda_process_get_host_addr_from_device_addr_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint64_t addr;
-  uint64_t hostaddr;
-
-  extract_bin (NULL, (unsigned char *) &dev,  sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &addr, sizeof (addr));
-
-  res = cudbgAPI->getHostAddrFromDeviceAddr (dev, addr, &hostaddr);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &hostaddr, p, sizeof (hostaddr), false);
-}
-
-static void
-cuda_process_get_error_string_ex_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t err_str_len;
-  const ptrdiff_t packet_hdr_sz = buf - buf_head;
-  const uint32_t max_err_str_len = (uint32_t) (PBUFSIZ - ((size_t) packet_hdr_sz + sizeof (res) + sizeof (err_str_len)));
-  void *error_str_buf = xmalloc (max_err_str_len);
-  res = cudbgAPI->getErrorStringEx ((char *) error_str_buf, max_err_str_len, &err_str_len);
-  if (res != CUDBG_SUCCESS)
-    {
-      if (res == CUDBG_ERROR_BUFFER_TOO_SMALL)
-        {
-          err_str_len = max_err_str_len;
-        }
-      else
-        {
-          err_str_len = 0;
-        }
-    }
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &err_str_len, p, sizeof (err_str_len), true);
-  p = append_string ((char *) error_str_buf, p, false);
-}
-
-#ifndef __QNXHOST__
-template <typename TValue>
-using FnGetValueFromAPI = CUDBGResult (*)(uint32_t dev, uint32_t sm, uint32_t wp, TValue *value);
-
-template <typename TValue>
-static void
-cuda_process_update_per_warp_info_in_sm_packet (char *buf, FnGetValueFromAPI<TValue>&& get_value)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint64_t valid_warps_mask = 0;
-  uint32_t num_warps;
-  TValue value;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,  sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &num_warps, sizeof (num_warps));
-
-  res = cudbgAPI->readValidWarps (dev, sm, &valid_warps_mask);
-  p = append_bin ((unsigned char *) &valid_warps_mask, buf, sizeof (valid_warps_mask), true);
-  for (wp = 0; wp < num_warps; wp++)
-    {
-      if (valid_warps_mask & (1ULL << wp))
-        {
-          if (res == CUDBG_SUCCESS)
-            res = get_value (dev, sm, wp, &value);
-          p = append_bin ((unsigned char *) &value, p, sizeof (value), true);
-        }
-    }
-  p = append_bin ((unsigned char *) &res, p, sizeof (res), false);
-}
-
-static void
-cuda_process_update_grid_id_in_sm_packet (char *buf)
-{
-  cuda_process_update_per_warp_info_in_sm_packet<uint64_t> (
-    buf, [](uint32_t dev, uint32_t sm, uint32_t wp, uint64_t *gridId64) {
-      return cudbgAPI->readGridId (dev, sm, wp, gridId64);
-    });
-}
-
-static void
-cuda_process_update_cluster_idx_in_sm_packet (char *buf)
-{
-  cuda_process_update_per_warp_info_in_sm_packet<CuDim3> (
-    buf, [](uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 *cluster_idx) {
-      return cudbgAPI->readClusterIdx (dev, sm, wp, cluster_idx);
-    });
-}
-
-static void
-cuda_process_update_cluster_dim_in_sm_packet (char *buf)
-{
-  cuda_process_update_per_warp_info_in_sm_packet<CuDim3> (
-      buf, [] (uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 *cluster_dim) {
-	/* Need to be backwards compatible with older CUDA drivers. */
-	if (cuda_debugapi_version_revision >= 148)
-	  return cudbgAPI->getClusterDim (dev, sm, wp, cluster_dim);
-	else
-	  {
-	    uint64_t gridId64;
-	    cudbgAPI->readGridId (dev, sm, wp, &gridId64);
-	    return cudbgAPI->getClusterDim120 (dev, gridId64, cluster_dim);
-	  }
-      });
-}
-
-static void
-cuda_process_update_block_idx_in_sm_packet (char *buf)
-{
-  cuda_process_update_per_warp_info_in_sm_packet<CuDim3> (
-    buf, [](uint32_t dev, uint32_t sm, uint32_t wp, CuDim3 *block_idx) {
-      return cudbgAPI->readBlockIdx (dev, sm, wp, block_idx);
-    });
-}
-#endif
-
-static void
-cuda_process_update_thread_idx_in_warp_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint32_t ln;
-  uint32_t valid_lanes_mask;
-  uint32_t num_lanes;
-  CuDim3 thread_idx;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,  sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,  sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &num_lanes, sizeof (num_lanes));
-
-  res = cudbgAPI->readValidLanes (dev, sm, wp, &valid_lanes_mask);
-  p = append_bin ((unsigned char *) &valid_lanes_mask, buf, sizeof (valid_lanes_mask), true);
-  for (ln = 0; ln < num_lanes; ln++)
-    {
-      if (valid_lanes_mask & (1 << ln))
-        {
-          if (res == CUDBG_SUCCESS)
-            res = cudbgAPI->readThreadIdx (dev, sm, wp, ln, &thread_idx);
-          p = append_bin ((unsigned char *) &thread_idx, p, sizeof (thread_idx), true);
-        }
-    }
-  p = append_bin ((unsigned char *) &res, p, sizeof (res), false);
-}
-
-static void
-cuda_process_notification_analyze_packet (char *buf)
+cuda_process_notification_analyze_packet (cuda_packet_decoder &decoder,
+					  cuda_packet_encoder &encoder)
 {
 #ifdef __QNXHOST__
-  /* On QNX, ptid and ws are passed in from host */
-  ptid_t cuda_last_ptid;
+  const int32_t pid = decoder.get<int32_t> ();
+  const int64_t lwp = decoder.get<int64_t> ();
+  const ptid_t cuda_last_ptid
+      = ptid_t (static_cast<ptid_t::pid_type> (pid),
+		static_cast<ptid_t::lwp_type> (lwp), 0);
+  const uint32_t wait_kind = decoder.get<uint32_t> ();
+  const uint32_t wait_signal = decoder.get<uint32_t> ();
+
+  /* QNX analyzer only acts on STOPPED + EMT/ILL; everything else is
+     IGNORE so the analyzer skips it.  */
   struct target_waitstatus cuda_last_ws;
-
-  extract_bin (NULL, (unsigned char *) &cuda_last_ptid, sizeof (cuda_last_ptid));
-  extract_bin (NULL, (unsigned char *) &cuda_last_ws, sizeof (cuda_last_ws));
+  switch (static_cast<target_waitkind> (wait_kind))
+    {
+    case TARGET_WAITKIND_STOPPED:
+      cuda_last_ws.set_stopped (static_cast<gdb_signal> (wait_signal));
+      break;
+    case TARGET_WAITKIND_SIGNALLED:
+      cuda_last_ws.set_signalled (static_cast<gdb_signal> (wait_signal));
+      break;
+    default:
+      cuda_last_ws.set_ignore ();
+      break;
+    }
 #endif /* __QNXHOST__ */
-  /* trap_expected was historically sent but is no longer used — consume
-     it from the packet to maintain wire compatibility.  */
-  int trap_expected;
-  extract_bin (NULL, (unsigned char *) &trap_expected, sizeof (trap_expected));
   cuda_notification_analyze (cuda_last_ptid, &cuda_last_ws);
-  append_string ("OK", buf, false);
+  encoder.put ("OK");
 }
 
 static void
-cuda_process_notification_received_packet (char *buf)
+cuda_process_notification_received_packet (cuda_packet_encoder &encoder)
 {
-  bool received;
-
-  received = cuda_notification_received ();
-  append_bin ((unsigned char *) &received, buf, sizeof (received), false);
+  const bool received = cuda_notification_received ();
+  encoder.put (received);
 }
 
 static void
-cuda_process_notification_pending_packet (char *buf)
+cuda_process_notification_pending_packet (cuda_packet_encoder &encoder)
 {
-  bool pending;
-
-  pending = cuda_notification_pending ();
-  append_bin ((unsigned char *) &pending, buf, sizeof (pending), false);
+  const bool pending = cuda_notification_pending ();
+  encoder.put (pending);
 }
 
 static void
-cuda_process_notification_mark_consumed_packet (char *buf)
+cuda_process_notification_mark_consumed_packet (cuda_packet_encoder &encoder)
 {
   cuda_notification_mark_consumed ();
-  append_string ("OK", buf, false);
+  encoder.put ("OK");
 }
 
 static void
-cuda_process_notification_consume_pending_packet (char *buf)
+cuda_process_notification_consume_pending_packet (cuda_packet_encoder &encoder)
 {
   cuda_notification_consume_pending ();
-  append_string ("OK", buf, false);
+  encoder.put ("OK");
 }
 
 static void
-cuda_process_notification_aliased_event_packet (char *buf)
+cuda_process_notification_aliased_event_packet (cuda_packet_encoder &encoder)
 {
-  bool aliased_event;
-
-  aliased_event = cuda_notification_aliased_event ();
+  const bool aliased_event = cuda_notification_aliased_event ();
   if (aliased_event)
     cuda_notification_reset_aliased_event ();
-  append_bin ((unsigned char *) &aliased_event, buf, sizeof (aliased_event), false);
-}
-
-static void
-cuda_process_single_step_warp_packet65 (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint32_t nsteps;
-  uint64_t warp_mask;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm, sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp, sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &nsteps, sizeof (nsteps));
-  extract_bin (NULL, (unsigned char *) &warp_mask, sizeof (warp_mask));
-  res = cudbgAPI->singleStepWarp65 (dev, sm, wp, nsteps, &warp_mask);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &warp_mask, p, sizeof (warp_mask), false);
+  encoder.put (aliased_event);
 }
 
 #ifdef __QNXHOST__
 static void
-cuda_process_set_symbols (char *buf)
+cuda_process_set_symbols (cuda_packet_decoder &decoder,
+			  cuda_packet_encoder &encoder)
 {
   bool symbols_are_set = false;
-  unsigned char symbols_count;
-  CORE_ADDR address;
-  int server_symbols_count;
 
-  extract_bin (NULL, (unsigned char *) &symbols_count, sizeof (symbols_count));
+  const unsigned char symbols_count = decoder.get<unsigned char> ();
   /* For compatibility with newer cuda-gdb binaries we handle packets that
      provide more symbols than we have statically built with. */
-  server_symbols_count = cuda_get_symbol_cache_size ();
+  const int server_symbols_count = cuda_get_symbol_cache_size ();
   if (symbols_count >= server_symbols_count)
     {
       symbols_are_set = true;
       for (int i = 0; i < server_symbols_count; i++)
-        {
-          extract_bin (NULL, (unsigned char *) &address, sizeof (CORE_ADDR));
-          if (address == 0)
-            {
-              symbols_are_set = false;
-              break;
-            }
-          cuda_symbol_list[i].addr = address;
-        }
+	{
+	  const CORE_ADDR address = decoder.get<CORE_ADDR> ();
+	  if (address == 0)
+	    {
+	      symbols_are_set = false;
+	      break;
+	    }
+	  cuda_symbol_list[i].addr = address;
+	}
     }
 
-  append_bin ((unsigned char *) &symbols_are_set, buf, sizeof (symbols_are_set), false);
+  encoder.put (symbols_are_set);
 }
 #endif /* __QNXHOST__ */
 
 static void
-cuda_process_initialize_target_packet (char *buf)
+cuda_process_initialize_target_packet (cuda_packet_decoder &decoder,
+				       cuda_packet_encoder &encoder)
 {
   /* Extract options that need to be set before initialization */
-  extract_bin (NULL, (unsigned char *) &cuda_launch_blocking, sizeof (cuda_launch_blocking));
+  cuda_launch_blocking = decoder.get<bool> ();
 
-  bool driver_is_compatible = cuda_initialize_target ();
+  const bool driver_is_compatible = cuda_initialize_target ();
 
-  char *p;
-  p = append_bin ((unsigned char *) &get_debugger_api_res, buf, sizeof (get_debugger_api_res), true);
-  p = append_bin ((unsigned char *) &set_callback_api_res, p, sizeof (set_callback_api_res), true);
-  p = append_bin ((unsigned char *) &api_initialize_res, p, sizeof (api_initialize_res), true);
-  p = append_bin ((unsigned char *) &cuda_initialized, p, sizeof (cuda_initialized), true);
-  p = append_bin ((unsigned char *) &cuda_debugging_enabled, p, sizeof (cuda_debugging_enabled), true);
-  p = append_bin ((unsigned char *) &driver_is_compatible, p, sizeof (driver_is_compatible), true);
-
-  p = append_bin ((unsigned char *) &cuda_debugapi_version_major, p,
-		  sizeof (cuda_debugapi_version_major), true);
-
-  p = append_bin ((unsigned char *) &cuda_debugapi_version_minor, p,
-		  sizeof (cuda_debugapi_version_minor), true);
-
-  p = append_bin ((unsigned char *) &cuda_debugapi_version_revision, p,
-		  sizeof (cuda_debugapi_version_revision), false);
+  encoder.put (get_debugger_api_res);
+  encoder.put (set_callback_api_res);
+  encoder.put (api_initialize_res);
+  encoder.put (cuda_initialized);
+  encoder.put (cuda_debugging_enabled);
+  encoder.put (driver_is_compatible);
+  encoder.put (cuda_debugapi_version_major);
+  encoder.put (cuda_debugapi_version_minor);
+  encoder.put (cuda_debugapi_version_revision);
 }
 
 static void
-cuda_process_get_num_devices_packet (char *buf)
+cuda_process_query_device_spec_packet (cuda_packet_decoder &decoder,
+				       cuda_packet_encoder &encoder)
 {
   CUDBGResult res;
-  char *p;
-  uint32_t num_dev;
-
-  res = cudbgAPI->getNumDevices (&num_dev);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &num_dev, p, sizeof (num_dev), false);
-}
-
-static void
-cuda_process_query_device_spec_packet (char *buf)
-{
-  char *p;
-  CUDBGResult res;
-  char device_type[256];
-  char sm_type[16];
-  uint32_t dev;
+  std::array<char, 256> device_type{};
+  std::array<char, 16> sm_type{};
   uint32_t num_sms = 0;
   uint32_t num_warps = 0;
   uint32_t num_lanes = 0;
   uint32_t num_registers = 0;
 
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
+  const uint32_t dev = decoder.get<uint32_t> ();
 
   res = cudbgAPI->getNumSMs (dev, &num_sms);
-  if (res == CUDBG_SUCCESS) 
+  if (res == CUDBG_SUCCESS)
     res = cudbgAPI->getNumWarps (dev, &num_warps);
-  if (res == CUDBG_SUCCESS) 
+  if (res == CUDBG_SUCCESS)
     res = cudbgAPI->getNumLanes (dev, &num_lanes);
-  if (res == CUDBG_SUCCESS) 
+  if (res == CUDBG_SUCCESS)
     res = cudbgAPI->getNumRegisters (dev, &num_registers);
-  if (res == CUDBG_SUCCESS) 
-    res = cudbgAPI->getDeviceType (dev, device_type, sizeof (device_type));
-  if (res == CUDBG_SUCCESS) 
-    res = cudbgAPI->getSmType (dev, sm_type, sizeof (sm_type));
+  if (res == CUDBG_SUCCESS)
+    res = cudbgAPI->getDeviceType (dev, device_type.data (),
+				   device_type.size ());
+  if (res == CUDBG_SUCCESS)
+    res = cudbgAPI->getSmType (dev, sm_type.data (), sm_type.size ());
 
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &num_sms, p, sizeof (num_sms), true);
-  p = append_bin ((unsigned char *) &num_warps, p, sizeof (num_warps), true);
-  p = append_bin ((unsigned char *) &num_lanes, p, sizeof (num_lanes), true);
-  p = append_bin ((unsigned char *) &num_registers, p, sizeof (num_registers), true);
-  p = append_string (device_type, p, true);
-  p = append_string (sm_type, p, false);
+  encoder.put (res);
+  encoder.put (num_sms);
+  encoder.put (num_warps);
+  encoder.put (num_lanes);
+  encoder.put (num_registers);
+  encoder.put (device_type.data ());
+  encoder.put (sm_type.data ());
 }
 
 static void
-cuda_process_get_grid_status_packet (char *buf)
+cuda_process_check_pending_sigint_packet (cuda_packet_decoder &decoder,
+					  cuda_packet_encoder &encoder)
 {
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint64_t grid_id;
-  CUDBGGridStatus status;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &grid_id, sizeof (grid_id));
-
-  res = cudbgAPI->getGridStatus (dev, grid_id, &status);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &status, p, sizeof (status), false);
-}
-
-static void
-cuda_process_get_grid_info_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint64_t grid_id;
-  CUDBGGridInfo120 info;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &grid_id, sizeof (grid_id));
-
-  res = cudbgAPI->getGridInfo120 (dev, grid_id, &info);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &info, p, sizeof (info), false);
-}
-
-static void
-cuda_process_read_grid_id_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint64_t grid_id;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm, sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp, sizeof (wp));
-
-  res = cudbgAPI->readGridId (dev, sm, wp, &grid_id);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &grid_id, p, sizeof (grid_id), false);
-}
-
-static void
-cuda_process_read_cluster_idx_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  CuDim3 cluster_idx;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,  sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,  sizeof (wp));
-
-  res = cudbgAPI->readClusterIdx (dev, sm, wp, &cluster_idx);  
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &cluster_idx, p, sizeof (cluster_idx), false);
-}
-
-static void
-cuda_process_read_block_idx_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  CuDim3 block_idx;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,  sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,  sizeof (wp));
-
-  res = cudbgAPI->readBlockIdx (dev, sm, wp, &block_idx);  
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &block_idx, p, sizeof (block_idx), false);
-}
-
-static void
-cuda_process_read_thread_idx_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint32_t ln;
-  CuDim3 thread_idx;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,  sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,  sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &ln,  sizeof (ln));
-
-  res = cudbgAPI->readThreadIdx (dev, sm, wp, ln, &thread_idx);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &thread_idx, p, sizeof (thread_idx), false);
-}
-
-static void
-cuda_process_read_broken_warps_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint64_t broken_warps_mask;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm, sizeof (sm));
-
-  res = cudbgAPI->readBrokenWarps (dev, sm, &broken_warps_mask);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &broken_warps_mask, p, sizeof (broken_warps_mask), false);
-}
-
-static void
-cuda_process_read_valid_warps_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint64_t valid_warps_mask;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm, sizeof (sm));
-
-  res = cudbgAPI->readValidWarps (dev, sm, &valid_warps_mask);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &valid_warps_mask, p, sizeof (valid_warps_mask), false);
-}
-
-static void
-cuda_process_read_valid_lanes_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint32_t valid_lanes_mask;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm, sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp, sizeof (wp));
-
-  res = cudbgAPI->readValidLanes (dev, sm, wp, &valid_lanes_mask);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &valid_lanes_mask, p, sizeof (valid_lanes_mask), false);
-}
-
-static void
-cuda_process_read_active_lanes_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint32_t active_lanes_mask;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm, sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp, sizeof (wp));
-
-  res = cudbgAPI->readActiveLanes (dev, sm, wp, &active_lanes_mask);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &active_lanes_mask, p, sizeof (active_lanes_mask), false);
-}
-
-static void
-cuda_process_read_virtual_pc_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint32_t ln;
-  uint64_t value;
- 
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm, sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp, sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &ln, sizeof (ln));
-
-  res = cudbgAPI->readVirtualPC (dev, sm, wp, ln, &value);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &value, p, sizeof (value), false);
-}
-
-static void
-cuda_process_read_pc_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint32_t ln;
-  uint64_t value;
- 
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,  sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,  sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &ln,  sizeof (ln));
-
-  res = cudbgAPI->readPC (dev, sm, wp, ln, &value);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &value, p, sizeof (value), false);
-}
-
-static void
-cuda_process_read_register_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  int regno;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint32_t ln;
-  uint32_t value;
-
-  extract_bin (NULL, (unsigned char *) &dev,   sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,    sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,    sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &ln,    sizeof (ln));
-  extract_bin (NULL, (unsigned char *) &regno, sizeof (regno));
-
-  res = cudbgAPI->readRegister (dev, sm, wp, ln, regno, &value);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &value, p, sizeof (value), false);
-}
-
-
-static void
-cuda_process_read_lane_exception_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint32_t ln;
-  CUDBGException_t exception;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,  sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,  sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &ln,  sizeof (ln));
-
-  res = cudbgAPI->readLaneException (dev, sm, wp, ln, &exception);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &exception, p, sizeof (exception), false);
-}
-
-static void
-cuda_process_read_call_depth_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint32_t ln;
-  uint32_t value;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,  sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,  sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &ln,  sizeof (ln));
-
-  res = cudbgAPI->readCallDepth (dev, sm, wp, ln, &value);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &value, p, sizeof (value), false);;
-}
-
-static void
-cuda_process_read_virtual_return_address_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint32_t ln;
-  uint32_t level;
-  uint64_t value;
-
-  extract_bin (NULL, (unsigned char *) &dev,   sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,    sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,    sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &ln,    sizeof (ln));
-  extract_bin (NULL, (unsigned char *) &level, sizeof (level));
-
-  res = cudbgAPI->readVirtualReturnAddress (dev, sm, wp, ln, level, &value);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &value, p, sizeof (value), false);
-}
-
-static void
-cuda_process_read_code_memory_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint64_t addr;
-  uint32_t sz;
-  void *value;
-
-  extract_bin (NULL, (unsigned char *) &dev,  sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &addr, sizeof (addr));
-  extract_bin (NULL, (unsigned char *) &sz,   sizeof (sz));
-
-  value = xmalloc (sz);
-  res = cudbgAPI->readCodeMemory (dev, addr, value, sz);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) value, p, sz, false);
-  xfree (value);
-}
-
-static void
-cuda_process_read_generic_memory_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint32_t ln;
-  uint64_t addr;
-  uint32_t sz;
-  void *value;
-
-  extract_bin (NULL, (unsigned char *) &dev,  sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,   sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,   sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &ln,   sizeof (ln));
-  extract_bin (NULL, (unsigned char *) &addr, sizeof (addr));
-  extract_bin (NULL, (unsigned char *) &sz,   sizeof (sz));
-
-  value = xmalloc (sz);
-  res = cudbgAPI->readGenericMemory (dev, sm, wp, ln, addr, value, sz);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) value, p, sz, false);
-  xfree (value);
-}
-
-static void
-cuda_process_read_param_memory_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint64_t addr;
-  uint32_t sz;
-  void *value;
-
-  extract_bin (NULL, (unsigned char *) &dev,  sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,   sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,   sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &addr, sizeof (addr));
-  extract_bin (NULL, (unsigned char *) &sz,   sizeof (sz));
-
-  value = xmalloc (sz);
-  res = cudbgAPI->readParamMemory (dev, sm, wp, addr, value, sz);  
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) value, p, sz, false);
-  xfree (value);
-}
-
-static void
-cuda_process_read_shared_memory_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint64_t addr;
-  uint32_t sz;
-  void *value;
-
-  extract_bin (NULL, (unsigned char *) &dev,  sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,   sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,   sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &addr, sizeof (addr));
-  extract_bin (NULL, (unsigned char *) &sz,   sizeof (sz));
-
-  value = xmalloc (sz);
-  res = cudbgAPI->readSharedMemory (dev, sm, wp, addr, value, sz);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) value, p, sz, false);
-  xfree (value);
-}
-
-static void
-cuda_process_read_local_memory_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint32_t ln;
-  uint64_t addr;
-  uint32_t sz;
-  void *value;
-
-  extract_bin (NULL, (unsigned char *) &dev,  sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,   sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,   sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &ln,   sizeof (ln));
-  extract_bin (NULL, (unsigned char *) &addr, sizeof (addr));
-  extract_bin (NULL, (unsigned char *) &sz,   sizeof (sz));
-
-  value = xmalloc (sz);
-  res = cudbgAPI->readLocalMemory (dev, sm, wp, ln, addr, value, sz);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) value, p, sz, false);
-  xfree (value);
-}
-
-static void
-cuda_process_write_generic_memory_packet (char *buf)
-{
-  CUDBGResult res;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint32_t ln;
-  uint64_t addr;
-  uint32_t sz;
-  void *value;
-
-  extract_bin (NULL, (unsigned char *) &dev,  sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,   sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,   sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &ln,   sizeof (ln));
-  extract_bin (NULL, (unsigned char *) &addr, sizeof (addr));
-  extract_bin (NULL, (unsigned char *) &sz,   sizeof (sz));
-
-  value = xmalloc (sz);
-  extract_bin (NULL, (unsigned char *) value, sz);
-
-  res = cudbgAPI->writeGenericMemory (dev, sm, wp, ln, addr, value, sz);
-  append_bin ((unsigned char *) &res, buf, sizeof (res), false);
-  xfree (value);
-}
-
-static void
-cuda_process_write_param_memory_packet (char *buf)
-{
-  CUDBGResult res;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint64_t addr;
-  uint32_t sz;
-  void *value;
-
-  extract_bin (NULL, (unsigned char *) &dev,  sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,   sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,   sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &addr, sizeof (addr));
-  extract_bin (NULL, (unsigned char *) &sz,   sizeof (sz));
-
-  value = xmalloc (sz);
-  extract_bin (NULL, (unsigned char *) value, sz);
-
-  res = cudbgAPI->writeParamMemory (dev, sm, wp, addr, value, sz);
-  append_bin ((unsigned char *) &res, buf, sizeof (res), false);
-  xfree (value);
-}
-
-static void
-cuda_process_write_shared_memory_packet (char *buf)
-{
-  CUDBGResult res;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint64_t addr;
-  uint32_t sz;
-  void *value;
-
-  extract_bin (NULL, (unsigned char *) &dev,  sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,   sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,   sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &addr, sizeof (addr));
-  extract_bin (NULL, (unsigned char *) &sz,   sizeof (sz));
-
-  value = xmalloc (sz);
-  extract_bin (NULL, (unsigned char *) value, sz);
-
-  res = cudbgAPI->writeSharedMemory (dev, sm, wp, addr, value, sz);
-  append_bin ((unsigned char *) &res, buf, sizeof (res), false);
-  xfree (value);
-}
-
-static void
-cuda_process_write_local_memory_packet (char *buf)
-{
-  CUDBGResult res;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint32_t ln;
-  uint64_t addr;
-  uint32_t sz;
-  void *value;
-
-  extract_bin (NULL, (unsigned char *) &dev,  sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,   sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,   sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &ln,   sizeof (ln));
-  extract_bin (NULL, (unsigned char *) &addr, sizeof (addr));
-  extract_bin (NULL, (unsigned char *) &sz,   sizeof (sz));
-
-  value = xmalloc (sz);
-  extract_bin (NULL, (unsigned char *) value, sz);
-
-  res = cudbgAPI->writeLocalMemory (dev, sm, wp, ln, addr, value, sz);
-  append_bin ((unsigned char *) &res, buf, sizeof (res), false);
-  xfree (value);
-}
-
-static void
-cuda_process_write_register_packet (char *buf)
-{
-  CUDBGResult res;
-  int regno;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint32_t ln;
-  uint32_t value;
-
-  extract_bin (NULL, (unsigned char *) &dev,   sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm,    sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp,    sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &ln,    sizeof (ln));
-  extract_bin (NULL, (unsigned char *) &regno, sizeof (regno));
-  extract_bin (NULL, (unsigned char *) &value, sizeof (value));
-
-  res = cudbgAPI->writeRegister (dev, sm, wp, ln, regno, value);
-  append_bin ((unsigned char *) &res, buf, sizeof (res), false);
-}
-
-static void
-cuda_process_check_pending_sigint_packet (char *buf)
-{
-  bool ret_val;
 #ifdef __QNXHOST__
-  /* On QNX, ptid is passed in from host */
-  ptid_t cuda_last_ptid;
-
-  extract_bin (NULL, (unsigned char *) &cuda_last_ptid, sizeof (cuda_last_ptid));
+  const int32_t pid = decoder.get<int32_t> ();
+  const int64_t lwp = decoder.get<int64_t> ();
+  const ptid_t cuda_last_ptid
+      = ptid_t (static_cast<ptid_t::pid_type> (pid),
+		static_cast<ptid_t::lwp_type> (lwp), 0);
 #endif
-  ret_val = cuda_check_pending_sigint (cuda_last_ptid);
-  append_bin ((unsigned char *) &ret_val, buf, sizeof (ret_val), false);
+  const bool ret_val = cuda_check_pending_sigint (cuda_last_ptid);
+  encoder.put (ret_val);
 }
 
 static void
-cuda_process_api_initialize_packet (char *buf)
+cuda_process_api_finalize_packet (cuda_packet_encoder &encoder)
 {
-  CUDBGResult res;
-
-  res = cudbgAPI->initialize ();
-  append_bin ((unsigned char *) &res, buf, sizeof (res), false);
-}
-
-static void
-cuda_process_api_finalize_packet (char *buf)
-{
-  CUDBGResult res;
-
   /* If finalize() has been called in cuda_cleanup(), then return the
      recorded cudbgAPI result. */
-  if (cuda_initialized)
-    res = cudbgAPI->finalize ();
-  else
-    res = api_finalize_res;
-  append_bin ((unsigned char *) &res, buf, sizeof (res), false);
+  const CUDBGResult res
+      = cuda_initialized ? cudbgAPI->finalize () : api_finalize_res;
+  encoder.put (res);
 }
 
 static void
-cuda_process_api_request_clear_attach_state (char *buf)
+cuda_process_set_option_packet (cuda_packet_decoder &decoder,
+				cuda_packet_encoder &encoder)
 {
-  CUDBGResult res;
-  res = cudbgAPI->clearAttachState ();
-  append_bin ((unsigned char *) &res, buf, sizeof (res), false);
-}
-
-static void
-cuda_process_api_request_cleanup_on_detach_packet (char *buf)
-{
-  CUDBGResult res;
-  uint32_t resumeAppFlag;
-
-  extract_bin (NULL, (unsigned char *) &resumeAppFlag, sizeof (resumeAppFlag));
-
-  res = cudbgAPI->requestCleanupOnDetach (resumeAppFlag);
-  append_bin ((unsigned char *) &res, buf, sizeof (res), false);
-}
-
-static void
-cuda_process_set_option_packet (char *buf)
-{
-  extract_bin (NULL, (unsigned char *) &cuda_debug_general,       sizeof (cuda_debug_general));
-  extract_bin (NULL, (unsigned char *) &cuda_debug_libcudbg,      sizeof (cuda_debug_libcudbg));
-  extract_bin (NULL, (unsigned char *) &cuda_debug_notifications, sizeof (cuda_debug_notifications));
-  extract_bin (NULL, (unsigned char *) &cuda_notify_youngest,     sizeof (cuda_notify_youngest));
-  extract_bin (NULL, (unsigned char *) &cuda_driver_logs,         sizeof (cuda_driver_logs));
-  extract_bin (NULL, (unsigned char *) &cuda_printf_flushing,     sizeof (cuda_printf_flushing));
+  cuda_debug_general = decoder.get<bool> ();
+  cuda_debug_libcudbg = decoder.get<bool> ();
+  cuda_debug_notifications = decoder.get<bool> ();
+  cuda_notify_youngest = decoder.get<bool> ();
+  cuda_driver_logs = decoder.get<bool> ();
+  cuda_printf_flushing = decoder.get<bool> ();
 
   /* Apply the runtime option */
   cuda_set_driver_logging (cuda_driver_logs);
 
-  append_string ("OK", buf, false);
+  encoder.put ("OK");
 }
 
 static void
-cuda_process_set_async_launch_notifications (char *buf)
+cuda_process_query_trace_message (cuda_packet_encoder &encoder)
 {
-  CUDBGResult res;
-  uint32_t mode;
-  extract_bin (NULL, (unsigned char *) &mode, sizeof (mode));
-
-  res = (CUDBGResult) cudbgAPI->setKernelLaunchNotificationMode ((CUDBGKernelLaunchNotifyMode) mode);
-  append_bin ((unsigned char *) &res, buf, sizeof (res), false);
-}
-
-static void
-cuda_process_api_read_device_exception_state (char *buf)
-{
-  CUDBGResult res;
-  uint32_t dev, sz;
-  char *p;
-  uint64_t *value;
-
-  extract_bin (NULL, (unsigned char*) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char*) &sz, sizeof (sz));
-
-  value = (uint64_t *) xmalloc (sz * sizeof (*value));
-  res = cudbgAPI->readDeviceExceptionState (dev, value, sz);
-  p = append_bin ((unsigned char*) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char*) value, p, sz * sizeof (*value), false);
-  xfree (value);
-}
-
-static void
-cuda_process_api_get_device_info_sizes (char *buf)
-{
-  CUDBGResult res;
-  uint32_t dev;
-  char *p;
-  CUDBGDeviceInfoSizes sizes;
-
-  extract_bin (NULL, (unsigned char*) &dev, sizeof (dev));
-
-  res = cudbgAPI->getDeviceInfoSizes (dev, &sizes);
-  p = append_bin ((unsigned char*) &res, buf, sizeof (res), true);
-  if (res == CUDBG_SUCCESS)
-    p = append_bin ((unsigned char*) &sizes, p, sizeof (CUDBGDeviceInfoSizes), false);
-}
-
-static void
-cuda_process_api_get_device_info (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  void *buffer;
-  uint32_t dev, length, data_length;
-  CUDBGDeviceInfoQueryType_t type;
-
-  extract_bin (NULL, (unsigned char*) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char*) &type, sizeof (type));
-  extract_bin (NULL, (unsigned char*) &length, sizeof (length));
-
-  buffer = xmalloc (length);
-  res = cudbgAPI->getDeviceInfo (dev, type, buffer, length, &data_length);
-
-  if (res == CUDBG_SUCCESS)
+  if (cuda_trace_messages.empty ())
     {
-      p = append_bin ((unsigned char*) &res, buf, sizeof (res), true);
-      p = append_bin ((unsigned char*) &data_length, p, sizeof (data_length), true);
-      p = append_bin ((unsigned char*) buffer, p, data_length, false);
-    }
-  else
-    p = append_bin ((unsigned char*) &res, buf, sizeof (res), false);
-  xfree (buffer);
-}
-
-static void
-cuda_process_single_step_warp_packet (char *buf)
-{
-  CUDBGResult res;
-  char *p;
-  uint32_t dev;
-  uint32_t sm;
-  uint32_t wp;
-  uint32_t laneHint;
-  uint32_t nsteps;
-  uint32_t flags;
-  uint64_t warp_mask;
-
-  extract_bin (NULL, (unsigned char *) &dev, sizeof (dev));
-  extract_bin (NULL, (unsigned char *) &sm, sizeof (sm));
-  extract_bin (NULL, (unsigned char *) &wp, sizeof (wp));
-  extract_bin (NULL, (unsigned char *) &laneHint, sizeof (laneHint));
-  extract_bin (NULL, (unsigned char *) &nsteps, sizeof (nsteps));
-  extract_bin (NULL, (unsigned char *) &flags, sizeof (flags));
-  extract_bin (NULL, (unsigned char *) &warp_mask, sizeof (warp_mask));
-  res = cudbgAPI->singleStepWarp (dev, sm, wp, laneHint, nsteps, flags, &warp_mask);
-  p = append_bin ((unsigned char *) &res, buf, sizeof (res), true);
-  p = append_bin ((unsigned char *) &warp_mask, p, sizeof (warp_mask), false);
-}
-
-static void
-cuda_process_query_trace_message (char *buf)
-{
-  struct cuda_trace_msg *msg;
-
-  if (!cuda_first_trace_msg)
-    {
-      append_string ("NO_TRACE_MESSAGE", buf, false);
+      encoder.put ("NO_TRACE_MESSAGE");
       return;
     }
 
-  append_string (cuda_first_trace_msg->buf, buf, false);
-  msg = cuda_first_trace_msg->next;
-  xfree (cuda_first_trace_msg);
-  cuda_first_trace_msg = msg;
-  if (!cuda_first_trace_msg)
-    cuda_last_trace_msg = NULL;
+  encoder.put (cuda_trace_messages.front ());
+  cuda_trace_messages.pop_front ();
 }
 
 #ifdef __QNXHOST__
 static void
-cuda_process_version_handshake (char *buf)
+cuda_process_protocol_hash_handshake (cuda_packet_decoder &decoder,
+				      cuda_packet_encoder &encoder)
 {
-  char str[256];
+  const std::string_view client_hash = decoder.get<std::string_view> ();
+  if (client_hash != CUDA_PROTOCOL_HASH)
+    {
+      const std::string client_hash_str (client_hash);
+      error ("CUDA GDB / cuda-gdbserver mismatch: protocol-hash mismatch "
+	     "(cuda-gdb=%s, cuda-gdbserver=%s).  Please use cuda-gdb "
+	     "and cuda-gdbserver built from the same sources.\n",
+	     client_hash_str.c_str (), CUDA_PROTOCOL_HASH);
+    }
 
-  sprintf (str, "%d.%d.%d",
-           CUDBG_API_VERSION_MAJOR,
-           CUDBG_API_VERSION_MINOR,
-           CUDBG_API_VERSION_REVISION);
-
-  append_string (str, buf, false);
+  encoder.put (CUDA_PROTOCOL_HASH);
 }
 #endif /* __QNXHOST__ */
 
 void
-handle_cuda_packet (char *buf)
+handle_cuda_packet (cuda_packet_decoder &decoder, cuda_packet_encoder &encoder)
 {
-  cuda_packet_type_t packet_type;
-  buf_head = buf;
-  extract_bin (buf + strlen ("qnv."), (unsigned char *) &packet_type, sizeof (packet_type));
+  const cuda_packet_type_t packet_type
+      = decoder.get_packet_type<cuda_packet_type_t> ();
 
   switch (packet_type)
     {
-    case RESUME_DEVICE:
-      cuda_process_resume_device_packet (buf);
-      break;
-    case SUSPEND_DEVICE:
-      cuda_process_suspend_device_packet (buf);
-      break;
-    case SINGLE_STEP_WARP65:
-      cuda_process_single_step_warp_packet65 (buf);
-      break;
-    case SET_BREAKPOINT:
-      cuda_process_set_breakpoint_packet (buf);
-      break;
-    case UNSET_BREAKPOINT:
-      cuda_process_unset_breakpoint_packet (buf);
-      break;
-    case READ_GRID_ID:
-      cuda_process_read_grid_id_packet (buf);
-      break;
-    case READ_BLOCK_IDX:
-      cuda_process_read_block_idx_packet (buf);
-      break;
-    case READ_THREAD_IDX:
-      cuda_process_read_thread_idx_packet (buf);
-      break;
-    case READ_BROKEN_WARPS:
-      cuda_process_read_broken_warps_packet (buf);
-      break;
-    case READ_VALID_WARPS:
-      cuda_process_read_valid_warps_packet (buf);
-      break;
-    case READ_VALID_LANES:
-      cuda_process_read_valid_lanes_packet (buf);
-      break;
-    case READ_ACTIVE_LANES:
-      cuda_process_read_active_lanes_packet (buf);
-      break;
-    case READ_CODE_MEMORY:
-      cuda_process_read_code_memory_packet (buf);
-      break;
-    case READ_GENERIC_MEMORY:
-      cuda_process_read_generic_memory_packet (buf);
-      break;
-    case READ_PINNED_MEMORY:
-      /* Support dropped */
-      buf[0] = '\0';
-      break;
-    case READ_PARAM_MEMORY:
-      cuda_process_read_param_memory_packet (buf);
-      break;
-    case READ_SHARED_MEMORY:
-      cuda_process_read_shared_memory_packet (buf);
-      break;
-    case READ_TEXTURE_MEMORY:
-    case READ_TEXTURE_MEMORY_BINDLESS:
-      /* Support dropped */
-      buf[0] = '\0';
-      break;
-    case READ_LOCAL_MEMORY:
-      cuda_process_read_local_memory_packet (buf);
-      break;
-    case READ_REGISTER:
-      cuda_process_read_register_packet (buf);
-      break;
-    case READ_PC:
-      cuda_process_read_pc_packet (buf);
-      break;
-    case READ_VIRTUAL_PC:
-      cuda_process_read_virtual_pc_packet (buf);
-      break;
-    case READ_LANE_EXCEPTION:
-      cuda_process_read_lane_exception_packet (buf);
-      break;
-    case READ_CALL_DEPTH:
-      cuda_process_read_call_depth_packet (buf);
-      break;
-    case READ_SYSCALL_CALL_DEPTH:
-      /* Support dropped */
-      buf[0] = '\0';
-      break;
-    case READ_VIRTUAL_RETURN_ADDRESS:
-      cuda_process_read_virtual_return_address_packet (buf);
-      break;
-    case WRITE_GENERIC_MEMORY:
-      cuda_process_write_generic_memory_packet (buf);
-      break;
-    case WRITE_PARAM_MEMORY:
-      cuda_process_write_param_memory_packet (buf);
-      break;
-    case WRITE_SHARED_MEMORY:
-      cuda_process_write_shared_memory_packet (buf);
-      break;
-    case WRITE_LOCAL_MEMORY:
-      cuda_process_write_local_memory_packet (buf);
-      break;
-    case WRITE_REGISTER:
-      cuda_process_write_register_packet (buf);
-      break;
-    case IS_DEVICE_CODE_ADDRESS:
-      /* Support dropped */
-      break;
-    case DISASSEMBLE:
-      cuda_process_disassemble_packet (buf);
-      break;
-    case GET_NUM_DEVICES:
-      cuda_process_get_num_devices_packet (buf);
-      break;
-    case GET_GRID_STATUS:
-      cuda_process_get_grid_status_packet (buf);
-      break;
-    case GET_GRID_INFO:
-      cuda_process_get_grid_info_packet (buf);
-      break;
-    case GET_ADJUSTED_CODE_ADDRESS:
-      cuda_process_get_adjusted_code_address (buf);
-      break;
-    case GET_HOST_ADDR_FROM_DEVICE_ADDR:
-      cuda_process_get_host_addr_from_device_addr_packet (buf);
-      break;
-    case GET_ERROR_STRING_EX:
-      cuda_process_get_error_string_ex_packet (buf);
-      break;
     case NOTIFICATION_ANALYZE:
-      cuda_process_notification_analyze_packet (buf);
+      cuda_process_notification_analyze_packet (decoder, encoder);
       break;
     case NOTIFICATION_PENDING:
-      cuda_process_notification_pending_packet (buf);
+      cuda_process_notification_pending_packet (encoder);
       break;
     case NOTIFICATION_RECEIVED:
-      cuda_process_notification_received_packet (buf);
+      cuda_process_notification_received_packet (encoder);
       break;
     case NOTIFICATION_ALIASED_EVENT:
-      cuda_process_notification_aliased_event_packet (buf);
+      cuda_process_notification_aliased_event_packet (encoder);
       break;
     case NOTIFICATION_MARK_CONSUMED:
-      cuda_process_notification_mark_consumed_packet (buf);
+      cuda_process_notification_mark_consumed_packet (encoder);
       break;
     case NOTIFICATION_CONSUME_PENDING:
-      cuda_process_notification_consume_pending_packet (buf);
+      cuda_process_notification_consume_pending_packet (encoder);
       break;
-#ifndef __QNXHOST__
-    case UPDATE_GRID_ID_IN_SM:
-      cuda_process_update_grid_id_in_sm_packet (buf);
+    case INITIALIZE_TARGET:
+      cuda_process_initialize_target_packet (decoder, encoder);
       break;
-    case UPDATE_BLOCK_IDX_IN_SM:
-      cuda_process_update_block_idx_in_sm_packet (buf);
+    case API_FINALIZE:
+      cuda_process_api_finalize_packet (encoder);
       break;
-#endif
-    case UPDATE_THREAD_IDX_IN_WARP:
-      cuda_process_update_thread_idx_in_warp_packet (buf);
+    case QUERY_DEVICE_SPEC:
+      cuda_process_query_device_spec_packet (decoder, encoder);
+      break;
+    case QUERY_TRACE_MESSAGE:
+      cuda_process_query_trace_message (encoder);
+      break;
+    case CHECK_PENDING_SIGINT:
+      cuda_process_check_pending_sigint_packet (decoder, encoder);
+      break;
+    case SET_OPTION:
+      cuda_process_set_option_packet (decoder, encoder);
       break;
 #ifdef __QNXHOST__
     case SET_SYMBOLS:
-      cuda_process_set_symbols (buf);
+      cuda_process_set_symbols (decoder, encoder);
+      break;
+    case CUDA_PROTOCOL_HASH_HANDSHAKE:
+      cuda_process_protocol_hash_handshake (decoder, encoder);
       break;
 #endif /* __QNXHOST__ */
-    case INITIALIZE_TARGET:
-      cuda_process_initialize_target_packet (buf);
-      break;
-    case QUERY_DEVICE_SPEC:
-      cuda_process_query_device_spec_packet (buf);
-      break;
-    case QUERY_TRACE_MESSAGE:
-      cuda_process_query_trace_message (buf);
-      break;
-    case CHECK_PENDING_SIGINT:
-      cuda_process_check_pending_sigint_packet (buf);
-      break;
-    case API_INITIALIZE:
-      cuda_process_api_initialize_packet (buf);
-      break;
-    case API_FINALIZE:
-      cuda_process_api_finalize_packet (buf);
-      break;
-    case CLEAR_ATTACH_STATE:
-      cuda_process_api_request_clear_attach_state (buf);
-      break;
-    case REQUEST_CLEANUP_ON_DETACH:
-      cuda_process_api_request_cleanup_on_detach_packet (buf);
-      break;
-    case SET_OPTION:
-      cuda_process_set_option_packet (buf);
-      break;
-    case SET_ASYNC_LAUNCH_NOTIFICATIONS:
-      cuda_process_set_async_launch_notifications (buf);
-      break;
-    case READ_DEVICE_EXCEPTION_STATE:
-      cuda_process_api_read_device_exception_state (buf);
-      break;
-#ifdef __QNXHOST__
-    case VERSION_HANDSHAKE:
-      cuda_process_version_handshake (buf);
-      break;
-#endif /* __QNXHOST__ */
-    case READ_CLUSTER_IDX:
-      cuda_process_read_cluster_idx_packet (buf);
-      break;
-#ifndef __QNXHOST__
-    case UPDATE_CLUSTER_IDX_IN_SM:
-      cuda_process_update_cluster_idx_in_sm_packet (buf);
-      break;
-    case UPDATE_CLUSTER_DIM_IN_SM:
-      cuda_process_update_cluster_dim_in_sm_packet (buf);
-      break;
-#endif /* !__QNXHOST__ */
-    case GET_DEVICE_INFO_SIZES:
-      cuda_process_api_get_device_info_sizes (buf);
-      break;
-    case GET_DEVICE_INFO:
-      cuda_process_api_get_device_info (buf);
-      break;
-    case SINGLE_STEP_WARP:
-      cuda_process_single_step_warp_packet (buf);
-      break;
     default:
-      error ("unknown cuda packet type: %u\n", (uint32_t) packet_type);
-      break;
+      error ("unknown cuda packet type: %u\n", (uint32_t)packet_type);
     }
 }
 
@@ -1553,79 +351,113 @@ void
 cuda_append_api_finalize_res (char *buf)
 {
   gdb_assert (buf);
-  sprintf (buf, ";cuda_finalize:%x", api_finalize_res);
+  xsnprintf (buf, 64, ";cuda_finalize:%x", api_finalize_res);
 }
 
-/*
- * Regardless of the packet_len, buf can contain up to PBUFSIZ bytes
- */
-int handle_vCuda (char *buf, int packet_len, int *new_packet_len)
+static void
+write_error_response (gdb::array_view<char> response, int err,
+		      int *new_packet_len)
 {
-  CUDBGResult res;
-  gdb_byte *lbuf;
-  static void *data = NULL;
-  static size_t size = 0;
-  int out_len;
-  size_t offset = 0;
+  gdb_assert (response.size () >= 4);
+  xsnprintf (response.data (), 4, "E%02d", err);
+  *new_packet_len = 3;
+}
 
-  /* Handle multipacket vCUDARetr; command */
-  if (strncmp (buf, "vCUDARetr;", 10) == 0) {
-    offset = (size_t) atol (buf + strlen ("vCUDARetr;"));
+static void
+write_ok_response (gdb::array_view<char> buf,
+		   gdb::array_view<const gdb_byte> payload, bool *truncated,
+		   int *new_packet_len)
+{
+  static constexpr std::string_view kOK = "OK;";
+  static constexpr std::string_view kMP = "MP";
 
-    if (offset >= size) {
-      sprintf (buf, "E%02d", EINVAL);
-      *new_packet_len = 3;
+  constexpr size_t prefix = kOK.size ();
+  gdb_assert (buf.size () > prefix);
+  kOK.copy (buf.data (), prefix);
+  int out_len = 0;
+  const int escaped = remote_escape_output (
+      payload.data (), payload.size (), 1, (gdb_byte *)buf.data () + prefix,
+      &out_len, buf.size () - prefix);
+  *truncated = (size_t)out_len != payload.size ();
+  if (*truncated)
+    kMP.copy (buf.data (), kMP.size ());
+  *new_packet_len = (int)prefix + escaped;
+}
+
+int
+handle_vCuda (std::string_view request, gdb::array_view<char> response,
+	      int *new_packet_len)
+{
+  static constexpr std::string_view kVCUDARetr = "vCUDARetr;";
+  static constexpr std::string_view kVCUDA = "vCUDA;";
+
+  static gdb::byte_vector last_vcuda_reply;
+
+  if (startswith (request, kVCUDARetr))
+    {
+      /* The offset field is parsed by strtoul, which scans until a
+	 non-numeric byte.  The request buffer is NUL-terminated past
+	 the request, so this is safe.  */
+      const size_t offset
+	  = std::strtoul (request.data () + kVCUDARetr.size (), nullptr, 10);
+
+      if (last_vcuda_reply.empty () || offset >= last_vcuda_reply.size ())
+	{
+	  write_error_response (response, EINVAL, new_packet_len);
+	  return 1;
+	}
+
+      bool truncated;
+      write_ok_response (
+	  response,
+	  gdb::make_array_view (last_vcuda_reply.data () + offset,
+				last_vcuda_reply.size () - offset),
+	  &truncated, new_packet_len);
+      if (!truncated)
+	last_vcuda_reply.clear ();
       return 1;
     }
 
-    memcpy (buf, "OK;", strlen("OK;"));
-    lbuf = (gdb_byte *)buf + strlen("OK;");
-    *new_packet_len  = strlen ("OK;");
-    *new_packet_len += remote_escape_output ((const gdb_byte *)data+offset,
-                                             size-offset, 1, lbuf,
-                                             &out_len, PBUFSIZ-strlen ("OK;"));
-    if (out_len != size - offset)
-      memcpy (buf, "MP", 2);
+  last_vcuda_reply.clear ();
 
-    return 1;
-  }
-
-  /* Handle vCUDA; command */
-  if (strncmp (buf, "vCUDA;", 6) != 0) {
-    sprintf (buf, "E%02d", EINVAL);
-    *new_packet_len = 3;
-    return 1;
-  }
-
-  lbuf = (gdb_byte *)buf + strlen("vCUDA;");
-  packet_len -= strlen ("vCUDA;");
-
-  data = xmalloc (packet_len);
-  gdb_assert (data);
-
-  packet_len = remote_unescape_input (lbuf, packet_len, (gdb_byte *) data, packet_len);
-  res = cudbgipcAppend (data, packet_len);
-  if (res != CUDBG_SUCCESS) {
-      sprintf (buf, "E%02d", res);
-      *new_packet_len = 3;
+  if (!startswith (request, kVCUDA))
+    {
+      write_error_response (response, EINVAL, new_packet_len);
       return 1;
-  }
-  xfree (data);
+    }
 
-  res = cudbgipcRequest (&data, &size);
-  if (res != CUDBG_SUCCESS) {
-      sprintf (buf, "E%02d", res);
-      *new_packet_len = 3;
+  const auto *escaped_payload
+      = (const gdb_byte *)(request.data () + kVCUDA.size ());
+  const int payload_len = (int)(request.size () - kVCUDA.size ());
+
+  static gdb::byte_vector input;
+  input.resize ((size_t)payload_len);
+
+  const int unescaped_len = remote_unescape_input (
+      escaped_payload, payload_len, input.data (), input.size ());
+
+  CUDBGResult res = cudbgipcAppend (input.data (), unescaped_len);
+  if (res != CUDBG_SUCCESS)
+    {
+      write_error_response (response, res, new_packet_len);
       return 1;
-  }
+    }
 
-  memcpy (buf, "OK;", strlen("OK;"));
-  lbuf = (gdb_byte *)buf + strlen("OK;");
-  *new_packet_len  = strlen ("OK;");
-  *new_packet_len += remote_escape_output ((const gdb_byte *) data, size, 1, lbuf,
-                                          &out_len, PBUFSIZ-strlen ("OK;"));
-  if (out_len != size)
-    memcpy (buf, "MP", 2);
+  void *ipc_reply = nullptr;
+  size_t ipc_reply_size = 0;
+  res = cudbgipcRequest (&ipc_reply, &ipc_reply_size);
+  if (res != CUDBG_SUCCESS)
+    {
+      write_error_response (response, res, new_packet_len);
+      return 1;
+    }
 
+  const auto *reply_bytes = (const gdb_byte *)ipc_reply;
+  bool truncated;
+  write_ok_response (response,
+		     gdb::make_array_view (reply_bytes, ipc_reply_size),
+		     &truncated, new_packet_len);
+  if (truncated)
+    last_vcuda_reply.assign (reply_bytes, reply_bytes + ipc_reply_size);
   return 1;
 }

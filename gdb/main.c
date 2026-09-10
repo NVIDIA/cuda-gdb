@@ -69,14 +69,6 @@
 #include "cli-out.h"
 #include "bt-utils.h"
 
-#ifdef NVIDIA_CUDA_GDB
-#ifdef HAVE_PYTHON
-#ifdef NVIDIA_PYTHON_DYNLIB
-/* Print the version of the libpython library loaded by the dynlib code */
-extern void python_print_library ();
-#endif
-#endif
-#endif
 /* The selected interpreter.  */
 std::string interpreter_p;
 
@@ -1182,13 +1174,6 @@ captured_main_1 (struct captured_main_args *context)
     {
       print_gdb_version (gdb_stdout, false);
       gdb_printf ("\n");
-#ifdef NVIDIA_CUDA_GDB
-#ifdef HAVE_PYTHON
-#ifdef NVIDIA_PYTHON_DYNLIB
-      python_print_library ();
-#endif
-#endif
-#endif
       do_final_cleanups ();
       exit (0);
     }
@@ -1204,13 +1189,6 @@ captured_main_1 (struct captured_main_args *context)
     {
       print_gdb_configuration (gdb_stdout);
       gdb_printf ("\n");
-#ifdef NVIDIA_CUDA_GDB
-#ifdef HAVE_PYTHON
-#ifdef NVIDIA_PYTHON_DYNLIB
-      python_print_library ();
-#endif
-#endif
-#endif
       do_final_cleanups ();
       exit (0);
     }
@@ -1231,13 +1209,6 @@ captured_main_1 (struct captured_main_args *context)
       if (symarg)
 	gdb_printf ("..");
       gdb_printf ("\n");
-#ifdef NVIDIA_CUDA_GDB
-#ifdef HAVE_PYTHON
-#ifdef NVIDIA_PYTHON_DYNLIB
-      python_print_library ();
-#endif
-#endif
-#endif
       gdb_flush (gdb_stdout);	/* Force to screen during slow
 				   operations.  */
     }

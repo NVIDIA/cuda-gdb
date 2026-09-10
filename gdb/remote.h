@@ -133,8 +133,5 @@ extern bool remote_register_is_expedited (int regnum);
 
 #ifdef NVIDIA_CUDA_GDB
 void cuda_remote_report_event ();
-#ifdef __QNXTARGET__
-void cuda_qnx_version_handshake_check (const char *version_string);
-#endif
 #endif
 #endif /* GDB_REMOTE_H */

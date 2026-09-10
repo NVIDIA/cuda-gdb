@@ -2573,6 +2573,24 @@ in which its expression is valid.\n"),
     }
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* Returns true if the condition string for breakpoint B failed to parse
+   at every enabled location.  A condition that is invalid everywhere is
+   likely a user error and should be reported.  A condition that is invalid
+   at only some locations (e.g. template/overloaded functions where the
+   condition references type-specific members) is expected, and those
+   locations should be silently skipped per the upstream behavior.  */
+
+static bool
+all_bp_locations_disabled_by_cond (const breakpoint *b)
+{
+  for (const bp_location &loc : b->locations ())
+    if (loc.enabled && !loc.disabled_by_cond)
+      return false;
+  return true;
+}
+#endif
+
 /* Returns true iff breakpoint location should be
    inserted in the inferior.  We don't differentiate the type of BL's owner
    (breakpoint vs. tracepoint), although insert_location in tracepoint's
@@ -2588,9 +2606,16 @@ should_be_inserted (struct bp_location *bl)
   if (bl->owner->disposition == disp_del_at_next_stop)
     return false;
 
+#ifdef NVIDIA_CUDA_GDB
+  if (!bl->enabled || bl->shlib_disabled || bl->duplicate)
+    return false;
+  if (bl->disabled_by_cond && !all_bp_locations_disabled_by_cond (bl->owner))
+    return false;
+#else
   if (!bl->enabled || bl->disabled_by_cond
       || bl->shlib_disabled || bl->duplicate)
     return false;
+#endif
 
   if (user_breakpoint_p (bl->owner) && bl->pspace->executing_startup)
     return false;
@@ -4798,7 +4823,18 @@ breakpoint_here_p (const address_space *aspace, CORE_ADDR pc)
 {
   bool any_breakpoint_here = false;
 
+#ifdef NVIDIA_CUDA_GDB
+  /* The CUDA match predicate (cuda_breakpoint_address_match) used
+     below checks strict address equality (addr1 == addr2) and never
+     consults bl->length, so only locations whose bl->address == pc
+     are candidates.  This lets us narrow the iteration to
+     all_bp_locations_at_addr(pc) (O(log n) binary search) instead
+     of scanning every location.  Purely an iteration optimization;
+     matching semantics in breakpoint_here_p are unchanged.  */
+  for (bp_location *bl : all_bp_locations_at_addr (pc))
+#else
   for (bp_location *bl : all_bp_locations ())
+#endif
     {
       if (bl->loc_type != bp_loc_software_breakpoint
 	  && bl->loc_type != bp_loc_hardware_breakpoint)
@@ -6081,6 +6117,34 @@ bpstat_check_breakpoint_conditions (bpstat *bs, thread_info *thread)
 		       thread->ptid.to_string ().c_str (),
 		       b->number, find_loc_num_by_location (bl));
 
+#ifdef NVIDIA_CUDA_GDB
+  /* If the condition failed to parse (disabled_by_cond), stop execution
+     and re-parse to reproduce the original error for the user.  This
+     path is only reached when the condition is invalid at every location
+     (guarded by all_bp_locations_disabled_by_cond in build_bpstat_chain
+     and should_be_inserted).  We intentionally preserve cond_string and
+     disabled_by_cond so that breakpoint re-resolution (e.g. when a later
+     cubin loads with a different template instantiation) can re-parse the
+     condition and potentially find a valid match.  */
+  if (bl->disabled_by_cond)
+    {
+      if (b->cond_string)
+	{
+	  const char *s = b->cond_string.get ();
+	  try
+	    {
+	      parse_exp_1 (&s, bl->address, block_for_pc (bl->address), 0);
+	    }
+	  catch (const gdb_exception_error &ex)
+	    {
+	      warning (_("Error in testing condition for breakpoint %d:\n"
+			 "%s"), b->number, ex.what ());
+	    }
+	}
+      return;
+    }
+#endif
+
   /* Even if the target evaluated the condition on its end and notified GDB, we
      need to do so again since GDB does not know if we stopped due to a
      breakpoint or a single step breakpoint.  */
@@ -6279,8 +6343,16 @@ build_bpstat_chain (const address_space *aspace, CORE_ADDR bp_addr,
 	  if (b.type == bp_hardware_watchpoint && &bl != &b.first_loc ())
 	    break;
 
+#ifdef NVIDIA_CUDA_GDB
+	  if (!bl.enabled || bl.shlib_disabled)
+	    continue;
+	  if (bl.disabled_by_cond
+	      && !all_bp_locations_disabled_by_cond (bl.owner))
+	    continue;
+#else
 	  if (!bl.enabled || bl.disabled_by_cond || bl.shlib_disabled)
 	    continue;
+#endif
 
 	  if (!bpstat_check_location (&bl, aspace, bp_addr, ws))
 	    continue;
@@ -7202,7 +7274,11 @@ print_one_breakpoint_location (struct breakpoint *b,
 	  else
 	    {
 	      if (loc->disabled_by_cond)
+#ifdef NVIDIA_CUDA_GDB
+		return "y*";
+#else
 		return "N*";
+#endif
 	      else if (!loc->enabled)
 		return "n";
 	      else if (!breakpoint_enabled (loc->owner))
@@ -9082,11 +9158,21 @@ disable_cuda_breakpoints_in_freed_objfile (struct objfile *objfile)
 	{
 	  /* ALL_BP_LOCATIONS bp_location has LOC->OWNER always non-NULL.  */
 	  struct breakpoint *b = loc->owner;
+
+	  /* During a destructive unload (context / module destruction,
+	     objfile->unlinked) the driver removes all breakpoints, so
+	     clear the stale handle.  During a FUNCTIONS_LOADED
+	     incremental reload the driver keeps the cubin and its
+	     breakpoints — preserve the handle so that swap_insertion
+	     can transfer it to the replacement location and a later
+	     remove_breakpoint can still reach the device.  */
+	  if (objfile->unlinked)
+	    {
+	      loc->target_info.cuda_bp_handle = CUDBG_BREAKPOINT_HANDLE_INVALID;
+	      loc->inserted = 0;
+	    }
+
 	  loc->shlib_disabled = 1;
-	  /* At this point, we cannot rely on remove_breakpoint
-	     succeeding so we must mark the breakpoint as not inserted
-	     to prevent future errors occurring in remove_breakpoints.  */
-	  loc->inserted = 0;
 
 	  /* This may cause duplicate notifications for the same breakpoint. */
 	  notify_breakpoint_modified (b);
@@ -12237,8 +12323,9 @@ breakpoint_auto_delete (bpstat *bs)
 {
 #ifdef NVIDIA_CUDA_GDB
   /* CUDA - We only want to delete a single bp_cuda_auto in the chain.
-   * We can have multiple KERNEL_READY events cooresponding to the same
-   * address. Delete only one of them. */
+   * Multiple bp_cuda_auto breakpoints can share the same address (e.g. one
+   * per break-on-launch hit on the same kernel entry). Delete only one of
+   * them. */
   bool removed_cuda_auto = false;
 #endif
   for (; bs; bs = bs->next)
@@ -15991,11 +16078,6 @@ cuda_auto_breakpoints_update (void)
 		  b.silent = false;
 		  b.enable_state = bp_enabled;
 		}
-	      else if (cuda_options_show_kernel_events_application ())
-		{
-		  b.silent = true;
-		  b.enable_state = bp_enabled;
-		}
 	      else
 		{
 		  b.enable_state = bp_disabled;
@@ -16020,7 +16102,14 @@ cuda_auto_breakpoints_cleanup (void)
     }
 }
 /* Used when a KERNEL_READY event is detected. We have the entry pc provided to
- * us. */
+ * us.
+ *
+ * TODO: CUDBG_EVENT_KERNEL_READY is being removed from the CUDA
+ * debugger API. The only caller of this function is cuda_event_kernel_ready,
+ * so once the event is gone this entire legacy break-on-launch fallback path
+ * is dead code and should be removed in the next major release. The new
+ * break-on-launch API path uses cuda_auto_breakpoint_break_on_launch_hit
+ * instead. */
 void
 cuda_auto_breakpoints_event_add_break (cuda_module* module, CORE_ADDR addr)
 {
@@ -16062,17 +16151,22 @@ cuda_auto_breakpoints_event_add_break (cuda_module* module, CORE_ADDR addr)
 }
 
 /* Used when the new break-on-launch API detects a BoL hit.  Creates a
-   physical breakpoint at the post-prologue PC.  The breakpoint is inserted
-   on the device, and the caller should return a spurious wait status so
-   GDB resumes execution and the kernel hits this breakpoint at the first
-   executable statement.
+   cuda_auto_breakpoint so the stop is reported as a kernel entry function
+   breakpoint (via cuda_auto_breakpoint::print_it), and tells the caller how to
+   proceed via the returned cuda_bol_action.
 
-   This approach matches the legacy break_on_launch behavior where the stop
-   occurs at the first executable line (after prologue) rather than at the
-   function entry point.
+   For a kernel with a non-empty prologue the breakpoint is created at the
+   post-prologue PC (ahead of where the warp is stopped) and the caller should
+   resume so the warp runs forward and hits it at the first executable
+   statement.
 
-   Returns true if the breakpoint was created successfully.  */
-bool
+   For a kernel with a zero-length prologue the warp is already stopped at the
+   first executable statement (the entry PC).  The breakpoint is created at the
+   warp's current PC and the caller should report the stop now rather than
+   resuming: the warp is already where it should stop, and bpstat will attribute
+   the current stop to this breakpoint so print_it produces the kernel entry
+   message.  Resuming would step the warp past the breakpoint.  */
+cuda_bol_action
 cuda_auto_breakpoint_break_on_launch_hit (CORE_ADDR addr, cuda_module *module)
 {
   struct gdbarch *cuda_gdbarch = cuda_get_gdbarch ();
@@ -16080,26 +16174,48 @@ cuda_auto_breakpoint_break_on_launch_hit (CORE_ADDR addr, cuda_module *module)
     {
       warning (_ ("Could not set CUDA break-on-launch breakpoint at 0x%llx\n"),
 	       (unsigned long long)addr);
-      return false;
+      return cuda_bol_action::none;
     }
 
-  /* Skip prologue and adjust breakpoint address to get to the first
-     executable statement, matching legacy break_on_launch behavior.  */
-  addr = gdbarch_skip_prologue_noexcept (cuda_gdbarch, addr);
-  addr = adjust_breakpoint_address (cuda_gdbarch, addr, bp_cuda_auto,
-				    current_program_space);
+  /* The warp that triggered the break-on-launch hit is currently stopped at
+     ADDR.  Remember it so we can detect the zero-length prologue case below. */
+  CORE_ADDR bol_pc = addr;
 
-  /* Create an insertable breakpoint (CUDA_EVENT_APPLICATION_BP) at the
-     post-prologue address.  This breakpoint will be physically inserted
-     on the device.  When the kernel resumes, it will hit this breakpoint
-     at the first executable statement.  */
+  /* Skip the prologue to land on the first executable statement.  */
+  CORE_ADDR post_prologue_pc
+      = gdbarch_skip_prologue_noexcept (cuda_gdbarch, bol_pc);
+
+  /* A zero-length prologue yields a post-prologue PC equal to the PC the warp
+     already ran to.  In that case the warp is already stopped at the first
+     executable statement: place the breakpoint at the current PC and report
+     the stop instead of resuming past it.  Otherwise place it at the
+     post-prologue PC and resume so the warp runs forward into it.  */
+  cuda_bol_action action;
+  if (post_prologue_pc > bol_pc)
+    {
+      addr = adjust_breakpoint_address (cuda_gdbarch, post_prologue_pc,
+					bp_cuda_auto, current_program_space);
+      action = cuda_bol_action::resume;
+    }
+  else
+    {
+      addr = bol_pc;
+      action = cuda_bol_action::report;
+    }
+
+  /* Create an insertable breakpoint (CUDA_EVENT_APPLICATION_BP).  This
+     breakpoint is inserted on the device so the stop is reported as a kernel
+     entry function breakpoint.  */
   struct breakpoint *bp
       = create_cuda_auto_breakpoint (cuda_gdbarch, addr,
 				     CUDA_EVENT_APPLICATION_BP, module);
   cuda_trace_breakpoint ("Created break-on-launch auto breakpoint bp %d at "
-			 "0x%llx (post-prologue)",
-			 bp->number, (unsigned long long)addr);
-  return true;
+			 "0x%llx (%s)",
+			 bp->number, (unsigned long long)addr,
+			 action == cuda_bol_action::resume
+			     ? "post-prologue, resume"
+			     : "zero-length prologue, report stop");
+  return action;
 }
 #endif /* NVIDIA_CUDA_GDB */
 

@@ -76,7 +76,6 @@
 #include "cuda-notifications.h"
 #include "cuda-stats.h"
 
-#include <ctype.h>
 #include <pthread.h>
 #include <signal.h>
 #include <unistd.h>
@@ -102,22 +101,101 @@ static struct
 			 event was being processed. */
   bool sent;	      /* If already sent, do not send duplicates. */
   bool received;      /* True if the stop signal has been received. */
-  uint32_t tid; /* The thread id of the thread to which the stop signal was
-		   sent to. */
+  uint32_t tid; /* Host notification target id. This is a thread id on most
+		   platforms and the inferior pid on QNX. */
   pthread_mutex_t mutex; /* Mutex for the cuda_notification_* functions */
   CUDBGEventCallbackData41 pending_send_data;
 } cuda_notification_info;
 
+/* Per-wait-epoch flag.  Only touched by the wait/resume thread, so no mutex.
+   Lives outside cuda_notification_info because it isn't part of the SIGURG
+   protocol -- it's a state-passing channel between cuda_wait's drain and
+   cuda_resume's aliased-event discriminator.  */
+static bool cuda_notification_suspend_drained_state = false;
+
 #if __QNXHOST__
 extern uint32_t inferior_pid;
+static int cuda_notification_notify_specific_thread (uint32_t tid);
+
+static uint32_t
+cuda_notification_qnx_target_pid (void)
+{
+  return inferior_pid;
+}
+
+static uint32_t
+cuda_notification_qnx_send_process_notification (CUDBGEventCallbackData41 *data)
+{
+  const uint32_t target_pid = cuda_notification_qnx_target_pid ();
+  const uint32_t callback_tid = data ? data->tid : 0;
+  const uint32_t timeout = data ? data->timeout : 0;
+
+  cuda_trace ("qnx notify: process-pid send callback_tid=%u timeout=%u "
+	      "target_pid=%u",
+	      callback_tid, timeout, target_pid);
+
+  const bool sent
+      = (cuda_notification_notify_specific_thread (target_pid) == 0);
+  const uint32_t sent_to = sent ? target_pid : 0;
+  cuda_trace ("qnx notify: process-pid send result target_pid=%u sent_to=%u",
+	      target_pid, sent_to);
+
+  return sent_to;
+}
+
+static uint32_t
+cuda_notification_qnx_stop_target_pid (ptid_t ptid)
+{
+  return ptid.pid ();
+}
+
+static int
+cuda_notification_signal_for_trace (const struct target_waitstatus *ws)
+{
+  if (ws->kind () == TARGET_WAITKIND_STOPPED
+      || ws->kind () == TARGET_WAITKIND_SIGNALLED)
+    return ws->sig ();
+
+  return GDB_SIGNAL_0;
+}
+
+static bool
+cuda_notification_qnx_match_received (ptid_t ptid,
+				      const struct target_waitstatus *ws)
+{
+  return (cuda_notification_info.sent
+	  && cuda_notification_info.tid
+		 == cuda_notification_qnx_stop_target_pid (ptid)
+	  && ws->kind () == TARGET_WAITKIND_STOPPED
+	  && (ws->sig () == GDB_SIGNAL_EMT
+	      || ws->sig () == GDB_SIGNAL_ILL));
+}
+
+static bool
+cuda_notification_qnx_signal_stop (const struct target_waitstatus *ws)
+{
+  return (ws->kind () == TARGET_WAITKIND_STOPPED
+	  && (ws->sig () == GDB_SIGNAL_EMT
+	      || ws->sig () == GDB_SIGNAL_ILL));
+}
+
+static void
+cuda_notification_qnx_trace_analyze (ptid_t ptid,
+				     const struct target_waitstatus *ws,
+				     bool matched)
+{
+  cuda_trace ("qnx notify: analyze notify_pid=%u stop_pid=%d stop_lwp=%ld "
+	      "ws_kind=%d ws_sig=%d sent=%d received=%d match=%d",
+	      cuda_notification_info.tid, ptid.pid (), (long) ptid.lwp (),
+	      (int) ws->kind (), cuda_notification_signal_for_trace (ws),
+	      cuda_notification_info.sent, cuda_notification_info.received,
+	      matched);
+}
 #endif
 
 static void
 cuda_notification_trace (const char *fmt, ...)
 {
-#ifdef GDBSERVER
-  struct cuda_trace_msg *msg;
-#endif
   va_list ap;
 
   if (!cuda_options_debug_notifications ())
@@ -125,21 +203,14 @@ cuda_notification_trace (const char *fmt, ...)
 
   va_start (ap, fmt);
 #ifdef GDBSERVER
-  msg = (struct cuda_trace_msg *)xmalloc (sizeof (*msg));
-  if (!cuda_first_trace_msg)
-    cuda_first_trace_msg = msg;
-  else
-    cuda_last_trace_msg->next = msg;
-  sprintf (msg->buf, "[CUDAGDB] notifications -- ");
-  vsnprintf (msg->buf + strlen (msg->buf), sizeof (msg->buf), fmt, ap);
-  msg->next = NULL;
-  cuda_last_trace_msg = msg;
+  cuda_enqueue_trace_message ("[CUDAGDB] notifications -- ", fmt, ap);
 #else
   fprintf (stderr, "[CUDAGDB] notifications -- ");
   vfprintf (stderr, fmt, ap);
   fprintf (stderr, "\n");
   fflush (stderr);
 #endif
+  va_end (ap);
 }
 
 void
@@ -151,6 +222,7 @@ cuda_notification_reset (void)
   cuda_notification_info.sent = false;
   cuda_notification_info.received = false;
   cuda_notification_info.tid = false;
+  cuda_notification_suspend_drained_state = false;
 }
 
 static void
@@ -223,21 +295,7 @@ cuda_notification_notify_specific_thread (uint32_t tid)
   return err;
 }
 
-#if __QNXHOST__
-static uint32_t
-qnx_cuda_notification_notify_thread (uint32_t tid)
-{
-  if (cuda_notification_notify_specific_thread (tid) == 0)
-    {
-      return tid;
-    }
-  else
-    {
-      return 0;
-    }
-}
-
-#else /* !__QNXHOST__ */
+#if !__QNXHOST__
 
 #ifdef GDBSERVER
 static int
@@ -356,8 +414,11 @@ static void
 cuda_notification_send (CUDBGEventCallbackData41 *data)
 {
   uint32_t tid = 0;
+#ifndef __QNXHOST__
   int err = 1;
+#endif
 
+#ifndef __QNXHOST__
   // use the host thread id if given to us
   if (!tid && cuda_platform_supports_tid () && data && data->tid)
     {
@@ -365,13 +426,13 @@ cuda_notification_send (CUDBGEventCallbackData41 *data)
       if (!err)
 	tid = data->tid;
     }
+#endif
 
 #ifdef __QNXHOST__
-  /* FIXME: we are not tracking any threads apart from the main one */
+  /* Keep QNX notification delivery process-pid based while tracing callback
+     tids for later comparison against stop lwps. */
   if (!tid)
-    {
-      tid = qnx_cuda_notification_notify_thread (inferior_pid);
-    }
+    tid = cuda_notification_qnx_send_process_notification (data);
 #else
 #ifndef GDBSERVER
   // use the saved ptid used to init the debug API
@@ -532,6 +593,24 @@ cuda_notification_received (void)
 }
 
 void
+cuda_notification_set_suspend_drained (void)
+{
+  cuda_notification_suspend_drained_state = true;
+}
+
+void
+cuda_notification_clear_suspend_drained (void)
+{
+  cuda_notification_suspend_drained_state = false;
+}
+
+bool
+cuda_notification_suspend_drained (void)
+{
+  return cuda_notification_suspend_drained_state;
+}
+
+void
 cuda_notification_analyze (ptid_t ptid, struct target_waitstatus *ws)
 {
 #ifndef GDBSERVER
@@ -549,6 +628,19 @@ cuda_notification_analyze (ptid_t ptid, struct target_waitstatus *ws)
      on Linux, alternating EMT/ILL on QNX).  SIGTRAP must NOT be matched
      here.  Matching SIGTRAP caused real breakpoint hits (e.g., bp_cuda_api_error) 
      to be misidentified as notifications and silently consumed.  */
+#ifdef __QNXHOST__
+  bool matched = cuda_notification_qnx_match_received (ptid, ws);
+
+  if (cuda_notification_info.sent || cuda_notification_qnx_signal_stop (ws))
+    cuda_notification_qnx_trace_analyze (ptid, ws, matched);
+
+  if (matched)
+    {
+      cuda_notification_trace ("received notification to thread %d",
+			       cuda_notification_info.tid);
+      cuda_notification_info.received = true;
+    }
+#else
   if (cuda_notification_info.sent
       && cuda_notification_info.tid == cuda_gdb_get_tid_or_pid (ptid)
       && ws->kind () == TARGET_WAITKIND_STOPPED
@@ -562,6 +654,7 @@ cuda_notification_analyze (ptid_t ptid, struct target_waitstatus *ws)
 			       cuda_notification_info.tid);
       cuda_notification_info.received = true;
     }
+#endif
 
   cuda_notification_release_lock ();
 }

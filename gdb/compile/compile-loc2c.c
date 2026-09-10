@@ -17,6 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+/* NVIDIA CUDA Debugger CUDA-GDB
+   Copyright (C) 2007-2026 NVIDIA Corporation
+   Modified from the original GDB file referenced above by the CUDA-GDB
+   team at NVIDIA <cudatools@nvidia.com>. */
+
 #include "dwarf2.h"
 #include "objfiles.h"
 #include "dwarf2/expr.h"
@@ -56,6 +61,58 @@ struct insn_info
 
   unsigned int is_tls : 1;
 };
+
+#ifdef NVIDIA_CHERRY_PICK
+/* A helper function for compute_stack_depth_worker that handles
+   LLVM extension opcodes for DW_OP_LLVM_USER_ namespace.  This
+   only examines the part of the DWARF expression that describes a
+   LLVM extension.
+
+   OP is a LLVM extension opcode, while the OP_PTR and OP_END are the
+   bounds of the DWARF expression.  */
+
+static const gdb_byte *
+llvm_user_stack_depth (dwarf_llvm_user op, const gdb_byte *op_ptr,
+		       const gdb_byte *op_end, int &stack_depth)
+{
+  switch (op)
+    {
+    case DW_OP_LLVM_USER_offset:
+    case DW_OP_LLVM_USER_bit_offset:
+    case DW_OP_LLVM_USER_form_aspace_address:
+      --stack_depth;
+      break;
+
+    case DW_OP_LLVM_USER_undefined:
+      ++stack_depth;
+      break;
+
+    case DW_OP_LLVM_USER_extend:
+    case DW_OP_LLVM_USER_select_bit_piece:
+      stack_depth -= 2;
+      break;
+
+    case DW_OP_LLVM_USER_aspace_bregx:
+      {
+       uint64_t reg;
+       int64_t offset;
+
+       op_ptr = safe_read_uleb128 (op_ptr, op_end, &reg);
+       op_ptr = safe_read_sleb128 (op_ptr, op_end, &offset);
+       break;
+      }
+
+    case DW_OP_LLVM_USER_piece_end:
+    case DW_OP_LLVM_USER_offset_constu:
+      return 0;
+
+    default:
+      error (_("Unhandled DWARF llvm user op: %s"), get_DW_OP_LLVM_USER_name (op));
+    }
+
+  return op_ptr;
+}
+#endif
 
 /* A helper function for compute_stack_depth that does the work.  This
    examines the DWARF expression starting from START and computes
@@ -357,35 +414,16 @@ compute_stack_depth_worker (int start, int *need_tempvar,
 	  (*info)[offset].label = 1;
 	  break;
 
-	case DW_OP_LLVM_offset:
-	case DW_OP_LLVM_bit_offset:
-	case DW_OP_LLVM_form_aspace_address:
-	  --stack_depth;
-	  break;
-
-	case DW_OP_LLVM_undefined:
-	  ++stack_depth;
-	  break;
-
-	case DW_OP_LLVM_select_bit_piece:
-	  stack_depth -= 2;
-	  break;
-
-	case DW_OP_LLVM_overlay:
-	case DW_OP_LLVM_bit_overlay:
-	  stack_depth -= 3;
-	  break;
-
-	case DW_OP_LLVM_aspace_bregx:
-	  op_ptr = safe_read_uleb128 (op_ptr, op_end, &reg);
-	  op_ptr = safe_read_sleb128 (op_ptr, op_end, &offset);
-	  break;
-
-	case DW_OP_LLVM_extend:
-	case DW_OP_LLVM_piece_end:
-	case DW_OP_LLVM_offset_constu:
 	case DW_OP_nop:
 	  break;
+
+#ifdef NVIDIA_CHERRY_PICK
+	case DW_OP_LLVM_user:
+	  op_ptr = safe_read_uleb128 (op_ptr, op_end, &reg);
+	  op_ptr = llvm_user_stack_depth ((dwarf_llvm_user) reg,
+					  op_ptr, op_end, stack_depth);
+	  break;
+#endif
 
 	default:
 	  error (_("unhandled DWARF op: %s"), get_DW_OP_name (op));

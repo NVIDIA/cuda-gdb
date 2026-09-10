@@ -89,6 +89,7 @@ INSTALL_DATA = @INSTALL_DATA@
 DESTDIR =
 
 AR = @AR@
+SHA256SUM = @SHA256SUM@
 AR_FLAGS = qv
 RANLIB = @RANLIB@
 DLLTOOL = @DLLTOOL@
@@ -508,11 +509,6 @@ SUBDIR_PYTHON_SRCS = \
 	$(SUBDIR_CUDA_PYTHON_SRCS)
 
 SUBDIR_PYTHON_OBS = $(patsubst %.c,%.o,$(SUBDIR_PYTHON_SRCS))
-
-SUBDIR_PYTHON_DYNLIB_SRCS = \
-	python/python-dynobj.c
-
-SUBDIR_PYTHON_DYNLIB_OBS = $(patsubst %.c,%.o,$(SUBDIR_PYTHON_DYNLIB_SRCS))
 
 SUBDIR_PYTHON_DEPS =
 SUBDIR_PYTHON_LDFLAGS =
@@ -1440,6 +1436,7 @@ HFILES_NO_SRCDIR = \
 	cuda/cuda-modules.h \
 	cuda/cuda-notifications.h \
 	cuda/cuda-options.h \
+	cuda/cuda-packet-format.h \
 	cuda/cuda-packet-manager.h \
 	cuda/cuda-parser.h \
 	cuda/cuda-regmap.h \
@@ -2399,6 +2396,7 @@ clean mostlyclean: $(CONFIG_CLEAN)
 	@$(MAKE) $(FLAGS_TO_PASS) DO=clean "DODIRS=$(CLEANDIRS)" subdir_do
 	rm -f *.o *.a *~ init.c-tmp init.l-tmp version.c-tmp
 	rm -f init.c stamp-init version.c stamp-version
+	rm -f cuda/cuda-protocol-hash.h stamp-cuda-protocol-hash cuda-protocol-hash.tmp
 	rm -f gdb$(EXEEXT) core make.log
 	rm -f gdb[0-9]$(EXEEXT)
 	rm -f xml-builtin.c stamp-xml
@@ -2596,6 +2594,12 @@ stamp-version: Makefile version.in $(srcdir)/../bfd/version.h $(srcdir)/../gdbsu
 	@$(SHELL) $(srcdir)/../move-if-change version-t.t version.c
 	@echo stamp > stamp-version
 
+# CUDA remote-protocol-compatibility hash.
+#
+# The shared rule and the source-file manifest both live in
+# cuda/cuda-remote-protocol-hash.mk and are reused by gdbserver/Makefile.in
+# (the same way both Makefiles share silent-rules.mk).
+include $(srcdir)/cuda/cuda-remote-protocol-hash.mk
 
 gdb.cxref: $(SFILES)
 	cxref -I. $(SFILES) >gdb.cxref

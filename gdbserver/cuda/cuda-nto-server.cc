@@ -18,6 +18,7 @@
 
 #include "gdbsupport/common-defs.h"
 #include "gdbsupport/common-exceptions.h"
+#include "cuda/cuda-packet-format.h"
 #include "server.h"
 #include "cuda-nto-protocol.h"
 #include "cuda-tdep-server.h"
@@ -25,6 +26,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <ctype.h>
 #include <limits.h>
 #include <netinet/in.h>
 #include <netdb.h>
@@ -309,16 +311,32 @@ handle_host_packet (unsigned char *buf, int length, int hostfd)
              byte-stream into a string. */
           packet_start = (char *) cuda_packet.pkt.cuda.data;
           packet_length -= packet_start - (char *) cuda_packet.buf;
-          if (strncmp (packet_start, "qnv.", 4) == 0)
+          if (startswith (packet_start, cuda_packet_prefix))
             {
-              handle_cuda_packet (packet_start);
+              cuda_packet_decoder decoder (
+                  std::string_view (packet_start,
+                                    static_cast<size_t> (packet_length)));
+	      cuda_packet_encoder encoder (sizeof (cuda_packet.pkt.cuda.data));
+	      handle_cuda_packet (decoder, encoder);
+
+              const std::string_view response = encoder.view ();
+	      gdb_assert (response.size ()
+			  < sizeof (cuda_packet.pkt.cuda.data));
+	      response.copy (packet_start, response.size ());
+              packet_start[response.size ()] = '\0';
               packet_length = pack_cuda_packet (buf, packet_start, 0);
             }
-          else if (strncmp (packet_start, "vCUDA", 5) == 0)
+          else if (startswith (packet_start, "vCUDA"))
             {
-              handle_vCuda (packet_start, packet_length, &packet_length);
-              packet_length = pack_cuda_packet (buf, packet_start, packet_length);
-            }
+	      int new_packet_len = 0;
+	      handle_vCuda (
+		  std::string_view (packet_start, (size_t)packet_length),
+		  gdb::make_array_view (packet_start,
+					sizeof (cuda_packet.pkt.cuda.data)),
+		  &new_packet_len);
+	      packet_length
+		  = pack_cuda_packet (buf, packet_start, new_packet_len);
+	    }
           else
             {
               if (qnx_gdbserver_debug)

@@ -130,6 +130,17 @@ if test x"$enable_cuda" = xyes; then
 fi
 AM_CONDITIONAL(ENABLE_CUDA, [test x"$enable_cuda" = xyes])
 
+# NVIDIA: Locate sha256sum (GNU coreutils).  Used at build time to derive a
+# truncated SHA-256 of the cuda_packet_type_t enum region in
+# ../gdb/cuda/cuda-packet-manager.h, which is exchanged between gdb and
+# gdbserver as a protocol-compatibility tag.  See cuda/cuda-protocol-hash.h.
+if test x"$enable_cuda" = xyes; then
+  AC_PATH_PROG([SHA256SUM], [sha256sum])
+  AS_IF([test x"$SHA256SUM" = x],
+    [AC_MSG_ERROR([sha256sum not found; install GNU coreutils])])
+fi
+AC_SUBST([SHA256SUM])
+
 # Check for UST
 ustlibs=""
 ustinc=""

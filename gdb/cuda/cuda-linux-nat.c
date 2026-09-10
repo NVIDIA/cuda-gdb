@@ -348,11 +348,11 @@ cuda_inject_debug_library_new (inferior *inf)
     the library injection request.  After it does so, we will hit a breakpoint
     in cudbgReportAttachProcedureFinished. */
 
-  if (inferior_thread ()->state == THREAD_RUNNING)
-    return;
-
   /* Mark that we're in the library injection phase.  */
   inf->cuda_attach_state = inferior::cuda_attach_state::INJECTING;
+
+  if (has_inferior_thread() && inferior_thread ()->state == THREAD_RUNNING)
+    return;
 
   prepare_execution_command (inf->top_target (), true);
   continue_1 (true);
@@ -620,30 +620,33 @@ cuda_nat_attach (inferior *inf)
       cuda_inject_debug_library_new (inf);
       break;
     case cuda_attach_protocol_support::v1_supported_later:
-      /* The CUDA driver hasn't fully initialized yet.  We need to continue
-	 the target so the driver can finish initializing.  The pre-wait
+      /* The CUDA driver hasn't fully initialized yet.  The target needs to be
+	 continued so the driver can finish initializing.  The pre-wait
 	 continuation (cuda_initialize_pre_wait_continuation) will check
 	 the cuda_attach_state and call cuda_nat_attach when initialization
 	 succeeds.  */
-      gdb_printf (_ ("The CUDA driver has not initialized yet, the attach "
-		     "procedure will finish later.\n"));
-      gdb_printf (_ ("CUDA features will not be available until the driver "
-		     "has initialized.\n"));
-
-      /* Set state so pre-wait continuation knows to call cuda_nat_attach
-	 after driver initialization.  */
-      inf->cuda_attach_state = inferior::cuda_attach_state::WAITING_FOR_DRIVER;
-
-      /* Continue the target so the driver can finish initializing.  */
-      if (inferior_thread ()->state != THREAD_RUNNING)
+      if (inf->cuda_attach_state
+	  != inferior::cuda_attach_state::WAITING_FOR_DRIVER)
 	{
-	  prepare_execution_command (inf->top_target (), true);
-	  continue_1 (true);
+	  gdb_printf (_ ("The CUDA driver has not initialized yet, the attach "
+			 "procedure will finish later.\n"));
+	  gdb_printf (
+	      _ ("CUDA features will not be available until the driver "
+		 "has initialized.\n"));
+
+	  /* Set state so pre-wait continuation knows to call cuda_nat_attach
+	     after driver initialization.  */
+	  inf->cuda_attach_state
+	      = inferior::cuda_attach_state::WAITING_FOR_DRIVER;
+
+	  /* Continuing the target is outside of the scope of this function -
+	     we don't really know if we can continue at this point. If we
+	     continue and keep the prompt blocked, then the target can still
+	     fail/refuse to initialize the driver, which would leave the
+	     debugger in hung state.
+	  */
 	}
 
-      /* Block user input until CUDA attach completes.  */
-      current_ui->keep_prompt_blocked = true;
-      async_disable_stdin ();
       break;
     }
 }
@@ -1562,6 +1565,20 @@ cuda_initialize_pre_wait_continuation (inferior *inf)
       return;
     }
 
+#ifndef __QNXTARGET__
+  /* If we were waiting for the driver to initialize before completing
+     attach and the driver has now initialized, call cuda_nat_attach ()
+     to complete attaching. */
+  if (inf->cuda_attach_state == inferior::cuda_attach_state::WAITING_FOR_DRIVER
+      && cuda_get_attach_protocol_support (inf)
+	     == cuda_attach_protocol_support::v1_supported)
+    {
+      cuda_trace (
+	  "cuda_initialize_pre_wait_continuation: completing deferred attach");
+      cuda_nat_attach (inf);
+    }
+#endif
+
   /* Give up if we initiated a detach. */
   if (cuda_debugapi::get_attach_state () == CUDA_ATTACH_STATE_DETACHING)
     {
@@ -1606,17 +1623,6 @@ cuda_initialize_pre_wait_continuation (inferior *inf)
     }
 
   cuda_trace ("cuda_initialize_pre_wait_continuation: CUDA fully initialized");
-
-#ifndef __QNXTARGET__
-  /* If we were waiting for the driver to initialize before completing
-     attach (v1_supported_later case), call cuda_nat_attach now.
-     Attach is not supported on QNX.  */
-  if (inf->cuda_attach_state == inferior::cuda_attach_state::WAITING_FOR_DRIVER)
-    {
-      cuda_trace ("cuda_initialize_pre_wait_continuation: completing deferred attach");
-      cuda_nat_attach (inf);
-    }
-#endif
 }
 
 /* Observer callback for objfile (symbol file) loading.

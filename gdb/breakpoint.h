@@ -42,6 +42,7 @@
 #ifdef NVIDIA_CUDA_GDB
 #include "cuda/cuda-coords.h"
 #include "cuda/cuda-modules.h"
+#include "cudadebugger.h"
 struct value;
 #endif
 
@@ -339,6 +340,13 @@ struct bp_target_info
   /* Flag that is true if the breakpoint should be left in place even
      when GDB is not connected.  */
   int persist;
+
+#ifdef NVIDIA_CUDA_GDB
+  /* Opaque handle returned by the CUDA debug API when using the
+     handle-based breakpoint interface (CUDA 13.2+).  Zero when the
+     legacy address-based API was used instead.  */
+  CUDBGBreakpointHandle cuda_bp_handle = CUDBG_BREAKPOINT_HANDLE_INVALID;
+#endif
 };
 
 /* GDB maintains two types of information about each breakpoint (or
@@ -2120,10 +2128,22 @@ void cuda_auto_breakpoints_forced_add_location (cuda_module* module, CORE_ADDR a
 void cuda_auto_breakpoints_update (void);
 void cuda_auto_breakpoints_cleanup (void);
 void cuda_auto_breakpoints_event_add_break (cuda_module* module, CORE_ADDR addr);
-/* Create a physical breakpoint for a break-on-launch hit at the post-prologue
-   address.  This is used when the new break-on-launch API is active.
-   Returns true if the breakpoint was created successfully.  */
-bool cuda_auto_breakpoint_break_on_launch_hit (CORE_ADDR addr, cuda_module *module);
+
+/* What the caller should do after a break-on-launch hit is handled.  */
+enum class cuda_bol_action
+{
+  /* No break-on-launch breakpoint was created; report the stop normally.  */
+  none,
+  /* Breakpoint placed ahead of the warp; resume so it runs into it.  */
+  resume,
+  /* Warp is already at the breakpoint (zero-length prologue); report now.  */
+  report,
+};
+
+/* Create a cuda_auto_breakpoint for a break-on-launch hit so the stop is
+   reported as a kernel entry function breakpoint.  */
+cuda_bol_action cuda_auto_breakpoint_break_on_launch_hit (CORE_ADDR addr,
+							  cuda_module *module);
 #endif
 /* Command element for the 'commands' command.  */
 extern cmd_list_element *commands_cmd_element;

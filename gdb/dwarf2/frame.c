@@ -472,6 +472,24 @@ bad CFI data; mismatched DW_CFA_restore_state at %s"),
 	      insn_ptr += fs->regs.cfa_exp_len;
 	      break;
 
+#ifdef NVIDIA_CHERRY_PICK
+	    case DW_CFA_LLVM_def_aspace_cfa:
+	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &reg);
+	      fs->regs.cfa_reg = reg;
+	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &utmp);
+
+	      if (fs->armcc_cfa_offsets_sf)
+		utmp *= fs->data_align;
+
+	      fs->regs.cfa_offset = utmp;
+
+	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &utmp);
+	      fs->regs.cfa_aspace = utmp;
+
+	      fs->regs.cfa_how = CFA_REG_OFFSET;
+	      break;
+#endif
+
 	    case DW_CFA_expression:
 	      insn_ptr = safe_read_uleb128 (insn_ptr, insn_end, &reg);
 	      reg = dwarf2_frame_adjust_regnum (gdbarch, reg, eh_frame_p);
@@ -1046,6 +1064,13 @@ dwarf2_frame_cache (const frame_info_ptr &this_frame, void **this_cache)
 	    cache->cfa -= fs.regs.cfa_offset;
 	  else
 	    cache->cfa += fs.regs.cfa_offset;
+
+#ifdef NVIDIA_CHERRY_PICK
+	cache->cfa
+	    = gdbarch_segment_address_to_core_address (gdbarch,
+						       fs.regs.cfa_aspace,
+						       cache->cfa);
+#endif
 	  break;
 
 	case CFA_EXP:

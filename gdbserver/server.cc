@@ -40,9 +40,13 @@
 #include "dll.h"
 #include "hostio.h"
 #ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-packet-format.h"
+#include "cuda/cuda-packet-manager.h"
+#include "cuda/cuda-protocol-hash.h"
 #include "cuda/cuda-tdep-server.h"
 #include "cuda/cuda-utils.h"
 #include "cuda/cuda-version.h"
+#include <string_view>
 #endif
 #include <vector>
 #include <unordered_map>
@@ -2583,9 +2587,17 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 
 #ifdef NVIDIA_CUDA_GDB
   /* Handle all CUDA RSP packet */
-  if (strncmp ("qnv.", own_buf, 4) == 0)
+  if (startswith (own_buf, cuda_packet_prefix))
     {
-      handle_cuda_packet (own_buf);
+      cuda_packet_decoder decoder (
+	  std::string_view (own_buf, static_cast<size_t> (packet_len)));
+      cuda_packet_encoder encoder (PBUFSIZ);
+      handle_cuda_packet (decoder, encoder);
+
+      const std::string_view response = encoder.view ();
+      gdb_assert (response.size () < PBUFSIZ);
+      response.copy (own_buf, response.size ());
+      own_buf[response.size ()] = '\0';
       return;
     }
 #endif
@@ -2811,6 +2823,19 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 		}
 	      else if (feature == "error-message+")
 		cs.error_message_supported = true;
+#ifdef NVIDIA_CUDA_GDB
+	      else if (startswith (feature.c_str (), "CUDAProtocolHash="))
+		{
+		  const char *client_hash
+		    = feature.c_str () + sizeof ("CUDAProtocolHash=") - 1;
+		  if (std::string_view (client_hash) != CUDA_PROTOCOL_HASH)
+		    error ("CUDA GDB / cuda-gdbserver mismatch: protocol-hash "
+			   "mismatch (cuda-gdb=%s, cuda-gdbserver=%s).  "
+			   "Please use cuda-gdb and cuda-gdbserver built "
+			   "from the same sources.\n",
+			   client_hash, CUDA_PROTOCOL_HASH);
+		}
+#endif
 	      else
 		{
 		  /* Move the unknown features all together.  */
@@ -2942,10 +2967,7 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 
 #ifdef NVIDIA_CUDA_GDB
       /* CUDA - version handshake */
-      sprintf (own_buf + strlen (own_buf), ";CUDAVersion=%d.%d.%d",
-               CUDBG_API_VERSION_MAJOR,
-               CUDBG_API_VERSION_MINOR,
-               CUDBG_API_VERSION_REVISION);
+      strcat (own_buf, ";CUDAProtocolHash=" CUDA_PROTOCOL_HASH);
 #endif
       /* Reinitialize components as needed for the new connection.  */
       hostio_handle_new_gdb_connection ();
@@ -3645,8 +3667,10 @@ handle_v_requests (char *own_buf, int packet_len, int *new_packet_len)
     return;
 
 #ifdef NVIDIA_CUDA_GDB
-  if (strncmp (own_buf, "vCUDA", 5) == 0
-      && handle_vCuda (own_buf, packet_len, new_packet_len))
+  if (startswith (own_buf, "vCUDA")
+      && handle_vCuda (std::string_view (own_buf, (size_t)packet_len),
+		       gdb::make_array_view (own_buf, (size_t)PBUFSIZ),
+		       new_packet_len))
     return;
 #endif
   if (startswith (own_buf, "vAttach;"))

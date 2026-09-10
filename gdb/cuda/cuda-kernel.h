@@ -26,7 +26,6 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
-#include <vector>
 
 class cuda_bitset;
 
@@ -37,8 +36,7 @@ public:
 	       uint64_t virt_code_base, cuda_module *module,
 	       const CuDim3 &grid_dim, const CuDim3 &block_dim,
 	       const CuDim3 &cluster_dim_default,
-	       const CuDim3 &cluster_dim_preferred, CUDBGKernelType type,
-	       CUDBGKernelOrigin origin, uint64_t parent_grid_id);
+	       const CuDim3 &cluster_dim_preferred, CUDBGKernelType type);
 
   const uint32_t
   dev_id () const
@@ -62,18 +60,6 @@ public:
   grid_id () const
   {
     return m_grid_id;
-  }
-
-  const CUDBGKernelOrigin
-  get_origin () const
-  {
-    return m_origin;
-  }
-
-  const uint64_t
-  parent_grid_id () const
-  {
-    return m_parent_grid_id;
   }
 
   const uint64_t
@@ -134,9 +120,6 @@ public:
     return m_module->context ();
   }
 
-  uint32_t depth ();
-  std::vector<cuda_kernel *> children ();
-
   CUDBGGridStatus grid_status ();
 
   bool present ();
@@ -147,8 +130,6 @@ public:
 
   void invalidate ();
   void compute_sms_mask (cuda_bitset &mask);
-
-  bool should_print_kernel_event ();
 
   void print ();
 
@@ -178,16 +159,7 @@ private:
   bool m_grid_status_p;
   CUDBGGridStatus m_grid_status; // current grid status of the kernel
 
-  CUDBGKernelType m_type;     // The kernel type: system or application.
-  CUDBGKernelOrigin m_origin; // The kernel origin: CPU or GPU
-  uint64_t m_parent_grid_id;  // The kernel that launched this grid (for origin
-			      // == GPU)
-
-  bool m_depth_p;   // Is the kernel depth valid?
-  uint32_t m_depth; // kernel nest level (0 - host launched kernel)
-
-  bool m_children_p;			 // Are the children kernels valid?
-  std::vector<cuda_kernel *> m_children; // children kernels
+  CUDBGKernelType m_type; // The kernel type: system or application.
 
   bool m_launched; // Has the kernel been seen on the HW?
 };

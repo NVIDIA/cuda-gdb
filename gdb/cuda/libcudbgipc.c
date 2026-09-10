@@ -823,9 +823,6 @@ cudbgipcFinalize (void)
 
 ATTRIBUTE_PRINTF (1, 2) void cudbgipc_trace (const char *fmt, ...)
 {
-#ifdef GDBSERVER
-  struct cuda_trace_msg *msg;
-#endif
   va_list ap;
 
   if (!cuda_options_debug_libcudbg ())
@@ -833,19 +830,12 @@ ATTRIBUTE_PRINTF (1, 2) void cudbgipc_trace (const char *fmt, ...)
 
   va_start (ap, fmt);
 #ifdef GDBSERVER
-  msg = (struct cuda_trace_msg *)xmalloc (sizeof (*msg));
-  if (!cuda_first_trace_msg)
-    cuda_first_trace_msg = msg;
-  else
-    cuda_last_trace_msg->next = msg;
-  sprintf (msg->buf, "[CUDAGDB] libcudbg ipc ");
-  vsnprintf (msg->buf + strlen (msg->buf), sizeof (msg->buf), fmt, ap);
-  msg->next = NULL;
-  cuda_last_trace_msg = msg;
+  cuda_enqueue_trace_message ("[CUDAGDB] libcudbg ipc ", fmt, ap);
 #else
   fprintf (stderr, "[CUDAGDB] libcudbg ipc ");
   vfprintf (stderr, fmt, ap);
   fprintf (stderr, "\n");
   fflush (stderr);
 #endif
+  va_end (ap);
 }

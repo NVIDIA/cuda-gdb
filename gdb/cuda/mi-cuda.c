@@ -167,28 +167,6 @@ mi_cmd_cuda_info_threads (const char *command, const char *const *argv,
 }
 
 void
-mi_cmd_cuda_info_launch_trace (const char *command, const char *const *argv,
-			       int argc)
-{
-  char *filter = concatenate_string (argv, argc);
-
-  run_info_cuda_command (info_cuda_launch_trace_command, filter);
-
-  xfree (filter);
-}
-
-void
-mi_cmd_cuda_info_launch_children (const char *command, const char *const *argv,
-				  int argc)
-{
-  char *filter = concatenate_string (argv, argc);
-
-  run_info_cuda_command (info_cuda_launch_children_command, filter);
-
-  xfree (filter);
-}
-
-void
 mi_cmd_cuda_info_managed (const char *command, const char *const *argv,
 			  int argc)
 {

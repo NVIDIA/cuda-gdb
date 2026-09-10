@@ -2001,17 +2001,6 @@ dwarf2_get_symbol_read_needs (gdb::array_view<const gdb_byte> expr,
 	case DW_OP_nop:
 	case DW_OP_GNU_uninit:
 	case DW_OP_push_object_address:
-#ifdef NVIDIA_CHERRY_PICK
-	case DW_OP_LLVM_offset:
-	case DW_OP_LLVM_bit_offset:
-	case DW_OP_LLVM_undefined:
-	case DW_OP_LLVM_piece_end:
-	case DW_OP_LLVM_overlay:
-	case DW_OP_LLVM_bit_overlay:
-#endif
-#ifdef NVIDIA_CUDA_GDB
-	case DW_OP_LLVM_form_aspace_address:
-#endif
 	  break;
 
 	case DW_OP_GNU_push_tls_address:
@@ -2031,9 +2020,6 @@ dwarf2_get_symbol_read_needs (gdb::array_view<const gdb_byte> expr,
 	case DW_OP_constu:
 	case DW_OP_plus_uconst:
 	case DW_OP_piece:
-#ifdef NVIDIA_CHERRY_PICK
-	case DW_OP_LLVM_offset_constu:
-#endif
 	  op_ptr = safe_skip_leb128 (op_ptr, expr_end);
 	  break;
 
@@ -2042,21 +2028,9 @@ dwarf2_get_symbol_read_needs (gdb::array_view<const gdb_byte> expr,
 	  break;
 
 	case DW_OP_bit_piece:
-#ifdef NVIDIA_CHERRY_PICK
-	case DW_OP_LLVM_extend:
-	case DW_OP_LLVM_select_bit_piece:
-#endif
 	  op_ptr = safe_skip_leb128 (op_ptr, expr_end);
 	  op_ptr = safe_skip_leb128 (op_ptr, expr_end);
 	  break;
-
-#ifdef NVIDIA_CUDA_GDB
-	case DW_OP_LLVM_aspace_bregx:
-	  op_ptr = safe_skip_leb128 (op_ptr, expr_end);
-	  op_ptr = safe_skip_leb128 (op_ptr, expr_end);
-	  symbol_needs = SYMBOL_NEEDS_FRAME;
-	  break;
-#endif
 
 	case DW_OP_deref_type:
 #ifdef NVIDIA_CUDA_GDB
@@ -2309,6 +2283,47 @@ dwarf2_get_symbol_read_needs (gdb::array_view<const gdb_byte> expr,
 	    op_ptr += offset;
 	    break;
 	  }
+
+#ifdef NVIDIA_CHERRY_PICK
+	case DW_OP_LLVM_user:
+	  {
+	    uint64_t uoffset;
+	    op_ptr = safe_read_uleb128 (op_ptr, expr_end, &uoffset);
+	    dwarf_llvm_user llvm_user_op = (dwarf_llvm_user) uoffset;
+
+	    switch (llvm_user_op)
+	      {
+	      case DW_OP_LLVM_USER_offset:
+	      case DW_OP_LLVM_USER_bit_offset:
+	      case DW_OP_LLVM_USER_undefined:
+	      case DW_OP_LLVM_USER_piece_end:
+	      case DW_OP_LLVM_USER_overlay:
+	      case DW_OP_LLVM_USER_bit_overlay:
+	      case DW_OP_LLVM_USER_form_aspace_address:
+		break;
+	  
+	      case DW_OP_LLVM_USER_offset_constu:
+		op_ptr = safe_skip_leb128 (op_ptr, expr_end);
+		break;
+
+	      case DW_OP_LLVM_USER_extend:
+	      case DW_OP_LLVM_USER_select_bit_piece:
+		op_ptr = safe_skip_leb128 (op_ptr, expr_end);
+		op_ptr = safe_skip_leb128 (op_ptr, expr_end);
+		break;
+
+	      case DW_OP_LLVM_USER_aspace_bregx:
+		op_ptr = safe_skip_leb128 (op_ptr, expr_end);
+		op_ptr = safe_skip_leb128 (op_ptr, expr_end);
+		symbol_needs = SYMBOL_NEEDS_FRAME;
+		break;
+
+	      default:
+		error (_("Unhandled DWARF llvm user op: %s"), get_DW_OP_LLVM_USER_name (llvm_user_op));
+	      }
+	    break;
+	  }
+#endif
 
 	default:
 	  error (_("Unhandled DWARF expression opcode 0x%x"), op);
@@ -3400,6 +3415,63 @@ locexpr_describe_location_piece (struct symbol *symbol, struct ui_file *stream,
   return data;
 }
 
+#ifdef NVIDIA_CHERRY_PICK
+/* Disassemble a LLVM extension.  Returns a pointer to the next unread
+   byte in the input expression.  */
+
+static const gdb_byte *
+disassemble_llvm_user (ui_file *stream, gdbarch *arch,
+		       int indent, dwarf_llvm_user op, const gdb_byte *start,
+		       const gdb_byte *data, const gdb_byte *end)
+{
+  uint64_t ul;
+  int64_t l;
+
+  switch (op)
+    {
+    case DW_OP_LLVM_USER_offset_constu:
+      data = safe_read_uleb128 (data, end, &ul);
+      gdb_printf (stream, " %s", pulongest (ul));
+      break;
+
+    case DW_OP_LLVM_USER_select_bit_piece:
+      {
+       uint64_t count;
+
+       data = safe_read_uleb128 (data, end, &ul);
+       data = safe_read_uleb128 (data, end, &count);
+       gdb_printf (stream, " piece size %s (bits) pieces count %s",
+		   pulongest (ul), pulongest (count));
+      }
+      break;
+
+    case DW_OP_LLVM_USER_extend:
+      {
+       uint64_t count;
+
+       data = safe_read_uleb128 (data, end, &ul);
+       data = safe_read_uleb128 (data, end, &count);
+       gdb_printf (stream, " piece size %s (bits) pieces count %s",
+		   pulongest (ul), pulongest (count));
+      }
+      break;
+
+    case DW_OP_LLVM_USER_aspace_bregx:
+      data = safe_read_uleb128 (data, end, &ul);
+      data = safe_read_sleb128 (data, end, &l);
+      gdb_printf (stream, " register %s [$%s] offset %s",
+		 pulongest (ul), locexpr_regname (arch, (int) ul),
+		 plongest (l));
+      break;
+
+    default:
+      error (_("Unhandled DWARF expression LLVM user opcode 0x%x"), op);
+    }
+
+  return data;
+}
+#endif
+
 /* Disassemble an expression, stopping at the end of a piece or at the
    end of the expression.  Returns a pointer to the next unread byte
    in the input expression.  If ALL is nonzero, then this function
@@ -3826,48 +3898,11 @@ disassemble_dwarf_expression (struct ui_file *stream,
 	  break;
 
 #ifdef NVIDIA_CHERRY_PICK
-	case DW_OP_LLVM_offset_constu:
+	case DW_OP_LLVM_user:
 	  data = safe_read_uleb128 (data, end, &ul);
-	  gdb_printf (stream, " %s", pulongest (ul));
-	  break;
-#endif
-
-#ifdef NVIDIA_CUDA_GDB
-	case DW_OP_LLVM_aspace_bregx:
-	  {
-	    data = safe_read_uleb128 (data, end, &ul);
-	    data = safe_read_sleb128 (data, end, &l);
-	    auto reg_name = cuda_locexpr_regname (arch, ul);
-	    auto prefix
-		= (!reg_name.empty () && reg_name[0] == '%') ? "" : "$";
-	    gdb_printf (stream, " register %s [%s%s] offset %s",
-			pulongest (ul), prefix, reg_name.c_str (),
-			plongest (l));
-	  }
-#endif
-	  break;
-
-#ifdef NVIDIA_CHERRY_PICK
-	case DW_OP_LLVM_extend:
-	  {
-	    uint64_t count;
-
-	    data = safe_read_uleb128 (data, end, &ul);
-	    data = safe_read_uleb128 (data, end, &count);
-	    gdb_printf (stream, " piece size %s (bits) pieces count %s",
-			pulongest (ul), pulongest (count));
-	  }
-	  break;
-
-	case DW_OP_LLVM_select_bit_piece:
-	  {
-	    uint64_t count;
-
-	    data = safe_read_uleb128 (data, end, &ul);
-	    data = safe_read_uleb128 (data, end, &count);
-	    gdb_printf (stream, " piece size %s (bits) pieces count %s",
-			pulongest (ul), pulongest (count));
-	  }
+	  data = disassemble_llvm_user (stream, arch, indent,
+					(dwarf_llvm_user) ul,
+					start, data, end);
 	  break;
 #endif
 	}

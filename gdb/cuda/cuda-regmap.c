@@ -308,6 +308,17 @@ regmap_get_offset (regmap_t regmap, uint32_t idx)
 }
 
 uint32_t
+regmap_get_rpc_register (regmap_t regmap, uint32_t idx)
+{
+  gdb_assert (regmap);
+  gdb_assert (idx < regmap->output.num_entries);
+  gdb_assert (REGMAP_CLASS (regmap->output.raw_value[idx])
+	      == REG_CLASS_TEMP_REG_SPILL);
+
+  return REGMAP_REG (regmap->output.raw_value[idx]);
+}
+
+uint32_t
 regmap_get_raw_value (regmap_t regmap, uint32_t idx)
 {
   gdb_assert (regmap);
@@ -933,6 +944,12 @@ cuda_decode_physical_register (uint64_t reg, int32_t *result)
 	*result = (int32_t)tdep->zero_uregnum;
       else
 	*result = (int32_t)(REGMAP_REG (reg) + tdep->first_uregnum);
+      return 0;
+    }
+
+  if (REGMAP_CLASS (reg) == REG_CLASS_TEMP_REG_SPILL)
+    {
+      *result = (int32_t)(REGMAP_REG (reg) + tdep->first_rpc_regnum);
       return 0;
     }
 

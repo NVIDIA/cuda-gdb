@@ -182,12 +182,10 @@ public:
 				     cuda_api_warpmask *warp_mask,
 				     uint64_t virt_pc);
 
-  // Device Breakpoint Handling (legacy address-based API)
-  static bool set_breakpoint (uint32_t dev, uint64_t addr);
-  static bool unset_breakpoint (uint32_t dev, uint64_t addr);
-
-#if CUDBG_API_VERSION_REVISION > 167
-  // Handle-based Breakpoint API (CUDA 13.2+)
+  // Device Breakpoint Handling
+  // Callers always use the handle-based API.  The implementation
+  // dispatches to the legacy address-based driver API (setBreakpoint /
+  // unsetBreakpoint) when the API revision is < 176.
   static bool insert_breakpoint (uint32_t dev, uint64_t addr,
 				 CUDBGBreakpointHandle *handle);
   static bool remove_breakpoint (CUDBGBreakpointHandle handle);
@@ -201,7 +199,6 @@ public:
   // Break-on-Launch helper methods
   static bool enable_break_on_launch ();
   static bool disable_break_on_launch ();
-#endif
   static bool is_break_on_launch_supported ();
 
   // Device State Inspection
@@ -264,6 +261,8 @@ public:
 			      uint32_t regno, uint32_t *val);
   static void read_virtual_pc (uint32_t dev, uint32_t sm, uint32_t wp,
 			       uint32_t ln, uint64_t *pc);
+  static void read_rpc_register (uint32_t dev, uint32_t sm, uint32_t wp,
+				 uint32_t ln, uint32_t regno, uint32_t *val);
   static void read_lane_exception (uint32_t dev, uint32_t sm, uint32_t wp,
 				   uint32_t ln, CUDBGException_t *exception);
   static void read_device_exception_state (uint32_t dev,
@@ -295,6 +294,8 @@ public:
   static void write_upredicates (uint32_t dev, uint32_t sm, uint32_t wp,
 				 uint32_t predicates_size,
 				 const uint32_t *predicates);
+  static void write_rpc_register (uint32_t dev, uint32_t sm, uint32_t wp,
+				 uint32_t ln, uint32_t regno, uint32_t val);
   static void read_pc (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln,
 		       uint64_t *pc);
 
@@ -384,7 +385,12 @@ public:
 				  CUDBGCbuWarpState *states,
 				  uint32_t numStates);
 
-  static void consume_cuda_logs (CUDBGCudaLogMessage *logMessages,
+  static void consume_cuda_logs (
+#if CUDBG_API_VERSION_REVISION >= 181
+         CUDBGCudaLogMessage129 *logMessages,
+#else
+         CUDBGCudaLogMessage *logMessages,
+#endif
 				 uint32_t numMessages, uint32_t *numConsumed);
 
   static void read_cpu_call_stack (uint32_t dev, uint64_t grid_id,
@@ -397,6 +403,8 @@ public:
   static void get_const_bank_address (uint32_t dev, uint64_t gridId64,
 				      uint32_t bank, uint64_t *address,
 				      uint32_t *size);
+  static void get_bindless_const_address (uint32_t dev, uint64_t header,
+					  uint64_t *address, uint32_t *size);
 
   // Used for batched device info updates
   static bool get_device_info_sizes (uint32_t dev,

@@ -2048,6 +2048,27 @@ cudbgGetConstBankAddress (uint32_t dev, uint64_t gridId64, uint32_t bank,
   return result;
 }
 
+#if CUDBG_API_VERSION_REVISION >= 178
+static CUDBGResult
+cudbgGetBindlessConstAddress (uint32_t dev, uint64_t header, uint64_t *address,
+			      uint32_t *size)
+{
+  char *ipc_buf;
+  CUDBGResult result;
+
+  CUDBG_IPC_BEGIN (CUDBGAPIREQ_getBindlessConstAddress);
+  CUDBG_IPC_APPEND (&dev, sizeof (dev));
+  CUDBG_IPC_APPEND (&header, sizeof (header));
+
+  CUDBG_IPC_REQUEST ((void **)&ipc_buf);
+  CUDBG_IPC_RECEIVE (&result, &ipc_buf);
+  CUDBG_IPC_RECEIVE (address, &ipc_buf);
+  CUDBG_IPC_RECEIVE (size, &ipc_buf);
+
+  return result;
+}
+#endif
+
 static CUDBGResult
 cudbgSingleStepWarp (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t laneHint,
 		     uint32_t nsteps, uint32_t flags, uint64_t *warpMask)
@@ -2310,13 +2331,18 @@ cudbgReadWarpState (uint32_t devId, uint32_t sm, uint32_t wp,
 }
 
 static CUDBGResult
-cudbgConsumeCudaLogs (CUDBGCudaLogMessage *logMessages, uint32_t numMessages,
-		      uint32_t *numConsumed)
+cudbgConsumeCudaLogs129 (
+#if CUDBG_API_VERSION_REVISION >= 181
+          CUDBGCudaLogMessage129 *logMessages,
+#else
+          CUDBGCudaLogMessage *logMessages,
+#endif
+          uint32_t numMessages, uint32_t *numConsumed)
 {
   char *ipc_buf;
   CUDBGResult result;
 
-  CUDBG_IPC_BEGIN (CUDBGAPIREQ_consumeCudaLogs);
+  CUDBG_IPC_BEGIN (CUDBGAPIREQ_consumeCudaLogs129);
   CUDBG_IPC_APPEND (&numMessages, sizeof (numMessages));
 
   CUDBG_IPC_REQUEST ((void **)&ipc_buf);
@@ -2613,6 +2639,84 @@ cudbgResumeAllDevices ()
 }
 #endif
 
+#if CUDBG_API_VERSION_REVISION >= 192
+static CUDBGResult
+STUB_cudbgSetCudaLogRules (const CUDBGCudaLogRule *rules, uint32_t numRules,
+			   uint32_t *newRulesetIndex)
+{
+  return CUDBG_ERROR_UNKNOWN;
+}
+
+static CUDBGResult
+STUB_cudbgConsumeCudaLogs (CUDBGCudaLogMessage *logMessages,
+			   uint32_t numMessages, uint32_t *numConsumed)
+{
+  return CUDBG_ERROR_UNKNOWN;
+}
+
+static CUDBGResult
+cudbgReadRpcRegisters (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln,
+		       uint32_t *rpcLo, uint32_t *rpcHi)
+{
+  char *ipc_buf;
+  CUDBGResult result;
+  uint32_t lo = 0;
+  uint32_t hi = 0;
+
+  /* RPCD wire format (read):
+       in : u32 dev, u32 sm, u32 wp, u32 ln
+       out: CUDBGResult result, u32 rpcLo, u32 rpcHi (server always writes both;
+            client copies into the caller's pointers if non-NULL). */
+  CUDBG_IPC_BEGIN (CUDBGAPIREQ_readRpcRegisters);
+  CUDBG_IPC_APPEND (&dev, sizeof (dev));
+  CUDBG_IPC_APPEND (&sm, sizeof (sm));
+  CUDBG_IPC_APPEND (&wp, sizeof (wp));
+  CUDBG_IPC_APPEND (&ln, sizeof (ln));
+
+  CUDBG_IPC_REQUEST ((void **)&ipc_buf);
+  CUDBG_IPC_RECEIVE (&result, &ipc_buf);
+  CUDBG_IPC_RECEIVE (&lo, &ipc_buf);
+  CUDBG_IPC_RECEIVE (&hi, &ipc_buf);
+
+  if (rpcLo)
+    *rpcLo = lo;
+  if (rpcHi)
+    *rpcHi = hi;
+
+  return result;
+}
+
+static CUDBGResult
+cudbgWriteRpcRegisters (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln,
+			const uint32_t *rpcLo, const uint32_t *rpcHi)
+{
+  char *ipc_buf;
+  CUDBGResult result;
+  /* RPCD wire format (write):
+       in : u32 dev, u32 sm, u32 wp, u32 ln,
+            u8 flags (bit0=writeRpcLo, bit1=writeRpcHi),
+            u32 rpcLo (always present), u32 rpcHi (always present)
+       out: CUDBGResult result. */
+  uint8_t flags = (uint8_t) ((rpcLo ? 1 : 0) | (rpcHi ? 2 : 0));
+  uint32_t lo = rpcLo ? *rpcLo : 0;
+  uint32_t hi = rpcHi ? *rpcHi : 0;
+
+  CUDBG_IPC_BEGIN (CUDBGAPIREQ_writeRpcRegisters);
+  CUDBG_IPC_APPEND (&dev, sizeof (dev));
+  CUDBG_IPC_APPEND (&sm, sizeof (sm));
+  CUDBG_IPC_APPEND (&wp, sizeof (wp));
+  CUDBG_IPC_APPEND (&ln, sizeof (ln));
+  CUDBG_IPC_APPEND (&flags, sizeof (flags));
+  CUDBG_IPC_APPEND (&lo, sizeof (lo));
+  CUDBG_IPC_APPEND (&hi, sizeof (hi));
+
+  CUDBG_IPC_REQUEST ((void **)&ipc_buf);
+  CUDBG_IPC_RECEIVE (&result, &ipc_buf);
+
+  return result;
+}
+#endif
+
 template <typename... T>
 inline constexpr size_t
 numberOfArgs (T... a)
@@ -2756,7 +2860,7 @@ DEFINE_CUDBGAPI (
     cudbgReadWarpResources,
 
     /* 12.9 Extensions */
-    cudbgGetCbuWarpState, cudbgReadWarpState, cudbgConsumeCudaLogs,
+    cudbgGetCbuWarpState, cudbgReadWarpState, cudbgConsumeCudaLogs129,
     cudbgReadCPUCallStack,
 
     /* 13.0 Extensions */
@@ -2770,7 +2874,16 @@ DEFINE_CUDBGAPI (
     cudbgReadRegisterRange, cudbgInsertBreakpoint, cudbgRemoveBreakpoint,
     cudbgEnableBreakpoint, cudbgDisableBreakpoint, cudbgIsBreakpointEnabled,
     cudbgGetWarpHitBreakpoint, cudbgResumeWarpsUntilPC, cudbgSuspendAllDevices,
-    cudbgResumeAllDevices
+    cudbgResumeAllDevices,
+#endif
+
+    /* 13.4 Extensions */
+#if CUDBG_API_VERSION_REVISION >= 178
+    cudbgGetBindlessConstAddress,
+#endif
+#if CUDBG_API_VERSION_REVISION >= 192
+    STUB_cudbgSetCudaLogRules, STUB_cudbgConsumeCudaLogs,
+    cudbgReadRpcRegisters, cudbgWriteRpcRegisters,
 #endif
 );
 
@@ -2783,9 +2896,6 @@ cudbgGetAPI (uint32_t major, uint32_t minor, uint32_t rev, CUDBGAPI *api)
 
 ATTRIBUTE_PRINTF (1, 2) static void cudbg_trace (const char *fmt, ...)
 {
-#ifdef GDBSERVER
-  struct cuda_trace_msg *msg;
-#endif
   va_list ap;
 
   if (!cuda_options_debug_libcudbg ())
@@ -2793,19 +2903,12 @@ ATTRIBUTE_PRINTF (1, 2) static void cudbg_trace (const char *fmt, ...)
 
   va_start (ap, fmt);
 #ifdef GDBSERVER
-  msg = (struct cuda_trace_msg *)xmalloc (sizeof (*msg));
-  if (!cuda_first_trace_msg)
-    cuda_first_trace_msg = msg;
-  else
-    cuda_last_trace_msg->next = msg;
-  sprintf (msg->buf, "[CUDAGDB] libcudbg ");
-  vsnprintf (msg->buf + strlen (msg->buf), sizeof (msg->buf), fmt, ap);
-  msg->next = NULL;
-  cuda_last_trace_msg = msg;
+  cuda_enqueue_trace_message ("[CUDAGDB] libcudbg ", fmt, ap);
 #else
   fprintf (stderr, "[CUDAGDB] libcudbg ");
   vfprintf (stderr, fmt, ap);
   fprintf (stderr, "\n");
   fflush (stderr);
 #endif
+  va_end (ap);
 }

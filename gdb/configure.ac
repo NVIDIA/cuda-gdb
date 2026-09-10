@@ -369,6 +369,17 @@ fi
 AC_SUBST(LIBCUDACORE)
 AM_CONDITIONAL(ENABLE_CUDA, [test x"$enable_cuda" = xyes])
 
+# NVIDIA: Locate sha256sum (GNU coreutils).  Used at build time to derive a
+# truncated SHA-256 of the cuda_packet_type_t enum region in
+# cuda/cuda-packet-manager.h, which is exchanged between gdb and
+# gdbserver as a protocol-compatibility tag.  See cuda/cuda-protocol-hash.h.
+if test x"$enable_cuda" = xyes; then
+  AC_PATH_PROG([SHA256SUM], [sha256sum])
+  AS_IF([test x"$SHA256SUM" = x],
+    [AC_MSG_ERROR([sha256sum not found; install GNU coreutils])])
+fi
+AC_SUBST([SHA256SUM])
+
 # Enable TUI.
 AC_ARG_ENABLE(tui,
 AS_HELP_STRING([--enable-tui],
@@ -804,8 +815,6 @@ dnl        If we find python in $PATH, use it to fetch configure options,
 dnl        otherwise assume the compiler can find it with no help from us.
 dnl auto - Same as "yes", but if python is missing from the system,
 dnl        fall back to "no".
-dnl dyn  - Same as "yes", but don't explicitly link against libpython.
-dnl        Use a dlopen mechanism instead. Try python3 instead.
 dnl /path/to/python/exec-prefix -
 dnl        Use the python located in this directory.
 dnl        If /path/to/python/exec-prefix/bin/python exists, use it to find
@@ -890,15 +899,6 @@ else
         python_prog=missing
       fi
       ;;
-    dyn)
-      # Assume python3 is being used for dynlib
-      python_prog=python3
-      AC_PATH_PROG(python_prog_path, ${python_prog}, missing)
-      if test "${python_prog_path}" = missing; then
-        AC_MSG_WARN(unable to find python program ${python_prog})
-	python_prog=missing
-      fi
-      ;;
     *)
       # While we can't run python compiled for $host (unless host == build),
       # the user could write a script that provides the needed information,
@@ -923,26 +923,19 @@ else
 	AC_MSG_ERROR(failure running python-config --includes)
       fi
     fi
-    # Skip tests for dlopen libpython - we don't need to link
-    if test "${with_python}" != dyn; then
-      python_libs=`${python_prog} ${srcdir}/python/python-config.py --ldflags`
-      if test $? != 0; then
-        have_python_config=failed
-        if test "${with_python}" != auto; then
-	  AC_MSG_ERROR(failure running python-config --ldflags)
-        fi
+    python_libs=`${python_prog} ${srcdir}/python/python-config.py --ldflags`
+    if test $? != 0; then
+      have_python_config=failed
+      if test "${with_python}" != auto; then
+	AC_MSG_ERROR(failure running python-config --ldflags)
       fi
-      python_prefix=`${python_prog} ${srcdir}/python/python-config.py --exec-prefix`
-      if test $? != 0; then
-        have_python_config=failed
-        if test "${with_python}" != auto; then
-	  AC_MSG_ERROR(failure running python-config --exec-prefix)
-	fi
+    fi
+    python_prefix=`${python_prog} ${srcdir}/python/python-config.py --exec-prefix`
+    if test $? != 0; then
+      have_python_config=failed
+      if test "${with_python}" != auto; then
+	AC_MSG_ERROR(failure running python-config --exec-prefix)
       fi
-    else
-      # do not set for dlopen libpython
-      python_libs=
-      python_prefix=
     fi
   else
     # We do not have a python executable we can use to determine where
@@ -960,12 +953,7 @@ else
   # python in turn.
 
   have_libpython=no
-  # Bypass checks if we are using dlopen libpython
-  if test "${with_python}" = dyn; then
-    # FIXME: Probably should be doing a AC_CHECK_HEADERS test here...
-    PYTHON_CPPFLAGS=${python_includes}
-    have_libpython=yes
-  elif test "${have_python_config}" = yes; then
+  if test "${have_python_config}" = yes; then
     AC_TRY_LIBPYTHON(have_libpython,
                      ${python_includes}, ${python_libs})
   fi
@@ -1031,13 +1019,6 @@ if test "${have_libpython}" != no; then
     AC_DEFINE_UNQUOTED(WITH_PYTHON_LIBDIR, "${with_python_libdir}",
 		       [Directory containing Python's standard libraries from --with-python-libdir.])
     GDB_AC_DEFINE_RELOCATABLE(PYTHON_LIBDIR, [python lib], ${with_python_libdir})
-  fi
-
-  # Check for added NVIDIA dynlib support
-  if test "${with_python}" = dyn; then
-    AC_DEFINE(NVIDIA_PYTHON_DYNLIB, 1, [Define if building with NVIDIA dlopen python bindings.])
-    CONFIG_OBS="$CONFIG_OBS \$(SUBDIR_PYTHON_DYNLIB_OBS)"
-    CONFIG_SRCS="$CONFIG_SRCS \$(SUBDIR_PYTHON_DYNLIB_SRCS)"
   fi
 
   # Flags needed to compile Python code (taken from python-config --cflags).

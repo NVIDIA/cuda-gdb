@@ -143,6 +143,8 @@ public:
   bool get_predicate (uint32_t predicate);
   void set_register (uint32_t regno, uint32_t value);
   void set_predicate (uint32_t predicate, bool value);
+  uint32_t get_rpc_register (uint32_t regno);
+  void set_rpc_register (uint32_t regno, uint32_t value);
 
   int32_t get_call_depth ();
 
@@ -194,6 +196,10 @@ private:
   // Register caches
   cuda_bitset m_registers_p;
   std::vector<uint32_t> m_registers;
+
+  // RPC registers
+  uint32_t m_rpc_registers[2];
+  bool m_rpc_registers_p[2];
 };
 
 class cuda_warp final
@@ -322,9 +328,12 @@ public:
 
   const CUDBGCbuWarpState &get_cbu_state ();
 
+  bool get_hit_breakpoint_handle (CUDBGBreakpointHandle *handle);
+
 private:
   void update_warp_resources ();
   void update_cbu_state ();
+  void update_hit_breakpoint_handle ();
 
   /* parent and index */
   uint32_t m_warp_idx = ~0;
@@ -381,6 +390,11 @@ private:
   /* CBU state */
   bool m_cbu_state_p = false;
   CUDBGCbuWarpState m_cbu_state = { 0 };
+
+  /* Breakpoint handle that caused this warp to break (lazy-fetched). */
+  bool m_hit_bp_handle_p = false;
+  bool m_hit_bp_handle_valid = false;
+  CUDBGBreakpointHandle m_hit_bp_handle = CUDBG_BREAKPOINT_HANDLE_INVALID;
 };
 
 class cuda_sm final
@@ -880,8 +894,7 @@ public:
   create_kernel (uint32_t dev_id, uint64_t grid_id, uint64_t virt_code_base,
 		 uint64_t module_id, CuDim3 grid_dim, CuDim3 block_dim,
 		 CuDim3 cluster_dim_default, CuDim3 cluster_dim_preferred,
-		 CUDBGKernelType type, CUDBGKernelOrigin origin,
-		 uint64_t parent_grid_id);
+		 CUDBGKernelType type);
   static void destroy_kernel (uint32_t dev_id, uint64_t grid_id);
   static void destroy_kernel (cuda_kernel *kernel);
   static void update_kernel_args ();
@@ -1271,6 +1284,14 @@ public:
     return warp (dev_id, sm_id, wp_id)->get_cbu_state ();
   }
 
+  static bool
+  warp_get_hit_breakpoint_handle (uint32_t dev_id, uint32_t sm_id,
+				  uint32_t wp_id,
+				  CUDBGBreakpointHandle *handle)
+  {
+    return warp (dev_id, sm_id, wp_id)->get_hit_breakpoint_handle (handle);
+  }
+
   static uint32_t
   warp_get_uregister (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
 		      uint32_t regno)
@@ -1394,6 +1415,20 @@ public:
     lane (dev_id, sm_id, wp_id, ln_id)->set_predicate (pred, value);
   }
 
+  static void
+  lane_set_rpc_register (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
+			uint32_t ln_id, uint32_t regno, uint32_t value)
+  {
+    lane (dev_id, sm_id, wp_id, ln_id)->set_rpc_register (regno, value);
+  }
+
+  static uint32_t
+  lane_get_rpc_register (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
+			 uint32_t ln_id, uint32_t regno)
+  {
+    return lane (dev_id, sm_id, wp_id, ln_id)->get_rpc_register (regno);
+  }
+
   static int32_t
   lane_get_call_depth (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
 		       uint32_t ln_id)
@@ -1412,9 +1447,17 @@ public:
 					      uint32_t wp_id, uint32_t ln_id,
 					      char *buf, uint32_t bufSz);
 
-private:
-  static cuda_kernel *add_parent_kernel (uint32_t dev_id, uint64_t grid_id);
+  // Breakpoint facade methods
+  static bool insert_breakpoint (uint32_t dev_id, uint64_t addr,
+				 CUDBGBreakpointHandle *handle);
+  static bool remove_breakpoint (CUDBGBreakpointHandle handle);
 
+  // Break-on-Launch facade methods
+  static bool is_break_on_launch_supported ();
+  static bool enable_break_on_launch ();
+  static bool disable_break_on_launch ();
+
+private:
   static cuda_state m_instance;
 
   uint32_t m_num_devices = 0;

@@ -710,18 +710,24 @@ DW_OP (DW_OP_PGI_omp_thread_num, 0xf8)
    ABI documentation for details.  */
 DW_OP (DW_OP_AARCH64_operation, 0xea)
 /* LLVM extensions for heterogeneous targets */
-DW_OP_DUP (DW_OP_LLVM_form_aspace_address, 0xe1)
-DW_OP_DUP (DW_OP_LLVM_offset, 0xe3)
-DW_OP_DUP (DW_OP_LLVM_offset_constu, 0xe4)
-DW_OP_DUP (DW_OP_LLVM_bit_offset, 0xe5)
-DW_OP (DW_OP_LLVM_undefined, 0xe7)
-DW_OP (DW_OP_LLVM_aspace_bregx, 0xe8)
-DW_OP_DUP (DW_OP_LLVM_piece_end, 0xea)
-DW_OP (DW_OP_LLVM_extend, 0xeb)
-DW_OP (DW_OP_LLVM_select_bit_piece, 0xec)
-DW_OP (DW_OP_LLVM_bit_overlay, 0xed)
-DW_OP (DW_OP_LLVM_overlay, 0xee)
+DW_OP (DW_OP_LLVM_user, 0xe9)
 DW_END_OP
+
+/* LLVM extension opcodes in the DW_OP_LLVM_USER namespace.  */
+DW_BEGIN_OP_LLVM_USER (DW_OP_LLVM_USER_form_aspace_address, 0x02)
+DW_OP_LLVM_USER (DW_OP_LLVM_USER_push_lane, 0x03)
+DW_OP_LLVM_USER (DW_OP_LLVM_USER_offset, 0x04)
+DW_OP_LLVM_USER (DW_OP_LLVM_USER_offset_constu, 0x05)
+DW_OP_LLVM_USER (DW_OP_LLVM_USER_bit_offset, 0x06)
+DW_OP_LLVM_USER (DW_OP_LLVM_USER_call_frame_entry_reg, 0x07)
+DW_OP_LLVM_USER (DW_OP_LLVM_USER_undefined, 0x08)
+DW_OP_LLVM_USER (DW_OP_LLVM_USER_aspace_bregx, 0x09)
+DW_OP_LLVM_USER (DW_OP_LLVM_USER_piece_end, 0x0a)
+DW_OP_LLVM_USER (DW_OP_LLVM_USER_extend, 0x0b)
+DW_OP_LLVM_USER (DW_OP_LLVM_USER_select_bit_piece, 0x0c)
+DW_OP_LLVM_USER (DW_OP_LLVM_USER_overlay, 0x0d)
+DW_OP_LLVM_USER (DW_OP_LLVM_USER_bit_overlay, 0x0e)
+DW_END_OP_LLVM_USER
 
 DW_FIRST_ATE (DW_ATE_void, 0x0)
 DW_ATE (DW_ATE_address, 0x1)
@@ -796,6 +802,8 @@ DW_CFA (DW_CFA_def_cfa_offset_sf, 0x13)
 DW_CFA (DW_CFA_val_offset, 0x14)
 DW_CFA (DW_CFA_val_offset_sf, 0x15)
 DW_CFA (DW_CFA_val_expression, 0x16)
+/* LLVM extensions for heterogeneous targets */
+DW_CFA (DW_CFA_LLVM_def_aspace_cfa, 0x30)
 
 DW_CFA (DW_CFA_lo_user, 0x1c)
 DW_CFA (DW_CFA_hi_user, 0x3f)

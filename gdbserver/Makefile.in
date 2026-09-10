@@ -49,6 +49,7 @@ CC = @CC@
 CXX = @CXX@
 CXX_DIALECT = @CXX_DIALECT@
 AR = @AR@
+SHA256SUM = @SHA256SUM@
 AR_FLAGS = rc
 STRIP = @STRIP@
 
@@ -456,6 +457,7 @@ mostlyclean clean:
 	rm -f $(IPA_LIB)
 	rm -f *-generated.cc
 	rm -f stamp-xml
+	rm -f cuda/cuda-protocol-hash.h stamp-cuda-protocol-hash cuda-protocol-hash.tmp
 	rm -f $(DEPDIR)/*.Po
 	for i in $(CONFIG_SRC_SUBDIR); do \
 		rm -f $$i/*.o;	\
@@ -490,6 +492,13 @@ force:
 version-generated.cc: Makefile $(srcdir)/../gdb/version.in $(srcdir)/../bfd/version.h $(srcdir)/../gdbsupport/create-version.sh
 	$(ECHO_GEN) $(SHELL) $(srcdir)/../gdbsupport/create-version.sh $(srcdir)/../gdb \
 		$(host_alias) $(target_alias) $@
+
+# CUDA remote-protocol-compatibility hash.
+#
+# The shared rule and the source-file manifest both live in
+# ../gdb/cuda/cuda-remote-protocol-hash.mk and are reused by
+# gdb/Makefile.in (the same way both Makefiles share silent-rules.mk).
+include $(srcdir)/../gdb/cuda/cuda-remote-protocol-hash.mk
 
 xml-builtin-generated.cc: stamp-xml; @true
 stamp-xml: $(XML_DIR)/feature_to_c.sh Makefile $(XML_FILES)

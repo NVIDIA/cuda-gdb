@@ -32,8 +32,6 @@ void info_cuda_contexts_command (const char *arg);
 void info_cuda_clusters_command (const char *arg);
 void info_cuda_blocks_command (const char *arg);
 void info_cuda_threads_command (const char *arg);
-void info_cuda_launch_trace_command (const char *arg);
-void info_cuda_launch_children_command (const char *arg);
 void info_cuda_kernel_launch_backtrace_command (const char *arg);
 void info_cuda_managed_command (const char *arg);
 void info_cuda_line_command (const char *arg);

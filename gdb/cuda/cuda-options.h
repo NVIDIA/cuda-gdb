@@ -47,9 +47,6 @@ void cuda_options_set_disassemble_from_elf_image (void);
 bool cuda_options_disassemble_per_file (void);
 bool cuda_options_disassemble_per_function (void);
 void cuda_options_force_set_launch_notification_update (void);
-unsigned int cuda_options_show_kernel_events_depth (void);
-bool cuda_options_show_kernel_events_application (void);
-bool cuda_options_show_kernel_events_system (void);
 bool cuda_options_show_context_events (void);
 bool cuda_options_launch_blocking (void);
 bool cuda_options_thread_selection_logical (void);
@@ -75,8 +72,11 @@ bool cuda_options_printf_flushing (void);
 bool cuda_options_preserve_tmp_data (void);
 bool cuda_options_kernel_launch_backtrace_enabled (void);
 
-/* Return true if KERNEL_READY breakpoints needs to be inserted */
+/* Return true if break-on-launch auto breakpoints need to be inserted
+   (i.e. break_on_launch is enabled for application kernels). */
 bool cuda_options_auto_breakpoints_needed (void);
-/* Return true if we need to force KE breakpoints. */
+/* Return true if we need to use the forced auto-breakpoint method, i.e.
+   pre-install a breakpoint at every known kernel entry point. This is
+   required when device-side launches are in use. */
 bool cuda_options_auto_breakpoints_forced_needed (void);
 #endif

@@ -8522,6 +8522,9 @@ typedef struct Frame_Chunk
   uint64_t pc_range;
   unsigned int cfa_reg;
   uint64_t cfa_offset;
+#ifdef NVIDIA_CHERRY_PICK
+  unsigned int cfa_aspace;
+#endif
   unsigned int ra;
   unsigned char fde_encoding;
   unsigned char cfa_exp;
@@ -9000,6 +9003,11 @@ frame_display_row (Frame_Chunk *fc, int *need_col_headers, unsigned int *max_reg
   print_hex (fc->pc_begin, eh_addr_size);
   if (fc->cfa_exp)
     strcpy (tmp, "exp");
+#ifdef NVIDIA_CHERRY_PICK
+  else if (fc->cfa_aspace)
+    sprintf (tmp, "%s%+d in address space %d", regname (fc->cfa_reg, 1),
+	     (int) fc->cfa_offset, fc->cfa_aspace);
+#endif
   else
     sprintf (tmp, "%s%+d", regname (fc->cfa_reg, 1), (int) fc->cfa_offset);
   printf ("%-8s ", tmp);
@@ -9725,6 +9733,9 @@ display_debug_frames (struct dwarf_section *section,
 	      fc->data_factor = cie->data_factor;
 	      fc->cfa_reg = cie->cfa_reg;
 	      fc->cfa_offset = cie->cfa_offset;
+#ifdef NVIDIA_CHERRY_PICK
+	      fc->cfa_aspace = cie->cfa_aspace;
+#endif
 	      fc->ra = cie->ra;
 	      if (frame_need_space (fc, max_regs > 0 ? max_regs - 1: 0) < 0)
 		{
@@ -9901,6 +9912,13 @@ display_debug_frames (struct dwarf_section *section,
 		  else
 		    start += temp;
 		  break;
+#ifdef NVIDIA_CHERRY_PICK
+		case DW_CFA_LLVM_def_aspace_cfa:
+		  SKIP_ULEB (start, block_end);
+		  SKIP_ULEB (start, block_end);
+		  SKIP_ULEB (start, block_end);
+		  break;
+#endif
 		case DW_CFA_expression:
 		case DW_CFA_val_expression:
 		  READ_ULEB (reg, start, block_end);
@@ -10194,6 +10212,9 @@ display_debug_frames (struct dwarf_section *section,
 		printf ("  DW_CFA_remember_state\n");
 	      rs = (Frame_Chunk *) xmalloc (sizeof (Frame_Chunk));
 	      rs->cfa_offset = fc->cfa_offset;
+#ifdef NVIDIA_CHERRY_PICK
+	      rs->cfa_aspace = fc->cfa_aspace;
+#endif
 	      rs->cfa_reg = fc->cfa_reg;
 	      rs->ra = fc->ra;
 	      rs->cfa_exp = fc->cfa_exp;
@@ -10216,6 +10237,9 @@ display_debug_frames (struct dwarf_section *section,
 		{
 		  remembered_state = rs->next;
 		  fc->cfa_offset = rs->cfa_offset;
+#ifdef NVIDIA_CHERRY_PICK
+		  fc->cfa_aspace = rs->cfa_aspace;
+#endif
 		  fc->cfa_reg = rs->cfa_reg;
 		  fc->ra = rs->ra;
 		  fc->cfa_exp = rs->cfa_exp;
@@ -10243,6 +10267,9 @@ display_debug_frames (struct dwarf_section *section,
 	      READ_ULEB (fc->cfa_reg, start, block_end);
 	      READ_ULEB (fc->cfa_offset, start, block_end);
 	      fc->cfa_exp = 0;
+#ifdef NVIDIA_CHERRY_PICK
+	      fc->cfa_aspace = 0;
+#endif
 	      if (! do_debug_frames_interp)
 		printf ("  DW_CFA_def_cfa: %s ofs %d\n",
 			regname (fc->cfa_reg, 0), (int) fc->cfa_offset);
@@ -10251,6 +10278,9 @@ display_debug_frames (struct dwarf_section *section,
 	    case DW_CFA_def_cfa_register:
 	      READ_ULEB (fc->cfa_reg, start, block_end);
 	      fc->cfa_exp = 0;
+#ifdef NVIDIA_CHERRY_PICK
+	      fc->cfa_aspace = 0;
+#endif
 	      if (! do_debug_frames_interp)
 		printf ("  DW_CFA_def_cfa_register: %s\n",
 			regname (fc->cfa_reg, 0));
@@ -10260,6 +10290,9 @@ display_debug_frames (struct dwarf_section *section,
 	      READ_ULEB (fc->cfa_offset, start, block_end);
 	      if (! do_debug_frames_interp)
 		printf ("  DW_CFA_def_cfa_offset: %d\n", (int) fc->cfa_offset);
+#ifdef NVIDIA_CHERRY_PICK
+	      fc->cfa_aspace = 0;
+#endif
 	      break;
 
 	    case DW_CFA_nop:
@@ -10282,9 +10315,25 @@ display_debug_frames (struct dwarf_section *section,
 					      ofs, 0, section);
 		  printf (")\n");
 		}
+#ifdef NVIDIA_CHERRY_PICK
+	      fc->cfa_aspace = 0;
+#endif
 	      fc->cfa_exp = 1;
 	      start += ofs;
 	      break;
+
+#ifdef NVIDIA_CHERRY_PICK
+	    case DW_CFA_LLVM_def_aspace_cfa:
+	      READ_ULEB (fc->cfa_reg, start, end);
+	      READ_ULEB (fc->cfa_offset, start, end);
+	      READ_ULEB (fc->cfa_aspace, start, end);
+	      fc->cfa_exp = 0;
+	      if (! do_debug_frames_interp)
+		printf ("  DW_CFA_LLVM_def_aspace_cfa: %s ofs %d in aspace %d\n",
+			regname (fc->cfa_reg, 0), (int) fc->cfa_offset,
+			fc->cfa_aspace);
+	      break;
+#endif
 
 	    case DW_CFA_expression:
 	      READ_ULEB (reg, start, block_end);
@@ -10380,6 +10429,9 @@ display_debug_frames (struct dwarf_section *section,
 	      ofs *= fc->data_factor;
 	      fc->cfa_offset = ofs;
 	      fc->cfa_exp = 0;
+#ifdef NVIDIA_CHERRY_PICK
+	      fc->cfa_aspace = 0;
+#endif
 	      if (! do_debug_frames_interp)
 		printf ("  DW_CFA_def_cfa_sf: %s ofs %" PRId64 "\n",
 			regname (fc->cfa_reg, 0), ofs);
@@ -10390,6 +10442,9 @@ display_debug_frames (struct dwarf_section *section,
 	      ofs = sofs;
 	      ofs *= fc->data_factor;
 	      fc->cfa_offset = ofs;
+#ifdef NVIDIA_CHERRY_PICK
+	      fc->cfa_aspace = 0;
+#endif
 	      if (! do_debug_frames_interp)
 		printf ("  DW_CFA_def_cfa_offset_sf: %" PRId64 "\n", ofs);
 	      break;
