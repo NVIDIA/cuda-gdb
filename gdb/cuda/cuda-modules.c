@@ -123,7 +123,7 @@ cuda_module::disassembler ()
     {
       const auto device = cuda_state::device (m_context->dev_id ());
       m_disassembler = std::make_unique<cuda_module_disassembly_cache> (
-	  device->get_insn_size ());
+	  this, device->get_insn_size ());
     }
 
   return m_disassembler.get ();
