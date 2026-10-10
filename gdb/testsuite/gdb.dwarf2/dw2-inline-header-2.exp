@@ -30,9 +30,8 @@
 #
 # Place the first brekpoint at file 2, line 22 and a second breakpoint
 # at file 1, line 19.  A third breakpoint is placed at file 1, line
-# 18, but as this line table entry will have been discarded[1] the
-# third breakpoint will actually be placed at the same location as the
-# second breakpoint.
+# 18.  Although this line table entry is discarded[1], the inline
+# call-site information places the third breakpoint at the entry of callee.
 #
 # This test is designed to test GDB's internal behavior with respect
 # to discarding particular line table entries.  GCC and DWARF are
@@ -177,7 +176,9 @@ gdb_test "info breakpoints" \
     ".* in main at \[^\r\n\]+${srcfile3}:19\\y.*" \
     "check for breakpoint at ${srcfile3}"
 
-# Line table entry for line 18 will have been discarded, so this
-# brekpoint will be at the same location as line 19.
-gdb_test "break ${srcfile3}:18" \
-    "Note: breakpoint $decimal also set at pc $hex.*"
+# The line-table row was discarded, but the inline call site survives.
+# Stop at the callee entry, before either of the existing breakpoints.
+gdb_breakpoint "${srcfile3}:18"
+gdb_test "continue" "Breakpoint .*callee.*" "hit inline call-site entry"
+gdb_test "print \$pc == (void *) &line_label_3" " = 1" \
+    "call-site breakpoint precedes later lines"

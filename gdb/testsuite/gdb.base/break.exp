@@ -907,6 +907,12 @@ proc_with_prefix test_break_file_line_convenience_var {} {
     set line_actual "-1"
     set test "break $::srcfile:\$l"
     gdb_test_multiple "$test" $test {
+	-re "Breakpoint $::decimal at $::hex: .*break\\.c:$line\\. \\($::decimal locations\\)\r\n$::gdb_prompt $" {
+	    # If the source line only contains inline calls, each call-site
+	    # instance can supply a location even without a line-table row.
+	    set line_actual $line
+	    pass $test
+	}
 	-re "Breakpoint $::decimal at $::hex: file .*break\\.c, line ($::decimal)\\.\r\n$::gdb_prompt $" {
 	    # Save the actual line number on which the breakpoint was
 	    # actually set. On some systems (Eg: Ubuntu 16.04 with GCC
