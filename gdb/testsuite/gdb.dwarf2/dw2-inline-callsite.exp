@@ -1,0 +1,187 @@
+# Copyright 2026 NVIDIA CORPORATION & AFFILIATES.
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+# A call to an inline function need not have a line-table row.  Resolve
+# its caller file/line to the inline entry instead of the next caller line.
+# Use synthetic DWARF so compiler-generated call-site rows cannot hide a
+# regression.  Reuse the labelled instructions and source files from the
+# inline-header tests.
+
+load_lib dwarf.exp
+require dwarf2_support
+require is_c_compiler_gcc
+
+standard_testfile dw2-inline-header-lbls.c -generated.S \
+    dw2-inline-header.c dw2-inline-header.h
+set build_options {nodebug optimize=-O1}
+
+foreach mode {instances ranges explicit-entry} {
+    with_test_prefix $mode {
+	set asm_file [standard_output_file "$testfile-$mode.S"]
+	Dwarf::assemble $asm_file {
+	    global srcdir subdir srcfile srcfile3 srcfile4 build_options mode
+	    declare_labels lines_label callee_label nested_label ranges_label
+	    get_func_info main $build_options
+
+	    cu {} {
+		compile_unit {
+		    {producer "inline call-site test"}
+		    {language @DW_LANG_C}
+		    {name $srcfile3}
+		    {low_pc 0 addr}
+		    {stmt_list $lines_label DW_FORM_sec_offset}
+		} {
+		    callee_label: subprogram {
+			{name callee}
+			{inline 3 data1}
+		    }
+		    nested_label: subprogram {
+			{name nested}
+			{inline 3 data1}
+		    }
+		    subprogram {
+			{external 1 flag}
+			{name main}
+			{low_pc $main_start addr}
+			{high_pc "$main_start + $main_len" addr}
+		    } {
+			# A removed call has no executable range and must not
+			# acquire a breakpoint at an unrelated instruction.
+			inlined_subroutine {
+			    {abstract_origin %$callee_label}
+			    {low_pc line_label_4 addr}
+			    {high_pc line_label_4 addr}
+			    {call_file 1 data1}
+			    {call_line 17 data1}
+			}
+			if {$mode == "instances"} {
+			    foreach {start middle end} {2 3 4 5 6 7} {
+				inlined_subroutine {
+				    {abstract_origin %$callee_label}
+				    {low_pc line_label_$start addr}
+				    {high_pc line_label_$end addr}
+				    {call_file 1 data1}
+				    {call_line 18 data1}
+				} {
+				    inlined_subroutine {
+					{abstract_origin %$nested_label}
+					{low_pc line_label_$start addr}
+					{high_pc line_label_$middle addr}
+					{call_file 2 data1}
+					{call_line 21 data1}
+				    }
+				}
+			    }
+			} else {
+			    set attrs {
+				{abstract_origin %$callee_label}
+				{ranges $ranges_label DW_FORM_sec_offset}
+				{call_file 1 data1}
+				{call_line 18 data1}
+			    }
+			    if {$mode == "explicit-entry"} {
+				lappend attrs {entry_pc line_label_3 addr}
+			    }
+			    inlined_subroutine $attrs
+			}
+		    }
+		}
+	    }
+
+	    ranges {} {
+		ranges_label: sequence {
+		    # Deliberately not address-sorted: the first range is the
+		    # default entry, unless DW_AT_entry_pc overrides it.
+		    range line_label_5 line_label_7
+		    range line_label_2 line_label_4
+		}
+	    }
+
+	    lines {version 2 default_is_stmt 1} lines_label {
+		include_dir "${srcdir}/${subdir}"
+		file_name $srcfile3 1
+		file_name $srcfile4 1
+		program {
+		    foreach {label file lineno} {
+			1 1 16
+			2 2 22
+			3 2 23
+			4 1 19
+			5 2 22
+			6 2 23
+			7 1 20
+		    } {
+			DW_LNE_set_address line_label_$label
+			DW_LNS_set_file $file
+			line $lineno
+			DW_LNS_copy
+		    }
+		    DW_LNE_set_address "$main_start + $main_len"
+		    DW_LNE_end_sequence
+		}
+	    }
+	}
+
+	if {[prepare_for_testing "failed to prepare" "$testfile-$mode" \
+		 [list $srcfile $asm_file] $build_options]} {
+	    continue
+	}
+	if {![runto_main]} {
+	    continue
+	}
+	delete_breakpoints
+
+	gdb_test_no_output "set breakpoint pending off"
+	gdb_breakpoint "$srcfile3:18"
+	if {$mode == "instances"} {
+	    gdb_test "info breakpoints" "MULTIPLE.*$decimal\\.1.*$decimal\\.2.*" \
+		"both inline instances found"
+	    set entry 2
+	} elseif {$mode == "ranges"} {
+	    set entry 5
+	} else {
+	    set entry 3
+	}
+	gdb_test "continue" "Breakpoint .*" "hit inline call-site breakpoint"
+	gdb_test "print \$pc == (void *) &line_label_$entry" " = 1" \
+	    "stop at inline entry"
+
+	if {$mode == "instances"} {
+	    gdb_test "backtrace" \
+		"#0 .*nested.*#1 .*callee.*#2 .*main.*" \
+		"nested inline frames preserved"
+	    gdb_test "continue" "Breakpoint .*" "hit second inline instance"
+	    gdb_test "print \$pc == (void *) &line_label_5" " = 1" \
+		"stop at second inline entry"
+
+	    delete_breakpoints
+	    gdb_breakpoint "$srcfile4:21"
+	    gdb_test "info breakpoints" "MULTIPLE.*" \
+		"nested call sites in header found"
+	}
+
+	delete_breakpoints
+	gdb_test "break $srcfile3:21" "No compiled code for line 21.*" \
+	    "do not match another file's call site"
+	gdb_breakpoint "$srcfile3:19"
+	set address [get_hexadecimal_valueof "&line_label_4" 0]
+	set address [string range $address 2 end]
+	gdb_test "info breakpoints" ".*0x0*$address.*main.*$srcfile3:19.*" \
+	    "ordinary line breakpoint unchanged"
+	gdb_test "break $srcfile3:17" \
+	    "Note: breakpoint $decimal also set at pc $hex.*line 19\\." \
+	    "eliminated call uses existing next-line fallback"
+    }
+}
