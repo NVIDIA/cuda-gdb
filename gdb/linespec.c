@@ -401,6 +401,9 @@ static std::vector<symtab_and_line> decode_digits_ordinary
    int line,
    const linetable_entry **best_entry);
 
+static std::vector<symtab_and_line> decode_digits_inline
+  (linespec *ls, int line);
+
 static std::vector<symtab_and_line> decode_digits_list_mode
   (struct linespec_state *self,
    linespec *ls,
@@ -2078,6 +2081,8 @@ create_sals_line_offset (struct linespec_state *self,
 
       std::vector<symtab_and_line> intermediate_results
 	= decode_digits_ordinary (self, ls, val.line, &best_entry);
+      if (intermediate_results.empty ())
+	intermediate_results = decode_digits_inline (ls, val.line);
       if (intermediate_results.empty () && best_entry != NULL)
 	{
 	  was_exact = false;
@@ -4110,6 +4115,50 @@ decode_digits_ordinary (struct linespec_state *self,
 	}
     }
 
+  return sals;
+}
+
+/* Resolve a line which has no line-table entries but is the call site of
+   an inlined function.  The instructions keep their callee locations;
+   DW_AT_call_file and DW_AT_call_line, recorded on the inline symbol,
+   identify the caller's line.  Use the inline block's entry PC rather
+   than moving the breakpoint past the call to the next source line.  */
+
+static std::vector<symtab_and_line>
+decode_digits_inline (linespec *ls, int line)
+{
+  std::vector<symtab_and_line> sals;
+  if (line <= 0)
+    return sals;
+
+  for (symtab *symtab : ls->file_symtabs)
+    {
+      const blockvector *bv = symtab->compunit ()->blockvector ();
+      program_space *pspace = symtab->compunit ()->objfile ()->pspace ();
+      set_current_program_space (pspace);
+
+      for (int i = FIRST_LOCAL_BLOCK; i < bv->num_blocks (); ++i)
+	{
+	  const block *block = bv->block (i);
+	  symbol *sym = block->function ();
+	  if (sym == nullptr || !sym->is_inlined ()
+	      || sym->symtab () != symtab || sym->line () != line
+	      || block->start () == block->end ())
+	    continue;
+
+	  symtab_and_line sal;
+	  sal.pspace = pspace;
+	  sal.symtab = symtab;
+	  sal.line = line;
+	  sal.pc = block->entry_pc ();
+	  sal.section = sym->obj_section (sym->objfile ());
+	  sal.explicit_line = true;
+	  /* This is already the inline entry, not the enclosing function's
+	     prologue.  Do not skip any of the callee's instructions.  */
+	  sal.explicit_pc = true;
+	  sals.push_back (std::move (sal));
+	}
+    }
   return sals;
 }
 

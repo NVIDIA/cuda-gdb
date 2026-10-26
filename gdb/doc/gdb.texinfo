@@ -14517,12 +14517,12 @@ function calls are the same as normal calls:
 
 @itemize @bullet
 @item
-Setting breakpoints at the call site of an inlined function may not
-work, because the call site does not contain any code.  @value{GDBN}
-may incorrectly move the breakpoint to the next line of the enclosing
-function, after the call.  This limitation will be removed in a future
-version of @value{GDBN}; until then, set a breakpoint on an earlier line
-or inside the inlined function instead.
+If an inline call site has no instructions attributed to its source
+line, @value{GDBN} uses the inline call-site debug information to set a
+breakpoint at the inlined function's entry.  The stop may display a line
+inside the inlined function.  If the compiler omits the call-site debug
+information or eliminates the inlined function entirely, @value{GDBN}
+may still move the breakpoint to a later line with executable code.
 
 @item
 @value{GDBN} cannot locate the return value of inlined calls after
