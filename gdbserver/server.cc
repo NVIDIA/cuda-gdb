@@ -2585,7 +2585,7 @@ handle_query (char *own_buf, int packet_len, int *new_packet_len_p)
 	}
     };
 
-#ifdef NVIDIA_CUDA_GDB
+#if defined (NVIDIA_CUDA_GDB) && !defined (__QNXHOST__)
   /* Handle all CUDA RSP packet */
   if (startswith (own_buf, cuda_packet_prefix))
     {

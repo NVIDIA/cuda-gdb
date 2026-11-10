@@ -26,10 +26,12 @@
 #include "cuda-options.h"
 #include "exceptions.h"
 #include "gdb/signals.h"
+#include "gdbsupport/function-view.h"
 #include "gdbsupport/gdb_locale.h"
 #include "gdbthread.h"
 #include "inferior.h"
 #include "interps.h"
+#include "mi/mi-common.h"
 #include "mi/mi-console.h"
 #include "mi/mi-interp.h"
 #include "objfiles.h"
@@ -38,11 +40,15 @@
 #include "ui-out.h"
 #include "utils.h"
 
+#include <inttypes.h>
+
 #include <chrono>
 #include <iomanip>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <time.h>
+#include <vector>
 #endif
 
 #include <ctype.h>
@@ -58,15 +64,31 @@
 #include <unistd.h>
 
 #include "cuda-defs.h"
+#include "gdbsupport/common-utils.h"
 #ifndef GDBSERVER
 #include "cuda-api.h"
 #include "cuda-options.h"
+#include "cuda-tdep.h"
 #endif
 #include "cuda-utils.h"
 #include <fcntl.h>
 
 static char cuda_gdb_tmp_basedir[CUDA_GDB_TMP_BUF_SIZE] = { 0 };
 static char *cuda_gdb_tmp_dir = NULL;
+
+/* Check if the given library name matches libcuda.so. */
+bool
+cuda_is_libcuda (std::string_view name)
+{
+  if (name.empty ())
+    return false;
+
+  size_t slash = name.find_last_of ('/');
+  if (slash != std::string_view::npos)
+    name.remove_prefix (slash + 1);
+
+  return startswith (name, "libcuda.so");
+}
 
 int
 cuda_gdb_dir_create (const char *dir_name, uint32_t permissions,
@@ -701,7 +723,7 @@ _initialize_cuda_utils ()
 
 #ifndef GDBSERVER
 /* Helper function to format a nanosecond timestamp into hh:mm:ss.ms string. */
-static std::string
+std::string
 cuda_format_log_timestamp_string (uint64_t timestamp_ns)
 {
   const std::chrono::nanoseconds ns_duration (timestamp_ns);
@@ -730,89 +752,239 @@ cuda_format_log_timestamp_string (uint64_t timestamp_ns)
   return ss.str ();
 }
 
-/* Drain the CUDA log queue from the backend and print all logs
- * according to the current log level setting. This should be called
- * whenever we need to consume logs from the backend.
- */
-void
-cuda_consume_and_print_driver_logs (void)
+const char *
+cuda_log_level_name (CUDBGCudaLogLevel log_level)
 {
-#if CUDBG_API_VERSION_REVISION >= 181
-  CUDBGCudaLogMessage129 logMessages[cuda_debugapi::CudaLogMessagesFetchLimit];
+  switch (log_level)
+    {
+    case CUDBG_CUDA_LOG_LEVEL_ERROR:
+      return "error";
+    case CUDBG_CUDA_LOG_LEVEL_WARNING:
+      return "warning";
+    default:
+      return "unknown";
+    }
+}
+
+/* Emit one informational CUDA log line for surfaced (not stopped-on) logs;
+   shared by the live-record and stop-metadata paths.  */
+static void
+cuda_emit_log_line (CUDBGCudaLogLevel log_level, uint64_t os_thread_id,
+		    uint64_t timestamp_ns, const char *message)
+{
+  bool drop_log_record = false;
+  const auto output_log_level = cuda_options_log_level ();
+  const char *log_level_str = cuda_log_level_name (log_level);
+  switch (log_level)
+    {
+    case CUDBG_CUDA_LOG_LEVEL_ERROR:
+      break;
+    case CUDBG_CUDA_LOG_LEVEL_WARNING:
+      if (output_log_level == cuda_log_level_t::error)
+	drop_log_record = true;
+      break;
+    default:
+      if (output_log_level != cuda_log_level_t::extra)
+	drop_log_record = true;
+      break;
+    }
+  if (drop_log_record)
+    return;
+
+  const std::string timestamp_str
+      = cuda_format_log_timestamp_string (timestamp_ns);
+  if (current_uiout->is_mi_like_p ())
+    {
+      struct mi_interp *mi = as_mi_interp (top_level_interpreter ());
+      gdb_assert (mi != NULL);
+      target_terminal::scoped_restore_terminal_state term_state;
+      target_terminal::ours_for_output ();
+
+      gdb_printf (mi->event_channel, "cuda-driver-log");
+
+      ui_out *mi_uiout = mi->interp_ui_out ();
+      ui_out_redirect_pop redir (mi_uiout, mi->event_channel);
+
+      mi_uiout->field_string ("level", log_level_str);
+      mi_uiout->field_string ("message", message);
+      mi_uiout->field_fmt ("thread-id", "0x%" PRIx64, os_thread_id);
+      mi_uiout->field_string ("timestamp", timestamp_str.c_str ());
+
+      gdb_flush (mi->event_channel);
+    }
+  else
+    {
+      gdb_printf (_ ("Cuda Driver %s detected"), log_level_str);
+      if (output_log_level == cuda_log_level_t::extra)
+	gdb_printf (_ (" (thread=0x%" PRIx64 " timestamp=%s)"), os_thread_id,
+		    timestamp_str.c_str ());
+      gdb_printf (_ (": %s\n"), message);
+    }
+}
+
+/* Emit a live CUDA log record.  */
+static void
+cuda_emit_log_message (const CUDBGCudaLogMessage &message)
+{
+  cuda_emit_log_line (message.logLevel, message.osThreadId,
+		      message.unixTimestampNs, message.message);
+}
+
+/* Emit a captured stop record as a log line when a higher-priority stop
+   preempted the CUDA log stop, so it is not silently dropped.  */
+void
+cuda_emit_log_stop_record (const cuda_log_stop_metadata &metadata)
+{
+  cuda_emit_log_line (metadata.log_level, metadata.os_thread_id,
+		      metadata.timestamp_ns, metadata.message.c_str ());
+}
+
+/* Emit the bp_cuda_log stop reason.  Metadata is read-only here; MI log
+   fields use a log- prefix to avoid clashing with core stop fields.  */
+void
+cuda_emit_log_stop_reason (struct ui_out *uiout)
+{
+  const auto metadata = cuda_get_log_stop_metadata ();
+
+  if (uiout->is_mi_like_p ())
+    {
+      std::string reason = async_reason_lookup (EXEC_ASYNC_BREAKPOINT_HIT);
+      reason += "/cuda-log";
+      uiout->field_string ("reason", reason.c_str ());
+
+      if (metadata.has_value ())
+	{
+	  const std::string timestamp
+	      = cuda_format_log_timestamp_string (metadata->timestamp_ns);
+
+	  uiout->field_fmt ("log-rule-id", "%u", metadata->rule_id);
+	  uiout->field_string ("log-level",
+			       cuda_log_level_name (metadata->log_level));
+	  uiout->field_string ("log-message", metadata->message.c_str ());
+	  uiout->field_fmt ("log-os-thread-id", "0x%" PRIx64,
+			    metadata->os_thread_id);
+	  uiout->field_string ("log-timestamp", timestamp.c_str ());
+	}
+      return;
+    }
+
+  if (!metadata.has_value ())
+    {
+      uiout->text ("CUDA log stop, ");
+      return;
+    }
+
+  uiout->text ("\nStopped on CUDA log rule id ");
+  uiout->field_fmt ("log-rule-id", "%u", metadata->rule_id);
+  uiout->text (":\n");
+  uiout->field_string ("log-message", metadata->message.c_str ());
+  uiout->text ("\n");
+}
+
+static uint32_t
+cuda_log_rule_id_for_message (const CUDBGCudaLogMessage &message)
+{
+#if CUDBG_API_VERSION_REVISION >= 193
+  /* matchedRuleIndex indexes the ruleset that matched; it maps to a current
+     log rule only when that ruleset is the one we last installed.  Index 0
+     is the backend default (async-all); index 0 or any superseded ruleset is
+     stale -- logged, never stopped.  */
+  const uint32_t active_ruleset_index
+      = cuda_options_log_active_ruleset_index ();
+  if (active_ruleset_index == 0
+      || message.matchedRulesetIndex != active_ruleset_index)
+    return 0;
+
+  return cuda_options_log_rule_id_for_backend_index (message.matchedRuleIndex);
 #else
-  CUDBGCudaLogMessage logMessages[cuda_debugapi::CudaLogMessagesFetchLimit];
+  return 0;
 #endif
+}
 
+/* Upper bound on consume_cuda_logs iterations per drain so a backend that
+   keeps returning full batches cannot wedge gdb in an unbounded loop.  */
+static constexpr unsigned max_log_drain_iterations = 100000;
+
+/* Drain the backend CUDA log queue in a bounded loop, invoking PER_MESSAGE
+   for every record.  CALLER names the caller in the iteration-cap trace.  */
+static void
+cuda_drain_logs (
+    const char *caller,
+    gdb::function_view<void (const CUDBGCudaLogMessage &)> per_message)
+{
+  CUDBGCudaLogMessage logMessages[cuda_debugapi::CudaLogMessagesFetchLimit];
   uint32_t num_consumed = 0;
-
-  // Keep fetching logs until no more are available
+  unsigned iterations = 0;
   do
     {
       cuda_debugapi::consume_cuda_logs (
 	  logMessages, cuda_debugapi::CudaLogMessagesFetchLimit,
 	  &num_consumed);
 
-      for (uint32_t i = 0; i < num_consumed; i++)
+      for (uint32_t i = 0; i < num_consumed; ++i)
+	per_message (logMessages[i]);
+
+      if (++iterations >= max_log_drain_iterations)
 	{
-	  bool drop_log_record = false;
-	  const auto output_log_level = cuda_options_driver_log_level ();
-	  const char *log_level_str;
-	  switch (logMessages[i].logLevel)
-	    {
-	    case CUDBG_CUDA_LOG_LEVEL_ERROR:
-	      log_level_str = "error";
-	      break;
-	    case CUDBG_CUDA_LOG_LEVEL_WARNING:
-	      log_level_str = "warning";
-	      if (output_log_level == cuda_log_level_t::CUDA_LOG_LEVEL_ERROR)
-		drop_log_record = true;
-	      break;
-	    default:
-	      log_level_str = "unknown";
-	      if (output_log_level != cuda_log_level_t::CUDA_LOG_LEVEL_EXTRA)
-		drop_log_record = true;
-	      break;
-	    }
-	  if (drop_log_record)
-	    continue;
-	  const uint64_t timestamp_ns = logMessages[i].unixTimestampNs;
-	  const std::string timestamp_str
-	      = cuda_format_log_timestamp_string (timestamp_ns);
-	  /* Generate MI async event record if running in MI mode */
-	  if (current_uiout->is_mi_like_p ())
-	    {
-	      /* Get the MI interpreter for event channel access */
-	      struct mi_interp *mi = as_mi_interp (top_level_interpreter ());
-	      gdb_assert (mi != NULL);
-	      target_terminal::scoped_restore_terminal_state term_state;
-	      target_terminal::ours_for_output ();
-
-	      /* Print the async record name first */
-	      gdb_printf (mi->event_channel, "cuda-driver-log");
-
-	      /* Redirect MI uiout to event channel for structured data */
-	      ui_out *mi_uiout = mi->interp_ui_out ();
-	      ui_out_redirect_pop redir (mi_uiout, mi->event_channel);
-
-	      /* Use uiout functions for structured MI output */
-	      mi_uiout->field_string ("level", log_level_str);
-	      mi_uiout->field_string ("message", logMessages[i].message);
-	      mi_uiout->field_fmt ("thread-id", "0x%x",
-				logMessages[i].osThreadId);
-	      mi_uiout->field_string ("timestamp", timestamp_str.c_str ());
-
-	      gdb_flush (mi->event_channel);
-	    }
-	  else
-	    {
-	      gdb_printf (_ ("Cuda Driver %s detected"), log_level_str);
-	      if (output_log_level == cuda_log_level_t::CUDA_LOG_LEVEL_EXTRA)
-		gdb_printf (_ (" (thread=0x%x timestamp=%s)"),
-			    logMessages[i].osThreadId, timestamp_str.c_str ());
-	      gdb_printf (_ (": %s\n"), logMessages[i].message);
-	    }
+	  cuda_trace ("%s: drain iteration cap reached; stopping early",
+		      caller);
+	  break;
 	}
     }
   while (num_consumed > 0);
 }
+
+bool
+cuda_consume_log_stop_record (cuda_log_stop_metadata *metadata)
+{
+  gdb_assert (metadata != nullptr);
+
+  /* Use the last rule-matched record as the stop metadata.  Non-matching
+     records, including async-tail records after the match, are emitted
+     normally.  */
+  std::optional<CUDBGCudaLogMessage> stop_message;
+  std::optional<uint32_t> log_rule_id;
+  const bool print_logs = cuda_options_logs_enabled ();
+
+  cuda_drain_logs (__func__, [&] (const CUDBGCudaLogMessage &message) {
+    const uint32_t rule_id = cuda_log_rule_id_for_message (message);
+    if (rule_id != 0)
+      {
+	/* A newer match supersedes the previous one.  Emit the superseded
+	   record only when CUDA logs are on; with them off nothing but the
+	   final stop is surfaced.  */
+	if (print_logs && stop_message)
+	  cuda_emit_log_message (*stop_message);
+	stop_message = message;
+	log_rule_id = rule_id;
+      }
+    else if (print_logs)
+      cuda_emit_log_message (message);
+  });
+
+  if (!stop_message)
+    return false;
+
+  gdb_assert (log_rule_id.has_value ());
+
+  metadata->rule_id = *log_rule_id;
+  metadata->log_level = stop_message->logLevel;
+  metadata->os_thread_id = stop_message->osThreadId;
+  metadata->timestamp_ns = stop_message->unixTimestampNs;
+  metadata->message = stop_message->message;
+  return true;
+}
+
+/* Drain the CUDA log queue from the backend and print all logs
+ * according to the current log level setting. This should be called
+ * whenever we need to consume logs from the backend.
+ */
+void
+cuda_consume_and_print_logs (void)
+{
+  cuda_drain_logs (__func__, [] (const CUDBGCudaLogMessage &message) {
+    cuda_emit_log_message (message);
+  });
+}
+
 #endif /* GDBSERVER */

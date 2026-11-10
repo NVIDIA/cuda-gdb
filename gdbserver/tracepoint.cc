@@ -3604,9 +3604,96 @@ cmd_qtframe (char *own_buf)
     sprintf (own_buf, "F-1");
 }
 
+#ifdef NVIDIA_BUGFIX
+
+static bool
+write_trace_status_response (char *packet, const std::string &response)
+{
+  /* CUDA - A qTStatus reply is a single RSP packet.  Reject state that
+     cannot fit instead of overflowing the shared packet buffer.  */
+  if (response.size () > PBUFSIZ - 1)
+    {
+      write_enn (packet);
+      return false;
+    }
+
+  memcpy (packet, response.c_str (), response.size () + 1);
+  return true;
+}
+
+#endif
+
 static void
 cmd_qtstatus (char *packet)
 {
+#ifdef NVIDIA_BUGFIX
+  const char *user = tracing_user_name ? tracing_user_name : "";
+  const char *notes = tracing_notes ? tracing_notes : "";
+  const char *stop_note = tracing_stop_note ? tracing_stop_note : "";
+  std::string user_hex
+    = bin2hex ((const gdb_byte *) user, strlen (user));
+  std::string notes_hex
+    = bin2hex ((const gdb_byte *) notes, strlen (notes));
+  std::string stop_note_hex
+    = bin2hex ((const gdb_byte *) stop_note, strlen (stop_note));
+
+  trace_debug ("Returning trace status as %d, stop reason %s",
+	       tracing, tracing_stop_reason);
+
+  if (agent_loaded_p ())
+    {
+      target_pause_all (true);
+
+      upload_fast_traceframes ();
+
+      target_unpause_all (true);
+    }
+
+  std::string stop_reason_rsp = tracing_stop_reason;
+
+  /* The user visible error string in terror needs to be hex encoded.
+     We leave it as plain string in `tracing_stop_reason' to ease
+     debugging.  */
+  if (startswith (stop_reason_rsp, "terror:"))
+    {
+      const char *result_name
+	= stop_reason_rsp.c_str () + strlen ("terror:");
+      stop_reason_rsp
+	= "terror:" + bin2hex ((const gdb_byte *) result_name,
+			      strlen (result_name));
+    }
+
+  /* If this was a forced stop, include any stop note that was supplied.  */
+  if (stop_reason_rsp == "tstop")
+    stop_reason_rsp += ":" + stop_note_hex;
+
+  std::string trace_buffer_size
+    = phex_nz (trace_buffer_hi - trace_buffer_lo, 0);
+  std::string start_time
+    = phex_nz (tracing_start_time, sizeof (tracing_start_time));
+  std::string stop_time
+    = phex_nz (tracing_stop_time, sizeof (tracing_stop_time));
+
+  std::string response
+    = string_printf ("T%d;"
+		     "%s:%x;"
+		     "tframes:%x;tcreated:%x;"
+		     "tfree:%x;tsize:%s;"
+		     "circular:%d;"
+		     "disconn:%d;"
+		     "starttime:%s;stoptime:%s;"
+		     "username:%s;notes:%s:",
+		     tracing ? 1 : 0,
+		     stop_reason_rsp.c_str (), tracing_stop_tpnum,
+		     traceframe_count, traceframes_created,
+		     free_space (), trace_buffer_size.c_str (),
+		     circular_trace_buffer,
+		     disconnected_tracing,
+		     start_time.c_str (), stop_time.c_str (),
+		     user_hex.c_str (), notes_hex.c_str ());
+
+  write_trace_status_response (packet, response);
+#else
   char *stop_reason_rsp = NULL;
   char *buf1, *buf2, *buf3;
   const char *str;
@@ -3688,6 +3775,7 @@ cmd_qtstatus (char *packet)
 	   phex_nz (tracing_start_time, sizeof (tracing_start_time)),
 	   phex_nz (tracing_stop_time, sizeof (tracing_stop_time)),
 	   buf1, buf2);
+#endif
 }
 
 static void
@@ -4082,9 +4170,143 @@ cmd_bigqtbuffer_size (char *own_buf)
   write_ok (own_buf);
 }
 
+#ifdef NVIDIA_BUGFIX
+
+/* CUDA - qTStatus hex-encodes all three note fields into one packet.
+   Reserve ample room for the required status fields and numeric values.
+   cmd_qtstatus performs the authoritative final packet-size check.  */
+static constexpr size_t trace_status_fixed_size_reserve = 1024;
+static_assert (PBUFSIZ - 1 > trace_status_fixed_size_reserve);
+static constexpr size_t max_trace_status_note_bytes
+  = (PBUFSIZ - 1 - trace_status_fixed_size_reserve) / 2;
+
+static bool
+decode_trace_note (char **packet, const char *prefix, std::string *value)
+{
+  *packet += strlen (prefix);
+  char *end = strchr (*packet, ';');
+  if (end == nullptr)
+    return false;
+
+  size_t hex_length = end - *packet;
+  if ((hex_length & 1) != 0)
+    return false;
+
+  for (char *p = *packet; p != end; ++p)
+    if (!isxdigit ((unsigned char) *p))
+      return false;
+
+  value->resize (hex_length / 2);
+  int decoded_length
+    = hex2bin (*packet, (gdb_byte *) value->data (), value->size ());
+  value->resize (decoded_length);
+  *packet = end + 1;
+  return true;
+}
+
+static bool
+trace_status_notes_fit (const std::string &user, const std::string &notes,
+			const std::string &stop_note)
+{
+  if (user.size () > max_trace_status_note_bytes)
+    return false;
+
+  size_t total = user.size ();
+
+  if (notes.size () > max_trace_status_note_bytes - total)
+    return false;
+  total += notes.size ();
+
+  if (stop_note.size () > max_trace_status_note_bytes - total)
+    return false;
+
+  return true;
+}
+
+static void
+replace_trace_note (char **destination, const std::string &value)
+{
+  char *replacement = (char *) xmalloc (value.size () + 1);
+  memcpy (replacement, value.c_str (), value.size () + 1);
+  xfree (*destination);
+  *destination = replacement;
+}
+
+#endif
+
 static void
 cmd_qtnotes (char *own_buf)
 {
+#ifdef NVIDIA_BUGFIX
+  std::string user = tracing_user_name ? tracing_user_name : "";
+  std::string notes = tracing_notes ? tracing_notes : "";
+  std::string stop_note = tracing_stop_note ? tracing_stop_note : "";
+  bool replace_user = false;
+  bool replace_notes = false;
+  bool replace_stop_note = false;
+  char *packet = own_buf + strlen ("QTNotes:");
+
+  while (*packet)
+    {
+      if (startswith (packet, "user:"))
+	{
+	  if (!decode_trace_note (&packet, "user:", &user))
+	    {
+	      write_enn (own_buf);
+	      return;
+	    }
+	  replace_user = true;
+	}
+      else if (startswith (packet, "notes:"))
+	{
+	  if (!decode_trace_note (&packet, "notes:", &notes))
+	    {
+	      write_enn (own_buf);
+	      return;
+	    }
+	  replace_notes = true;
+	}
+      else if (startswith (packet, "tstop:"))
+	{
+	  if (!decode_trace_note (&packet, "tstop:", &stop_note))
+	    {
+	      write_enn (own_buf);
+	      return;
+	    }
+	  replace_stop_note = true;
+	}
+      else
+	{
+	  write_enn (own_buf);
+	  return;
+	}
+    }
+
+  if (!trace_status_notes_fit (user, notes, stop_note))
+    {
+      write_enn (own_buf);
+      return;
+    }
+
+  /* Commit all fields only after the complete packet has been validated.  */
+  if (replace_user)
+    {
+      trace_debug ("User is '%s'", user.c_str ());
+      replace_trace_note (&tracing_user_name, user);
+    }
+  if (replace_notes)
+    {
+      trace_debug ("Notes is '%s'", notes.c_str ());
+      replace_trace_note (&tracing_notes, notes);
+    }
+  if (replace_stop_note)
+    {
+      trace_debug ("tstop note is '%s'", stop_note.c_str ());
+      replace_trace_note (&tracing_stop_note, stop_note);
+    }
+
+  write_ok (own_buf);
+#else
   size_t nbytes;
   char *saved, *user, *notes, *stopnote;
   char *packet = own_buf;
@@ -4140,6 +4362,7 @@ cmd_qtnotes (char *own_buf)
     }
 
   write_ok (own_buf);
+#endif
 }
 
 int

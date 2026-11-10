@@ -58,7 +58,7 @@ public:
     return m_module_map;
   }
 
-  void flush_disasm_caches ();
+  void flush_disasm_caches (bool device_only);
 
   // For internal debugging
   void print () const;

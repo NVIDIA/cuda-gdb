@@ -104,7 +104,7 @@ private:
        data structure. We only need to check to see if addr is contained by end
        exclusive. */
     const auto end = it->second.first;
-    if (end < addr)
+    if (end <= addr)
       return m_ranges.cend ();
 
     /* Range contained by addr found. */

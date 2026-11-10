@@ -196,6 +196,7 @@ find_end_pc (uint64_t pc)
 static int
 count_instructions (uint64_t pc, uint64_t end_pc)
 {
+  // Count of SASS instructions
   int count = 0;
   const auto kernel = cuda_current_focus::get ().logical ().kernel ();
   const auto module = kernel->module ();
@@ -204,27 +205,24 @@ count_instructions (uint64_t pc, uint64_t end_pc)
   auto disassembler = module->disassembler ();
   gdb_assert (disassembler);
 
-  const uint32_t inst_size = disassembler->insn_size ();
-
   cuda_adjust_device_code_address (pc, &pc);
-  for (; pc < end_pc; pc += inst_size)
+  for (; pc < end_pc; pc += cuda_default_instruction_size)
     {
-      auto inst = disassembler->disassemble_instruction (pc);
-      /* Stop counting if pc is outside of the routine boundary */
-      if (!inst)
-	return count;
+      if (!disassembler->lookup_instruction (pc, true))
+	break;
       ++count;
     }
-
   return count;
 }
 
 static int
-count_lines (uint64_t pc, uint64_t end_pc, uint32_t inst_size)
+count_lines (uint64_t pc, uint64_t end_pc)
 {
   struct symtab_and_line cur_sal, next_sal;
   int nlines = 0;
 
+  const auto dev_id = cuda_current_focus::get ().physical ().dev ();
+  const auto inst_size = cuda_state::device_get_insn_size (dev_id);
   for (cur_sal = find_pc_line (pc, 0); pc <= end_pc;
        pc += inst_size, cur_sal = next_sal)
     {
@@ -396,7 +394,6 @@ set_next_device_iteration (void)
   bool single_inst = astep_state.insn_stepping;
   int remaining = astep_state.remaining;
   int nsteps = 1;
-  uint32_t inst_size = cuda_state::device_get_insn_size (p.dev ());
 
   /* A valid warp is already in place and we are starting to step this warp
      from the start.  */
@@ -412,7 +409,8 @@ set_next_device_iteration (void)
     }
   else if (!(cur_sal.symtab && cur_sal.line) || single_inst)
     {
-      end_pc = cur_pc + remaining * inst_size;
+      end_pc
+	  = cur_pc + remaining * cuda_state::device_get_insn_size (p.dev ());
     }
   else
     {
@@ -451,7 +449,7 @@ set_next_device_iteration (void)
   if (cuda_options_single_stepping_optimizations_enabled ())
     {
       auto found = cuda_find_next_control_flow_instruction (
-	  cur_pc, cur_sal.pc, end_pc, false, end_pc, inst_size);
+	  cur_pc, cur_sal.pc, end_pc, false, end_pc);
       /* Stop autostepping if instruction scanning failed */
       if (!found)
 	return 1;
@@ -474,7 +472,6 @@ set_next_device_iteration (void)
   astep_state.end_pc = end_pc;
   astep_state.cur_sal = cur_sal;
   astep_state.remaining = remaining;
-  astep_state.device.inst_size = inst_size;
   astep_state.device.nsteps = nsteps;
 
   return 0;
@@ -664,7 +661,6 @@ update_device_autostep_state (CORE_ADDR pc)
   int remaining = astep_state.remaining;
   int single_inst = astep_state.insn_stepping;
   struct symtab_and_line before_sal = astep_state.cur_sal;
-  uint32_t inst_size = astep_state.device.inst_size;
 
   /* Update current CUDA focus */
   switch_to_cuda_thread (c);
@@ -692,7 +688,7 @@ update_device_autostep_state (CORE_ADDR pc)
       /* We were supposed to instruction-step multiple instructions at
 	 once.  */
       nsteps = count_instructions (before_pc, after_pc);
-      lines = count_lines (before_pc, after_pc, inst_size);
+      lines = count_lines (before_pc, after_pc);
     }
   else /* Control flow instruction */
     {

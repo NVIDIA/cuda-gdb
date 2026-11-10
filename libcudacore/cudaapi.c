@@ -433,6 +433,32 @@ DEF_API_CALL(readParamMemory)(uint32_t dev, uint32_t sm, uint32_t wp,
 	return CUDBG_SUCCESS;
 }
 
+DEF_API_CALL(readTcgen05TmemInfo)(uint32_t dev, uint32_t sm, uint32_t wp,
+				  CUDBGTcgen05TmemInfo *info)
+{
+	CudbgTcgen05TmemTableEntry *entry;
+	uint32_t ctaId;
+	CUDBGResult rc;
+
+	TRACE_FUNC("dev=%u sm=%u wp=%u info=%p", dev, sm, wp, info);
+
+	VERIFY_ARG(info);
+
+	rc = determineCTAId(dev, sm, wp, &ctaId);
+	if (rc != CUDBG_SUCCESS)
+		return rc;
+
+	GET_TABLE_ENTRY(entry, NULL, CUDBG_ERROR_MISSING_DATA,
+			"cta%u_sm%u_dev%u_tmem_info", ctaId, sm, dev);
+
+	info->allocationPhase = entry->allocationPhase;
+	info->ctaGroup = entry->ctaGroup;
+	info->allocationMask = entry->allocationMask;
+	info->allocationStartMask = entry->allocationStartMask;
+
+	return CUDBG_SUCCESS;
+}
+
 DEF_API_CALL(getCbuWarpState)(uint32_t devId, uint32_t sm, uint64_t wp_mask,
 			      CUDBGCbuWarpState *state, uint32_t num_states)
 {
@@ -805,7 +831,7 @@ DEF_API_CALL(getGridInfo)(uint32_t devId, uint64_t gridId, CUDBGGridInfo *info)
 	info->gridId64 = gridId;
 	info->tid = cte->tid;
 	info->context = cte->contextId;
-	info->module = gte->moduleHandle;
+	info->elfImageHandle = gte->moduleHandle;
 	info->function = gte->function;
 	info->functionEntry = gte->functionEntry;
 	info->type = gte->kernelType;
@@ -2245,6 +2271,11 @@ static const struct CUDBGAPI_st cudbgCoreApi = {
   API_CALL (readRpcRegisters),
   API_CALL (notSupported), /* writeRpcRegisters */
 #endif
+
+  /* 13.5 Extensions */
+  API_CALL (readTcgen05TmemInfo),
+  API_CALL (notSupported), /* readTcgen05TmemMemory */
+  API_CALL (notSupported), /* writeTcgen05TmemMemory */
 };
 
 CUDBGAPI cuCoreGetApi(CudaCore *cc)

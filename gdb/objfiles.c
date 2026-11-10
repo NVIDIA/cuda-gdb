@@ -209,6 +209,12 @@ add_to_objfile_sections (struct bfd *abfd, struct bfd_section *asect,
     }
 
 #ifdef NVIDIA_CUDA_GDB
+  /* Memoize the BFD section index here to avoid the upstream
+     gdb_bfd_section_index () call (and its five pseudo-section
+     comparisons) on the obj_section::offset () hot path.  CUDA
+     workloads load thousands of objfiles, and PC-to-section lookups
+     (e.g. lookup_minimal_symbol_by_pc_section -> frob_address) walk
+     every section of every objfile.  */
   int idx = gdb_bfd_section_index (abfd, asect);
   section = &objfile->sections_start[idx];
   section->bfd_index = idx;

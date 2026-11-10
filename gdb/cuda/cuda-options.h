@@ -19,17 +19,12 @@
 #ifndef _CUDA_OPTIONS_H
 #define _CUDA_OPTIONS_H 1
 
+#include "cuda-logs.h"
 #include "cuda-tdep.h"
 
-/*
- * set cuda driver_log_level
- */
-typedef enum
-{
-  CUDA_LOG_LEVEL_ERROR = 1,
-  CUDA_LOG_LEVEL_WARNING = 2,
-  CUDA_LOG_LEVEL_EXTRA = 4,
-} cuda_log_level_t;
+/* The "set/show cuda" command lists (defined in cuda-options.c).  */
+extern struct cmd_list_element *setcudalist;
+extern struct cmd_list_element *showcudalist;
 
 bool cuda_options_debug_general (void);
 bool cuda_options_debug_notifications (void);
@@ -41,8 +36,6 @@ bool cuda_options_break_on_launch_application (void);
 bool cuda_options_break_on_launch_api_active (void);
 void cuda_options_reset_break_on_launch_state (void);
 void cuda_options_initialize_break_on_launch_api (void);
-bool cuda_options_disassemble_from_device_memory (void);
-bool cuda_options_disassemble_from_elf_image (void);
 void cuda_options_set_disassemble_from_elf_image (void);
 bool cuda_options_disassemble_per_file (void);
 bool cuda_options_disassemble_per_function (void);
@@ -66,11 +59,13 @@ uint32_t cuda_options_trace_domain_enabled_flags ();
 bool cuda_options_single_stepping_optimizations_enabled (void);
 bool cuda_options_step_divergent_lanes_enabled (void);
 bool cuda_options_device_resume_on_cpu_dynamic_function_call (void);
-bool cuda_options_driver_logs_enabled (void);
-cuda_log_level_t cuda_options_driver_log_level (void);
 bool cuda_options_printf_flushing (void);
 bool cuda_options_preserve_tmp_data (void);
 bool cuda_options_kernel_launch_backtrace_enabled (void);
+bool cuda_options_lazy_function_finalization_enabled (void);
+bool cuda_options_profile_lfl (void);
+
+cuda_disassembly_type_t cuda_options_disassembly_type ();
 
 /* Return true if break-on-launch auto breakpoints need to be inserted
    (i.e. break_on_launch is enabled for application kernels). */

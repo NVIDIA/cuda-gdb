@@ -375,9 +375,6 @@ cuda_core_target_open (const char *filename, int from_tty)
 
       // Disallow disassembling from `device_memory' in coredumps
       cuda_options_set_disassemble_from_elf_image ();
-
-      /* Ensure the builtins objfile is created */
-      cuda_init_cudart_symbols ();
     }
   catch (const gdb_exception_error &e)
     {

@@ -243,6 +243,13 @@ add_builtin_mi_commands ()
 		 &mi_suppress_notification.breakpoint),
   add_mi_cmd_mi ("complete", mi_cmd_complete);
 #ifdef NVIDIA_CUDA_GDB
+  add_mi_cmd_mi ("cuda-log-set", mi_cmd_cuda_log_set);
+  add_mi_cmd_mi ("cuda-log-status", mi_cmd_cuda_log_status);
+  add_mi_cmd_mi ("cuda-log-add", mi_cmd_cuda_log_add);
+  add_mi_cmd_mi ("cuda-log-delete", mi_cmd_cuda_log_delete);
+  add_mi_cmd_mi ("cuda-log-enable", mi_cmd_cuda_log_enable);
+  add_mi_cmd_mi ("cuda-log-disable", mi_cmd_cuda_log_disable);
+  add_mi_cmd_mi ("cuda-info-log", mi_cmd_cuda_info_log);
   add_mi_cmd_mi ("cuda-info-barriers", mi_cmd_cuda_info_barriers);
   add_mi_cmd_mi ("cuda-info-devices", mi_cmd_cuda_info_devices);
   add_mi_cmd_mi ("cuda-info-sms", mi_cmd_cuda_info_sms);

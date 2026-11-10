@@ -63,6 +63,9 @@ int vsnprintf(char *str, size_t size, const char *format, va_list ap);
 #include "target.h"
 #include "mem-break.h"
 #include "gdbsupport/environ.h"
+#ifdef NVIDIA_CUDA_GDB
+#include "gdbsupport/array-view.h"
+#endif
 
 /* Target-specific functions */
 

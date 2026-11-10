@@ -245,6 +245,8 @@ public:
   static bool read_local_memory (uint32_t dev, uint32_t sm, uint32_t wp,
 				 uint32_t ln, uint64_t addr, void *buf,
 				 uint32_t sz);
+  static CUDBGResult read_tmem_info (uint32_t dev, uint32_t sm, uint32_t wp,
+				     CUDBGTcgen05TmemInfo *info);
   static void read_predicates (uint32_t dev, uint32_t sm, uint32_t wp,
 			       uint32_t ln, uint32_t predicates_size,
 			       const uint32_t *predicates);
@@ -385,13 +387,17 @@ public:
 				  CUDBGCbuWarpState *states,
 				  uint32_t numStates);
 
-  static void consume_cuda_logs (
-#if CUDBG_API_VERSION_REVISION >= 181
-         CUDBGCudaLogMessage129 *logMessages,
-#else
-         CUDBGCudaLogMessage *logMessages,
-#endif
+  static void consume_cuda_logs (CUDBGCudaLogMessage *logMessages,
 				 uint32_t numMessages, uint32_t *numConsumed);
+#if CUDBG_API_VERSION_REVISION >= 193
+  /* Install RULES on the active backend.  On success, the backend assigns a
+     unique, monotonically increasing ruleset index; it is written to
+     *NEW_RULESET_INDEX when that pointer is non-null so callers can match it
+     against CUDBGCudaLogMessage::matchedRulesetIndex.  */
+  static CUDBGResult set_cuda_log_rules (const CUDBGCudaLogRule *rules,
+					 uint32_t numRules,
+					 uint32_t *new_ruleset_index);
+#endif
 
   static void read_cpu_call_stack (uint32_t dev, uint64_t grid_id,
 				   uint64_t *addrs, uint32_t num_addrs,

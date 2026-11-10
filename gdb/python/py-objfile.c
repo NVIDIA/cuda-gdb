@@ -156,6 +156,12 @@ objfpy_get_build_id (PyObject *self, void *closure)
 
   OBJFPY_REQUIRE_VALID (obj);
 
+#ifdef NVIDIA_CUDA_GDB
+  /* JIT-registered objfiles have no obfd; treat as "no build id".  */
+  if (objfile->obfd == nullptr)
+    Py_RETURN_NONE;
+#endif
+
   try
     {
       build_id = build_id_bfd_get (objfile->obfd.get ());

@@ -20,9 +20,9 @@
 #define CUDA_NTO_PROTOCOL_H
 
 #include "gdbsupport/common-defs.h"
-#include "gdbsupport/array-view.h"
 #include "remote-nto.h"
 
+#include <cstdint>
 #include <unistd.h>
 
 /* Each byte can be escaped, plus two frame markers (~),
@@ -37,17 +37,26 @@ typedef union
   TSMsg_text_t text;
 } DScomm_t;
 
-enum endpoint {GDB, SRV, PDB};
+enum endpoint
+{
+  GDB,
+  SRV,
+  PDB
+};
 
-void gdbserver_debug_print(enum endpoint from, enum endpoint to, unsigned char *buf);
+void gdbserver_debug_print (enum endpoint from, enum endpoint to,
+			    unsigned char *buf);
 int get_raw_pdebug_packet_size (unsigned char *src, int max_size);
 int unpack_pdebug_packet (DScomm_t *packet, unsigned char *src);
-int pack_pdebug_packet (unsigned char *dest, const DScomm_t *packet, int length);
-int pack_cuda_packet (unsigned char *dest, char *src, int length);
+int pack_pdebug_packet (unsigned char *dest, const DScomm_t *packet,
+			int length);
+int pack_cuda_packet (unsigned char *dest, char *src, int length, uint8_t mid);
 
-void putpkt_pdebug (DScomm_t *packet, int length);
-void getpkt_pdebug (DScomm_t *packet);
+void putpkt_pdebug (int pdebug_fd, DScomm_t *packet, int length);
+void getpkt_pdebug (int pdebug_fd, DScomm_t *packet);
 
-int qnx_write_inferior_memory (CORE_ADDR memaddr, const unsigned char *myaddr, int len);
+int qnx_write_inferior_memory (int pdebug_fd, bool debug_enabled, uint8_t mid,
+			       CORE_ADDR memaddr, const gdb_byte *myaddr,
+			       ssize_t len);
 
 #endif

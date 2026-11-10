@@ -55,8 +55,6 @@ struct device_astep_t
   int lines;
   /* Numberof steps.  */
   int nsteps;
-  /* Size of an instruction.  */
-  uint32_t inst_size;
 };
 
 /* Host-specific autostep data.  */

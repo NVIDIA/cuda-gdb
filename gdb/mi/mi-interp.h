@@ -101,9 +101,19 @@ public:
 
   /* Flag indicating that the target has proceeded since the last
      command was issued.  */
+#ifdef NVIDIA_CUDA_GDB
+  int mi_proceeded = 0;
+
+  const char *current_token = nullptr;
+
+  /* An internal resume suppressed the prompt normally emitted by async MI.
+     Emit it when this interpreter's synchronous execution completes.  */
+  bool deferred_prompt_pending = false;
+#else
   int mi_proceeded;
 
   const char *current_token;
+#endif
 };
 
 /* Output the shared object attributes to UIOUT.  */

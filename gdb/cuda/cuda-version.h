@@ -20,7 +20,7 @@
 #define _CUDA_VERSION_H 1
 
 #ifndef CUDA_VERSION
-#define CUDA_VERSION 13040
+#define CUDA_VERSION 13050
 #endif
 
 const int cuda_major_version (void);

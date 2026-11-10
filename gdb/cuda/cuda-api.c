@@ -20,6 +20,7 @@
 
 #include "inferior.h"
 #include "remote.h"
+#include "target.h"
 
 #include "cuda-api.h"
 #include "cuda-options.h"
@@ -33,6 +34,7 @@
 #include <tuple>
 #include <unistd.h>
 #include <unordered_map>
+#include <vector>
 
 /* Tracing macros - automatically prepend function name and context */
 #define CUDA_API_TRACE(fmt, ...)                                              \
@@ -275,6 +277,12 @@ cuda_debugapi::cuda_api_fatal (const char *msg, CUDBGResult res)
 {
   CUDA_API_TRACE ("%s: %s", cudbgGetErrorString (res), msg);
 
+  /* The inferior may still own the terminal when CUDA initialization fails
+     during startup.  Take it back before cleanup and error reporting, so the
+     shell does not stop cuda-gdb with SIGTTOU.  */
+  if (target_supports_terminal_ours ())
+    target_terminal::ours ();
+
   /* Finalize API */
   cuda_debugapi::finalize ();
   target_kill ();
@@ -282,7 +290,7 @@ cuda_debugapi::cuda_api_fatal (const char *msg, CUDBGResult res)
   cuda_managed_memory_clean_regions ();
 
   /* Report error */
-  throw_quit (_ ("fatal: %s (%d): %s"), cudbgGetErrorString (res), res, msg);
+  error (_ ("fatal: %s (%d): %s"), cudbgGetErrorString (res), res, msg);
 }
 
 void
@@ -629,6 +637,27 @@ cuda_debugapi::read_local_memory (uint32_t dev, uint32_t sm, uint32_t wp,
   CUDA_API_TRACE_DEV_SM_WARP_LANE (dev, sm, wp, ln, "0x%lx size %u", addr, sz);
 
   return true;
+}
+
+CUDBGResult
+cuda_debugapi::read_tmem_info (uint32_t dev, uint32_t sm, uint32_t wp,
+			       CUDBGTcgen05TmemInfo *info)
+{
+  gdb_assert (info);
+
+  if (!api_state_initialized ())
+    return CUDBG_ERROR_UNINITIALIZED;
+
+  CUDA_API_PROFILE ();
+
+  CUDBGResult res = CUDBG_ERROR_NOT_SUPPORTED;
+  if (api_version ().m_revision >= 197)
+    res = s_instance.m_cudbgAPI->readTcgen05TmemInfo (dev, sm, wp, info);
+  cuda_api_print_api_call_result (__FUNCTION__, res);
+
+  CUDA_API_TRACE_DEV_SM_WARP (dev, sm, wp, "result %s",
+			      cudbgGetErrorString (res));
+  return res;
 }
 
 void
@@ -2505,13 +2534,8 @@ cuda_debugapi::get_cbu_warp_state (uint32_t dev, uint32_t sm,
 }
 
 void
-cuda_debugapi::consume_cuda_logs (
-#if CUDBG_API_VERSION_REVISION >= 181
-         CUDBGCudaLogMessage129 *logMessages,
-#else
-         CUDBGCudaLogMessage *logMessages,
-#endif
-				 uint32_t numMessages, uint32_t *numConsumed)
+cuda_debugapi::consume_cuda_logs (CUDBGCudaLogMessage *logMessages,
+				  uint32_t numMessages, uint32_t *numConsumed)
 {
   gdb_assert (logMessages);
   gdb_assert (numConsumed);
@@ -2525,23 +2549,94 @@ cuda_debugapi::consume_cuda_logs (
   *numConsumed = 0;
 
   CUDBGResult res = CUDBG_ERROR_NOT_SUPPORTED;
-  if (api_version ().m_revision >= 155)
+
+#if CUDBG_API_VERSION_REVISION >= 192
+  if (api_version ().m_revision >= 192)
+    res = s_instance.m_cudbgAPI->consumeCudaLogs (logMessages, numMessages,
+						  numConsumed);
+  else if (api_version ().m_revision >= 155)
     {
-#if CUDBG_API_VERSION_REVISION >= 181
-      res = s_instance.m_cudbgAPI->consumeCudaLogs129 (logMessages, numMessages,
-		  				  numConsumed);
-#else
-      res = s_instance.m_cudbgAPI->consumeCudaLogs (logMessages, numMessages,
-		  				  numConsumed);
+      /* Backend only supports the legacy 129 ABI: copy into a temporary and
+       * widen.  */
+      std::vector<CUDBGCudaLogMessage129> legacyMessages (numMessages);
+      res = s_instance.m_cudbgAPI->consumeCudaLogs129 (
+	  legacyMessages.data (), legacyMessages.size (), numConsumed);
+      if (res == CUDBG_SUCCESS)
+	{
+	  gdb_assert (*numConsumed <= numMessages);
+	  for (uint32_t i = 0; i < *numConsumed; ++i)
+	    {
+	      const CUDBGCudaLogMessage129 &src = legacyMessages[i];
+	      CUDBGCudaLogMessage &dst = logMessages[i];
+	      dst.unixTimestampNs = src.unixTimestampNs;
+	      dst.osThreadId = src.osThreadId;
+	      dst.logLevel = src.logLevel;
+	      /* Legacy logs predate rule matching.  */
+	      dst.matchedRulesetIndex = 0;
+	      dst.matchedRuleIndex = UINT32_MAX;
+	      static_assert (sizeof (dst.message) == sizeof (src.message));
+	      memcpy (dst.message, src.message, sizeof (dst.message));
+	    }
+	}
+    }
 #endif
+
+  cuda_api_print_api_call_result (__FUNCTION__, res);
+
+  /* CUDA log drains are opportunistic; any failure is non-fatal.  Report
+     nothing consumed (terminates the cuda-utils.c loops) and return.  */
+  if (res != CUDBG_SUCCESS)
+    {
+      *numConsumed = 0;
+      return;
     }
 
-  if ((res != CUDBG_SUCCESS) && (res != CUDBG_ERROR_NOT_SUPPORTED)
-      && (res != CUDBG_ERROR_NO_EVENT_AVAILABLE))
-    CUDA_API_ERROR (res, "Failed to consume Cuda logs");
+  /* The backend does not guarantee message[] is NUL-terminated; force it so
+     string reads cannot run past the buffer.  numConsumed is backend-supplied,
+     so guard it against the fixed buffer before indexing.  */
+  gdb_assert (*numConsumed <= numMessages);
+  for (uint32_t i = 0; i < *numConsumed; ++i)
+    logMessages[i].message[sizeof (logMessages[i].message) - 1] = '\0';
 
   CUDA_API_TRACE ("numMessages %u numConsumed %u", numMessages, *numConsumed);
 }
+
+#if CUDBG_API_VERSION_REVISION >= 193
+CUDBGResult
+cuda_debugapi::set_cuda_log_rules (const CUDBGCudaLogRule *rules,
+				   uint32_t numRules,
+				   uint32_t *new_ruleset_index)
+{
+  /* Callers send at least the implicit async-all tail rule.  CUDA log rules
+     are local-only, not supported on remote targets including QNX.  */
+  gdb_assert (rules != nullptr && numRules > 0);
+
+  if (!api_state_initialized ())
+    return CUDBG_ERROR_NOT_SUPPORTED;
+
+  CUDA_API_PROFILE ();
+
+  uint32_t ruleset_index = 0;
+  CUDBGResult res = CUDBG_ERROR_NOT_SUPPORTED;
+
+  if (api_version ().m_revision >= 193)
+    {
+      res = s_instance.m_cudbgAPI->setCudaLogRules (rules, numRules,
+						    &ruleset_index);
+    }
+
+  cuda_api_print_api_call_result (__FUNCTION__, res);
+
+  if ((res != CUDBG_SUCCESS) && (res != CUDBG_ERROR_NOT_SUPPORTED))
+    CUDA_API_ERROR (res, "Failed to set Cuda log rules");
+
+  if (new_ruleset_index != nullptr)
+    *new_ruleset_index = ruleset_index;
+
+  CUDA_API_TRACE ("numRules %u newRulesetIndex %u", numRules, ruleset_index);
+  return res;
+}
+#endif /* CUDBG_API_VERSION_REVISION >= 193 */
 
 void
 cuda_debugapi::read_cpu_call_stack (uint32_t dev, uint64_t grid_id,

@@ -23,6 +23,7 @@
 #include "cuda-coords.h"
 #include "gdbarch.h"
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -86,6 +87,13 @@ struct gdbarch;
   (CUDA_MAX_NUM_RESIDENT_BLOCKS_PER_GRID                                      \
    * CUDA_MAX_NUM_RESIDENT_THREADS_PER_BLOCK)
 
+enum class cuda_disassembly_type_t : uint32_t
+{
+  nvsal_elf = 0,
+  sass_elf = 1,
+  sass_device = 2
+};
+
 typedef enum return_value_convention rvc_t;
 
 /* Global Variables */
@@ -95,20 +103,17 @@ struct gdbarch *cuda_get_gdbarch (void);
 bool cuda_is_cuda_gdbarch (struct gdbarch *);
 bool cuda_is_bfd_cuda (bfd *obfd);
 
-/* Offsets of the CUDA built-in variables */
-#define CUDBG_BUILTINS_BASE ((CORE_ADDR)0)
-#define CUDBG_THREADIDX_OFFSET (CUDBG_BUILTINS_BASE - 12)
-#define CUDBG_BLOCKIDX_OFFSET (CUDBG_THREADIDX_OFFSET - 12)
-#define CUDBG_CLUSTERIDX_OFFSET (CUDBG_BLOCKIDX_OFFSET - 12)
-#define CUDBG_GRIDDIM_OFFSET (CUDBG_CLUSTERIDX_OFFSET - 12)
-#define CUDBG_BLOCKDIM_OFFSET (CUDBG_GRIDDIM_OFFSET - 12)
-#define CUDBG_CLUSTERDIM_OFFSET (CUDBG_BLOCKDIM_OFFSET - 12)
-#define CUDBG_WARPSIZE_OFFSET (CUDBG_CLUSTERDIM_OFFSET - 4)
-#define CUDBG_BUILTINS_MAX (CUDBG_WARPSIZE_OFFSET)
+/* Mirror of CUDA_BUILTIN_COUNT to size the builtin symbol array below
+   without pulling in cuda-builtins.h.  Mismatch is caught at compile
+   time.  */
+#define CUDA_GDBARCH_NUM_BUILTINS 7
 
 /* CUDA architecture specific information.  */
 struct cuda_gdbarch_tdep : gdbarch_tdep_base
 {
+  /* CUDA built-in variable symbol slots (threadIdx, blockIdx, ...).  */
+  struct symbol *builtin_symbols[CUDA_GDBARCH_NUM_BUILTINS] = {};
+
   /* Pointer size: 32-bits on i686, 64-bits on x86_64. So that we do not need
      to have 2 versions of the cuda-tdep file */
   static constexpr int ptr_size = TARGET_CHAR_BIT * sizeof (CORE_ADDR);
@@ -319,8 +324,6 @@ extern bool cuda_initialized;
 
 void switch_to_cuda_thread (const cuda_coords &coords);
 int cuda_thread_select (char *, int);
-void cuda_init_cudart_symbols (void);
-void cuda_cleanup_cudart_symbols (void);
 
 int cuda_startup (void);
 void cuda_kill (void);
@@ -329,7 +332,7 @@ void cuda_final_cleanup (void *unused);
 bool cuda_initialize_target (void);
 void cuda_initialize (void);
 bool cuda_inferior_in_debug_mode (void);
-void cuda_set_driver_log_capability (bool enable);
+void cuda_set_log_capability (bool enable);
 void cuda_set_kernel_launch_backtrace_capability (bool enable);
 void cuda_load_device_info (char *, struct partial_symtab *);
 void cuda_signals_initialize (void);
@@ -346,6 +349,23 @@ bool cuda_get_last_driver_api_error_source_name (std::string &source);
 bool cuda_get_last_driver_api_error_name (std::string &name);
 bool cuda_get_last_driver_api_error_string (std::string &string);
 uint64_t cuda_get_last_driver_internal_error_code (void);
+
+/* Owning host snapshot of the CUDA log record that triggered a stop.
+   Outlives the volatile CUDBGCudaLogMessage (recycled on the next
+   consume_cuda_logs); owns the text and the host-resolved 1-based rule_id,
+   both read later in cuda_emit_log_stop_reason.  */
+struct cuda_log_stop_metadata
+{
+  uint32_t rule_id;
+  CUDBGCudaLogLevel log_level;
+  uint64_t os_thread_id;
+  uint64_t timestamp_ns;
+  std::string message;
+};
+
+void cuda_set_log_stop_metadata (const cuda_log_stop_metadata &metadata);
+std::optional<cuda_log_stop_metadata> cuda_get_log_stop_metadata (void);
+void cuda_clear_log_stop_metadata (void);
 
 /* Debugging */
 typedef enum
@@ -416,7 +436,7 @@ int cuda_abi_sp_regnum (struct gdbarch *);
 int cuda_special_regnum (struct gdbarch *);
 int cuda_pc_regnum (struct gdbarch *);
 CORE_ADDR cuda_get_symbol_address (const char *name);
-void cuda_decode_line_table (struct objfile *objfile);
+bool cuda_decode_line_table (struct objfile *objfile);
 
 const char *cuda_address_class_to_name (ptxStorageKind address_class);
 
@@ -477,9 +497,11 @@ int cuda_breakpoint_address_match (struct gdbarch *gdbarch,
 void cuda_adjust_host_pc (ptid_t r);
 void cuda_adjust_device_code_address (CORE_ADDR original_addr,
 				      CORE_ADDR *adjusted_addr);
-bool cuda_find_next_control_flow_instruction (
-    uint64_t pc, uint64_t range_start_pc, uint64_t range_end_pc,
-    bool skip_subroutines, uint64_t &end_pc, uint32_t &inst_size);
+bool cuda_find_next_control_flow_instruction (uint64_t pc,
+					      uint64_t range_start_pc,
+					      uint64_t range_end_pc,
+					      bool skip_subroutines,
+					      uint64_t &end_pc);
 bool cuda_check_addr_for_device_stub (CORE_ADDR pc);
 
 bool cuda_platform_supports_tid (void);

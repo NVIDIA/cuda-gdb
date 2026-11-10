@@ -451,6 +451,20 @@ struct cuda_attach_initiated_breakpoint : public internal_breakpoint
   void check_status (struct bpstat *bs) override;
   enum print_stop_action print_it (const bpstat *bs) const override;
 };
+/* CUDA - matched sync log rule stop.  Singleton, never inserted; hit on
+   pending log metadata, not a target trap.  */
+struct cuda_log_breakpoint : public internal_breakpoint
+{
+  using internal_breakpoint::internal_breakpoint;
+
+  void re_set (program_space *filter_pspace) override;
+  void check_status (struct bpstat *bs) override;
+  int breakpoint_hit (const struct bp_location *bl,
+		      const address_space *aspace,
+		      CORE_ADDR bp_addr,
+		      const target_waitstatus &ws) override;
+  enum print_stop_action print_it (const bpstat *bs) const override;
+};
 #endif
 
 /* Momentary breakpoints.  These typically have a lifetime of some run
@@ -4405,7 +4419,8 @@ update_breakpoints_after_exec (void)
       /* Cleanup CUDA internal breakpoints */
       if (b.type == bp_cuda_api_error || b.type == bp_cuda_internal_error ||
 	  b.type == bp_cuda_attach_initiated || b.type == bp_cuda_uvm ||
-	  b.type == bp_cuda_cdp || b.type == bp_cuda_graph)
+	  b.type == bp_cuda_cdp || b.type == bp_cuda_graph ||
+	  b.type == bp_cuda_log)
 	{
 	  delete_breakpoint (&b);
 	  continue;
@@ -4735,6 +4750,7 @@ breakpoint_init_inferior (inferior *inf, inf_context context)
 	case bp_cuda_uvm:
 	case bp_cuda_cdp:
 	case bp_cuda_graph:
+	case bp_cuda_log:
 #endif
 	case bp_shlib_event:
 
@@ -6721,6 +6737,10 @@ bpstat_what (bpstat *bs_head)
 	  delete_cuda_cdp_breakpoint ();
 	  delete_cuda_graph_breakpoint ();
 	  break;
+	/* CUDA - log rule stop */
+	case bp_cuda_log:
+	  this_action = BPSTAT_WHAT_STOP_NOISY;
+	  break;
 #endif
 	case bp_watchpoint:
 	case bp_hardware_watchpoint:
@@ -7125,6 +7145,8 @@ bptype_string (enum bptype type)
     {bp_cuda_cdp, "cuda cdp detection"},
     /* CUDA - graph detection */
     {bp_cuda_graph, "cuda graph detection"},
+    /* CUDA - log rule stop */
+    {bp_cuda_log, "cuda log"},
 #endif
     {bp_overlay_event, "overlay events"},
     {bp_longjmp_master, "longjmp master"},
@@ -8230,7 +8252,8 @@ adjust_breakpoint_address (struct gdbarch *gdbarch,
 	  && bptype != bp_cuda_autostep && bptype != bp_cuda_api_error
 	  && bptype != bp_cuda_internal_error
 	  && bptype != bp_cuda_attach_initiated && bptype != bp_cuda_cdp
-	  && bptype != bp_cuda_uvm && bptype != bp_cuda_graph)
+	  && bptype != bp_cuda_uvm && bptype != bp_cuda_graph
+	  && bptype != bp_cuda_log)
 #else
       if (adjusted_bpaddr != bpaddr)
 #endif
@@ -8305,6 +8328,9 @@ bp_location_from_bp_type (bptype type)
       return bp_loc_tracepoint;
 
     case bp_catchpoint:
+#ifdef NVIDIA_CUDA_GDB
+    case bp_cuda_log:
+#endif
       return bp_loc_other;
 
     default:
@@ -9601,7 +9627,14 @@ code_breakpoint::add_location (const symtab_and_line &sal)
 
 #ifdef NVIDIA_CUDA_GDB
   /* CUDA - breakpoints */
-  if ((new_loc->symtab && new_loc->symtab->compunit () && new_loc->symtab->compunit ()->objfile () && new_loc->symtab->compunit ()->objfile ()->cuda_objfile))
+  objfile *location_objfile = nullptr;
+  if (new_loc->section != nullptr && new_loc->section->objfile != nullptr)
+    location_objfile = new_loc->section->objfile;
+  else if (new_loc->symtab != nullptr
+	   && new_loc->symtab->compunit () != nullptr)
+    location_objfile = new_loc->symtab->compunit ()->objfile ();
+
+  if (location_objfile != nullptr && location_objfile->cuda_objfile)
     {
       /* LFL - ensure that the address is relocated. We want to disable
        * unrelocated locations. */
@@ -13605,8 +13638,8 @@ cuda_api_error_breakpoint::check_status (bpstat *bs)
 enum print_stop_action
 cuda_api_error_breakpoint::print_it (const bpstat *bs) const
 {
-  /* Fetch and print CUDA driver logs from the backend */
-  cuda_consume_and_print_driver_logs ();
+  /* Fetch and print CUDA logs from the backend */
+  cuda_consume_and_print_logs ();
 
   struct ui_out *uiout = current_uiout;
   uint64_t res = cuda_get_last_driver_api_error_code ();
@@ -13672,8 +13705,8 @@ cuda_internal_error_breakpoint::check_status (bpstat *bs)
 enum print_stop_action
 cuda_internal_error_breakpoint::print_it (const bpstat *bs) const
 {
-  /* Fetch and print CUDA driver logs from the backend */
-  cuda_consume_and_print_driver_logs ();
+  /* Fetch and print CUDA logs from the backend */
+  cuda_consume_and_print_logs ();
 
   uint64_t res = cuda_get_last_driver_internal_error_code ();
   gdb_printf (_ ("\n"));
@@ -13695,6 +13728,141 @@ enum print_stop_action
 cuda_attach_initiated_breakpoint::print_it (const bpstat *bs) const
 {
   return PRINT_SRC_AND_LOC;
+}
+
+void
+cuda_log_breakpoint::re_set (program_space *filter_pspace)
+{
+  /* Singleton; location refreshed per stop by cuda_log_breakpoint_insert.  */
+}
+
+int
+cuda_log_breakpoint::breakpoint_hit (const struct bp_location *bl,
+				     const address_space *aspace,
+				     CORE_ADDR bp_addr,
+				     const target_waitstatus &ws)
+{
+  /* No target trap: gate on pending metadata.  */
+  return cuda_get_log_stop_metadata ().has_value ();
+}
+
+void
+cuda_log_breakpoint::check_status (bpstat *bs)
+{
+  bs->stop = true;
+  bs->print = true;
+}
+
+/* Find the frame that called into the contiguous libcuda.so stack segment.
+   If the expected segment is absent or unwinding stops early, use frame #0. */
+static frame_info_ptr
+find_cuda_log_caller_frame (void)
+{
+  frame_info_ptr fallback = get_selected_frame (nullptr);
+  bool seen_libcuda = false;
+
+  try
+    {
+      fallback = get_current_frame ();
+      for (frame_info_ptr frame = fallback; frame != nullptr;
+	   frame = get_prev_frame (frame))
+	{
+	  CORE_ADDR pc;
+	  bool in_libcuda = false;
+
+	  if (get_frame_address_in_block_if_available (frame, &pc))
+	    {
+	      const char *soname = solib_name_from_address (
+		  get_frame_program_space (frame), pc);
+	      in_libcuda = soname != nullptr && cuda_is_libcuda (soname);
+	    }
+
+	  if (!seen_libcuda)
+	    {
+	      if (in_libcuda)
+		seen_libcuda = true;
+	      continue;
+	    }
+
+	  if (!in_libcuda)
+	    return frame;
+	}
+    }
+  catch (const gdb_exception_error &e)
+    {
+      cuda_trace_breakpoint ("failed to find CUDA log caller frame: %s",
+			     e.what ());
+    }
+
+  return fallback;
+}
+
+enum print_stop_action
+cuda_log_breakpoint::print_it (const bpstat *bs) const
+{
+  if (current_uiout->is_mi_like_p ())
+    cuda_emit_log_stop_reason (current_uiout);
+  else
+    {
+      const auto metadata = cuda_get_log_stop_metadata ();
+
+      if (metadata.has_value ())
+	current_uiout->message (_ ("Stopped on CUDA log rule id %u:\n"),
+				metadata->rule_id);
+      else
+	current_uiout->message (_ ("Stopped on CUDA log rule:\n"));
+    }
+
+  const frame_info_ptr frame = find_cuda_log_caller_frame ();
+  select_frame (frame);
+  print_stack_frame (frame, 0, LOCATION, 1);
+  return PRINT_NOTHING;
+}
+
+static cuda_log_breakpoint *
+find_cuda_log_breakpoint (void)
+{
+  for (breakpoint &b : all_breakpoints ())
+    if (b.type == bp_cuda_log)
+      return gdb::checked_static_cast<cuda_log_breakpoint *> (&b);
+  return nullptr;
+}
+
+void
+cuda_log_breakpoint_insert (struct gdbarch *gdbarch, CORE_ADDR pc)
+{
+  program_space *pspace = current_inferior ()->pspace;
+  cuda_log_breakpoint *b = find_cuda_log_breakpoint ();
+  if (b == nullptr)
+    {
+      std::unique_ptr<cuda_log_breakpoint> nb (
+	  new cuda_log_breakpoint (gdbarch, bp_cuda_log, pc));
+      nb->number = internal_breakpoint_number--;
+      add_to_breakpoint_chain (std::move (nb));
+      /* bp_cuda_log is internal bp_loc_other; keep bp_locations ordered
+	 without inserting anything into the target.  */
+      update_global_location_list (UGLL_DONT_INSERT);
+      return;
+    }
+
+  bp_location &bl = b->first_loc ();
+  b->pspace = pspace;
+  bl.gdbarch = gdbarch;
+  bl.pspace = pspace;
+  bl.address = pc;
+  bl.requested_address = pc;
+  bl.section = find_pc_overlay (pc);
+  /* bp_cuda_log is internal bp_loc_other; keep bp_locations ordered
+     without inserting anything into the target.  */
+  update_global_location_list (UGLL_DONT_INSERT);
+}
+
+void
+cuda_log_breakpoint_remove (void)
+{
+  for (breakpoint &b : all_breakpoints_safe ())
+    if (b.type == bp_cuda_log)
+      delete_breakpoint (&b);
 }
 #endif
 

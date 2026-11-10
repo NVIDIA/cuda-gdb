@@ -23,9 +23,9 @@
 #define GDBSERVER
 #endif
 
-#include "server.h"
 #include "cuda/cuda-utils.h"
 #include "cudadebugger.h"
+#include "gdbsupport/common-defs.h"
 
 #include <cstdarg>
 #include <deque>
@@ -54,9 +54,9 @@ extern bool cuda_debug_general;
 extern bool cuda_debug_libcudbg;
 extern bool cuda_debug_notifications;
 extern bool cuda_notify_youngest;
-extern bool cuda_driver_logs;
+extern bool cuda_logs;
 extern bool cuda_printf_flushing;
-
+extern bool cuda_lazy_function_finalization;
 extern ptid_t cuda_last_ptid;
 extern struct target_waitstatus cuda_last_ws;
 
@@ -86,13 +86,13 @@ extern void ATTRIBUTE_NORETURN captured_main (int argc, char *argv[]);
 void cuda_gdb_setup (void);
 void cuda_cleanup (void);
 bool cuda_inferior_in_debug_mode (void);
-bool cuda_initialize_target ();
+bool cuda_initialize_target (void);
 
 /* CUDA cleanup state tracking for deferred connection teardown */
 extern bool cuda_cleanup_completed;
 extern bool cuda_exit_requested;
 
-void cuda_set_driver_logging (bool enable);
+void cuda_set_logs (bool enable);
 
 CORE_ADDR cuda_get_symbol_address_from_cache (const char *name);
 
@@ -116,9 +116,11 @@ bool cuda_options_debug_notifications (void);
 
 bool cuda_options_notify_youngest (void);
 
-bool cuda_options_driver_logs (void);
+bool cuda_options_logs (void);
 
 bool cuda_options_printf_flushing (void);
+
+bool cuda_options_lazy_function_finalization_enabled (void);
 
 bool cuda_check_pending_sigint (ptid_t ptid);
 

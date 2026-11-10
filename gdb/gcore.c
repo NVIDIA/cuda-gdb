@@ -157,12 +157,13 @@ static std::string help_msg;
 
 struct gcore_params
 {
-  std::string cuda_core_file;
+  std::string gpu_core_file;
   std::string cpu_core_file;
-  std::string cuda_flags;
+  std::string gpu_flags;
   bool lightweight;
   bool no_cpu;
   bool no_gpu;
+  bool compress;
 };
 
 using namespace gdb::option;
@@ -181,22 +182,22 @@ static const option_def gcore_opt_defs[] = {
   },
 
   flag_option_def<gcore_params> {
-    "-cuda-lightweight",
+    "-gpu-lightweight",
     [] (gcore_params *params) { return &params->lightweight; },
     "Generate a lightweight coredump. This is equivalent to:\n" \
-      "--cuda-flags skip_nonrelocated_elf_images,skip_global_memory,skip_shared_memory,skip_local_memory,skip_constbank_memory"
+      "--gpu-flags skip_nonrelocated_elf_images,skip_global_memory,skip_shared_memory,skip_local_memory,skip_constbank_memory"
   },
 
   string_option_def<gcore_params> {
-    "-cuda-core-file",
-    [] (gcore_params *params) { return &params->cuda_core_file; },
+    "-gpu-core-file",
+    [] (gcore_params *params) { return &params->gpu_core_file; },
     nullptr,
     "Set the CUDA coredump filename."
   },
 
   string_option_def<gcore_params> {
-    "-cuda-flags",
-    [] (gcore_params *params) { return &params->cuda_flags; },
+    "-gpu-flags",
+    [] (gcore_params *params) { return &params->gpu_flags; },
     nullptr,
     "Set a comma-separated list of coredump generation flags to apply.\n" \
       "Can be any of the following:\n"                                    \
@@ -205,7 +206,13 @@ static const option_def gcore_opt_defs[] = {
       "\tskip_shared_memory\n"                                            \
       "\tskip_local_memory\n"                                             \
       "\tskip_constbank_memory"
-  }
+  },
+
+  flag_option_def<gcore_params> {
+    "-gpu-compress",
+    [] (gcore_params *params) { return &params->compress; },
+    "Compress GPU coredump into GZIP format."
+  },
 };
 
 static inline option_def_group
@@ -278,13 +285,17 @@ gcore_command (const char *args, int from_tty)
   {
     CUDBGCoredumpGenerationFlags flags =
       params.lightweight ? CUDBG_COREDUMP_LIGHTWEIGHT_FLAGS
-                         : parse_cuda_core_flags (params.cuda_flags);
+                         : parse_cuda_core_flags (params.gpu_flags);
+
+    if (params.compress)
+      flags = static_cast<CUDBGCoredumpGenerationFlags>(flags | CUDBG_COREDUMP_GZIP_COMPRESS);
 
     gdb_printf ("Generating GPU core dump ...\n");
+
     try
     {
-      cuda_debugapi::generate_coredump (params.cuda_core_file.empty ()
-                                          ? NULL : params.cuda_core_file.c_str (),
+      cuda_debugapi::generate_coredump (params.gpu_core_file.empty ()
+                                          ? NULL : params.gpu_core_file.c_str (),
                                         flags);
     }
     catch (gdb_exception_error& e)
@@ -1053,7 +1064,7 @@ The GPU core dump is created in the current working directory, it is named 'core
 \n\
 Default CPU core dump filename is 'core.PID'.\n\
 \n\
-Usage: generate-core-file [--cuda-flags x,y,z] [--cuda-lightweight] [--no-cpu] [--no-gpu] [--cuda-core-file gpu_filename] [cpu_filename]\n\
+Usage: generate-core-file [--gpu-flags x,y,z] [--gpu-lightweight] [--no-cpu] [--no-gpu] [--gpu-core-file gpu_filename] [--gpu-compress] [cpu_filename]\n\
 \n\
 Options:\n\
 %OPTIONS%"), def_grp);

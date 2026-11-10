@@ -201,6 +201,8 @@ enum bptype
     bp_cuda_cdp,
     /* CUDA - Graph */
     bp_cuda_graph,
+    /* CUDA - matched sync log rule stop; synthetic, no target trap.  */
+    bp_cuda_log,
 #endif
     /* On the same principal, an overlay manager can arrange to call a
        magic location in the inferior whenever there is an interesting
@@ -2121,6 +2123,10 @@ extern void maybe_print_thread_hit_breakpoint (struct ui_out *uiout);
 extern void print_breakpoint (breakpoint *bp);
 
 #ifdef NVIDIA_CUDA_GDB
+/* CUDA - create/refresh the singleton bp_cuda_log at host PC.  */
+void cuda_log_breakpoint_insert (struct gdbarch *gdbarch, CORE_ADDR pc);
+/* CUDA - delete the singleton bp_cuda_log if present.  */
+void cuda_log_breakpoint_remove (void);
 /* CUDA - autostep */
 struct breakpoint *cuda_find_autostep_by_addr (CORE_ADDR address);
 /* CUDA - auto breakpoints */

@@ -36,6 +36,12 @@
 #include "tui/tui-status.h"
 #include "tui/tui-winsource.h"
 
+#ifdef NVIDIA_BUGFIX
+#include "tui/tui-io.h"
+#include "tui/tui-win.h"
+#include "tui/tui-wingeneral.h"
+#endif
+
 static void
 tui_new_objfile_hook (struct objfile* objfile)
 {
@@ -162,7 +168,19 @@ tui_inferior_exit (struct inferior *inf)
 static void
 tui_before_prompt (const char *current_gdb_prompt)
 {
+#ifdef NVIDIA_BUGFIX
+  tui_prepare_cmdwin_for_prompt ();
+#endif
   tui_refresh_frame_and_register_information ();
+#ifdef NVIDIA_BUGFIX
+  /* Full redraw of source/status/asm without touching the command window,
+     which holds scrolled stop and inferior output.  Needed because we
+     cannot clearok(curscr) to flush stale screen characters.  */
+  {
+    tui_batch_rendering batch;
+    tui_refresh_other_wins ();
+  }
+#endif
   from_stack = false;
   from_source_symtab = false;
 }

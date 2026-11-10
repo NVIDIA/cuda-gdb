@@ -38,6 +38,7 @@
 #include "cuda-options.h"
 #include "cuda-packet-manager.h"
 #include "cuda-state.h"
+#include "cuda-tdep.h"
 #include "cuda-utils.h"
 #include "libcudbgipc.h"
 #include "remote-cuda.h"
@@ -163,8 +164,6 @@ cuda_remote_initialize_target ()
       cuda_state::set_device_spec (dev_id, num_sms, num_warps, num_lanes,
 				   num_registers, dev_type, sm_type);
     }
-  /* Ensure the builtins objfile is created */
-  cuda_init_cudart_symbols ();
   cuda_remote_set_option ();
   cuda_update_report_driver_api_error_flags ();
 

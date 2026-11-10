@@ -38,6 +38,11 @@
 #include "gdbarch.h"
 #include "c-exp.h"
 
+#ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-builtins.h"
+#include "cuda/cuda-tdep.h"
+#endif
+
 /* Given a C string type, STR_TYPE, return the corresponding target
    character set name.  */
 
@@ -776,6 +781,10 @@ c_language_arch_info (struct gdbarch *gdbarch,
   add (builtin->builtin_nv_fp6_e2m3);
   add (builtin->builtin_nv_fp6_e3m2);
   add (builtin->builtin_nv_fp4_e2m1);
+
+  /* Add CUDA dim3 and uint3 for coordinates */
+  add (cuda_get_dim3_type (gdbarch));
+  add (cuda_get_uint3_type (gdbarch));
 #endif
 
   lai->set_string_char_type (builtin->builtin_char);
@@ -948,6 +957,10 @@ public:
     add (builtin->builtin_nv_fp6_e2m3);
     add (builtin->builtin_nv_fp6_e3m2);
     add (builtin->builtin_nv_fp4_e2m1);
+
+    /* Add CUDA dim3 and uint3 for coordinates */
+    add (cuda_get_dim3_type (gdbarch));
+    add (cuda_get_uint3_type (gdbarch));
 #endif
 
     lai->set_string_char_type (builtin->builtin_char);

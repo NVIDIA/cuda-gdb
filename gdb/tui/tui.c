@@ -42,6 +42,10 @@
 #include "ui.h"
 #include "observable.h"
 
+#ifdef NVIDIA_BUGFIX
+#include "utils.h"
+#endif
+
 #include <fcntl.h>
 
 #include "gdb_curses.h"
@@ -266,6 +270,28 @@ tui_rl_next_keymap (int notused1, int notused2)
   return 0;
 }
 
+#ifdef NVIDIA_BUGFIX
+/* Set ncurses and TUI dimensions from readline's view of the terminal.
+   tigetnum/newterm often leave ncurses at terminfo defaults (e.g. 80x24)
+   while the real terminal is larger; without resize_term, window refreshes
+   land at the wrong screen coordinates.  */
+static void
+tui_sync_ncurses_terminal_size (void)
+{
+  int term_cols, term_lines;
+
+  rl_get_screen_size (&term_lines, &term_cols);
+  term_cols += readline_hidden_cols;
+  if (term_cols <= 0 || term_lines <= 0)
+    return;
+#ifdef HAVE_RESIZE_TERM
+  resize_term (term_lines, term_cols);
+#endif
+  tui_set_term_width_to (term_cols);
+  tui_set_term_height_to (term_lines);
+}
+#endif
+
 /* Readline hook to redisplay ourself the gdb prompt.
    In the SingleKey mode, the prompt is not printed so that
    the command window is cleaner.  It will be displayed if
@@ -392,7 +418,9 @@ tui_enable (void)
      and the first time the curses mode is entered.  */
   if (tui_finish_init)
     {
+#ifndef NVIDIA_BUGFIX
       WINDOW *w;
+#endif
       SCREEN *s;
 #ifndef __MINGW32__
        const char *cap;
@@ -422,7 +450,9 @@ tui_enable (void)
 	  error (_("Cannot enable the TUI: error opening terminal [TERM=%s]"),
 		 gdb_getenv_term ());
 	}
+#ifndef NVIDIA_BUGFIX
       w = stdscr;
+#endif
       if (has_colors ())
 	{
 #ifdef HAVE_USE_DEFAULT_COLORS
@@ -456,16 +486,25 @@ tui_enable (void)
       cbreak ();
       noecho ();
       /* timeout (1); */
+#ifndef NVIDIA_BUGFIX
       nodelay(w, FALSE);
+#endif
       nl();
+#ifdef NVIDIA_BUGFIX
+      tui_sync_ncurses_terminal_size ();
+#else
       keypad (w, TRUE);
       tui_set_term_height_to (LINES);
       tui_set_term_width_to (COLS);
+#endif
       def_prog_mode ();
 
       tui_show_frame_info (deprecated_safe_get_selected_frame ());
       tui_set_initial_layout ();
       tui_set_win_focus_to (tui_src_win ());
+#ifdef NVIDIA_BUGFIX
+      nodelay (tui_cmd_win ()->handle.get (), FALSE);
+#endif
       keypad (tui_cmd_win ()->handle.get (), TRUE);
       wrefresh (tui_cmd_win ()->handle.get ());
       tui_finish_init = false;
@@ -475,7 +514,19 @@ tui_enable (void)
       /* Save the current gdb setting of the terminal.
 	 Curses will restore this state when endwin() is called.  */
       def_shell_mode ();
+#ifdef NVIDIA_BUGFIX
+      {
+	int old_w = tui_term_width ();
+	int old_h = tui_term_height ();
+
+	tui_sync_ncurses_terminal_size ();
+	if (old_w != tui_term_width () || old_h != tui_term_height ())
+	  tui_set_win_resized_to (true);
+      }
+      tui_refresh_all_win ();
+#else
       clearok (stdscr, TRUE);
+#endif
 
       tui_active = true;
     }

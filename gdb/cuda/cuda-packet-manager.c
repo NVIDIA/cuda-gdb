@@ -21,12 +21,13 @@
 #include "cuda-options.h"
 #include "cuda-packet-format.h"
 #include "cuda-packet-manager.h"
+#include "gdbsupport/rsp-low.h"
 #include "inferior.h"
 #include "remote.h"
 #include <cstdio>
 #include <optional>
-#include <string.h>
 #include <stdbool.h>
+#include <string.h>
 #include <string>
 #include <string_view>
 
@@ -36,15 +37,8 @@
 #include "cuda/cuda-protocol-hash.h"
 #include "remote-nto.h"
 #include "target/waitstatus.h"
-/* Maximum supported data size in QNX protocol is DS_DATA_MAX_SIZE (1024).
-   cuda-gdbserver can be modified to handle 16384 instead, but in order to
-   use bigger packets for CUDA, we would need first ensure that they can be
-   packed/unpacked by the pdebug putpkt/getpkt functions.
-
-   Until then, use pdebug max allowed size.
-   Each DS_DATA_MAX_SIZE can be escaped (*2), 2 frame chars (+2) plus a
-   checksum that can be escaped (+2). */
-#define PBUFSIZE (DS_DATA_MAX_SIZE * 2 + 4)
+/* The encoder reserves one byte for a string terminator. */
+#define PBUFSIZE (QNX_CUDA_PACKET_DATA_SIZE + 1)
 #else
 #define PBUFSIZE 16384
 #endif
@@ -286,6 +280,9 @@ cuda_remote_initialize (CUDBGResult *get_debugger_api_res,
   auto &encoder = remote_callbacks.encoder (INITIALIZE_TARGET);
   const bool launch_blocking = cuda_options_launch_blocking ();
   encoder.put (launch_blocking);
+  const bool lazy_function_finalization
+      = cuda_options_lazy_function_finalization_enabled ();
+  encoder.put (lazy_function_finalization);
 
   remote_callbacks.send_request ();
 
@@ -362,12 +359,16 @@ cuda_remote_set_option ()
   encoder.put (notifications_trace);
   const bool notify_youngest = cuda_options_notify_youngest ();
   encoder.put (notify_youngest);
-  const bool driver_logs = cuda_options_driver_logs_enabled ();
-  encoder.put (driver_logs);
+  const bool logs = cuda_options_logs_enabled ();
+  encoder.put (logs);
   const bool printf_flushing = cuda_options_printf_flushing ();
   encoder.put (printf_flushing);
 
   remote_callbacks.send_request ();
+  const std::string_view response = remote_callbacks.get_string ();
+  if (response != "OK")
+    warning (_("Failed to apply CUDA remote options: %.*s"),
+	     static_cast<int> (response.size ()), response.data ());
 }
 
 void
@@ -382,7 +383,8 @@ cuda_remote_query_trace_message ()
   const char *str = remote_callbacks.get_string ();
   while (std::string_view (str) != "NO_TRACE_MESSAGE")
     {
-      fprintf (stderr, "%s\n", str);
+      const std::string trace_message = hex2str (str);
+      fprintf (stderr, "%s\n", trace_message.c_str ());
 
       cuda_remote_send_packet (QUERY_TRACE_MESSAGE);
       str = remote_callbacks.get_string ();

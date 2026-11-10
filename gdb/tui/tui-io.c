@@ -45,6 +45,9 @@
 #include <map>
 #include "pager.h"
 #include "gdbsupport/gdb-checked-static-cast.h"
+#ifdef NVIDIA_BUGFIX
+#include "utils.h"
+#endif
 
 /* This redefines CTRL if it is not already defined, so it must come
    after terminal state releated include files like <term.h> and
@@ -161,10 +164,34 @@ do_tui_putc (WINDOW *w, char c)
 /* Update the cached value of the command window's start line based on
    the window's current Y coordinate.  */
 
+#ifdef NVIDIA_BUGFIX
+/* Last line written by program/GDB output in the command window.
+   Used to avoid redisplaying the prompt over scrolled output.  */
+static int cmd_win_output_line = -1;
+
+/* True after tui_redisplay_readline draws the prompt.  GDB output that
+   arrives afterward must start on a new line.  */
+static bool tui_cmd_win_at_prompt = false;
+
+#ifdef TUI_USE_PIPE_FOR_READLINE
+static void
+tui_drain_readline_pipe (void)
+{
+  char buf[256];
+
+  while (read (tui_readline_pipe[0], buf, sizeof (buf)) > 0)
+    ;
+}
+#endif
+#endif
+
 static void
 update_cmdwin_start_line ()
 {
   tui_cmd_win ()->start_line = getcury (tui_cmd_win ()->handle.get ());
+#ifdef NVIDIA_BUGFIX
+  cmd_win_output_line = tui_cmd_win ()->start_line;
+#endif
 }
 
 /* Print a character in the curses command window.  The output is
@@ -215,6 +242,22 @@ static const int curses_colors[] = {
   COLOR_WHITE
 };
 
+#ifdef NVIDIA_BUGFIX
+static int
+tui_ncurses_max_colors (void)
+{
+  int n = tigetnum ((char *) "colors");
+  return n >= 0 ? n : 8;
+}
+
+static int
+tui_ncurses_max_color_pairs (void)
+{
+  int n = tigetnum ((char *) "pairs");
+  return n >= 0 ? n : 64;
+}
+#endif
+
 /* Given a color, find its index.  */
 
 static bool
@@ -231,7 +274,11 @@ get_color (const ui_file_style::color &color, int *result)
 	{
 	  /* The first 8 colors are standard.  */
 	  int next = color_map.size () + 8;
+#ifdef NVIDIA_BUGFIX
+	  if (next >= tui_ncurses_max_colors ())
+#else
 	  if (next >= COLORS)
+#endif
 	    return false;
 	  uint8_t rgb[3];
 	  color.get_rgb (rgb);
@@ -280,7 +327,11 @@ get_color_pair (int fg, int bg)
       int next = color_pair_map.size () + 1;
       /* Curses has a limited number of available color pairs.  Fall
 	 back to the default if we've used too many.  */
+#ifdef NVIDIA_BUGFIX
+      if (next >= tui_ncurses_max_color_pairs ())
+#else
       if (next >= COLOR_PAIRS)
+#endif
 	return 0;
       init_pair (next, fg, bg);
       color_pair_map[c] = next;
@@ -459,6 +510,17 @@ tui_puts (const char *string, WINDOW *w)
   if (w == nullptr)
     w = tui_cmd_win ()->handle.get ();
 
+#ifdef NVIDIA_BUGFIX
+  if (tui_cmd_win () != nullptr && w == tui_cmd_win ()->handle.get ()
+      && tui_cmd_win_at_prompt && string[0] != '\0' && string[0] != '\n'
+      && getcurx (w) > 0)
+    {
+      do_tui_putc (w, '\n');
+      update_cmdwin_start_line ();
+      tui_cmd_win_at_prompt = false;
+    }
+#endif
+
   while (true)
     {
       const char *next = strpbrk (string, "\n\1\2\033\t");
@@ -583,8 +645,21 @@ tui_redisplay_readline (void)
   int c_pos = -1;
   int c_line = -1;
   WINDOW *w = tui_cmd_win ()->handle.get ();
+#ifdef NVIDIA_BUGFIX
+  /* start_line tracks the top of the prompt block, but output may have
+     advanced below that.  Drawing the prompt at a stale start_line and
+     calling wclrtobot would erase scrolled program output.  */
+  if (cmd_win_output_line >= 0
+      && cmd_win_output_line > tui_cmd_win ()->start_line)
+    tui_cmd_win ()->start_line = cmd_win_output_line;
+  cmd_win_output_line = -1;
+#endif
   int start_line = tui_cmd_win ()->start_line;
   wmove (w, start_line, 0);
+#ifdef NVIDIA_BUGFIX
+  /* Clear leftover stop/inferior output on this line before redraw.  */
+  wclrtoeol (w);
+#endif
   int height = 1;
   if (prompt != nullptr)
     tui_puts_internal (w, prompt, &height);
@@ -635,8 +710,38 @@ tui_redisplay_readline (void)
     wmove (w, c_line, c_pos);
   tui_cmd_win ()->start_line -= height - 1;
 
+#ifdef NVIDIA_BUGFIX
+  tui_cmd_win_at_prompt = true;
+#ifdef TUI_USE_PIPE_FOR_READLINE
+  /* tui_redisplay_readline owns prompt display; discard duplicate
+     readline rl_outstream data that would append to the prompt line.  */
+  tui_drain_readline_pipe ();
+#endif
+#endif
+
   wrefresh (w);
 }
+
+#ifdef NVIDIA_BUGFIX
+void
+tui_prepare_cmdwin_for_prompt (void)
+{
+  WINDOW *w = tui_cmd_win ()->handle.get ();
+
+  tui_cmd_win_at_prompt = false;
+  gdb_flush (gdb_stdout);
+  gdb_flush (gdb_stderr);
+
+  update_cmdwin_start_line ();
+
+  /* Output may have ended mid-line; start the prompt on the next line.  */
+  if (getcurx (w) != 0)
+    {
+      tui_putc ('\n');
+      update_cmdwin_start_line ();
+    }
+}
+#endif
 
 /* Readline callback to prepare the terminal.  It is called once each
    time we enter readline.  Terminal is already setup in curses
@@ -673,6 +778,15 @@ tui_readline_output (int error, gdb_client_data data)
   if (size > 0 && tui_active)
     {
       buf[size] = 0;
+#ifdef NVIDIA_BUGFIX
+      /* tui_redisplay_readline owns the gdb prompt; readline may still
+	 write duplicate prompt bytes to rl_outstream.  */
+      if (tui_cmd_win_at_prompt)
+	{
+	  tui_drain_readline_pipe ();
+	  return;
+	}
+#endif
       tui_puts (buf);
     }
 }
@@ -1063,6 +1177,9 @@ tui_inject_newline_into_command_window ()
       py += px / tui_cmd_win ()->width;
       px %= tui_cmd_win ()->width;
       wmove (w, py, px);
+#ifdef NVIDIA_BUGFIX
+      tui_cmd_win_at_prompt = false;
+#endif
       tui_putc ('\n');
     }
 }

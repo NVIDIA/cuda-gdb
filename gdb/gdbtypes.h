@@ -105,6 +105,10 @@ enum type_instance_flag_value : unsigned
   TYPE_INSTANCE_FLAG_CUDA_REG = (1 << 16),
   TYPE_INSTANCE_FLAG_CUDA_MANAGED = (1 << 17),
   TYPE_INSTANCE_FLAG_CUDA_UREG = (1 << 18),
+  /* CUDA bound constant kind flag.
+     The associated 5-bit const-bank payload is encoded in instance_flags
+     bits [23:19] using non-enum masks/shifts below.  */
+  TYPE_INSTANCE_FLAG_CUDA_BOUND_CONST = (0x1 << 24),
 #endif
 };
 
@@ -181,6 +185,13 @@ DEF_ENUM_FLAGS_TYPE (enum type_instance_flag_value, type_instance_flags);
   ((((t)->instance_flags ()) & TYPE_INSTANCE_FLAG_DATA_SPACE) != 0)
 
 #ifdef NVIDIA_CUDA_GDB
+/* CUDA bound constant bank encoding in instance_flags.
+   This is intentionally outside enum type_instance_flag_value because only
+   the kind bit is a real flag; bits [23:19] are payload encoding.  */
+#define TYPE_INSTANCE_FLAG_CUDA_BOUND_CONST_BANK_SHIFT 19
+#define TYPE_INSTANCE_FLAG_CUDA_BOUND_CONST_BANK_MASK \
+  (0x1fu << TYPE_INSTANCE_FLAG_CUDA_BOUND_CONST_BANK_SHIFT)
+
 /* CUDA - Memory Segments */
 #define TYPE_INSTANCE_FLAG_CUDA_ALL  \
   (TYPE_INSTANCE_FLAG_CUDA_CODE    | \
@@ -192,11 +203,14 @@ DEF_ENUM_FLAGS_TYPE (enum type_instance_flag_value, type_instance_flags);
    TYPE_INSTANCE_FLAG_CUDA_LOCAL   | \
    TYPE_INSTANCE_FLAG_CUDA_MANAGED | \
    TYPE_INSTANCE_FLAG_CUDA_REG     | \
-   TYPE_INSTANCE_FLAG_CUDA_UREG)
+   TYPE_INSTANCE_FLAG_CUDA_UREG    | \
+   TYPE_INSTANCE_FLAG_CUDA_BOUND_CONST)
 #define TYPE_CUDA_ALL(t) \
-  (((t)->instance_flags ()) & TYPE_INSTANCE_FLAG_CUDA_ALL)
+  (((t)->instance_flags ()) & (TYPE_INSTANCE_FLAG_CUDA_ALL | (enum type_instance_flag_value) TYPE_INSTANCE_FLAG_CUDA_BOUND_CONST_BANK_MASK))
 #define TYPE_CUDA_CODE(t) \
   ((((t)->instance_flags ()) & TYPE_INSTANCE_FLAG_CUDA_CODE) != 0)	
+#define TYPE_CUDA_BOUND_CONST(t) \
+  ((((t)->instance_flags ()) & TYPE_INSTANCE_FLAG_CUDA_BOUND_CONST) != 0)
 #define TYPE_CUDA_CONST(t) \
   ((((t)->instance_flags ()) & TYPE_INSTANCE_FLAG_CUDA_CONST) != 0)
 #define TYPE_CUDA_GENERIC(t) \
@@ -229,7 +243,8 @@ DEF_ENUM_FLAGS_TYPE (enum type_instance_flag_value, type_instance_flags);
 #ifdef NVIDIA_CUDA_GDB
 #define TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL \
   (TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 | TYPE_INSTANCE_FLAG_ADDRESS_CLASS_2 \
-   | TYPE_INSTANCE_FLAG_CUDA_ALL)
+   | TYPE_INSTANCE_FLAG_CUDA_ALL \
+   | (enum type_instance_flag_value) TYPE_INSTANCE_FLAG_CUDA_BOUND_CONST_BANK_MASK)
 #else
 #define TYPE_INSTANCE_FLAG_ADDRESS_CLASS_ALL \
   (TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1 | TYPE_INSTANCE_FLAG_ADDRESS_CLASS_2)
@@ -1640,7 +1655,7 @@ struct type
      qualifiers can be cleared by the typedef.  See also
      check_typedef.  */
 #ifdef NVIDIA_CUDA_GDB
-  unsigned m_instance_flags : 20;
+  unsigned m_instance_flags : 25;
 #else
   unsigned m_instance_flags : 9;
 #endif

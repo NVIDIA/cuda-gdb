@@ -19,6 +19,7 @@
 #include "defs.h"
 
 #include "cuda-api.h"
+#include "cuda-builtins.h"
 #include "cuda-coord-set.h"
 #include "cuda-state.h"
 #include "cuda-tdep.h"
@@ -475,7 +476,7 @@ convert_to_gdb_value (struct value *arg)
 static struct value *
 convert_to_gdb_value (CuDim3 arg)
 {
-  static type *dim3_type = lookup_struct ("dim3", nullptr);
+  type *dim3_type = cuda_get_dim3_type (cuda_get_gdbarch ());
 
   return value_from_contents (dim3_type,
 			      reinterpret_cast<const gdb_byte *> (&arg));

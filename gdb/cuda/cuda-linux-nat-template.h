@@ -41,6 +41,7 @@
 #include "cuda-events.h"
 #include "cuda-exceptions.h"
 #include "cuda-kernel.h"
+#include "cuda-logs.h"
 #include "cuda-notifications.h"
 #include "cuda-options.h"
 #include "cuda-packet-manager.h"
@@ -669,6 +670,32 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
   /* Reset per-epoch suspend-drained flag.  */
   cuda_notification_clear_suspend_drained ();
 
+  /* Stop metadata describes only the event that produced it; clear it up
+     front so it can't leak into a later early-exit wait.  A SYNC log event in
+     this wait re-populates it.  */
+  cuda_clear_log_stop_metadata ();
+
+  /* Set when report_log_stop reports the stop; gates the tail block
+     that surfaces an unreported record as a log.  */
+  bool log_stop_reported = false;
+
+  auto report_log_stop = [&] (thread_info *stop_tp) {
+    gdb_assert (stop_tp != nullptr);
+    cuda_trace ("cuda_wait: stopped because of a CUDA log rule");
+    /* Refresh bp_cuda_log at the host PC; bpstat turns the pending metadata
+       into the stop.  Report sig 0, not TRAP, so ordinary breakpoints can't
+       address-match the host callback PC -- only bp_cuda_log explains it.  */
+    regcache *regcache = get_thread_regcache (stop_tp);
+    cuda_log_breakpoint_insert (regcache->arch (), regcache_read_pc (regcache));
+    ws->set_stopped (GDB_SIGNAL_0);
+    cuda_set_signo (GDB_SIGNAL_0);
+    stop_tp->need_cuda_context_switch = false;
+    stop_tp->need_cuda_updated_focus = false;
+    stop_tp->new_cuda_coords.invalidate ();
+    cuda_current_focus::invalidate ();
+    log_stop_reported = true;
+  };
+
   /*
    * Check if any thread is currently in a dynamic function call.
    * If so, the device is not resumed if the option is not set.
@@ -735,16 +762,27 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
 		  /* Consume any asynchronous events, if necessary.  We need
 		   * to do this explicitly here, since we're taking the quick
 		   * path out of this routine (and bypassing the normal check
-		   * for API events). */
-		  cuda_process_events (CUDA_EVENT_ASYNC);
+		   * for API events).  Defer logs so we don't accidentally drain
+		   * a sync log rule match. */
+		  {
+		    cuda_scoped_defer_async_log_drain defer_async_logs;
+		    cuda_process_events (CUDA_EVENT_ASYNC);
+		  }
+
+		  cuda_process_events (CUDA_EVENT_SYNC);
+		  cuda_drain_deferred_async_logs ();
+		  cuda_maybe_update_log_rules ();
 
 		  /* Update device state/kernels */
 		  cuda_state::update_kernels_terminated ();
 
-		  struct thread_info *tp = this->find_thread (r);
-		  gdb_assert (tp);
-		  tp->control.step_range_end = 1;
-		  tp->need_cuda_updated_focus = true;
+		  struct thread_info *sstep_tp = this->find_thread (r);
+		  gdb_assert (sstep_tp);
+		  sstep_tp->control.step_range_end = 1;
+		  sstep_tp->need_cuda_updated_focus = true;
+
+		  if (cuda_get_log_stop_metadata ().has_value ())
+		    report_log_stop (sstep_tp);
 
 		  return r;
 		}
@@ -855,11 +893,15 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
     return true;
   };
 
-  /* Check for asynchronous events.  These events do not require
-     acknowledgement to the debug API, and may arrive at any time
-     without an explicit notification. */
-  bool handled_events
-      = cuda_process_events (CUDA_EVENT_ASYNC, handle_suspended_event);
+  /* Async events first (historical order): no ack needed, may arrive without
+     a notification.  Defer only the async log drain so the SYNC pass below
+     captures the shared log queue first.  */
+  bool handled_events = false;
+  {
+    cuda_scoped_defer_async_log_drain defer_async_logs;
+    handled_events
+	|= cuda_process_events (CUDA_EVENT_ASYNC, handle_suspended_event);
+  }
 
   /* Analyze notifications.  Only check for new events if we've
      we've received a notification, or if we're single stepping
@@ -867,13 +909,15 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
      explicit notification). */
   cuda_notification_analyze (r, ws);
 
-  /* Handle all the CUDA events immediately.  In particular, for
-     GPU events that may happen without prior notification (GPU
-     grid launches, for example), API events will be packed
-     alongside of them, so we need to process the API event first. */
   if (cuda_notification_received ())
     handled_events
 	|= cuda_process_events (CUDA_EVENT_SYNC, handle_suspended_event);
+
+  /* Drain async logs deferred above; no-op if the SYNC pass emptied them.  */
+  cuda_drain_deferred_async_logs ();
+
+  /* Propagate log rules to the backend.  */
+  cuda_maybe_update_log_rules ();
 
   /* CUDA - managed memory */
   auto update_managed_memory = [&] () {
@@ -943,6 +987,8 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
       cuda_exception exp;
       if (exp.has_exception ())
 	handle_exception (exp);
+      else if (cuda_get_log_stop_metadata ().has_value ())
+	report_log_stop (tp);
       else
 	{
 	  cuda_trace ("cuda_wait: stopped because we are single-stepping");
@@ -956,111 +1002,112 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
       /* Update the info about the kernels */
       cuda_state::update_kernels_terminated ();
 
-      /* Handle exceptions. */
+      enum class breakpoint_stop
+      {
+	none,
+	reported,
+	spurious,
+      };
+
+      auto classify_breakpoint_stop = [&] () -> breakpoint_stop {
+	if (!broken_devices || !cuda_breakpoint_hit_p (tp->new_cuda_coords))
+	  return breakpoint_stop::none;
+
+	gdb_assert (tp->new_cuda_coords.valid ());
+
+	cuda_bol_action bol_action = check_break_on_launch_warps ();
+
+	CUDBGBreakpointHandle handle = CUDBG_BREAKPOINT_HANDLE_INVALID;
+	bool got_handle = cuda_state::warp_get_hit_breakpoint_handle (
+	    tp->new_cuda_coords.physical ().dev (),
+	    tp->new_cuda_coords.physical ().sm (),
+	    tp->new_cuda_coords.physical ().wp (), &handle);
+
+	/* A BoL hit (not a real breakpoint) resumes spuriously, unless a log
+	   rule also matched.  */
+	if (bol_action == cuda_bol_action::resume
+	    && (!got_handle
+		|| handle == CUDBG_BREAKPOINT_HANDLE_BREAK_ON_LAUNCH))
+	  {
+	    if (cuda_get_log_stop_metadata ().has_value ())
+	      {
+		cuda_trace ("cuda_wait: BoL auto breakpoints created, "
+			    "reporting CUDA log rule stop");
+		report_log_stop (tp);
+		return breakpoint_stop::reported;
+	      }
+	    cuda_trace ("cuda_wait: BoL auto breakpoints created, treating "
+			"as spurious to continue");
+	    return breakpoint_stop::spurious;
+	  }
+
+	if (got_handle)
+	  {
+	    switch (handle)
+	      {
+	      case CUDBG_BREAKPOINT_HANDLE_TRAP:
+		cuda_trace ("cuda_wait: stopped because of a hard-coded trap "
+			    "(handle=0x%llx)",
+			    (unsigned long long)handle);
+		break;
+
+	      case CUDBG_BREAKPOINT_HANDLE_LEGACY:
+		cuda_trace (
+		    "cuda_wait: stopped because of a legacy breakpoint "
+		    "(handle=0x%llx)",
+		    (unsigned long long)handle);
+		break;
+
+	      case CUDBG_BREAKPOINT_HANDLE_INTERNAL:
+		cuda_trace ("cuda_wait: stopped because of an internal "
+			    "breakpoint (handle=0x%llx)",
+			    (unsigned long long)handle);
+		break;
+
+	      case CUDBG_BREAKPOINT_HANDLE_INVALID:
+	      default:
+		cuda_trace (
+		    "cuda_wait: stopped because there are broken warps "
+		    "(induced trap?)");
+		break;
+	      }
+	  }
+	else
+	  {
+	    /* Legacy drivers (revision < 176) cannot distinguish a GDB
+	       breakpoint from a hardcoded SIGTRAP/BRK.  */
+	    cuda_trace ("cuda_wait: stopped because there are broken warps "
+			"(induced trap?)");
+	  }
+
+	cuda_set_signo (GDB_SIGNAL_TRAP);
+	ws->set_stopped (GDB_SIGNAL_TRAP);
+	tp->need_cuda_context_switch = true;
+	return breakpoint_stop::reported;
+      };
+
       // TODO: Check the exception based on the device mask
       if (faulted_devices)
 	{
-	  /* Constructing the cuda_exception will query cuda state. */
+	  /* A fault always wins, even with no decoded exception; keep ws as
+	     BaseTarget::wait set it.  */
 	  cuda_exception exp;
 	  if (exp.has_exception ())
 	    handle_exception (exp);
 	}
-      /* Handle breakpoints */
-      else if (broken_devices)
-	{
-	  /* Find the broken warp using cuda_breakpoint_hit_p, which respects
-	     sticky focus rules.  If the user has set focus (e.g., "cuda thread
-	     (20,0,0)"), this will look for a breakpoint at that location
-	     first, ensuring the focus is preserved across steps.  */
-	  if (cuda_breakpoint_hit_p (tp->new_cuda_coords))
-	    {
-	      gdb_assert (tp->new_cuda_coords.valid ());
-
-	      /* Check ALL broken warps for Break-on-Launch hits.  This is
-		 independent of which warp cuda_breakpoint_hit_p selected,
-		 ensuring every BoL warp is handled.  It creates and inserts
-		 the auto breakpoints and returns whether we must resume.  */
-	      cuda_bol_action bol_action = check_break_on_launch_warps ();
-
-	      /* Query the handle for the warp that cuda_breakpoint_hit_p
-		 selected so we can decide whether to report the stop or
-		 treat it as spurious.  */
-	      CUDBGBreakpointHandle handle = CUDBG_BREAKPOINT_HANDLE_INVALID;
-	      bool got_handle = cuda_state::warp_get_hit_breakpoint_handle (
-		  tp->new_cuda_coords.physical ().dev (),
-		  tp->new_cuda_coords.physical ().sm (),
-		  tp->new_cuda_coords.physical ().wp (), &handle);
-
-	      /* If a BoL breakpoint was placed ahead of the warps and the
-		 selected warp is itself a BoL hit (not a real breakpoint),
-		 treat the stop as spurious so GDB resumes and the kernel hits
-		 the auto breakpoint we just placed.  For a zero-length
-		 prologue the warp is already at the breakpoint, so we fall
-		 through and report the stop instead of resuming past it.  If
-		 the selected warp hit a real breakpoint at the same time, also
-		 fall through and report the stop.  */
-	      if (bol_action == cuda_bol_action::resume
-		  && (!got_handle
-		      || handle == CUDBG_BREAKPOINT_HANDLE_BREAK_ON_LAUNCH))
-		{
-		  cuda_trace ("cuda_wait: BoL auto breakpoints created, "
-			      "treating as spurious to continue");
-		  ws->set_spurious ();
-		  return r;
-		}
-
-	      if (got_handle)
-		{
-		  switch (handle)
-		    {
-		    case CUDBG_BREAKPOINT_HANDLE_TRAP:
-		      cuda_trace (
-			  "cuda_wait: stopped because of a hard-coded trap "
-			  "(handle=0x%llx)",
-			  (unsigned long long)handle);
-		      break;
-
-		    case CUDBG_BREAKPOINT_HANDLE_LEGACY:
-		      cuda_trace (
-			  "cuda_wait: stopped because of a legacy breakpoint "
-			  "(handle=0x%llx)",
-			  (unsigned long long)handle);
-		      break;
-
-		    case CUDBG_BREAKPOINT_HANDLE_INTERNAL:
-		      cuda_trace ("cuda_wait: stopped because of an internal "
-				  "breakpoint "
-				  "(handle=0x%llx)",
-				  (unsigned long long)handle);
-		      break;
-
-		    case CUDBG_BREAKPOINT_HANDLE_INVALID:
-		    default:
-		      cuda_trace (
-			  "cuda_wait: stopped because there are broken warps "
-			  "(induced trap?)");
-		      break;
-		    }
-		}
-	      else
-		{
-		  /* Legacy drivers (revision < 176) do not support
-		     get_warp_hit_breakpoint so we cannot distinguish a
-		     GDB breakpoint from a hardcoded SIGTRAP/BRK
-		     instruction.  cuda_breakpoint_hit_p returned true
-		     above, but the warp may have broken for either
-		     reason.  */
-		  cuda_trace (
-		      "cuda_wait: stopped because there are broken warps "
-		      "(induced trap?)");
-		}
-	      /* Alias received signal to SIGTRAP when hitting a breakpoint
-	       */
-	      cuda_set_signo (GDB_SIGNAL_TRAP);
-	      ws->set_stopped (GDB_SIGNAL_TRAP);
-	      tp->need_cuda_context_switch = true;
-	    }
-	}
+      else
+	switch (classify_breakpoint_stop ())
+	  {
+	  case breakpoint_stop::spurious:
+	    ws->set_spurious ();
+	    return r;
+	  case breakpoint_stop::reported:
+	    break;
+	  case breakpoint_stop::none:
+	    if (cuda_get_log_stop_metadata ().has_value ())
+	      report_log_stop (tp);
+	    break;
+	  }
       cuda_adjust_host_pc (r);
       update_managed_memory ();
     }
@@ -1125,17 +1172,13 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
       cuda_set_signo (GDB_SIGNAL_INT);
       tp->need_cuda_updated_focus = true;
     }
-  else if (handled_events)
-    cuda_trace ("cuda_wait: waited for handling CUDA events.");
-  else if (cuda_notification_received ())
-    {
-      /* Spurious CUDA-notification wake-up.  cuda_notification_analyze
-	 above identified the SIGURG as ours (matched tid + sent flag),
-	 but we drained no events from either queue in this wait cycle. */
-      cuda_trace ("cuda_wait: spurious CUDA notification, nothing drained");
-    }
-  else if (ws->kind () == TARGET_WAITKIND_STOPPED
-	   || ws->kind () == TARGET_WAITKIND_SIGNALLED)
+  else if ((ws->kind () == TARGET_WAITKIND_STOPPED
+	    || ws->kind () == TARGET_WAITKIND_SIGNALLED)
+	   && ws->sig () != GDB_SIGNAL_URG
+#ifdef __QNXHOST__
+	   && ws->sig () != GDB_SIGNAL_EMT && ws->sig () != GDB_SIGNAL_ILL
+#endif
+	   )
     {
       /* We are stopped for a non-CUDA reason. When the host
 	 stops, we need to ensure we halt the device. */
@@ -1215,8 +1258,29 @@ cuda_nat_linux<BaseTarget>::wait (ptid_t ptid, struct target_waitstatus *ws,
 	    }
 	}
     }
+  else if (cuda_get_log_stop_metadata ().has_value ())
+    report_log_stop (tp);
+  else if (handled_events)
+    cuda_trace ("cuda_wait: waited for handling CUDA events.");
+  else if (cuda_notification_received ())
+    {
+      /* Spurious CUDA-notification wake-up.  cuda_notification_analyze
+	 above identified the SIGURG as ours (matched tid + sent flag),
+	 but we drained no events from either queue in this wait cycle. */
+      cuda_trace ("cuda_wait: spurious CUDA notification, nothing drained");
+    }
   else
     cuda_trace ("cuda_wait: waited for a non-CUDA reason.");
+
+  /* A CUDA log rule matched but a higher-priority stop was reported instead;
+     surface the record as a log and clear it so it is neither lost nor
+     double-reported.  */
+  if (!log_stop_reported)
+    if (auto metadata = cuda_get_log_stop_metadata ())
+      {
+	cuda_emit_log_stop_record (*metadata);
+	cuda_clear_log_stop_metadata ();
+      }
 
   /* If we didn't explicitly request a thread to focus on, we still need
    * to ensure that we update the current thread state. */

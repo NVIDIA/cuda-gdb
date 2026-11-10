@@ -18,17 +18,18 @@
 
 #include "cuda-nto-protocol.h"
 
-#include <sys/socket.h>
+#include "gdbsupport/array-view.h"
+
 #include <string.h>
+#include <sys/socket.h>
+
+#include <array>
+#include <cerrno>
 
 #define FRAME_CHAR '\x7e'
 #define ESCAPE_CHAR '\x7d'
 
-extern int pdebug_sockfd;
-extern bool qnx_gdbserver_debug;
-
-int mid; /* pdebug protocol message id */
-unsigned char send_receive_buffer[MAX_PACKET_SIZE];
+static std::array<gdb_byte, MAX_PACKET_SIZE> send_receive_buffer;
 
 /* FOR DEBUGGING */
 const char *message_types[] =
@@ -149,23 +150,23 @@ unpack_pdebug_packet (DScomm_t *packet, unsigned char *src)
     {
       c = *src++;
       switch (c)
-        {
-        case ESCAPE_CHAR:
-          modifier = 0x20;
-          continue;
-        case FRAME_CHAR:
-          if (csum != 0xff)
-            {
-              error("Error unpacking a CUDA packet");
-            }
-          *--bp = '\0'; /* overwrite the checksum */
-          return bp - packet->buf;
-        default:
-          c ^= modifier;
-          csum += c;
-          *bp++ = c;
-          break;
-        }
+	{
+	case ESCAPE_CHAR:
+	  modifier = 0x20;
+	  continue;
+	case FRAME_CHAR:
+	  if (csum != 0xff)
+	    {
+	      error("Error unpacking a CUDA packet");
+	    }
+	  *--bp = '\0'; /* overwrite the checksum */
+	  return bp - packet->buf;
+	default:
+	  c ^= modifier;
+	  csum += c;
+	  *bp++ = c;
+	  break;
+	}
       modifier = 0;
     }
 }
@@ -184,13 +185,13 @@ pack_pdebug_packet (unsigned char *dest, const DScomm_t *packet, int length)
 
       csum += c;
       switch (c)
-        {
-        case FRAME_CHAR:
-        case ESCAPE_CHAR:
-          *bp++ = ESCAPE_CHAR;
-          c ^= 0x20;
-          break;
-        }
+	{
+	case FRAME_CHAR:
+	case ESCAPE_CHAR:
+	  *bp++ = ESCAPE_CHAR;
+	  c ^= 0x20;
+	  break;
+	}
       *bp++ = c;
     }
 
@@ -210,7 +211,7 @@ pack_pdebug_packet (unsigned char *dest, const DScomm_t *packet, int length)
 }
 
 int
-pack_cuda_packet (unsigned char *dest, char *src, int length)
+pack_cuda_packet (unsigned char *dest, char *src, int length, uint8_t mid)
 {
   DScomm_t resp;
 
@@ -223,7 +224,7 @@ pack_cuda_packet (unsigned char *dest, char *src, int length)
   memset (&resp, 0, sizeof (DScomm_t));
 
   resp.pkt.hdr.cmd = DSrMsg_okcuda;
-  resp.pkt.hdr.mid = mid++;
+  resp.pkt.hdr.mid = mid;
   resp.pkt.hdr.channel = SET_CHANNEL_DEBUG;
   memcpy (resp.pkt.cuda.data, src, length);
 
@@ -231,46 +232,68 @@ pack_cuda_packet (unsigned char *dest, char *src, int length)
 }
 
 void
-putpkt_pdebug (DScomm_t *packet, int length)
+putpkt_pdebug (int pdebug_fd, DScomm_t *packet, int length)
 {
-  length = pack_pdebug_packet (send_receive_buffer, packet, length);
-  if (write (pdebug_sockfd, send_receive_buffer, length) != length)
+  length = pack_pdebug_packet (send_receive_buffer.data (), packet, length);
+
+  auto view = gdb::make_array_view (send_receive_buffer.data (),
+				    static_cast<size_t> (length));
+  while (!view.empty ())
     {
-      error ("Error writing a pdebug packet");
+      const ssize_t n = write (pdebug_fd, view.data (), view.size ());
+      if (n < 0)
+	{
+	  if (errno == EINTR)
+	    continue;
+	  error ("Error writing a pdebug packet: %s", strerror (errno));
+	}
+      if (n == 0)
+	error ("Error writing a pdebug packet: write made no progress "
+	       "after %d of %d bytes",
+	       length - static_cast<int> (view.size ()), length);
+      view = view.slice (n);
     }
 }
 
 void
-getpkt_pdebug (DScomm_t *packet)
+getpkt_pdebug (int pdebug_fd, DScomm_t *packet)
 {
-  if (read (pdebug_sockfd, send_receive_buffer, MAX_PACKET_SIZE) == 0)
+  ssize_t n = read (pdebug_fd, send_receive_buffer.data (),
+		    send_receive_buffer.size ());
+  if (n <= 0)
     {
-      error ("Error reading a pdebug packet");
+      if (n < 0)
+	error ("Error reading a pdebug packet: %s", strerror (errno));
+      else
+	error ("Error reading a pdebug packet: end of file on pdebug_fd");
     }
-  unpack_pdebug_packet (packet, send_receive_buffer);
+  unpack_pdebug_packet (packet, send_receive_buffer.data ());
 }
 
 int
-qnx_write_inferior_memory (CORE_ADDR memaddr, const unsigned char *myaddr, int len)
+qnx_write_inferior_memory (int pdebug_fd, bool debug_enabled, uint8_t mid,
+			   CORE_ADDR memaddr, const gdb_byte *myaddr,
+			   ssize_t len)
 {
+  gdb_assert (len > 0);
   DScomm_t packet;
 
   memset (&packet, 0, sizeof (DScomm_t));
 
   packet.pkt.hdr.cmd = DStMsg_memwr;
-  packet.pkt.hdr.mid = mid++;
+  packet.pkt.hdr.mid = mid;
   packet.pkt.hdr.channel = SET_CHANNEL_DEBUG;
 
   packet.pkt.memwr.addr = memaddr; /* FIXME: check if the endianness is always correct */
   memcpy (packet.pkt.memwr.data, myaddr, len);
 
-  if (qnx_gdbserver_debug)
+  if (debug_enabled)
     {
       gdbserver_debug_print(SRV, PDB, packet.buf);
     }
-  putpkt_pdebug (&packet, offsetof (DStMsg_memwr_t, data) + len);
-  getpkt_pdebug (&packet);
-  if (qnx_gdbserver_debug)
+  putpkt_pdebug (pdebug_fd, &packet, offsetof (DStMsg_memwr_t, data) + len);
+  getpkt_pdebug (pdebug_fd, &packet);
+  if (debug_enabled)
     {
       gdbserver_debug_print(PDB, SRV, packet.buf);
     }
@@ -278,10 +301,15 @@ qnx_write_inferior_memory (CORE_ADDR memaddr, const unsigned char *myaddr, int l
   switch (packet.pkt.hdr.cmd)
     {
     case DSrMsg_ok:
-      return len;
+      return 0;
     case DSrMsg_okstatus:
-      return packet.pkt.okstatus.status;
+      /* okstatus.status is the actual number of bytes written.  Callers
+	 expect all-or-nothing semantics, so treat a short write as a
+	 failure.  */
+      return packet.pkt.okstatus.status == len ? 0 : EIO;
+    case DSrMsg_err:
+      return packet.pkt.err.err != 0 ? packet.pkt.err.err : EIO;
     }
 
-  return 0;
+  return EIO;
 }

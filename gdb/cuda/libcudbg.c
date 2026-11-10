@@ -2639,19 +2639,85 @@ cudbgResumeAllDevices ()
 }
 #endif
 
-#if CUDBG_API_VERSION_REVISION >= 192
+#if CUDBG_API_VERSION_REVISION == 192
 static CUDBGResult
 STUB_cudbgSetCudaLogRules (const CUDBGCudaLogRule *rules, uint32_t numRules,
 			   uint32_t *newRulesetIndex)
 {
-  return CUDBG_ERROR_UNKNOWN;
+  return CUDBG_ERROR_NOT_SUPPORTED;
 }
-
+#elif CUDBG_API_VERSION_REVISION >= 193
 static CUDBGResult
-STUB_cudbgConsumeCudaLogs (CUDBGCudaLogMessage *logMessages,
-			   uint32_t numMessages, uint32_t *numConsumed)
+cudbgSetCudaLogRules (const CUDBGCudaLogRule *rules, uint32_t numRules,
+		      uint32_t *newRulesetIndex)
 {
-  return CUDBG_ERROR_UNKNOWN;
+  char *ipc_buf;
+  CUDBGResult result;
+  uint32_t rulesetIndex = 0;
+
+  /* RPCD wire format:
+       in : u32 numRules,
+	    per rule: u32 action, u32 logLevelFilter, u64 osThreadIdFilter,
+		      u32 messageFilterRegexSize,
+		      [messageFilterRegexSize] regex bytes (no NUL terminator;
+		      the server stores them into a std::string of that size)
+       out: CUDBGResult result, u32 newRulesetIndex.  */
+  CUDBG_IPC_BEGIN (CUDBGAPIREQ_setCudaLogRules);
+  CUDBG_IPC_APPEND (&numRules, sizeof (numRules));
+
+  for (uint32_t i = 0; i < numRules; ++i)
+    {
+      const CUDBGCudaLogRule *rule = &rules[i];
+      uint32_t action = (uint32_t)rule->action;
+      uint32_t logLevelFilter = (uint32_t)rule->logLevelFilter;
+      uint64_t osThreadIdFilter = rule->osThreadIdFilter;
+      uint32_t regexSize = rule->messageFilterRegex
+			       ? (uint32_t)strlen (rule->messageFilterRegex)
+			       : 0;
+
+      CUDBG_IPC_APPEND (&action, sizeof (action));
+      CUDBG_IPC_APPEND (&logLevelFilter, sizeof (logLevelFilter));
+      CUDBG_IPC_APPEND (&osThreadIdFilter, sizeof (osThreadIdFilter));
+      CUDBG_IPC_APPEND (&regexSize, sizeof (regexSize));
+      if (regexSize > 0)
+	CUDBG_IPC_APPEND ((char *)rule->messageFilterRegex, regexSize);
+    }
+
+  CUDBG_IPC_REQUEST ((void **)&ipc_buf);
+  CUDBG_IPC_RECEIVE (&result, &ipc_buf);
+  CUDBG_IPC_RECEIVE (&rulesetIndex, &ipc_buf);
+
+  if (newRulesetIndex)
+    *newRulesetIndex = rulesetIndex;
+
+  return result;
+}
+#endif
+
+#if CUDBG_API_VERSION_REVISION >= 192
+static CUDBGResult
+cudbgConsumeCudaLogs (CUDBGCudaLogMessage *logMessages, uint32_t numMessages,
+		      uint32_t *numConsumed)
+{
+  char *ipc_buf;
+  CUDBGResult result;
+
+  /* RPCD wire format:
+       in : u32 numMessages
+       out: CUDBGResult result, u32 numConsumed,
+	    [numConsumed] CUDBGCudaLogMessage entries (only on success).  */
+  CUDBG_IPC_BEGIN (CUDBGAPIREQ_consumeCudaLogs);
+  CUDBG_IPC_APPEND (&numMessages, sizeof (numMessages));
+
+  CUDBG_IPC_REQUEST ((void **)&ipc_buf);
+  CUDBG_IPC_RECEIVE (&result, &ipc_buf);
+  CUDBG_IPC_RECEIVE (numConsumed, &ipc_buf);
+  gdb_assert (*numConsumed <= numMessages);
+  if (result == CUDBG_SUCCESS)
+    CUDBG_IPC_RECEIVE_ARRAY (logMessages, std::min (*numConsumed, numMessages),
+			     &ipc_buf);
+
+  return result;
 }
 
 static CUDBGResult
@@ -2716,6 +2782,39 @@ cudbgWriteRpcRegisters (uint32_t dev, uint32_t sm, uint32_t wp, uint32_t ln,
   return result;
 }
 #endif
+
+static CUDBGResult
+cudbgReadTcgen05TmemInfo (uint32_t dev, uint32_t sm, uint32_t wp,
+			  CUDBGTcgen05TmemInfo *info)
+{
+  char *ipc_buf;
+  CUDBGResult result;
+
+  CUDBG_IPC_BEGIN (CUDBGAPIREQ_readTcgen05TmemInfo);
+  CUDBG_IPC_APPEND (&dev, sizeof (dev));
+  CUDBG_IPC_APPEND (&sm, sizeof (sm));
+  CUDBG_IPC_APPEND (&wp, sizeof (wp));
+
+  CUDBG_IPC_REQUEST ((void **)&ipc_buf);
+  CUDBG_IPC_RECEIVE (&result, &ipc_buf);
+  CUDBG_IPC_RECEIVE (info, &ipc_buf);
+
+  return result;
+}
+
+static CUDBGResult
+STUB_cudbgReadTcgen05TmemMemory (uint32_t dev, uint32_t sm, uint32_t wp,
+				 uint32_t addr, void *buf, uint32_t sz)
+{
+  return CUDBG_ERROR_NOT_SUPPORTED;
+}
+
+static CUDBGResult
+STUB_cudbgWriteTcgen05TmemMemory (uint32_t dev, uint32_t sm, uint32_t wp,
+				  uint32_t addr, const void *buf, uint32_t sz)
+{
+  return CUDBG_ERROR_NOT_SUPPORTED;
+}
 
 template <typename... T>
 inline constexpr size_t
@@ -2808,10 +2907,10 @@ DEFINE_CUDBGAPI (
     /* 6.0 Extensions */
     cudbgGetAdjustedCodeAddress, cudbgReadErrorPC, cudbgGetNextEvent,
     cudbgGetElfImageByHandle, cudbgResumeWarpsUntilPC60,
-    STUB_cudbgReadWarpState60, cudbgReadRegisterRange60, cudbgReadGenericMemory,
-    cudbgWriteGenericMemory, cudbgReadGlobalMemory, cudbgWriteGlobalMemory,
-    cudbgGetManagedMemoryRegionInfo, STUB_cudbgIsDeviceCodeAddress,
-    cudbgRequestCleanupOnDetach,
+    STUB_cudbgReadWarpState60, cudbgReadRegisterRange60,
+    cudbgReadGenericMemory, cudbgWriteGenericMemory, cudbgReadGlobalMemory,
+    cudbgWriteGlobalMemory, cudbgGetManagedMemoryRegionInfo,
+    STUB_cudbgIsDeviceCodeAddress, cudbgRequestCleanupOnDetach,
 
     /* 6.5 Extensions */
     cudbgReadPredicates, cudbgWritePredicates, cudbgGetNumPredicates,
@@ -2865,11 +2964,11 @@ DEFINE_CUDBGAPI (
 
     /* 13.0 Extensions */
     cudbgGetCudaExceptionString, STUB_cudbgSetNotifyNewEventCallback,
-    
+
     /* 13.1 Extensions */
     cudbgGetHardwareBarrierInfo,
 
-    /* 13.2 Extensions */
+/* 13.2 Extensions */
 #if CUDBG_API_VERSION_REVISION > 167
     cudbgReadRegisterRange, cudbgInsertBreakpoint, cudbgRemoveBreakpoint,
     cudbgEnableBreakpoint, cudbgDisableBreakpoint, cudbgIsBreakpointEnabled,
@@ -2882,9 +2981,20 @@ DEFINE_CUDBGAPI (
     cudbgGetBindlessConstAddress,
 #endif
 #if CUDBG_API_VERSION_REVISION >= 192
-    STUB_cudbgSetCudaLogRules, STUB_cudbgConsumeCudaLogs,
-    cudbgReadRpcRegisters, cudbgWriteRpcRegisters,
+    /* setCudaLogRules shipped in rev 192 but was broken; the first working
+       revision is 193.  At 192 we fill the slot with a not-supported stub to
+       keep the positional ABI initializer aligned.  */
+#if CUDBG_API_VERSION_REVISION < 193
+    STUB_cudbgSetCudaLogRules,
+#else
+    cudbgSetCudaLogRules,
 #endif
+    cudbgConsumeCudaLogs, cudbgReadRpcRegisters, cudbgWriteRpcRegisters,
+#endif
+
+    /* 13.5 Extensions */
+    cudbgReadTcgen05TmemInfo, STUB_cudbgReadTcgen05TmemMemory,
+    STUB_cudbgWriteTcgen05TmemMemory,
 );
 
 CUDBGResult

@@ -1311,11 +1311,19 @@ pdebug_target::nto_set_thread (ptid_t ptid)
 
   nto_trace (0) ("nto_set_thread(%s)\n", nto_pid_to_str (ptid).c_str());
 
+#ifdef NVIDIA_CUDA_GDB
+  if (ptid.pid () == 0)
+    {
+      nto_trace (0) ( "  no pid for %s yet!\n", nto_pid_to_str (ptid).c_str());
+      return 0;
+    }
+#else
   if (find_inferior_ptid (this, ptid) == NULL)
     {
       nto_trace (0) ( "  no inferior for %s yet!\n", nto_pid_to_str (ptid).c_str());
       return 0;
     }
+#endif
 
   nto_send_init (&tran, DStMsg_select, DSMSG_SELECT_SET, SET_CHANNEL_DEBUG);
   tran.pkt.select.pid = ptid.pid();
@@ -1330,7 +1338,12 @@ pdebug_target::nto_set_thread (ptid_t ptid)
       return 0;
     }
 
-  switch_to_thread(this, ptid);
+#ifdef NVIDIA_CUDA_GDB
+  if (thread_info *thr = this->find_thread (ptid))
+    switch_to_thread (thr);
+#else
+  switch_to_thread (this, ptid);
+#endif
 
   return 1;
 }
@@ -4643,10 +4656,11 @@ send_qnx_packet (gdb::array_view<const char> &buf,
   if (buf.size () == 0 || buf.data ()[0] == '\0')
     error (_("a remote packet must not be empty"));
 
-  if (buf.size () > DS_DATA_MAX_SIZE)
+  if (buf.size () > QNX_CUDA_PACKET_DATA_SIZE)
     {
       std::string arg ((char *)buf.data (), buf.size ());
-      printf_unfiltered ("Packet too long: %.40s...\n", arg.c_str ());
+      error (_("QNX CUDA packet too long (%zu bytes, max %zu): %.40s..."),
+	     buf.size (), (size_t) QNX_CUDA_PACKET_DATA_SIZE, arg.c_str ());
     }
 
   if (get_current_target () == nullptr)
@@ -4665,7 +4679,7 @@ send_qnx_packet (gdb::array_view<const char> &buf,
   int bytes = nto_send_recv (&tran, &recv,
 			     offsetof (DStMsg_cuda_t, data) + buf.size (), 1);
 
-  if (bytes < 0)
+  if (bytes <= 0)
     error (_("error while fetching packet from remote target"));
   if (bytes < (int) sizeof (struct DShdr))
     error (_("truncated packet received from remote target"));

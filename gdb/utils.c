@@ -1324,10 +1324,28 @@ maintenance_info_screen (const char *args, int from_tty)
 		  : "")));
 
 #ifdef HAVE_LIBCURSES
+#ifdef NVIDIA_CUDA_GDB
+  {
+    int curses_cols = tigetnum ((char *) "cols");
+    int curses_lines = tigetnum ((char *) "lines");
+
+    if (curses_cols > 0)
+      gdb_printf (gdb_stdout,
+		  _("Number of characters curses thinks "
+		    "are in a line is %d.\n"),
+		  curses_cols);
+    if (curses_lines > 0)
+      gdb_printf (gdb_stdout,
+		  _("Number of lines curses thinks "
+		    "are in a page is %d.\n"),
+		  curses_lines);
+  }
+#else
   gdb_printf (gdb_stdout,
 	     _("Number of characters curses thinks "
 	       "are in a line is %d.\n"),
 	     COLS);
+#endif
 #endif
 
   gdb_printf (gdb_stdout,
@@ -1347,10 +1365,12 @@ maintenance_info_screen (const char *args, int from_tty)
 	      rows == sqrt_int_max ? " (unlimited)" : "");
 
 #ifdef HAVE_LIBCURSES
+#ifndef NVIDIA_CUDA_GDB
   gdb_printf (gdb_stdout,
 	     _("Number of lines curses thinks "
 	       "are in a page is %d.\n"),
 	      LINES);
+#endif
 #endif
 
   gdb_printf (gdb_stdout,

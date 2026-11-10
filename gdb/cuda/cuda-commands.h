@@ -36,6 +36,9 @@ void info_cuda_kernel_launch_backtrace_command (const char *arg);
 void info_cuda_managed_command (const char *arg);
 void info_cuda_line_command (const char *arg);
 void info_cuda_barriers_command (const char *arg);
+void info_cuda_log_command (const char *arg);
+void info_cuda_objfiles_command (const char *arg);
+void info_cuda_tmem_command (const char *arg);
 
 /*cuda focus commands */
 void cuda_command_switch (const char *switch_string);

@@ -912,6 +912,53 @@ static int cuCoreReadParamMemorySection(CudaCore *cc, Elf_Scn *scn)
 	return 0;
 }
 
+static int cuCoreReadTcgen05TmemTable(CudaCore *cc, Elf_Scn *scn)
+{
+	size_t entry_count;
+	uint8_t *entry;
+	size_t entrySz;
+	size_t parent, offset;
+	size_t i;
+
+	if (cuCoreGenericReadTable(cc->e, scn,
+				   &entry_count,
+				   (void **)&entry,
+				   &entrySz, &parent, &offset) != 0)
+		return -1;
+
+	for (i = 0; i < entry_count; ++i, entry += entrySz) {
+		CudbgTcgen05TmemTableEntry *tmemEntry;
+		CudbgSmTableEntry *ste;
+		CudbgDeviceTableEntry *dte;
+
+		tmemEntry = (CudbgTcgen05TmemTableEntry *)entry;
+		/* A CTA group of zero means this block has no TMEM metadata. */
+		if (tmemEntry->ctaGroup == 0)
+			continue;
+
+		ste = cuCoreGetMapEntry(&cc->tableEntriesMap,
+					NULL,
+					"ctatbl_section%llu_offset%llu_sm",
+					(unsigned long long)parent,
+					(unsigned long long)i);
+		VERIFY(ste != NULL, -1, "Could not find SM table entry by CTA");
+
+		dte = cuCoreGetMapEntry(&cc->tableEntriesMap,
+					NULL,
+					"ctatbl_section%llu_offset%llu_dev",
+					(unsigned long long)parent,
+					(unsigned long long)i);
+		VERIFY(dte != NULL, -1, "Could not find Device table entry by CTA");
+
+		if (cuCoreAddMapEntry(&cc->tableEntriesMap, tmemEntry, entrySz, false,
+				      "cta%u_sm%u_dev%u_tmem_info",
+				      (uint32_t)i, ste->smId, dte->devId))
+			return -1;
+	}
+
+	return 0;
+}
+
 static int cuCoreAddELFImage(CudaCoreELFImage **elfImageHead,
 			     CudbgDeviceTableEntry *dte,
 			     Elf *e, Elf_Scn *scn)
@@ -946,12 +993,13 @@ static int cuCoreReadELFImage(CudaCore *cc, Elf_Scn *scn, bool reloc)
 	CudbgContextTableEntry *cte;
 	CudbgDeviceTableEntry *dte;
 	CUDBGEvent event;
+        size_t mte_size = 0;
 
 	if (cuCoreReadSectionHeader(scn, &hdr))
 		return -1;
 
 	mte = cuCoreGetMapEntry(&cc->tableEntriesMap,
-				NULL,
+				&mte_size,
 				"modtbl_section%u_offset%u",
 				hdr->sh_link, hdr->sh_info);
 	VERIFY(mte != NULL, -1, "Could not find Module table entry");
@@ -960,7 +1008,9 @@ static int cuCoreReadELFImage(CudaCore *cc, Elf_Scn *scn, bool reloc)
 	if (cuCoreAddMapEntry(&cc->tableEntriesMap, scn, hdr->sh_size, false,
 			      "%celf_handle%llx",
 			      reloc ? 'r' : 'u',
-			      (unsigned long long)readUint64(&mte->moduleHandle)))
+			      (unsigned long long)readUint64(
+				      &mte->elfImageHandle
+			      )))
 		return -1;
 
 	if (!reloc)
@@ -982,9 +1032,12 @@ static int cuCoreReadELFImage(CudaCore *cc, Elf_Scn *scn, bool reloc)
 	event.kind = CUDBG_EVENT_ELF_IMAGE_LOADED;
 	event.cases.elfImageLoaded.dev = dte->devId;
 	event.cases.elfImageLoaded.context = cte->contextId;
-	event.cases.elfImageLoaded.module = readUint64(&mte->moduleHandle);
 	event.cases.elfImageLoaded.size = readUint64(&hdr->sh_size);
-	event.cases.elfImageLoaded.handle = readUint64(&mte->moduleHandle);
+	if (mte_size >= (offsetof(CudbgModuleTableEntry, cudaModuleHandle) + sizeof(mte->cudaModuleHandle)))
+		event.cases.elfImageLoaded.module = readUint64(&mte->cudaModuleHandle);
+	else
+		event.cases.elfImageLoaded.module = readUint64(&mte->elfImageHandle);
+	event.cases.elfImageLoaded.handle = readUint64(&mte->elfImageHandle);
 	if (cuCoreAddEvent(cc, &event) != 0)
 		return -1;
 
@@ -1158,6 +1211,8 @@ static int cuCoreProcessSection(CudaCore *cc, bool *processed, Elf_Scn *scn)
 		return cuCoreReadLocalMemorySection(cc, scn);
 	case CUDBG_SHT_PARAM_MEM:
 		return cuCoreReadParamMemorySection(cc, scn);
+	case CUDBG_SHT_TCGEN05_TMEMTABLE:
+		return cuCoreReadTcgen05TmemTable(cc, scn);
 	case CUDBG_SHT_DEV_TABLE:
 		return cuCoreReadDeviceTable(cc, scn);
 	case CUDBG_SHT_GRID_TABLE:

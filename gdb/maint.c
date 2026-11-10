@@ -367,6 +367,18 @@ static void
 maint_print_all_sections (const char *header, bfd *abfd, objfile *objfile,
 			  const char *arg)
 {
+#ifdef NVIDIA_CUDA_GDB
+  /* JIT-registered objfiles carry a null obfd.  Tolerate them.  */
+  if (abfd == nullptr)
+    {
+      gdb_puts (header);
+      gdb_stdout->wrap_here (8);
+      gdb_printf ("`%s', file type <no BFD>.\n",
+		  objfile != nullptr ? objfile_name (objfile) : "(null)");
+      return;
+    }
+#endif
+
   gdb_puts (header);
   gdb_stdout->wrap_here (8);
   gdb_printf ("`%s', ", bfd_get_filename (abfd));
@@ -769,6 +781,9 @@ struct cmd_list_element *maintenance_set_cuda_cmdlist;
 
 /* Chain containing all defined "maintenance show cuda" subcommands.  */
 struct cmd_list_element *maintenance_show_cuda_cmdlist;
+
+/* Chain containing all defined "maintenance cuda" subcommands.  */
+struct cmd_list_element *maintenance_cuda_cmdlist;
 #endif
 /* "maintenance with" command.  */
 
@@ -1452,6 +1467,10 @@ Commands for checking internal gdb state."),
 			  _("Show CUDA maintenance-related variables."),
 			  &maintenance_set_cuda_cmdlist, &maintenance_show_cuda_cmdlist,
 			  &maintenance_set_cmdlist, &maintenance_show_cmdlist);
+
+  add_basic_prefix_cmd ("cuda", class_maintenance,
+			_ ("CUDA maintenance commands."),
+			&maintenance_cuda_cmdlist, 0, &maintenancelist);
 #endif
 
   add_cmd ("translate-address", class_maintenance,

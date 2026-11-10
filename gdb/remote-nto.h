@@ -25,6 +25,13 @@
 #include "remote.h"
 #include "nto-share/dsmsgs.h"
 
+#include <stddef.h>
+
+/* Keep CUDA packets within the existing pdebug raw-frame buffer.  One byte is
+   for the checksum, and one byte is for worst-case frame overhead. */
+#define QNX_CUDA_PACKET_DATA_SIZE \
+  (DS_DATA_MAX_SIZE - offsetof (DStMsg_cuda_t, data) - 2)
+
 /* Return true if TARGET is a qnx target, otherwise,
    return false.  */
 extern bool is_qnx_target (process_stratum_target *target);

@@ -27,6 +27,11 @@
 extern void tui_set_win_focus_to (struct tui_win_info *);
 extern void tui_resize_all (void);
 extern void tui_refresh_all_win (void);
+#ifdef NVIDIA_BUGFIX
+/* Refresh all TUI windows except the command window.  The caller must
+   wnoutrefresh the command window and hold a tui_batch_rendering.  */
+extern void tui_refresh_other_wins (void);
+#endif
 extern void tui_rehighlight_all (void);
 
 extern chtype tui_border_ulcorner;

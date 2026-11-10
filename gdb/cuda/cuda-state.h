@@ -637,6 +637,8 @@ public:
   const CUDBGGridInfo &get_grid_info (uint64_t grid_id);
 
   void print ();
+  void flush_disasm_caches (bool device_only);
+
   bool suspend (bool spurious = false);
   void resume ();
 
@@ -740,6 +742,9 @@ public:
 	      // If we have a watcher that needs to resume, do it now
 	      m_this_device->m_watcher_needs_resume = false;
 	      cuda_debugapi::resume_device (m_this_device->dev_idx ());
+	      // Flush the device disassembly cache. The ELF caches only change
+	      // as a result of a LFL or LFF event.
+	      m_this_device->flush_disasm_caches (true);
 	    }
 	}
       m_this_device = nullptr;
@@ -825,13 +830,14 @@ public:
   }
 
   static cuda_module *create_module (uint64_t module_id,
+				     uint64_t elf_handle,
 				     CUDBGElfImageProperties properties,
 				     uint64_t context_id,
 				     uint64_t elf_image_size);
 
-  static void destroy_module (uint64_t module_id);
+  static void destroy_module (uint64_t elf_handle);
 
-  static cuda_module *find_module_by_id (uint64_t module_id);
+  static cuda_module *find_module_by_id (uint64_t elf_handle);
   static cuda_module *find_module_by_address (CORE_ADDR addr);
 
   static bool broken (cuda_coords &coords);
@@ -861,7 +867,13 @@ public:
     m_instance.m_suspended_devices_mask.set (dev_id, true);
   }
 
-  static void flush_disasm_caches ();
+  // device_only indicates that only the SASS-DEVICE cache should be flushed.
+  // If device_only is false, the NVSAL-ELF and SASS-ELF caches will also be
+  // flushed.
+  static void flush_disasm_caches (bool device_only);
+
+  // Flush just the indicated device's disassembly caches.
+  static void flush_disasm_caches (uint32_t dev_id, bool device_only);
 
   static void
   set_device_spec (uint32_t dev_id, uint32_t num_sms, uint32_t num_warps,
@@ -892,7 +904,7 @@ public:
   static cuda_kernel *create_kernel (uint32_t dev_id, uint64_t grid_id);
   static cuda_kernel *
   create_kernel (uint32_t dev_id, uint64_t grid_id, uint64_t virt_code_base,
-		 uint64_t module_id, CuDim3 grid_dim, CuDim3 block_dim,
+		 uint64_t elf_handle, CuDim3 grid_dim, CuDim3 block_dim,
 		 CuDim3 cluster_dim_default, CuDim3 cluster_dim_preferred,
 		 CUDBGKernelType type);
   static void destroy_kernel (uint32_t dev_id, uint64_t grid_id);
@@ -1417,7 +1429,7 @@ public:
 
   static void
   lane_set_rpc_register (uint32_t dev_id, uint32_t sm_id, uint32_t wp_id,
-			uint32_t ln_id, uint32_t regno, uint32_t value)
+			 uint32_t ln_id, uint32_t regno, uint32_t value)
   {
     lane (dev_id, sm_id, wp_id, ln_id)->set_rpc_register (regno, value);
   }

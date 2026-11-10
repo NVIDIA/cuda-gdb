@@ -278,6 +278,7 @@ SUBDIR_CUDA_SRCS = \
 	cuda/cuda-asm.c \
 	cuda/cuda-autostep.c \
 	cuda/cuda-bitset.c \
+	cuda/cuda-builtins.c \
 	cuda/cuda-commands.c \
 	cuda/cuda-context.c \
 	cuda/cuda-coords.c \
@@ -290,6 +291,7 @@ SUBDIR_CUDA_SRCS = \
 	cuda/cuda-kernel.c \
 	cuda/cuda-lang.c \
 	cuda/cuda-linux-nat.c \
+	cuda/cuda-logs.c \
 	cuda/cuda-modules.c \
 	cuda/cuda-notifications.c \
 	cuda/cuda-options.c \
@@ -1420,6 +1422,7 @@ HFILES_NO_SRCDIR = \
 	cuda/cuda-asm.h \
 	cuda/cuda-autostep.h \
 	cuda/cuda-bitset.h \
+	cuda/cuda-builtins.h \
 	cuda/cuda-commands.h \
 	cuda/cuda-context.h \
 	cuda/cuda-coords.h \
@@ -1433,6 +1436,7 @@ HFILES_NO_SRCDIR = \
 	cuda/cuda-kernel.h \
 	cuda/cuda-lang.h \
 	cuda/cuda-linux-nat.h \
+	cuda/cuda-logs.h \
 	cuda/cuda-modules.h \
 	cuda/cuda-notifications.h \
 	cuda/cuda-options.h \

@@ -26,6 +26,9 @@
 #include "cuda-defs.h"
 #include "gdbsupport/forward-scope-exit.h"
 
+#include <string>
+#include <string_view>
+
 /* Utility functions for cuda-gdb */
 #define CUDA_GDB_TMP_BUF_SIZE 1024
 #define __S__(s) #s
@@ -70,6 +73,7 @@ class frame_info_ptr;
 struct value;
 struct type;
 struct symbol;
+struct cuda_log_stop_metadata;
 void cuda_ptx_cache_store_register (frame_info_ptr, int dwarf_regnum,
 				    struct value *);
 struct value *cuda_ptx_cache_get_register (frame_info_ptr, int dwarf_regnum,
@@ -86,6 +90,7 @@ bool cuda_is_device_launch_used (void);
 void cuda_set_device_launch_used (bool);
 bool cuda_is_uvm_used (void);
 void cuda_set_uvm_used (bool);
+bool cuda_is_libcuda (std::string_view name);
 #ifndef GDBSERVER
 bool cuda_managed_msymbol_p (struct bound_minimal_symbol &);
 
@@ -97,7 +102,15 @@ cuda_write_bool (CORE_ADDR addr, bool val)
 bool cuda_managed_address_p (CORE_ADDR addr);
 void cuda_managed_memory_add_region (CORE_ADDR begin, CORE_ADDR end);
 
-/* Consume and print CUDA driver logs from the backend */
-void cuda_consume_and_print_driver_logs (void);
+/* Consume and print CUDA logs from the backend */
+const char *cuda_log_level_name (CUDBGCudaLogLevel log_level);
+std::string cuda_format_log_timestamp_string (uint64_t timestamp_ns);
+bool cuda_consume_log_stop_record (cuda_log_stop_metadata *metadata);
+void cuda_emit_log_stop_record (const cuda_log_stop_metadata &metadata);
+/* Emit the bp_cuda_log `*stopped` reason from cuda_log_breakpoint::print_it.
+   Read-only on the pending stop metadata.  */
+struct ui_out;
+void cuda_emit_log_stop_reason (struct ui_out *uiout);
+void cuda_consume_and_print_logs (void);
 #endif
 #endif

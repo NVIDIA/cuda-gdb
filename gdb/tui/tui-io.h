@@ -60,4 +60,10 @@ extern cli_ui_out *tui_old_uiout;
    next line.  */
 extern void tui_inject_newline_into_command_window ();
 
+#ifdef NVIDIA_BUGFIX
+/* Sync the command window cursor after GDB/inferior output and ensure
+   the next prompt starts on a fresh line.  */
+extern void tui_prepare_cmdwin_for_prompt (void);
+#endif
+
 #endif /* GDB_TUI_TUI_IO_H */

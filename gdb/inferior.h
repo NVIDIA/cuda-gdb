@@ -41,6 +41,9 @@ struct type;
 struct gdbarch;
 struct regcache;
 struct ui_out;
+#ifdef NVIDIA_CUDA_GDB
+struct ui;
+#endif
 struct terminal_info;
 struct target_desc_info;
 struct inferior;
@@ -691,6 +694,9 @@ public:
      cuda_nat_bypass_signals_cleanup() when non-null.  */
   unsigned char *cuda_saved_sigs = nullptr;
   bool cuda_saved_commit_resumed_state = false;
+  /* The UI synchronously waiting for an internal CUDA resume sequence to
+     complete during attach/detach.  */
+  struct ui *cuda_waiting_ui = nullptr;
 
   /* State machine for async CUDA attach.  Used for Ctrl-C handling and
      determining what action to take in the normal_stop observer.  */

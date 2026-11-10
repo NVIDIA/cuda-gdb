@@ -421,7 +421,7 @@ struct obj_section
   /* True if this "overlay section" is mapped into an "overlay region".  */
   int ovly_mapped;
 #ifdef NVIDIA_CUDA_GDB
-  /* Memoized BFD section index returned from gdb_bfd_section_index  */
+  /* Memoized BFD section index returned from gdb_bfd_section_index. */
   int bfd_index;
 #endif
 };
@@ -646,6 +646,9 @@ public:
 
   /* Return the relocation offset applied to SECTION.  */
 #ifdef NVIDIA_CUDA_GDB
+  /* IDX is the memoized bfd section index.
+     Passing it in skips a non-inlined gdb_bfd_section_index () call on
+     the hot path.  */
   CORE_ADDR section_offset (bfd_section *section, int idx) const
 #else
   CORE_ADDR section_offset (bfd_section *section) const
@@ -971,7 +974,8 @@ inline void
 obj_section::set_offset (CORE_ADDR offset)
 {
 #ifdef NVIDIA_CUDA_GDB
-  this->objfile->set_section_offset (this->the_bfd_section, this->bfd_index, offset);
+  this->objfile->set_section_offset (this->the_bfd_section, this->bfd_index,
+				     offset);
 #else
   this->objfile->set_section_offset (this->the_bfd_section, offset);
 #endif

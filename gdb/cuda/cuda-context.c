@@ -43,15 +43,17 @@ cuda_context::~cuda_context ()
 void
 cuda_context::add_module (cuda_module *module)
 {
-  cuda_trace ("Context add module 0x%llx", module->id ());
-  m_module_map[module->id ()] = module;
+  cuda_trace ("Context add module 0x%llx elf_handle 0x%llx",
+	module->module_id (), module->elf_handle ());
+  m_module_map[module->elf_handle ()] = module;
 }
 
 void
 cuda_context::remove_module (cuda_module *module)
 {
-  cuda_trace ("Context remove module 0x%llx", module->id ());
-  m_module_map.erase (module->id ());
+  cuda_trace ("Context remove module 0x%llx elf_handle 0x%llx",
+	module->module_id (), module->elf_handle ());
+  m_module_map.erase (module->elf_handle ());
 }
 
 void
@@ -65,8 +67,8 @@ cuda_context::print () const
 }
 
 void
-cuda_context::flush_disasm_caches ()
+cuda_context::flush_disasm_caches (bool device_only)
 {
   for (auto iter : m_module_map)
-    iter.second->flush_disasm_caches ();
+    iter.second->flush_disasm_caches (device_only);
 }

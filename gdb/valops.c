@@ -1568,6 +1568,9 @@ value_of_variable (struct symbol *var, const struct block *b)
      find its objfile.  It may happen with template arguments.  */
   if (var->section_index () < 0)
     return val;
+  /* Arch-owned symbols have no objfile; skip the managed-var check.  */
+  if (!var->is_objfile_owned ())
+    return val;
   /* CUDA - Managed variables */
   auto objfile = var->objfile ();
   /* Ensure we have a section */

@@ -111,6 +111,9 @@ extern struct cmd_list_element *maintenance_set_cuda_cmdlist;
 
 /* Chain containing all defined "maintenance show cuda" subcommands.  */
 extern struct cmd_list_element *maintenance_show_cuda_cmdlist;
+
+/* Chain containing all defined "maintenance cuda" subcommands.  */
+extern struct cmd_list_element *maintenance_cuda_cmdlist;
 #endif
 
 extern struct cmd_list_element *setprintlist;

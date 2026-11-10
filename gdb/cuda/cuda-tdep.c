@@ -35,9 +35,11 @@
 #endif
 
 #include <array>
+#include <charconv>
 #include <chrono>
 #include <map>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 #include <vector>
 
@@ -83,6 +85,7 @@
 
 #include "cuda-asm.h"
 #include "cuda-autostep.h"
+#include "cuda-builtins.h"
 #include "cuda-context.h"
 #include "cuda-coord-set.h"
 #include "cuda-frame.h"
@@ -98,14 +101,14 @@
 #include "cudadebugger.h"
 #include "gdb_bfd.h"
 #include "mach-o.h"
+#ifdef __QNXTARGET__
+#include "remote-cuda.h" /* cuda_reset_qnx_symbols */
+#endif
 
 #define REGMAP_CLASS(x) (x >> 24)
 #define REGMAP_REG(x) (x & 0xffffff)
 
 /* Globals */
-/* FIXME: Move these to the arch struct! */
-CuDim3 gridDim = { 0, 0, 0 };
-CuDim3 blockDim = { 0, 0, 0 };
 bool cuda_initialized = false;
 bool cuda_is_target_mourn_pending = false;
 static bool inferior_in_debug_mode = false;
@@ -120,10 +123,10 @@ static std::unordered_set<std::string> cuda_device_stubs;
 int cuda_host_shadow_debug = 0;
 
 /* Bit multiplex mask of the address class information in the core address.  */
-constexpr CORE_ADDR cuda_address_class_multiplex_mask = 0x4000000000000000;
+constexpr CORE_ADDR cuda_address_class_multiplex_mask = 0x8000000000000000;
 
 /* Bit mask of the address class information in the core address.  */
-constexpr CORE_ADDR cuda_address_class_mask = 0x3E00000000000000;
+constexpr CORE_ADDR cuda_address_class_mask = 0x7E00000000000000;
 
 /* Bit offset from the start of the core address
    that represent the address class information.  */
@@ -158,6 +161,7 @@ cuda_gdb_get_tid_or_pid (ptid_t ptid)
 
 /* CUDA - siginfo */
 static int cuda_signo = 0;
+static std::optional<cuda_log_stop_metadata> cuda_last_log_stop_metadata;
 
 static void
 cuda_siginfo_trace (const char *fmt, ...)
@@ -181,6 +185,24 @@ int
 cuda_get_signo (void)
 {
   return cuda_signo;
+}
+
+void
+cuda_set_log_stop_metadata (const cuda_log_stop_metadata &metadata)
+{
+  cuda_last_log_stop_metadata = metadata;
+}
+
+std::optional<cuda_log_stop_metadata>
+cuda_get_log_stop_metadata (void)
+{
+  return cuda_last_log_stop_metadata;
+}
+
+void
+cuda_clear_log_stop_metadata (void)
+{
+  cuda_last_log_stop_metadata.reset ();
 }
 
 /* Routines */
@@ -625,7 +647,8 @@ cuda_register_name (struct gdbarch *gdbarch, int regnum)
   if (cuda_rpc_register_p (gdbarch, regnum))
     {
       const auto tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
-      snprintf (buf, sizeof (buf), "RPC.%s", regnum - tdep->first_rpc_regnum == 0 ? "LO" : "HI");
+      snprintf (buf, sizeof (buf), "RPC.%s",
+		regnum - tdep->first_rpc_regnum == 0 ? "LO" : "HI");
       return buf;
     }
 
@@ -848,7 +871,8 @@ cuda_reg_to_regnum_extrapolated (struct gdbarch *gdbarch, frame_info_ptr frame,
 	return (int)(regmap_get_uregister (regmap, 1) + tdep->first_uregnum);
 
       if (regmap_get_class (regmap, 1) == REG_CLASS_TEMP_REG_SPILL)
-	return (int)(regmap_get_rpc_register (regmap, 1) + tdep->first_rpc_regnum);
+	return (int)(regmap_get_rpc_register (regmap, 1)
+		     + tdep->first_rpc_regnum);
     }
 
   /* This will be treated as an "optimized out" register */
@@ -1143,8 +1167,8 @@ cuda_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
     {
       const auto tdep = gdbarch_tdep<cuda_gdbarch_tdep> (gdbarch);
       cuda_state::lane_set_rpc_register (c.dev (), c.sm (), c.wp (), c.ln (),
-				     regnum - tdep->first_rpc_regnum,
-				     *(uint32_t *)buf);
+					 regnum - tdep->first_rpc_regnum,
+					 *(uint32_t *)buf);
       return;
     }
 
@@ -1205,27 +1229,33 @@ cuda_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 }
 
 static int
-cuda_print_insn (bfd_vma pc, disassemble_info *info)
+cuda_print_insn (bfd_vma pc, disassemble_info *dinfo)
 {
   /* Find the module by address - this works even without a CUDA focus,
      allowing disassembly of device code from core dumps or when no
      device is currently focused.  */
   auto module = cuda_module::find_cuda_module_by_address (pc);
-  if (!module)
-    return 1;
+  cuda_module_disassembly_cache *disassembler = nullptr;
+  if (module)
+    {
+      disassembler = module->disassembler ();
+      gdb_assert (disassembler);
 
-  auto disassembler = module->disassembler ();
-  gdb_assert (disassembler);
-
-  const uint32_t inst_size = disassembler->insn_size ();
-  auto inst = disassembler->disassemble_instruction (pc);
-  if (!inst)
-    info->fprintf_func (info->stream,
-			"Cannot disassemble instruction at pc 0x%lx", pc);
-  else
-    info->fprintf_func (info->stream, "%s", inst->to_string ().c_str ());
-
-  return inst_size;
+      /* Will fall back to SASS if NVSAL disassembly failed */
+      const auto info = disassembler->disassemble (pc);
+      if (info && info->is_valid ())
+	{
+	  dinfo->fprintf_func (dinfo->stream, "%s",
+			       info->to_string ().c_str ());
+	  return info->insn_size ();
+	}
+    }
+  dinfo->fprintf_func (dinfo->stream,
+		       "Cannot disassemble instruction at pc 0x%lx", pc);
+  if (cuda_current_focus::isDevice ())
+    return cuda_state::device_get_insn_size (
+	cuda_current_focus::get ().physical ().dev ());
+  return cuda_default_instruction_size;
 }
 
 bool
@@ -1639,9 +1669,8 @@ async_cuda_sigpipe_handler (gdb_client_data arg)
 void
 cuda_signals_initialize (void)
 {
-  cuda_sigpipe_token
-    = create_async_signal_handler (async_cuda_sigpipe_handler, NULL,
-				   "cuda-sigpipe");
+  cuda_sigpipe_token = create_async_signal_handler (async_cuda_sigpipe_handler,
+						    NULL, "cuda-sigpipe");
   signal (SIGPIPE, cuda_sigpipe_handler);
 }
 
@@ -1650,11 +1679,19 @@ cuda_cleanup (void)
 {
   cuda_trace ("cuda_cleanup");
 
-  cuda_consume_and_print_driver_logs ();
+  cuda_clear_log_stop_metadata ();
+  if (cuda_options_logs_enabled ())
+    cuda_consume_and_print_logs ();
+
+  /* Per-session backend state must not carry into the next inferior.  */
+  cuda_options_reset_log_rule_runtime_state ();
 
   registers_changed ();
   cuda_auto_breakpoints_cleanup ();
-  cuda_cleanup_cudart_symbols ();
+  cuda_log_breakpoint_remove ();
+#ifdef __QNXTARGET__
+  cuda_reset_qnx_symbols ();
+#endif
   cuda_current_focus::clear ();
   cuda_state::finalize ();
   cuda_sstep_reset (false);
@@ -1711,7 +1748,8 @@ cuda_initialize (void)
 
       cuda_state::initialize ();
 
-      /* Enable break-on-launch API if the option was set before initialization. */
+      /* Enable break-on-launch API if the option was set before
+       * initialization. */
       cuda_options_initialize_break_on_launch_api ();
       useExtDebuggerAddr
 	  = cuda_get_symbol_address (_STRING_ (CUDBG_USE_EXTERNAL_DEBUGGER));
@@ -1759,6 +1797,12 @@ static void
 kill_or_detach ()
 {
   inferior *inf = current_inferior ();
+
+  /* This helper is used by CUDA initialization error paths, where the
+     inferior may still own the terminal.  Take it back before tearing down the
+     target and reporting the error.  */
+  if (target_supports_terminal_ours ())
+    target_terminal::ours ();
 
   /* Leave core files alone.  */
   if (target_has_execution ())
@@ -1930,36 +1974,45 @@ cuda_initialize_target (void)
       uint32_t capabilities = CUDBG_DEBUGGER_CAPABILITY_NONE;
 
       cuda_trace_domain (CUDA_TRACE_GENERAL,
-			 "requesting CUDA lazy function loading support\n");
+			 "requesting CUDA lazy function loading support");
       capabilities |= CUDBG_DEBUGGER_CAPABILITY_LAZY_FUNCTION_LOADING;
+
+      if (cuda_options_lazy_function_finalization_enabled ())
+	{
+	  cuda_trace_domain (
+	      CUDA_TRACE_GENERAL,
+	      "requesting CUDA lazy function finalization support");
+	  capabilities
+	      |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LAZY_FUNCTION_FINALIZATION;
+	}
 
       cuda_trace_domain (
 	  CUDA_TRACE_GENERAL,
-	  "requesting tracking of exceptions in exited warps\n");
+	  "requesting tracking of exceptions in exited warps");
       capabilities
 	  |= CUDBG_DEBUGGER_CAPABILITY_REPORT_EXCEPTIONS_IN_EXITED_WARPS;
 
       cuda_trace_domain (
 	  CUDA_TRACE_GENERAL,
-	  "requesting no context push / pop events be delivered\n");
+	  "requesting no context push / pop events be delivered");
       capabilities |= CUDBG_DEBUGGER_CAPABILITY_NO_CONTEXT_PUSH_POP_EVENTS;
 
       cuda_trace_domain (CUDA_TRACE_GENERAL,
-			 "requesting CUDA suspend events\n");
+			 "requesting CUDA suspend events");
       capabilities |= CUDBG_DEBUGGER_CAPABILITY_SUSPEND_EVENTS;
 
-      if (cuda_options_driver_logs_enabled ())
+      if (cuda_options_logs_enabled ())
 	{
 	  cuda_trace_domain (
 	      CUDA_TRACE_GENERAL,
-	      "requesting enablement CUDA UMD logs collection\n");
+	      "requesting enablement CUDA UMD logs collection");
 	  capabilities |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
 	}
 
       if (cuda_options_printf_flushing ())
 	{
 	  cuda_trace_domain (CUDA_TRACE_GENERAL,
-			     "requesting CUDA printf flushing on suspend\n");
+			     "requesting CUDA printf flushing on suspend");
 	  capabilities |= CUDBG_DEBUGGER_CAPABILITY_FLUSH_PRINTF_ON_SUSPEND;
 	}
 
@@ -1967,7 +2020,7 @@ cuda_initialize_target (void)
 	{
 	  cuda_trace_domain (
 	      CUDA_TRACE_GENERAL,
-	      "requesting collection of CPU call stack for kernel launches\n");
+	      "requesting collection of CPU call stack for kernel launches");
 	  capabilities |= CUDBG_DEBUGGER_CAPABILITY_COLLECT_CPU_CALL_STACK_FOR_KERNEL_LAUNCHES;
 	}
 
@@ -1975,7 +2028,7 @@ cuda_initialize_target (void)
       /* Always request break-on-launch capability for CUDA 13.2+ support.
 	 The driver will ignore this flag if it doesn't understand it. */
       cuda_trace_domain (CUDA_TRACE_GENERAL,
-			 "requesting break-on-launch capability\n");
+			 "requesting break-on-launch capability");
       capabilities |= CUDBG_DEBUGGER_CAPABILITY_BREAK_ON_LAUNCH;
 #endif
 
@@ -1985,16 +2038,13 @@ cuda_initialize_target (void)
 
   cuda_update_report_driver_api_error_flags ();
 
-  /* Ensure the builtins objfile is created */
-  cuda_init_cudart_symbols ();
-
   inferior_in_debug_mode = true;
 
   return true;
 }
 
 void
-cuda_set_driver_log_capability (bool enable)
+cuda_set_log_capability (bool enable)
 {
   /* Setup our desired capabilities for the debugger backend. It is alright
    * if the older driver doesn't understand some of these flags. We will deal
@@ -2004,12 +2054,11 @@ cuda_set_driver_log_capability (bool enable)
   if (!capability_addr)
     {
       if (cuda_inferior_in_debug_mode ())
-	warning (_ ("Failed to set the CUDA driver logs capability."));
+	warning (_ ("Failed to set the CUDA logs capability."));
       return;
     }
 
-  cuda_trace_domain (CUDA_TRACE_GENERAL,
-		     "requesting %s of CUDA driver log collection\n",
+  cuda_trace_domain (CUDA_TRACE_GENERAL, "requesting %s of CUDA logs\n",
 		     enable ? "enablement" : "disablement");
 
   uint32_t capabilities = CUDBG_DEBUGGER_CAPABILITY_NONE;
@@ -2051,9 +2100,11 @@ cuda_set_kernel_launch_backtrace_capability (bool enable)
 		      sizeof (capabilities));
 
   if (enable)
-    capabilities |= CUDBG_DEBUGGER_CAPABILITY_COLLECT_CPU_CALL_STACK_FOR_KERNEL_LAUNCHES;
+    capabilities
+	|= CUDBG_DEBUGGER_CAPABILITY_COLLECT_CPU_CALL_STACK_FOR_KERNEL_LAUNCHES;
   else
-    capabilities &= ~CUDBG_DEBUGGER_CAPABILITY_COLLECT_CPU_CALL_STACK_FOR_KERNEL_LAUNCHES;
+    capabilities
+	&= ~CUDBG_DEBUGGER_CAPABILITY_COLLECT_CPU_CALL_STACK_FOR_KERNEL_LAUNCHES;
 
   target_write_memory (capability_addr, (const gdb_byte *)&capabilities,
 		       sizeof (capabilities));
@@ -2089,6 +2140,14 @@ cuda_address_class_type_flags (int byte_size, int addr_class)
     case ptxURegStorage:
       return TYPE_INSTANCE_FLAG_CUDA_UREG;
     default:
+      if (addr_class >= ptxBoundConstStorage0
+	  && addr_class <= ptxBoundConstStorage31)
+	{
+	  const auto bank_flags = (enum type_instance_flag_value) (
+	      (addr_class - ptxBoundConstStorage0)
+	      << TYPE_INSTANCE_FLAG_CUDA_BOUND_CONST_BANK_SHIFT);
+	  return TYPE_INSTANCE_FLAG_CUDA_BOUND_CONST | bank_flags;
+	}
       return 0;
     }
 }
@@ -2120,6 +2179,16 @@ cuda_address_class_type_flags_to_name (struct gdbarch *gdbarch,
     case TYPE_INSTANCE_FLAG_CUDA_UREG:
       return "uniform_register";
     default:
+      if ((type_flags & TYPE_INSTANCE_FLAG_CUDA_BOUND_CONST) != 0)
+	{
+	  const unsigned bank
+	      = (((unsigned)type_flags
+		  & TYPE_INSTANCE_FLAG_CUDA_BOUND_CONST_BANK_MASK)
+		 >> TYPE_INSTANCE_FLAG_CUDA_BOUND_CONST_BANK_SHIFT);
+	  static thread_local std::string bound_const_name;
+	  bound_const_name = "bound_constant_" + std::to_string (bank);
+	  return bound_const_name.c_str ();
+	}
       return "unknown_segment";
     }
 }
@@ -2189,6 +2258,31 @@ cuda_address_class_name_to_type_flags (struct gdbarch *gdbarch,
       return true;
     }
 
+  constexpr std::string_view bound_const_prefix = "bound_constant_";
+  std::string_view name_sv
+      = name ? std::string_view{ name } : std::string_view{};
+  if (name_sv.size () > bound_const_prefix.size ()
+      && name_sv.compare (0, bound_const_prefix.size (), bound_const_prefix)
+	     == 0)
+    {
+      constexpr unsigned bound_const_max_bank
+	  = ptxBoundConstStorage31 - ptxBoundConstStorage0;
+      const std::string_view suffix
+	  = name_sv.substr (bound_const_prefix.size ());
+      unsigned bank = 0;
+      const char *begin = suffix.data ();
+      const char *end = begin + suffix.size ();
+      const auto parse_result = std::from_chars (begin, end, bank);
+      if (parse_result.ec == std::errc () && parse_result.ptr == end
+	  && bank <= bound_const_max_bank)
+	{
+	  const auto bank_flags = (enum type_instance_flag_value) (
+	      bank << TYPE_INSTANCE_FLAG_CUDA_BOUND_CONST_BANK_SHIFT);
+	  *type_flags = TYPE_INSTANCE_FLAG_CUDA_BOUND_CONST | bank_flags;
+	  return true;
+	}
+    }
+
   return false;
 }
 
@@ -2196,11 +2290,10 @@ cuda_address_class_name_to_type_flags (struct gdbarch *gdbarch,
 static CORE_ADDR
 cuda_segment_address_to_core_address (int address_class, CORE_ADDR address)
 {
-  /* If this is a CUDA built-in symbol address, just return it.  */
-  if (address >= CUDBG_BUILTINS_MAX)
-    return address;
-
   gdb_assert ((address & cuda_address_class_multiplex_mask) == 0);
+
+  if (address_class == 0)
+    return address;
 
   return address | cuda_address_class_multiplex_mask
 	 | (((CORE_ADDR)address_class) << cuda_address_class_bit_offset);
@@ -2210,11 +2303,6 @@ cuda_segment_address_to_core_address (int address_class, CORE_ADDR address)
 static int
 cuda_address_class_from_core_address (CORE_ADDR address)
 {
-  /* If this is a CUDA built-in symbol address, just return default address
-   * class.  */
-  if (address >= CUDBG_BUILTINS_MAX)
-    return 0;
-
   /* No address class information, therefore this is a global memory address.
    */
   if ((address & cuda_address_class_multiplex_mask) == 0)
@@ -2227,10 +2315,6 @@ cuda_address_class_from_core_address (CORE_ADDR address)
 static CORE_ADDR
 cuda_segment_address_from_core_address (CORE_ADDR address)
 {
-  /* If this is a CUDA built-in symbol address, just return the address.  */
-  if (address >= CUDBG_BUILTINS_MAX)
-    return address;
-
   /* No address class information, therefore this is a global memory address.
    */
   if ((address & cuda_address_class_multiplex_mask) == 0)
@@ -2264,6 +2348,14 @@ cuda_address_class_to_name (ptxStorageKind address_class)
     case ptxURegStorage:
       return "uniform_register";
     default:
+      if (address_class >= ptxBoundConstStorage0
+	  && address_class <= ptxBoundConstStorage31)
+	{
+	  static thread_local std::string bound_const_name;
+	  const unsigned bank = address_class - ptxBoundConstStorage0;
+	  bound_const_name = "bound_constant_" + std::to_string (bank);
+	  return bound_const_name.c_str ();
+	}
       return "unknown_segment";
     }
 }
@@ -2294,6 +2386,11 @@ cuda_type_instance_flags_to_address_class (type_instance_flags type_flags)
     case TYPE_INSTANCE_FLAG_CUDA_MANAGED:
       return ptxGlobalStorage;
     default:
+      if ((type_flags & TYPE_INSTANCE_FLAG_CUDA_BOUND_CONST) != 0)
+	return ptxBoundConstStorage0
+	       + (((unsigned)type_flags
+		   & TYPE_INSTANCE_FLAG_CUDA_BOUND_CONST_BANK_MASK)
+		  >> TYPE_INSTANCE_FLAG_CUDA_BOUND_CONST_BANK_SHIFT);
       return ptxUNSPECIFIEDStorage;
     }
 }
@@ -2337,87 +2434,37 @@ cuda_elf_make_msymbol_special (asymbol *sym, struct minimal_symbol *msym)
     }
 }
 
-/* Temporary: intercept memory addresses when accessing known
-   addresses pointing to CUDA RT variables. Returns 0 if found a CUDA
-   RT variable, and 1 otherwise. */
-static int
-read_cudart_variable (uint64_t address, void *buffer, unsigned amount)
+static CORE_ADDR
+cuda_get_const_bank_address (uint32_t bank, uint32_t offset)
 {
-  if (address < CUDBG_BUILTINS_MAX)
-    return 1;
-
   if (!cuda_current_focus::isDevice ())
-    return 1;
+    {
+      error (_ ("A CUDA device isn't focused."));
+    }
 
-  const auto &cur = cuda_current_focus::get ();
+  uint64_t addr = 0;
+  const auto &c = cuda_current_focus::get ().physical ();
 
-  if (CUDBG_THREADIDX_OFFSET <= address)
+  if (cuda_debugapi::api_version ().m_revision >= 141)
     {
-      auto threadIdx = cur.logical ().threadIdx ();
-      memcpy (buffer,
-	      (char *)&threadIdx + (int64_t)address - CUDBG_THREADIDX_OFFSET,
-	      amount);
-    }
-  else if (CUDBG_BLOCKIDX_OFFSET <= address)
-    {
-      auto blockIdx = cur.logical ().blockIdx ();
-      memcpy (buffer,
-	      (char *)&blockIdx + (int64_t)address - CUDBG_BLOCKIDX_OFFSET,
-	      amount);
-    }
-  else if (CUDBG_CLUSTERIDX_OFFSET <= address)
-    {
-      // We could use clusterIdx here in cur, but that allows CUDA_IGNORE
-      // which we don't want to expose to the user.
-      auto clusterIdx = cuda_state::warp_get_cluster_idx (
-	  cur.physical ().dev (), cur.physical ().sm (),
-	  cur.physical ().wp ());
-      memcpy (buffer,
-	      (char *)&clusterIdx + (int64_t)address - CUDBG_CLUSTERIDX_OFFSET,
-	      amount);
-    }
-  else if (CUDBG_GRIDDIM_OFFSET <= address)
-    {
-      const auto kernel
-	  = cuda_state::find_kernel_by_kernel_id (cur.logical ().kernelId ());
-      gdb_assert (kernel);
-      const auto gridDim = kernel->grid_dim ();
-      memcpy (buffer,
-	      (const char *)&gridDim + (int64_t)address - CUDBG_GRIDDIM_OFFSET,
-	      amount);
-    }
-  else if (CUDBG_BLOCKDIM_OFFSET <= address)
-    {
-      const auto kernel
-	  = cuda_state::find_kernel_by_kernel_id (cur.logical ().kernelId ());
-      gdb_assert (kernel);
-      const auto blockDim = kernel->block_dim ();
-      memcpy (buffer,
-	      (const char *)&blockDim + (int64_t)address
-		  - CUDBG_BLOCKDIM_OFFSET,
-	      amount);
-    }
-  else if (CUDBG_CLUSTERDIM_OFFSET <= address)
-    {
-      // We could use clusterDim here in cur, but that allows CUDA_IGNORE
-      // which we don't want to expose to the user.
-      auto clusterDim = cuda_state::warp_get_cluster_dim (
-	  cur.physical ().dev (), cur.physical ().sm (),
-	  cur.physical ().wp ());
-      memcpy (buffer,
-	      (char *)&clusterDim + (int64_t)address - CUDBG_CLUSTERDIM_OFFSET,
-	      amount);
-    }
-  else if (CUDBG_WARPSIZE_OFFSET <= address)
-    {
-      const auto num_lanes
-	  = cuda_state::device_get_num_lanes (cur.physical ().dev ());
-      memcpy (buffer, &num_lanes, amount);
+      const uint64_t gridId64
+	  = cuda_current_focus::get ().logical ().gridId ();
+
+      uint32_t size;
+      cuda_debugapi::get_const_bank_address (c.dev (), gridId64, bank, &addr,
+					     &size);
+
+      if (addr == 0 || offset >= size)
+	error (_ ("The requested value c[0x%x][0x%x] is not valid."), bank,
+	       offset);
+
+      addr += offset;
     }
   else
-    return 1;
+    cuda_debugapi::get_const_bank_address (c.dev (), c.sm (), c.wp (), bank,
+					   offset, &addr);
 
-  return 0;
+  return addr;
 }
 
 // Read from CUDA memory taking into account the type instance flags
@@ -2453,15 +2500,21 @@ cuda_read_memory_with_address_class_1 (CORE_ADDR address,
   if (!cuda_current_focus::isDevice ())
     return 1;
 
+  if (address_class >= ptxBoundConstStorage0
+      && address_class <= ptxBoundConstStorage31)
+    {
+      uint32_t bank = address_class - ptxBoundConstStorage0;
+      address = cuda_get_const_bank_address (bank, address);
+      cuda_debugapi::read_global_memory (address, buf, len);
+      return 0;
+    }
+
   const auto &c = cuda_current_focus::get ().physical ();
 
   switch (address_class)
     {
     case ptxUNSPECIFIEDStorage:
-      /* If address of a built-in CUDA runtime variable, intercept it */
-      if (!read_cudart_variable (address, buf, len))
-	return 0;
-      /* Fall back to host access */
+      /* Fall through to the host path.  */
       return 1;
 
     case ptxConstStorage:
@@ -2473,9 +2526,6 @@ cuda_read_memory_with_address_class_1 (CORE_ADDR address,
 
     case ptxGenericStorage:
       {
-	/* If address of a built-in CUDA runtime variable, intercept it */
-	if (!read_cudart_variable (address, buf, len))
-	  return 0;
 	try
 	  {
 	    // Will return true on success, false if it's a valid
@@ -2750,6 +2800,15 @@ cuda_write_memory_with_address_class (CORE_ADDR address, int address_class,
   if (!cuda_current_focus::isDevice ())
     return 1;
 
+  if (address_class >= ptxBoundConstStorage0
+      && address_class <= ptxBoundConstStorage31)
+    {
+      uint32_t bank = address_class - ptxBoundConstStorage0;
+      address = cuda_get_const_bank_address (bank, address);
+      cuda_debugapi::write_global_memory (address, buf, len);
+      return 0;
+    }
+
   const auto &c = cuda_current_focus::get ().physical ();
 
   switch (address_class)
@@ -2954,38 +3013,6 @@ cuda_write_memory (gdbarch *gdbarch, CORE_ADDR address,
 			    len);
 }
 
-static CORE_ADDR
-cuda_get_const_bank_address (uint32_t bank, uint32_t offset)
-{
-  if (!cuda_current_focus::isDevice ())
-    {
-      error (_ ("A CUDA device isn't focused."));
-    }
-
-  uint64_t addr = 0;
-  const auto &c = cuda_current_focus::get ().physical ();
-
-  if (cuda_debugapi::api_version ().m_revision >= 141)
-    {
-      const uint64_t gridId64
-	  = cuda_current_focus::get ().logical ().gridId ();
-
-      uint32_t size;
-      cuda_debugapi::get_const_bank_address (c.dev (), gridId64, bank, &addr,
-					     &size);
-
-      if (addr == 0 || offset >= size)
-	error (_ ("The requested value c[0x%x][0x%x] is not valid."), bank, offset);
-
-      addr += offset;
-    }
-  else
-    cuda_debugapi::get_const_bank_address (c.dev (), c.sm (), c.wp (), bank,
-					   offset, &addr);
-
-  return addr;
-}
-
 static struct value *
 cuda_get_const_bank_address_val (struct gdbarch *gdbarch, uint32_t bank,
 				 uint32_t offset)
@@ -2993,6 +3020,7 @@ cuda_get_const_bank_address_val (struct gdbarch *gdbarch, uint32_t bank,
   CORE_ADDR addr = cuda_get_const_bank_address (bank, offset);
   struct type *const_bank_uint = builtin_type (gdbarch)->builtin_unsigned_int;
   const_bank_uint->set_instance_flags (TYPE_INSTANCE_FLAG_CUDA_CONST);
+
   struct type *uint_ptr_type = lookup_pointer_type (const_bank_uint);
 
   return value_from_pointer (uint_ptr_type, addr);
@@ -3015,7 +3043,7 @@ cuda_get_bindless_const_address (uint64_t header, uint64_t offset)
   if (addr == 0 || offset >= size)
     error (_ ("Bindless constant header 0x%llx does not describe a valid "
 	      "range for offset 0x%llx."),
-	   (unsigned long long) header, (unsigned long long) offset);
+	   (unsigned long long)header, (unsigned long long)offset);
 
   return addr + offset;
 }
@@ -3025,8 +3053,9 @@ cuda_get_bindless_const_address_val (struct gdbarch *gdbarch, uint64_t header,
 				     uint64_t offset)
 {
   CORE_ADDR addr = cuda_get_bindless_const_address (header, offset);
-  struct type *const_uint = builtin_type (gdbarch)->builtin_unsigned_int;
-  const_uint->set_instance_flags (TYPE_INSTANCE_FLAG_CUDA_CONST);
+  struct type *const_uint_base = builtin_type (gdbarch)->builtin_unsigned_int;
+  struct type *const_uint = make_type_with_address_space (
+      const_uint_base, TYPE_INSTANCE_FLAG_CUDA_CONST);
   struct type *uint_ptr_type = lookup_pointer_type (const_uint);
 
   return value_from_pointer (uint_ptr_type, addr);
@@ -3181,13 +3210,12 @@ bool
 cuda_find_next_control_flow_instruction (uint64_t pc, uint64_t range_start_pc,
 					 uint64_t range_end_pc, /* Exclusive */
 					 bool skip_subroutines,
-					 uint64_t &end_pc, uint32_t &inst_size)
+					 uint64_t &end_pc)
 {
-  inst_size = 0;
-
-  cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
-		     "find next at pc=%lx start=%lx end=%lx", pc,
-		     range_start_pc, range_end_pc);
+  cuda_trace_domain (
+      CUDA_TRACE_BREAKPOINT,
+      "%s: find next at pc=0x%lx start=0x%lx end=0x%lx skip_subroutines=%d",
+      __func__, pc, range_start_pc, range_end_pc, skip_subroutines);
 
   /* Check to see if we are not in the original source line range.
    * This can happen when branching to an inlined call.
@@ -3200,7 +3228,7 @@ cuda_find_next_control_flow_instruction (uint64_t pc, uint64_t range_start_pc,
       range_start_pc = sal.pc;
       range_end_pc = sal.end;
       cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
-			 "adjust range start=%lx end=%lx", range_start_pc,
+			 "adjust range start=0x%lx end=0x%lx", range_start_pc,
 			 range_end_pc);
     }
 
@@ -3210,76 +3238,64 @@ cuda_find_next_control_flow_instruction (uint64_t pc, uint64_t range_start_pc,
   const auto module = kernel->module ();
   gdb_assert (module);
 
-  // Not const as the disassembler will be updating it's cache of
+  // Not const as the disassembler will be updating its cache of
   // instructions
   auto disassembler = module->disassembler ();
   gdb_assert (disassembler);
-  inst_size = disassembler->insn_size ();
 
-  /* Iterate over instructions until the end of the step/next line range.
-   * Break if instruction that can potentially alter program counter has been
-   * encountered. */
-  std::string inst_str;
-  bool is_control_flow = false;
-  bool is_subroutine_call = false;
-  bool is_barrier = false;
-
-  for (end_pc = pc; end_pc <= range_end_pc; end_pc += inst_size)
+  // Iterate over instructions until the end of the step/next line range.
+  // Break if instruction that can potentially alter program counter has been
+  // encountered.
+  // Increment the PC by the default instruction size so that we don't skip
+  // over these instructions internal to instruction expansions.
+  const auto dev_id = cuda_current_focus::get ().physical ().dev ();
+  const auto inst_size = cuda_state::device_get_insn_size (dev_id);
+  for (end_pc = pc; end_pc < range_end_pc; end_pc += inst_size)
     {
-      auto inst = disassembler->disassemble_instruction (end_pc);
-      if (!inst)
+      // Lookup the instruction at end_pc, invoking the disassembler if
+      // necessary
+      auto insn = disassembler->lookup_instruction (end_pc, true);
+      if (!insn || insn->is_placeholder ())
 	{
 	  cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
-			     "could not disassemble pc=0x%lx", end_pc);
+			     "Failed to disassemble instruction at pc 0x%lx",
+			     end_pc);
 	  break;
 	}
+      if (cuda_options_trace_domain_enabled (CUDA_TRACE_BREAKPOINT))
+	{
+	  const auto info = insn->first_valid_disassembly_info ();
+	  cuda_trace_domain (
+	      CUDA_TRACE_BREAKPOINT,
+	      "%s: scanning pc=0x%lx is_barrier=%d is_control_flow=%d "
+	      "is_subroutine_call=%d %s",
+	      __func__, end_pc, insn->is_barrier (), insn->is_control_flow (),
+	      insn->is_subroutine_call (),
+	      info ? info->to_string ().c_str () : "<unavailable>");
+	}
 
-      inst_str = inst->to_string ();
-      is_barrier = inst->is_barrier ();
-      is_control_flow = inst->is_control_flow ();
-      is_subroutine_call = inst->is_subroutine_call ();
-
-      cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
-			 "%s: pc=0x%lx inst %.*s is_barrier=%d "
-			 "is_control_flow=%d is_subroutine_call=%d",
-			 __func__, end_pc, 20, inst_str.c_str (), is_barrier,
-			 is_control_flow, is_subroutine_call);
-
-      /* Subroutine calls are also classified as control flow by the nvdisasm
-       Make the check for skip_subroutine before checking for is_control_flow
-       || is_subroutine_call */
-      if (skip_subroutines && is_subroutine_call)
+      // Subroutine calls are also classified as control flow by the nvdisasm
+      // Make the check for skip_subroutine before checking for
+      //     (is_control_flow || is_subroutine_call)
+      if (skip_subroutines && insn->is_subroutine_call ())
 	continue;
-      else if (is_barrier || is_control_flow || is_subroutine_call)
+      if (insn->is_control_flow () || insn->is_barrier ()
+	  || insn->is_subroutine_call ())
 	break;
     }
 
   /* The above loop might increment end_pc beyond step_range_end.
      In that case, adjust it to the step_range_end. */
-  if (end_pc > range_end_pc)
-    end_pc = range_end_pc;
+  if (end_pc >= range_end_pc)
+    {
+      cuda_trace_domain (
+	  CUDA_TRACE_BREAKPOINT,
+	  "%s: stop scanning at end of range: end_pc=0x%lx range_end_pc=0x%lx",
+	  __func__, end_pc, range_end_pc);
+      end_pc = range_end_pc;
+    }
 
-  /* Adjust the end_pc to the exact instruction address */
-  const auto adj_pc
-      = gdbarch_adjust_breakpoint_address (cuda_get_gdbarch (), end_pc);
-  end_pc = adj_pc > range_end_pc
-	       ? range_end_pc - inst_size /* end_pc was pointing at SHINT and
-					     was adjusted beyond range_end_pc
-					     - reset to just before SHINT */
-	       : adj_pc;
-
-  /* Will have stopped short if a control flow instruction is found */
-  if (end_pc != range_end_pc)
-    cuda_trace_domain (
-	CUDA_TRACE_BREAKPOINT,
-	"%s: next control point after %lx (up to %lx) is at %lx (inst %s)",
-	__func__, pc, range_end_pc, end_pc, inst_str.c_str ());
-  else
-    cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
-		       "no control point found at end_pc=%lx", end_pc);
-
-  /* end_pc is very close to range_end_pc if no control flow instruction was
-   * found */
+  // If no control flow instruction was found, end_pc == range_end_pc
   return true;
 }
 
@@ -3309,15 +3325,15 @@ cuda_sstep_fast (ptid_t ptid)
 
   /* Defined by cuda_find_next_control_flow_instruction */
   uint64_t end_pc;
-  uint32_t inst_size;
   auto found = cuda_find_next_control_flow_instruction (
       pc, tp->control.step_range_start, tp->control.step_range_end,
-      skip_subroutines, end_pc, inst_size);
+      skip_subroutines, end_pc);
   if (!found)
     return false;
 
-  /* Do not attempt to accelerate if stepping over less than 3 instructions
-   */
+  // Do not attempt to accelerate if stepping over less than 3 instructions
+  const auto dev_id = cuda_current_focus::get ().physical ().dev ();
+  const auto inst_size = cuda_state::device_get_insn_size (dev_id);
   if ((end_pc <= pc) || ((end_pc - pc) < (3 * inst_size)))
     {
       cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
@@ -3914,6 +3930,12 @@ cuda_iterate_over_regset_sections (struct gdbarch *gdbarch,
 {
 }
 
+/* Defined in cuda-builtins.c.  Intentionally not in cuda-builtins.h:
+   this getter is the one legitimate caller, and routing every CUDA
+   gdbarch consumer through it keeps the built-in cache populated
+   before anyone observes the gdbarch.  */
+extern void cuda_init_builtin_symbols (struct gdbarch *gdbarch);
+
 struct gdbarch *
 cuda_get_gdbarch (void)
 {
@@ -3928,6 +3950,10 @@ cuda_get_gdbarch (void)
       /* Core file support. */
       set_gdbarch_iterate_over_regset_sections (
 	  cuda_gdbarch, cuda_iterate_over_regset_sections);
+
+      /* Populate built-ins here, not from cuda_gdbarch_init: building
+	 their types requires a fully-initialized gdbarch.  */
+      cuda_init_builtin_symbols (cuda_gdbarch);
     }
 
   return cuda_gdbarch;

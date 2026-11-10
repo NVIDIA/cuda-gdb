@@ -20,32 +20,51 @@
 
 #include <sys/stat.h>
 
+#include <cctype>
+#include <cstring>
 #include <map>
+#include <optional>
+#include <regex>
+#include <string>
 #include <vector>
 
+#include "bfd/elf-bfd.h"
+
 #include "breakpoint.h"
-#include "inferior.h"
+#include "gdb_bfd.h"
+#include "gdbcore.h"
 #include "objfiles.h"
 #include "source.h"
+#include "symfile.h"
 
 #include "cuda-asm.h"
 #include "cuda-context.h"
-#include "cuda-defs.h"
-#include "cuda-kernel.h"
+#include "cuda-events.h"
 #include "cuda-modules.h"
 #include "cuda-options.h"
+#include "cuda-sass-json.h"
 #include "cuda-state.h"
+#include "cuda-stats.h"
 #include "cuda-tdep.h"
-#include "cuda-utils.h"
 
 #include "elf/common.h"
 #include "elf/external.h"
+
+#include "gdbsupport/scoped_fd.h"
 
 #define R_CUDA_NONE 0 // no relocation
 #define R_CUDA_32 1   // 32bit specific address
 #define R_CUDA_64 2   // 64bit specific address
 #define R_CUDA_G32 3  // 32bit generic address
 #define R_CUDA_G64 4  // 64bit generic address
+
+// Per-step timer for functions_loaded_event; off by default. When on,
+// rows appear under FUNCTIONS_LOADED in `maint print cuda_stats events`.
+#define CUDA_LFL_STEP_TIMER(step)                                             \
+  std::optional<cuda_statistic::scoped_timer> step##_timer;                   \
+  if (cuda_options_profile_lfl ())                                            \
+  step##_timer.emplace (                                                      \
+      get_cuda_event_statistics ().get_statistic ("FUNCTIONS_LOADED_" #step))
 
 static void
 cuda_trace_module (const char *fmt, ...)
@@ -69,8 +88,6 @@ cuda_trace_module (const char *fmt, ...)
     }                                                                         \
   while (0)
 
-extern void cuda_decode_line_table (struct objfile *objfile);
-
 /******************************************************************************
  *
  *                                   Module
@@ -83,60 +100,73 @@ std::multimap<uint64_t, CORE_ADDR> cuda_module::s_kernel_entry_points;
 
 cuda_rangemap<cuda_module *> cuda_module::s_cuda_objfile_section_ranges;
 
-cuda_module::cuda_module (uint64_t module_id,
+cuda_module::cuda_module (uint64_t module_id, uint64_t elf_handle,
 			  CUDBGElfImageProperties properties,
 			  cuda_context *context, uint64_t elf_image_size)
-    : m_id (module_id), m_properties (properties), m_context (context),
+    : m_module_id (module_id), m_elf_handle (elf_handle),
+      m_properties (properties), m_context (context),
+      m_cubin_storage_stale (true), m_cubin_buffer (elf_image_size),
       m_objfile (nullptr), m_size (elf_image_size), m_loaded (false),
-      m_functions_loaded (0), m_uses_abi (false), m_disassembler (nullptr)
+      m_functions_loaded (0), m_lazy_load_event_count (0), m_uses_abi (false),
+      m_disassembler (nullptr)
 {
-  gdb_assert (m_id);
+  gdb_assert (m_module_id);
+  gdb_assert (m_elf_handle);
   gdb_assert (m_context);
 
-  cuda_trace (
-      "Module create context_id 0x%llx module_id 0x%llx total %llu modules",
-      m_context->id (), m_id, m_context->get_modules ().size () + 1);
+  // The +1 is for the current module being created.
+  cuda_trace ("Module create context_id 0x%llx module_id 0x%llx elf_handle "
+	      "0x%llx total %llu modules",
+	      m_context->id (), m_module_id, m_elf_handle,
+	      m_context->get_modules ().size () + 1);
 
-  std::vector<uint8_t> buffer (m_size);
-  cuda_debugapi::get_elf_image (m_context->dev_id (), module_id, true,
-				buffer.data (), m_size);
+  // Fetch the relocated ELF straight into m_cubin_buffer; load_objfile ()
+  // serves it to BFD via gdb_bfd_openr_iovec instead of reading from disk.
+  cuda_debugapi::get_elf_image (m_context->dev_id (), elf_handle, true,
+				m_cubin_buffer.data (), m_size);
 
-  // Will initialize m_filename, but will not create the BFD / objfile.
-  write_cubin (buffer.data ());
+  m_file_path
+      = string_printf ("%s/elf.%lx.%lx.%lx.o", cuda_gdb_session_get_dir (),
+		       m_context->id (), m_module_id, m_elf_handle);
+
+  // BFD reads from m_cubin_buffer; use a real /tmp name only under
+  // preserve_tmp_data, which keeps that file current.
+  if (cuda_options_preserve_tmp_data ())
+    {
+      m_bfd_name = m_file_path;
+      write_cubin ();
+    }
+  else
+    m_bfd_name = string_printf ("<cuda-cubin:0x%lx:0x%lx>", m_context->id (),
+				m_elf_handle);
 }
 
 cuda_module::~cuda_module ()
 {
-  cuda_trace (
-      "Module destroy context_id 0x%lx module_id 0x%lx total %lu modules",
-      m_context->id (), m_id, m_context->get_modules ().size ());
+  cuda_trace ("Module destroy context_id 0x%lx module_id 0x%lx elf_handle "
+	      "0x%llx total %lu modules",
+	      m_context->id (), m_module_id, m_elf_handle,
+	      m_context->get_modules ().size ());
 
-  // Remove any still pending locations from the kernel entry map for this
-  // module
-  s_kernel_entry_points.erase (m_id);
+  // The /tmp file is unlinked by unload_objfile on cubin unload (unless
+  // preserve_tmp_data). Only the kernel entry map needs cleanup here.
+  s_kernel_entry_points.erase (m_elf_handle);
 }
 
 cuda_module_disassembly_cache *
 cuda_module::disassembler ()
 {
   if (!m_disassembler)
-    {
-      const auto device = cuda_state::device (m_context->dev_id ());
-      m_disassembler = std::make_unique<cuda_module_disassembly_cache> (
-	  device->get_insn_size ());
-    }
+    m_disassembler = std::make_unique<cuda_module_disassembly_cache> (this);
 
   return m_disassembler.get ();
 }
 
 void
-cuda_module::flush_disasm_caches ()
+cuda_module::flush_disasm_caches (bool device_only)
 {
   if (m_disassembler)
-    {
-      m_disassembler->flush_elf_cache ();
-      m_disassembler->flush_device_cache ();
-    }
+    m_disassembler->flush_cache (device_only);
 }
 
 void
@@ -145,9 +175,9 @@ cuda_module::add_kernel_entry (CORE_ADDR addr)
   gdb_assert (s_current_module);
 
   cuda_trace ("Adding entry point for ELF image %s pc=0x%llx",
-	      s_current_module->filename ().c_str (), addr);
+	      s_current_module->bfd_name ().c_str (), addr);
 
-  s_kernel_entry_points.emplace (s_current_module->id (), addr);
+  s_kernel_entry_points.emplace (s_current_module->elf_handle (), addr);
 }
 
 void
@@ -186,80 +216,102 @@ cuda_module::find_cuda_module_by_address (CORE_ADDR addr)
   return nullptr;
 }
 
-void
-cuda_module::read_cubin (void *image)
-{
-  auto fd = open (m_filename.c_str (), O_RDONLY);
-  if (fd < 0)
-    error ("Could not open %s for reading", m_filename.c_str ());
+/* gdb_bfd_iovec_base that reads from a cuda_module's in-memory cubin
+   buffer (cf. rocm_code_object_stream_memory in solib-rocm.c).
 
+   Holds a non-owning pointer/size; safe because the BFD lifetime is
+   bracketed by load_objfile/unload_objfile and the cuda_module owns the
+   buffer.  */
+
+namespace
+{
+
+class cuda_module_iovec final : public gdb_bfd_iovec_base
+{
+public:
+  cuda_module_iovec (const uint8_t *data, uint64_t size)
+      : m_data (data), m_size (size)
+  {
+  }
+
+  file_ptr
+  read (bfd *abfd, void *buf, file_ptr nbytes, file_ptr offset) override
+  {
+    if (nbytes < 0 || offset < 0 || (uint64_t)offset > m_size)
+      {
+	bfd_set_error (bfd_error_bad_value);
+	return -1;
+      }
+    file_ptr available = (file_ptr)(m_size - (uint64_t)offset);
+    if (nbytes > available)
+      nbytes = available;
+    memcpy (buf, m_data + offset, nbytes);
+    return nbytes;
+  }
+
+  int
+  stat (struct bfd *abfd, struct stat *sb) override
+  {
+    memset (sb, 0, sizeof (*sb));
+    sb->st_size = (off_t)m_size;
+    sb->st_mode = S_IFREG | 0444;
+    return 0;
+  }
+
+private:
+  const uint8_t *m_data;
+  uint64_t m_size;
+};
+
+} // anonymous namespace
+
+// Write m_cubin_buffer out to the /tmp/cuda-dbg/... file.
+void
+cuda_module::write_cubin ()
+{
+  scoped_fd fd (open (m_file_path.c_str (), O_WRONLY | O_CREAT | O_TRUNC,
+		      S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH));
+  if (fd.get () < 0)
+    error ("Error: Failed to create device ELF symbol file %s",
+	   m_file_path.c_str ());
+
+  // Loop over write(): a single call can't transfer images above the
+  // ~2G limit on Linux.
+  const uint8_t *ptr = m_cubin_buffer.data ();
   size_t remaining = m_size;
-  uint8_t *ptr = (uint8_t *)image;
   while (remaining > 0)
     {
-      auto nbytes = read (fd, ptr, remaining);
-      if (nbytes < 0)
-	error ("Error: Failed to read the ELF image file");
-      remaining -= (size_t)nbytes;
-      ptr += nbytes;
-    }
-  close (fd);
-}
-
-void
-cuda_module::write_buffer (int fd, const void *image, size_t len)
-{
-  size_t remaining = len;
-  const uint8_t *ptr = (const uint8_t *)image;
-  while (remaining > 0)
-    {
-      auto nbytes = write (fd, ptr, remaining);
+      const ssize_t nbytes = write (fd.get (), ptr, remaining);
       if (nbytes < 0)
 	error ("Error: Failed to write the ELF image file");
       remaining -= (size_t)nbytes;
       ptr += nbytes;
     }
-}
-
-// This function gets the ELF image from a module load and saves it
-// onto the hard drive (usually under /tmp/cuda-dbg).
-// The temp filename is created on the first call to write_cubin()
-// Following calls re-use the same filename.
-void
-cuda_module::write_cubin (const void *image)
-{
-  gdb_assert (!m_loaded);
-
-  int fd;
-  if (m_filename.size () == 0)
-    {
-      // Create a file in /tmp/cuda-dbg to hold the cubin
-      char objfile_path[CUDA_GDB_TMP_BUF_SIZE];
-      snprintf (objfile_path, sizeof (objfile_path), "%s/elf.%lx.%lx.o.XXXXXX",
-		cuda_gdb_session_get_dir (), m_context->id (), m_id);
-      fd = mkstemp (objfile_path);
-      m_filename = objfile_path;
-    }
-  else
-    fd = open (m_filename.c_str (), O_WRONLY | O_CREAT | O_TRUNC,
-	       S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-
-  if (fd < 0)
-    error ("Error: Failed to create device ELF symbol file %s",
-	   m_filename.c_str ());
-
-  write_buffer (fd, image, m_size);
-  close (fd);
 
   struct stat object_file_stat;
-  if (stat (m_filename.c_str (), &object_file_stat))
+  if (stat (m_file_path.c_str (), &object_file_stat))
     error (_ ("Error: Failed to stat device ELF symbol file!"));
 
   if (object_file_stat.st_size != m_size)
     error (_ ("Error: The device ELF file size is incorrect!"));
+
+  m_cubin_storage_stale = false;
 }
 
-/* Helper function to add sections to the range map using a functor */
+/* Ensure the cubin exists on disk and return its path, for tools
+   such as cuobjdump. The path is fixed at construction; the file is
+   (re)written here only when stale.  */
+const std::string &
+cuda_module::sync_to_disk_and_get_file_path ()
+{
+  if (m_cubin_storage_stale)
+    write_cubin ();
+  return m_file_path;
+}
+
+/* Apply FUNC to each loaded CODE section (vma != 0). The BFD is rebuilt
+   from the patched m_cubin_buffer on every LFL event, so vma reflects the
+   current sh_addr; truly-unloaded sections keep vma == 0 and are skipped. */
 template <typename Func>
 inline void
 cuda_module::foreach_cuda_objfile_section (Func func)
@@ -269,21 +321,173 @@ cuda_module::foreach_cuda_objfile_section (Func func)
       asection *section = osect->the_bfd_section;
       if (!section)
 	continue;
-      /* Skip sections that do not have code */
+
+      // Skip sections that do not have code
       if (!(section->flags & SEC_CODE))
 	continue;
-      /* skip sections that are unrelocated */
+
+      // Skip NOBITS sections
+      if (elf_section_data (section)->this_hdr.sh_type == SHT_NOBITS)
+	continue;
+
+      // Skip sections that are unrelocated
       if (section->vma == 0)
 	continue;
+
+      // Process the section
       func (section);
     }
 }
 
-// cuda_module::load_objfile() reads the ELF image file into symbol table.
-// Native debugging calls cuda_module::save_buffer() first. Remote debugging
-// only calls load() since the ELF image file has already fetched from server.
-// TODO: This function should be reconciled with the cuda_new_objfile observer
-//      in cuda-tdep.cu.
+static std::string
+compute_debug_sections (struct objfile *objfile)
+{
+  if (objfile == nullptr || objfile->obfd == nullptr)
+    return "none";
+
+  static const char *const sections[] = {
+    ".debug_info",
+    ".debug_line",
+    ".debug_frame",
+    ".nv_debug_line_sass",
+    ".nv_debug_info_reg_sass",
+  };
+
+  bfd *abfd = objfile->obfd.get ();
+  std::string result;
+  for (const char *name : sections)
+    {
+      if (bfd_get_section_by_name (abfd, name) == nullptr)
+	continue;
+      if (!result.empty ())
+	result += ' ';
+      result += name;
+    }
+
+  return result.empty () ? "none" : result;
+}
+
+static std::string
+format_virtual_sm (const std::optional<int64_t> &v)
+{
+  if (!v.has_value ())
+    return std::string ();
+  return string_printf ("compute_%ld", (long)*v);
+}
+
+static std::string
+format_toolkit_version (const std::optional<std::string> &tool_version)
+{
+  /* Settled rule: extract "release X.Y" from tki_toolVersion (e.g. "Cuda
+     compilation tools, release 13.4, V13.4.0" -> "13.4"). The integer
+     nv_note_cuinfo_toolVersion is NOT decoded (encoding unconfirmed). */
+  if (!tool_version.has_value ())
+    return std::string ();
+  static const std::regex re ("release ([0-9]+\\.[0-9]+)");
+  std::smatch m;
+  if (std::regex_search (*tool_version, m, re))
+    return m[1].str ();
+  return std::string ();
+}
+
+static std::string
+format_compile_options (std::string options)
+{
+  /* Keep the detailed output on one line while preserving ordinary spacing
+     in the recorded command line. */
+  for (char &c : options)
+    if (c != ' ' && std::isspace ((unsigned char)c))
+      c = ' ';
+
+  while (!options.empty () && options.back () == ' ')
+    options.pop_back ();
+  return options;
+}
+
+void
+cuda_module::ensure_nvdisasm_metadata ()
+{
+  if (m_nv_metadata_state != nv_metadata_state::not_attempted)
+    return;
+
+  /* Pre-fill so getters never dereference a nullopt, even if a step throws. */
+  m_nv_target_arch = std::string ();
+  m_nv_virtual_sm = std::string ();
+  m_nv_toolkit_version = std::string ();
+  m_nv_tool_name = std::string ();
+  m_nv_compile_options = std::string ();
+
+  try
+    {
+      const std::string &path = sync_to_disk_and_get_file_path ();
+      cuda_disasm_json::schema_metadata meta;
+      if (cuda_read_module_metadata_json (path, meta))
+	{
+	  /* Target Architecture from the (required) SM.version, e.g. major=9
+	     minor=0 -> "sm_90". Base arch only; accelerator suffix deferred. */
+	  m_nv_target_arch = string_printf (
+	      "sm_%ld%ld", (long)meta.m_sm_ver_major, (long)meta.m_sm_ver_minor);
+	  m_nv_virtual_sm
+	      = format_virtual_sm (meta.m_note_nv_cuda_virtual_sm_version);
+	  m_nv_toolkit_version
+	      = format_toolkit_version (meta.m_note_nv_toolkit_tool_version);
+	  if (meta.m_note_nv_toolkit_tool_name.has_value ())
+	    m_nv_tool_name = *meta.m_note_nv_toolkit_tool_name;
+	  if (meta.m_note_nv_toolkit_tool_options.has_value ())
+	    m_nv_compile_options
+		= format_compile_options (*meta.m_note_nv_toolkit_tool_options);
+	  m_nv_metadata_state = nv_metadata_state::ok;
+	}
+      else
+	m_nv_metadata_state = nv_metadata_state::failed;
+    }
+  catch (const gdb_exception &e)
+    {
+      cuda_trace ("nvdisasm metadata extraction failed for module=0x%llx "
+		  "elf_handle=0x%llx: %s",
+		  m_module_id, m_elf_handle, e.what ());
+      m_nv_metadata_state = nv_metadata_state::failed;
+    }
+}
+
+const std::string &
+cuda_module::get_nv_target_arch ()
+{
+  ensure_nvdisasm_metadata ();
+  return *m_nv_target_arch;
+}
+
+const std::string &
+cuda_module::get_nv_virtual_sm ()
+{
+  ensure_nvdisasm_metadata ();
+  return *m_nv_virtual_sm;
+}
+
+const std::string &
+cuda_module::get_nv_toolkit_version ()
+{
+  ensure_nvdisasm_metadata ();
+  return *m_nv_toolkit_version;
+}
+
+const std::string &
+cuda_module::get_nv_tool_name ()
+{
+  ensure_nvdisasm_metadata ();
+  return *m_nv_tool_name;
+}
+
+const std::string &
+cuda_module::get_nv_compile_options ()
+{
+  ensure_nvdisasm_metadata ();
+  return *m_nv_compile_options;
+}
+
+// Read the ELF into the symbol table. Cubin bytes come from an iovec BFD
+// over m_cubin_buffer, so loads and post-LFL reloads never touch /tmp.
+// TODO: reconcile with the cuda_new_objfile observer in cuda-tdep.cu.
 void
 cuda_module::load_objfile ()
 {
@@ -292,17 +496,42 @@ cuda_module::load_objfile ()
   // auto breakpoints
   s_current_module = this;
 
-  // Open the object file and make sure to adjust its arch_info before reading
-  // its symbols.
-  gdb_bfd_ref_ptr abfd (symfile_bfd_open (m_filename.c_str ()));
+  gdb_assert (!m_bfd_name.empty ());
+
+  auto opener = [this] (bfd *) -> gdb_bfd_iovec_base * {
+    return new cuda_module_iovec (m_cubin_buffer.data (), m_size);
+  };
+
+  gdb_bfd_ref_ptr abfd
+      = gdb_bfd_openr_iovec (m_bfd_name.c_str (), gnutarget, opener);
+  if (abfd == nullptr)
+    error ("Error: Failed to open device ELF image %s: %s",
+	   m_bfd_name.c_str (), bfd_errmsg (bfd_get_error ()));
+
+  // Explicit check: the iovec path skips the format auto-detection that
+  // symfile_bfd_open would do.
+  if (!bfd_check_format (abfd.get (), bfd_object))
+    error ("Error: Device ELF image %s is not a valid object: %s",
+	   m_bfd_name.c_str (), bfd_errmsg (bfd_get_error ()));
+
   const auto arch_info = bfd_lookup_arch (bfd_arch_m68k, 0);
   abfd->arch_info = arch_info;
 
-  // Load in the device ELF object file, forcing a symbol read and while
-  // making sure that the breakpoints are not re-set automatically.
-  m_objfile
-      = symbol_file_add_from_bfd (abfd, bfd_get_filename (abfd.get ()),
-				  SYMFILE_DEFER_BP_RESET, nullptr, 0, nullptr);
+  // Add the objfile's symbols without auto-resetting breakpoints.
+  //
+  // SYMFILE_NOT_FILENAME (default in-memory mode, synthetic
+  // "<cuda-cubin:...>" name): sets OBJF_NOT_FILENAME so gdb won't lstat
+  // the fake path, skipping two filesystem paths:
+  //   - auto-load.c's "<name>-gdb.py" script lookup
+  //   - dwarf2/index-write.c's .gdb_index cache (pointless: we rebuild
+  //     from scratch every LFL event)
+  // Under preserve_tmp_data the name is a real /tmp path, so leave it off.
+  symfile_add_flags symfile_flags = SYMFILE_DEFER_BP_RESET;
+  if (!cuda_options_preserve_tmp_data ())
+    symfile_flags |= SYMFILE_NOT_FILENAME;
+
+  m_objfile = symbol_file_add_from_bfd (abfd, bfd_get_filename (abfd.get ()),
+					symfile_flags, nullptr, 0, nullptr);
   if (!m_objfile)
     error ("Error: Failed to add symbols from device ELF symbol file!\n");
 
@@ -320,8 +549,9 @@ cuda_module::load_objfile ()
   // cubin is now loaded
   m_loaded = true;
   m_uses_abi = cuda_is_bfd_version_call_abi (m_objfile->obfd.get ());
-  cuda_trace ("loaded ELF image (name=%s, module=0x%llx, abi=%d)",
-	      m_filename.c_str (), m_id, m_uses_abi);
+  cuda_trace (
+      "loaded ELF image (name=%s, module=0x%llx, elf_handle=0x%llx, abi=%d)",
+      m_bfd_name.c_str (), m_module_id, m_elf_handle, m_uses_abi);
 
   // This might change our ideas about frames already looked at.
   reinit_frame_cache ();
@@ -335,10 +565,32 @@ cuda_module::load_objfile ()
   // the embedded .debug_line parser.
   //
   // This must happen after the reinit_frame_cache above.
-  if (!m_objfile->compunit_symtabs)
-    cuda_decode_line_table (m_objfile);
+  //
+  // Derive the debug capability from the symbol tables GDB actually built,
+  // not from raw ELF section presence: full DWARF if objfile_has_symbols(),
+  // else line-info if the line-table decode reports it built a line program.
+  // cuda_decode_line_table also makes -lineinfo cubins debuggable, so it must
+  // run whenever there are no full symbols.
+  bool full = objfile_has_symbols (m_objfile);
+  bool line = !full && cuda_decode_line_table (m_objfile);
+  m_debug_capability = full   ? cuda_debug_capability::full_debug
+		       : line ? cuda_debug_capability::line_info
+			      : cuda_debug_capability::none;
+  m_debug_sections = compute_debug_sections (m_objfile);
 
-  // Don't try to update/set breakpoints for corefiles
+  // Allow one nvdisasm retry against the newly relocated cubin: a prior
+  // failure may have been due to the pre-relocation image. A successful
+  // result is relocation-invariant and is kept. The retry is granted once
+  // per module, not once per reload: FUNCTIONS_LOADED rebuilds the objfile
+  // on every lazy function load, and a module that fails persistently would
+  // otherwise spawn nvdisasm again after each one.
+  if (m_nv_metadata_state == nv_metadata_state::failed && !m_nv_retry_consumed)
+    {
+      m_nv_retry_consumed = true;
+      m_nv_metadata_state = nv_metadata_state::not_attempted;
+    }
+
+  // Don't try to update/set breakpoints for corefiles.
   if (target_has_execution ())
     {
       breakpoint_re_set ();
@@ -359,13 +611,14 @@ cuda_module::unload_objfile (bool unlink_file)
   gdb_assert (m_objfile);
   gdb_assert (m_objfile->cuda_objfile);
 
-  cuda_trace ("unloading ELF image (name=%s, module=0x%llx)",
-	      m_objfile->original_name, m_id);
+  cuda_trace (
+      "unloading ELF image (name=%s, module=0x%llx, elf_handle=0x%llx)",
+      m_objfile->original_name, m_module_id, m_elf_handle);
 
   // Mark this objfile as being discarded.
   m_objfile->discarding = true;
 
-  // Use the helper function to add sections
+  // Use the helper function to remove sections from the range map.
   foreach_cuda_objfile_section ([] (asection *section) {
     /* Remove this section from the range map */
     s_cuda_objfile_section_ranges.remove_range (section->vma);
@@ -375,16 +628,17 @@ cuda_module::unload_objfile (bool unlink_file)
   clear_current_source_symtab_and_line (m_objfile);
   clear_displays ();
 
-  // Unlink the ELF image in /tmp/cuda-dbg/ if requested
+  // Unlink the /tmp cubin if requested; it may never have been
+  // written, so ENOENT is fine.
   if (unlink_file && !cuda_options_preserve_tmp_data ())
     {
-      unlink (m_filename.c_str ());
-      m_filename = "";
+      unlink (m_file_path.c_str ());
+      m_cubin_storage_stale = true;
     }
 
-  // Tell the free_objfile observer whether this is a permanent
-  // removal (device breakpoint handles are stale) or a temporary
-  // rebuild during FUNCTIONS_LOADED (handles are still live).
+  // Tell the free_objfile observer if this is a permanent removal (stale
+  // device breakpoint handles) or a temporary FUNCTIONS_LOADED rebuild
+  // (handles still live).
   m_objfile->unlinked = unlink_file;
 
   // Request the objfile be destroyed
@@ -395,95 +649,98 @@ cuda_module::unload_objfile (bool unlink_file)
   m_uses_abi = false;
 }
 
-void
-cuda_module::functions_loaded_event (uint32_t count)
+/* Fetch CUDBGLoadedFunctionInfo for this module's NEWLY_LOADED sections,
+   hiding the API-version choice between the incremental (revision >= 135)
+   and legacy whole-vector fetch. Returns a NEWLY_LOADED-length vector.  */
+
+static std::vector<CUDBGLoadedFunctionInfo>
+fetch_loaded_function_info (uint32_t device_id, uint64_t elf_handle,
+			    uint64_t already_loaded, uint32_t total_count,
+			    uint32_t newly_loaded)
 {
-  auto device_id = context ()->dev_id ();
+  // Guard the std::copy below against overrun.
+  gdb_assert (already_loaded <= total_count);
+  gdb_assert (newly_loaded == total_count - already_loaded);
 
-  // Save a copy of the ELF image for updating below
-  std::vector<uint8_t> buffer (m_size);
-
-  // For debugging incremental vs. full reload
-  bool incremental_updates = true;
-  if (incremental_updates)
+  std::vector<CUDBGLoadedFunctionInfo> result (newly_loaded);
+  if (cuda_debugapi::api_version ().m_revision >= 135)
     {
-      // Save a copy of the current cubin
-      read_cubin (buffer.data ());
-
-      // Unload the objfile, keeping the file in /tmp/cuda-dbg/...
-      // in place for later writing.
-      unload_objfile (false);
-
-      // Fetch the incremental function load information
-      // and apply the incremental relocations
-      auto newly_loaded = count - functions_loaded ();
-      if (cuda_debugapi::api_version ().m_revision >= 135)
-	{
-	  std::vector<CUDBGLoadedFunctionInfo> info (newly_loaded);
-	  cuda_debugapi::get_loaded_function_info (
-	      device_id, m_id, info.data (), functions_loaded (),
-	      newly_loaded);
-	  apply_function_load_updates (buffer.data (), info.data (),
-				       newly_loaded);
-	}
-      else
-	{
-	  // Older debugger backend - have to fetch the whole vector
-	  // This should always work as we were sent a LFL event by the backend
-	  // indicating support for this API
-	  std::vector<CUDBGLoadedFunctionInfo> info (count);
-	  cuda_debugapi::get_loaded_function_info (device_id, id (),
-						   info.data (), count);
-	  apply_function_load_updates (
-	      buffer.data (), &info[functions_loaded ()], newly_loaded);
-	}
-      m_functions_loaded += newly_loaded;
-
-      // For debugging, compare before and after incremental updates
-      bool compare_cubins = false;
-      if (compare_cubins)
-	{
-	  // Save a copy of the ELF image for comparison
-	  std::vector<uint8_t> reference (m_size);
-
-	  // Re-fetch the whole cubin
-	  cuda_debugapi::get_elf_image (device_id, m_id, true,
-					reference.data (), m_size);
-
-	  // Compare
-	  if (memcmp (buffer.data (), reference.data (), m_size))
-	    error (
-		_ ("%s: cubin buffers do not match after incremental update"),
-		__FUNCTION__);
-	}
+      cuda_debugapi::get_loaded_function_info (
+	  device_id, elf_handle, result.data (), already_loaded, newly_loaded);
     }
   else
     {
-      // Unload the objfile
-      unload_objfile (false);
-
-      // Re-fetch the whole cubin
-      cuda_debugapi::get_elf_image (device_id, m_id, true, buffer.data (),
-				    m_size);
+      // Older backend: no startIndex arg, so fetch the whole vector and
+      // copy the newly-loaded tail.
+      std::vector<CUDBGLoadedFunctionInfo> all (total_count);
+      cuda_debugapi::get_loaded_function_info (device_id, elf_handle,
+					       all.data (), total_count);
+      std::copy (all.begin () + already_loaded, all.end (), result.begin ());
     }
+  return result;
+}
 
-  // Write image back out to disk for cuda_module::load_objfile() to create a
-  // BFD from.
-  write_cubin (buffer.data ());
+void
+cuda_module::functions_loaded_event (uint32_t count)
+{
+  m_lazy_load_event_count++;
 
-  // Load the ELF image from the filesystem, creating a new objfile
-  load_objfile ();
+  auto device_id = context ()->dev_id ();
+  auto already_loaded = functions_loaded ();
 
-  // Flush the module disassembly caches as we've just updated the
-  // ELF image
-  flush_disasm_caches ();
+  // Prevent unsigned underflow of newly_loaded.
+  gdb_assert (count >= already_loaded);
+  auto newly_loaded = count - already_loaded;
+
+  // Phase A: fetch per-section addresses for the new sections.
+  std::vector<CUDBGLoadedFunctionInfo> info;
+  {
+    CUDA_LFL_STEP_TIMER (FETCH_INFO);
+    info = fetch_loaded_function_info (device_id, m_elf_handle, already_loaded,
+				       count, newly_loaded);
+  }
+
+  // Phase B: tear down the BFD/objfile before mutating its backing buffer.
+  {
+    CUDA_LFL_STEP_TIMER (UNLOAD);
+    unload_objfile (false);
+  }
+
+  // Phase C: patch the cubin in place (sh_addr, then st_value for those
+  // sections, then REL/RELA relocations). Safe: the BFD is down, so nothing
+  // is reading m_cubin_buffer now.
+  {
+    CUDA_LFL_STEP_TIMER (APPLY_RELOCS);
+    apply_function_load_updates (m_cubin_buffer.data (), info.data (),
+				 newly_loaded);
+  }
+
+  m_functions_loaded += newly_loaded;
+
+  // Phase D: refresh the /tmp cubin only under preserve_tmp_data; otherwise
+  // sync_to_disk_and_get_file_path() writes it on demand when a tool needs it.
+  {
+    CUDA_LFL_STEP_TIMER (WRITE);
+    if (cuda_options_preserve_tmp_data ())
+      write_cubin ();
+    else
+      m_cubin_storage_stale = true;
+  }
+
+  // Phase E: reopen the iovec BFD over the patched buffer, re-parse DWARF.
+  {
+    CUDA_LFL_STEP_TIMER (LOAD);
+    load_objfile ();
+  }
+
+  flush_disasm_caches (false);
 }
 
 void
 cuda_module::print () const
 {
-  cuda_trace ("      module_id 0x%llx size %llu file %s", m_id, m_size,
-	      m_filename.c_str ());
+  cuda_trace ("      module_id 0x%llx elf_handle 0x%llx size %llu file %s",
+	      m_module_id, m_elf_handle, m_size, m_file_path.c_str ());
 }
 
 void
@@ -582,6 +839,14 @@ cuda_module::apply_function_load_updates (uint8_t *buffer,
   for (int i = 0; i < count; ++i)
     {
       const uint64_t section_index = info[i].sectionIndex;
+      // Skip out-of-range section indices to avoid overrunning buffer.
+      if (section_index >= shnum)
+	{
+	  CUDA_TRACE_MODULE (
+	      "Skipping out-of-range section index %llu (shnum %llu)",
+	      (unsigned long long)section_index, (unsigned long long)shnum);
+	  continue;
+	}
       Elf64_External_Shdr *section
 	  = (Elf64_External_Shdr *)&buffer[shoff + section_index * shentsize];
 
@@ -596,7 +861,8 @@ cuda_module::apply_function_load_updates (uint8_t *buffer,
 	{
 	  if (section_address != info[i].address)
 	    CUDA_TRACE_MODULE (
-		"Skipping section %lld: mismatched addresses for section %lld "
+		"Skipping section %lld: mismatched addresses for section "
+		"%lld "
 		"%s: 0x%llx vs 0x%llx",
 		section_index,
 		(const char *)&shstrtab[*(uint32_t *)section->sh_name],
@@ -641,8 +907,8 @@ cuda_module::apply_function_load_updates (uint8_t *buffer,
 	}
       if (sym_shndx >= section_addresses.size ())
 	{
-	  CUDA_TRACE_MODULE ("Symbol %s section number out of range %u >= %lu",
-			     sym_shndx, section_addresses.size ());
+	  CUDA_TRACE_MODULE ("Symbol %d section number out of range %u >= %lu",
+			     symidx, sym_shndx, section_addresses.size ());
 	  continue;
 	}
 

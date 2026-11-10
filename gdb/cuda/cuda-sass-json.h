@@ -19,12 +19,13 @@
 #ifndef _CUDA_SASS_JSON_H
 #define _CUDA_SASS_JSON_H 1
 
+#include "cuda-asm.h"
 #include "cuda-util-stream.h"
 #include "gdbsupport/common-exceptions.h"
 
 #include <functional>
 #include <memory>
-#include <sstream>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -53,29 +54,222 @@ struct schema_metadata
   std::string m_producer;
   std::string m_description;
 
-  /* Optional properties */
-  int64_t m_note_nv_toolkit_version;
-  std::string m_note_nv_toolkit_object_filename;
-  std::string m_note_nv_toolkit_tool_name;
-  std::string m_note_nv_toolkit_tool_version;
-  std::string m_note_nv_toolkit_tool_branch;
-  std::string m_note_nv_toolkit_tool_options;
+  /* Optional properties — .note.nv.tkinfo */
+  std::optional<int64_t> m_note_nv_toolkit_version;
+  std::optional<std::string> m_note_nv_toolkit_object_filename;
+  std::optional<std::string> m_note_nv_toolkit_tool_name;
+  std::optional<std::string> m_note_nv_toolkit_tool_version;
+  std::optional<std::string> m_note_nv_toolkit_tool_branch;
+  std::optional<std::string> m_note_nv_toolkit_tool_options;
 
-  int64_t m_note_nv_cuda_version;
-  int64_t m_note_nv_cuda_virtual_sm_version;
+  /* Optional properties — .note.nv.cuinfo (legacy .note.nv.cuver).
+     The tag and the toolkit value are DISTINCT integers. */
+  std::optional<int64_t> m_note_nv_cuda_version;        /* tag */
+  std::optional<int64_t> m_note_nv_cuinfo_tool_version; /* nv_note_cuinfo_toolVersion */
+  std::optional<int64_t> m_note_nv_cuda_virtual_sm_version;
 };
 
-struct schema_sass_instruction
+struct schema_value
+{
+  enum class value_type
+  {
+    string,
+    integer,
+    boolean,
+    null,
+  };
+
+  value_type m_type;
+  std::string m_string;
+  int64_t m_integer;
+  bool m_boolean;
+
+  bool
+  is_string () const
+  {
+    return m_type == value_type::string;
+  }
+  bool
+  is_integer () const
+  {
+    return m_type == value_type::integer;
+  }
+  bool
+  is_boolean () const
+  {
+    return m_type == value_type::boolean;
+  }
+  bool
+  is_null () const
+  {
+    return m_type == value_type::null;
+  }
+
+  std::string
+  to_string () const
+  {
+    gdb_assert (m_type == value_type::string);
+    return m_string;
+  }
+  int64_t
+  to_integer () const
+  {
+    gdb_assert (m_type == value_type::integer);
+    return m_integer;
+  }
+  bool
+  to_boolean () const
+  {
+    gdb_assert (m_type == value_type::boolean);
+    return m_boolean;
+  }
+
+  schema_value (std::string &&string)
+      : m_type (value_type::string), m_string (std::move (string)),
+	m_integer (0), m_boolean (false)
+  {
+  }
+
+  schema_value (int64_t integer)
+      : m_type (value_type::integer), m_string (), m_integer (integer),
+	m_boolean (false)
+  {
+  }
+
+  schema_value (bool boolean)
+      : m_type (value_type::boolean), m_string (), m_integer (0),
+	m_boolean (boolean)
+  {
+  }
+
+  schema_value ()
+      : m_type (value_type::null), m_string (), m_integer (0),
+	m_boolean (false)
+  {
+  }
+};
+
+struct schema_annotation
+{
+
+  schema_value
+  lookup (const std::string &name) const
+  {
+    for (const auto &[key, value] : m_values)
+      {
+	if (key == name)
+	  return value;
+      }
+
+    // Return a null value if the key is not found
+    return schema_value ();
+  }
+
+  void
+  add (const std::string &name, const schema_value &value)
+  {
+    m_values.emplace_back (name, value);
+  }
+
+  std::vector<std::pair<std::string, schema_value>>
+  values () const
+  {
+    return m_values;
+  }
+
+  std::vector<std::pair<std::string, schema_value>> m_values;
+};
+
+// Result of parsing an "other-attributes" object in an instruction.
+class schema_instruction_attributes
+{
+public:
+  schema_instruction_attributes ()
+      : m_attributes (cuda_instruction_attribute::none),
+	m_padding (std::nullopt)
+  {
+  }
+
+  schema_instruction_attributes (cuda_instruction_attribute attributes,
+				 std::optional<int> padding)
+      : m_attributes (attributes), m_padding (padding)
+  {
+  }
+
+  cuda_instruction_attribute
+  attributes () const
+  {
+    return m_attributes;
+  }
+
+  void
+  set_attributes (cuda_instruction_attribute attributes)
+  {
+    m_attributes = attributes;
+  }
+
+  bool
+  is_barrier () const
+  {
+    return (m_attributes & cuda_instruction_attribute::inter_warp_barrier)
+	   != cuda_instruction_attribute::none;
+  }
+
+  bool
+  is_control_flow () const
+  {
+    return (m_attributes & cuda_instruction_attribute::control_flow)
+	   != cuda_instruction_attribute::none;
+  }
+
+  bool
+  is_subroutine_call () const
+  {
+    return (m_attributes & cuda_instruction_attribute::subroutine_call)
+	   != cuda_instruction_attribute::none;
+  }
+
+  int
+  has_padding () const
+  {
+    return m_padding.has_value ();
+  }
+
+  int
+  padding () const
+  {
+    return m_padding.value_or (0);
+  }
+
+  void
+  set_padding (int padding)
+  {
+    m_padding = std::make_optional (padding);
+  }
+
+private:
+  cuda_instruction_attribute m_attributes;
+  std::optional<int> m_padding;
+};
+
+struct schema_instruction_disassembly
 {
   std::string m_predicate;
   std::string m_opcode;
   std::string m_operands;
   std::string m_extra;
-  std::optional<bool> m_opt_is_control_flow;
-  std::optional<bool> m_opt_is_subroutine_call;
-  std::optional<bool> m_opt_is_inter_warp_barrier;
-  std::vector<std::pair<std::string, std::string>> m_other_attributes;
+};
+
+struct schema_instruction
+{
+  uint64_t m_pc;
+  schema_instruction_disassembly m_info;
+  std::optional<uint32_t> m_count;
+  std::optional<uint32_t> m_padding;
+  std::optional<cuda_instruction_attribute> m_attributes;
+  std::vector<schema_instruction_attributes> m_other_attributes;
   std::vector<std::string> m_other_flags;
+  std::vector<schema_annotation> m_annotations;
 };
 
 struct schema_function
@@ -84,7 +278,8 @@ struct schema_function
   uint64_t m_start;
   uint64_t m_length;
   std::vector<std::string> m_other_attributes;
-  std::vector<schema_sass_instruction> m_instructions;
+  std::vector<schema_instruction> m_instructions;
+  std::vector<schema_annotation> m_annotations;
 };
 
 struct schema_json
@@ -214,7 +409,7 @@ class parser
 public:
   typedef std::function<void (const schema_function &)> on_function_t;
 
-  parser (std::unique_ptr<util_stream::istream> &&stream);
+  parser (std::unique_ptr<util_stream::istream> &&stream, uint32_t insn_size);
 
   /* Parse the entire json object */
   void parse_json (schema_json &schema);
@@ -248,10 +443,18 @@ public:
   }
 
 private:
+  enum class cuda_info_kind
+  {
+    cuinfo,
+    cuver
+  };
+
   lexer m_lexer;
   parser_state m_state;
 
   on_function_t m_on_function;
+
+  uint32_t m_insn_size;
 
   void parse_metadata (schema_metadata &metadata);
   void parse_elf_metadata (schema_metadata &metadata);
@@ -260,24 +463,31 @@ private:
   void parse_sm_version (schema_metadata &metadata);
   void parse_cuda_version (schema_metadata &metadata);
   void parse_toolkit_info (schema_metadata &metadata);
+  template <cuda_info_kind Kind>
   void parse_cuda_info (schema_metadata &metadata);
 
-  void parse_functions_list (std::vector<schema_function> &functions);
-  void parse_function (schema_function &function);
-  void parse_sass_instructions_list (
-      std::vector<schema_sass_instruction> &instructions);
-  void parse_sass_instruction (schema_sass_instruction &instruction);
+  void parse_functions_list (std::vector<schema_function> &functions,
+			     uint32_t insn_size);
+  void parse_function (schema_function &function, uint32_t insn_size);
+  void parse_instructions_list (const std::string &format,
+				std::vector<schema_instruction> &instructions);
+  void parse_instruction (const std::string &format,
+			  std::vector<schema_instruction> &instructions);
+
   /* Returns true if field is part of the schema */
-  bool parse_sass_instruction_field (schema_sass_instruction &instruction,
-				     const std::string &field,
-				     int &fields_mask);
+  bool parse_instruction_attribute_field (
+      const std::string &format, schema_instruction &instruction,
+      std::vector<cuda_instruction_attribute> &attributes,
+      const std::string &field, int &fields_mask);
 
   void parse_string_list (std::vector<std::string> &list);
-  void parse_other_attributes_dict (schema_sass_instruction &instruction);
-  void parse_instruction_other_attribute_field (
-      schema_sass_instruction &instruction, const std::string &field,
-      const std::string &value);
-
+  void parse_instruction_attribute_object (schema_instruction &instruction);
+  void parse_instruction_attributes (schema_instruction &instruction);
+  void parse_instruction_attributes_dict (
+      std::vector<std::pair<std::string, schema_value>> &attributes);
+  void parse_annotations (std::vector<schema_annotation> &annotations);
+  void parse_annotation (schema_annotation &annotation);
+  void parse_value (schema_value &value);
   inline token next_expect (token_type type);
 
   inline void
@@ -327,8 +537,8 @@ private:
    - subroutine-call must imply control-flow (call is a subset of cf)
    - inter-warp-barrier is independent (cannot be control-flow or call)
    Returns true if validation passes, false if any constraint is violated. */
-bool validate_sass_instruction_attributes (
-    const schema_sass_instruction &instruction);
+bool validate_instruction_attributes (
+    const schema_instruction_attributes &attributes);
 
 }
 

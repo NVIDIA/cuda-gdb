@@ -221,7 +221,8 @@ cuda_kernel::print ()
   gdb_printf ("        name        : %s\n", m_name.c_str ());
   gdb_printf ("        device id   : %u\n", m_dev_id);
   gdb_printf ("        grid id     : %ld\n", (int64_t)m_grid_id);
-  gdb_printf ("        module id   : 0x%lx\n", m_module->id ());
+  gdb_printf ("        module id   : 0x%lx\n", m_module->module_id ());
+  gdb_printf ("        elf handle  : 0x%lx\n", m_module->elf_handle ());
   gdb_printf ("        entry point : 0x%lx\n", m_virt_code_base);
   gdb_printf ("        dimensions  : %s\n", m_dimensions.c_str ());
   gdb_printf ("        launched    : %s\n", m_launched ? "yes" : "no");

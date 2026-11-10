@@ -33,9 +33,7 @@
 
 #include <array>
 #include <cstdlib>
-#ifdef __QNXHOST__
 #include <string>
-#endif
 #include <string_view>
 
 #ifndef __QNXHOST__
@@ -166,6 +164,7 @@ cuda_process_initialize_target_packet (cuda_packet_decoder &decoder,
 {
   /* Extract options that need to be set before initialization */
   cuda_launch_blocking = decoder.get<bool> ();
+  cuda_lazy_function_finalization = decoder.get<bool> ();
 
   const bool driver_is_compatible = cuda_initialize_target ();
 
@@ -234,11 +233,13 @@ cuda_process_check_pending_sigint_packet (cuda_packet_decoder &decoder,
 static void
 cuda_process_api_finalize_packet (cuda_packet_encoder &encoder)
 {
-  /* If finalize() has been called in cuda_cleanup(), then return the
-     recorded cudbgAPI result. */
-  const CUDBGResult res
-      = cuda_initialized ? cudbgAPI->finalize () : api_finalize_res;
-  encoder.put (res);
+  /* QNX has no target mourn hook to reset the server-side CUDA state.  If
+     another target already called cuda_cleanup(), return its recorded result
+     without finalizing the API twice.  */
+  if (cuda_initialized)
+    cuda_cleanup ();
+
+  encoder.put (api_finalize_res);
 }
 
 static void
@@ -249,11 +250,11 @@ cuda_process_set_option_packet (cuda_packet_decoder &decoder,
   cuda_debug_libcudbg = decoder.get<bool> ();
   cuda_debug_notifications = decoder.get<bool> ();
   cuda_notify_youngest = decoder.get<bool> ();
-  cuda_driver_logs = decoder.get<bool> ();
+  cuda_logs = decoder.get<bool> ();
   cuda_printf_flushing = decoder.get<bool> ();
 
   /* Apply the runtime option */
-  cuda_set_driver_logging (cuda_driver_logs);
+  cuda_set_logs (cuda_logs);
 
   encoder.put ("OK");
 }
@@ -267,7 +268,11 @@ cuda_process_query_trace_message (cuda_packet_encoder &encoder)
       return;
     }
 
-  encoder.put (cuda_trace_messages.front ());
+  const std::string &trace_message = cuda_trace_messages.front ();
+  const std::string encoded_trace_message
+    = bin2hex (reinterpret_cast<const gdb_byte *> (trace_message.data ()),
+	       static_cast<int> (trace_message.size ()));
+  encoder.put (encoded_trace_message);
   cuda_trace_messages.pop_front ();
 }
 

@@ -39,6 +39,10 @@
 #include "tui/tui-location.h"
 #include "gdb_curses.h"
 
+#ifdef NVIDIA_BUGFIX
+#include "tui/tui-wingeneral.h"
+#endif
+
 /* Function to display the "main" routine.  */
 void
 tui_display_main ()
@@ -346,6 +350,9 @@ tui_source_window_base::refresh_window ()
   int smincol = x + box_width () + left_margin;
   int smaxrow = sminrow + m_content.size () - 1;
   int smaxcol = smincol + view_width - 1;
+#ifdef NVIDIA_BUGFIX
+  touchwin (m_pad.get ());
+#endif
   pnoutrefresh (m_pad.get (), 0, pad_x, sminrow, smincol, smaxrow, smaxcol);
 }
 
@@ -598,7 +605,17 @@ tui_source_window_base::set_is_exec_point_at (struct tui_line_or_address l)
       i++;
     }
   if (changed)
+#ifdef NVIDIA_BUGFIX
+    {
+      tui_batch_rendering batch;
+      for (int j = 0; j < m_content.size (); j++)
+	show_source_line (j);
+      update_exec_info (false);
+      refresh_window ();
+    }
+#else
     refill ();
+#endif
 }
 
 /* See tui-winsource.h.  */

@@ -148,17 +148,11 @@ struct comp_unit
 {
   comp_unit (struct objfile *objf)
     : abfd (objf->obfd.get ())
-#ifdef NVIDIA_CUDA_GDB
-      , objfile (objf)
-#endif
   {
   }
 
   /* Keep the bfd convenient.  */
   bfd *abfd;
-#ifdef NVIDIA_CUDA_GDB
-  struct objfile *objfile;
-#endif
 
   /* Pointer to the .debug_frame section loaded into memory.  */
   const gdb_byte *dwarf_frame_buffer = nullptr;
@@ -1731,12 +1725,7 @@ static comp_unit *
 find_comp_unit (struct objfile *objfile)
 {
   bfd *abfd = objfile->obfd.get ();
-/* CUDA - bugfix */
-#ifdef NVIDIA_CUDA_GDB
-  if (!abfd || gdb_bfd_requires_relocations (abfd))
-#else
   if (gdb_bfd_requires_relocations (abfd))
-#endif
     return dwarf2_frame_objfile_data.get (objfile);
 
   return dwarf2_frame_bfd_data.get (abfd);
@@ -1749,12 +1738,7 @@ static void
 set_comp_unit (struct objfile *objfile, struct comp_unit *unit)
 {
   bfd *abfd = objfile->obfd.get ();
-/* CUDA - bugfix */
-#ifdef NVIDIA_CUDA_GDB
-  if (!abfd || gdb_bfd_requires_relocations (abfd))
-#else
   if (gdb_bfd_requires_relocations (abfd))
-#endif
     return dwarf2_frame_objfile_data.set (objfile, unit);
 
   return dwarf2_frame_bfd_data.set (abfd, unit);

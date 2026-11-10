@@ -21,6 +21,7 @@
 #include "arch-utils.h"
 #include "block.h"
 #include "cli/cli-cmds.h"
+#include "cli/cli-utils.h"
 #include "command.h"
 #include "cuda-api.h"
 #include "cuda-commands.h"
@@ -29,6 +30,7 @@
 #include "cuda-coords.h"
 #include "cuda-exceptions.h"
 #include "cuda-kernel.h"
+#include "cuda-modules.h"
 #include "cuda-options.h"
 #include "cuda-parser.h"
 #include "cuda-state.h"
@@ -40,10 +42,12 @@
 #include "gdbsupport/buildargv.h"
 #include "gdbsupport/forward-scope-exit.h"
 #include "gdbsupport/pathstuff.h"
+#include "inferior.h"
 #include "language.h"
 #include "objfiles.h"
 #include "source.h"
 #include "symtab.h"
+#include "target.h"
 #include "ui-file.h"
 #include "ui-out.h"
 #include "valprint.h"
@@ -56,8 +60,10 @@
 #include <bitset>
 #include <cstdlib>
 #include <iomanip>
+#include <limits>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 // std::underlying_type_t was added in C++14
@@ -956,12 +962,34 @@ public:
 	cuda_state::warp_get_divergent_lanes_mask (m_device, m_sm, m_wp));
 
     const auto kernel = cuda_state::warp_get_kernel (m_device, m_sm, m_wp);
+
+    if (kernel == nullptr)
+      throw_error (NOT_AVAILABLE_ERROR, _ ("Ignoring warp without a kernel"));
+
     m_kernel_id = std::to_string (kernel->id ());
     m_blockIdx = dim3_to_string (
 	cuda_state::warp_get_block_idx (m_device, m_sm, m_wp));
-    m_threadIdx = dim3_to_string (cuda_state::lane_get_thread_idx (
-	m_device, m_sm, m_wp, __builtin_ctz (active_lanes_mask)));
-    m_pc = to_hex (cuda_state::warp_get_active_pc (m_device, m_sm, m_wp));
+
+    /* A valid warp can legitimately have no active lanes (e.g. a CNP/CDP
+       parent warp blocked while waiting for a child kernel to complete, or a
+       warp whose valid lanes are all divergent).  In that case there is no
+       "first active lane" to query: doing so would access an out-of-bounds
+       lane and crash cuda-gdb.  Report the active ThreadIdx and PC as
+       unavailable rather than inventing a value for a non-active lane.  */
+    if (active_lanes_mask != 0)
+      {
+	const auto lane
+	    = cuda_state::warp_get_lowest_active_lane (m_device, m_sm, m_wp);
+	m_threadIdx = dim3_to_string (
+	    cuda_state::lane_get_thread_idx (m_device, m_sm, m_wp, lane));
+	m_pc = to_hex (cuda_state::warp_get_active_pc (m_device, m_sm, m_wp));
+      }
+    else
+      {
+	/* No active lanes: there is no "first active" thread or PC to report. */
+	m_threadIdx = "<inactive>";
+	m_pc = "<unavailable>";
+      }
   }
 
   /* Getters */
@@ -2120,6 +2148,9 @@ public:
     auto kernel = cuda_state::find_kernel_by_grid_id (
 	coords.physical ().dev (), coords.logical ().gridId ());
 
+    if (kernel == nullptr)
+      return true;
+
     /* See if this is a new range */
     bool break_of_contiguity = false;
     if (!m_underlying.empty ())
@@ -2442,6 +2473,9 @@ public:
   {
     auto kernel = cuda_state::find_kernel_by_grid_id (
 	coords.physical ().dev (), coords.logical ().gridId ());
+
+    if (kernel == nullptr)
+      return true;
 
     /* See if this is a new range */
     bool break_of_contiguity = false;
@@ -2847,6 +2881,10 @@ public:
     const auto &l = coords.logical ();
 
     auto kernel = cuda_state::find_kernel_by_grid_id (p.dev (), l.gridId ());
+
+    if (kernel == nullptr)
+      return true;
+
     m_pc = cuda_state::lane_get_pc (p.dev (), p.sm (), p.wp (), p.ln ());
 
     /* Get the sal for this iteration. */
@@ -3296,7 +3334,7 @@ public:
   constexpr static underlying_type_t<cuda_coord_set_mask_t> iterator_mask
       = select_all;
   constexpr static cuda_coord_compare_type compare_type
-      = cuda_coord_compare_type::logical;
+      = cuda_coord_compare_type::physical;
   constexpr static command_t parser_command = CMD_FILTER;
   static cuda_filters
   default_filter ()
@@ -3455,6 +3493,422 @@ info_cuda_contexts_command (const char *arg)
   gdb_flush (gdb_stdout);
 }
 
+static const char *
+or_unavailable (const std::string &s)
+{
+  return s.empty () ? "<unavailable>" : s.c_str ();
+}
+
+static const char *
+cuda_session_environment_value (const char *value)
+{
+  if (value == nullptr)
+    return "<not set>";
+  return *value == '\0' ? "<empty>" : value;
+}
+
+static const char *
+capability_to_string (cuda_debug_capability capability)
+{
+  switch (capability)
+    {
+    case cuda_debug_capability::full_debug:
+      return "Full Debug";
+    case cuda_debug_capability::line_info:
+      return "Line Info Only";
+    case cuda_debug_capability::none:
+      return "None";
+    case cuda_debug_capability::unknown:
+    default:
+      return "Unknown";
+    }
+}
+
+class cuda_objfile_info
+{
+public:
+  explicit cuda_objfile_info (cuda_module *module, bool detailed = false)
+  {
+    gdb_assert (module);
+    if (cuda_current_focus::isDevice ())
+      {
+	const auto kernel = cuda_current_focus::get ().logical ().kernel ();
+	m_current = kernel ? (module == kernel->module ()) : false;
+      }
+    else
+      m_current = false;
+
+    m_elf_handle = to_hex (module->elf_handle ());
+    m_device = module->dev_id ();
+    m_debug_capability = module->get_debug_capability ();
+    if (detailed)
+      {
+	m_context = to_hex (module->context_id ());
+	m_debug_sections = module->get_debug_sections ();
+	m_target_arch = module->get_nv_target_arch ();
+	try
+	  {
+	    m_file_path = module->sync_to_disk_and_get_file_path ();
+	  }
+	catch (const gdb_exception &)
+	  {
+	  }
+	m_nv_virtual_sm = module->get_nv_virtual_sm ();
+	m_nv_toolkit_version = module->get_nv_toolkit_version ();
+	m_nv_tool_name = module->get_nv_tool_name ();
+	m_nv_compile_options = module->get_nv_compile_options ();
+	m_lazy_load_event_count = module->lazy_load_event_count ();
+      }
+  }
+
+  bool
+  current () const noexcept
+  {
+    return m_current;
+  }
+  const std::string &
+  elf_handle () const noexcept
+  {
+    return m_elf_handle;
+  }
+  uint32_t
+  device () const noexcept
+  {
+    return m_device;
+  }
+  const std::string &
+  context () const noexcept
+  {
+    return m_context;
+  }
+  const std::string &
+  target_arch () const noexcept
+  {
+    return m_target_arch;
+  }
+  std::string
+  debug_capability () const
+  {
+    return capability_to_string (m_debug_capability);
+  }
+  const std::string &
+  debug_sections () const noexcept
+  {
+    return m_debug_sections;
+  }
+  const std::string &
+  file_path () const noexcept
+  {
+    return m_file_path;
+  }
+  const std::string &
+  nv_virtual_sm () const noexcept
+  {
+    return m_nv_virtual_sm;
+  }
+  const std::string &
+  nv_toolkit_version () const noexcept
+  {
+    return m_nv_toolkit_version;
+  }
+  const std::string &
+  nv_tool_name () const noexcept
+  {
+    return m_nv_tool_name;
+  }
+  const std::string &
+  nv_compile_options () const noexcept
+  {
+    return m_nv_compile_options;
+  }
+
+  uint64_t
+  lazy_load_event_count () const noexcept
+  {
+    return m_lazy_load_event_count;
+  }
+
+  ~cuda_objfile_info () = default;
+  cuda_objfile_info () = delete;
+  cuda_objfile_info (const cuda_objfile_info &) = default;
+  cuda_objfile_info (cuda_objfile_info &&) = default;
+  cuda_objfile_info &operator= (const cuda_objfile_info &) = default;
+  cuda_objfile_info &operator= (cuda_objfile_info &&) = default;
+
+private:
+  bool m_current;
+  std::string m_elf_handle;
+  uint32_t m_device;
+  std::string m_context;
+  std::string m_target_arch;
+  cuda_debug_capability m_debug_capability;
+  std::string m_debug_sections;
+  std::string m_file_path;
+  std::string m_nv_virtual_sm;
+  std::string m_nv_toolkit_version;
+  std::string m_nv_tool_name;
+  std::string m_nv_compile_options;
+  uint64_t m_lazy_load_event_count = 0;
+};
+
+/* Which objfiles a single "info cuda objfiles" invocation reports on.  The
+   default inventory is never filtered; only the detailed view is.  */
+enum class objfiles_scope
+{
+  inventory,	   /* Default view: every loaded objfile.  */
+  detailed_active, /* Detailed view: objfiles owning an active kernel.  */
+  detailed_all,	   /* Detailed view: every loaded objfile.  */
+};
+
+/* Objfiles owning at least one kernel the device currently reports as
+   running.  cuda_kernel::present treats ACTIVE and SLEEPING grids as
+   running.  cuda_module has no kernel list, so the relation is only
+   walkable from the kernel side.
+
+   A cuda_module is one cubin, not one CUmodule: with lazy function
+   finalization a CUmodule can own several cubins, and the module map is
+   keyed by ELF handle.  kernel->module () therefore resolves to the cubin
+   the kernel actually runs from, so this selects cubins rather than every
+   cubin of a CUmodule that happens to be running something.  */
+static std::unordered_set<cuda_module *>
+cuda_objfiles_with_active_kernels ()
+{
+  std::unordered_set<cuda_module *> active;
+
+  for (const auto &entry : cuda_state::kernels ())
+    {
+      cuda_kernel *kernel = entry.second.get ();
+      if (kernel == nullptr || !kernel->present ())
+	continue;
+      cuda_module *module = kernel->module ();
+      if (module != nullptr)
+	active.insert (module);
+    }
+  return active;
+}
+
+/* Collect the objfiles SCOPE asks for.  When FILTERED_OUT is non-null it
+   receives the number of loaded objfiles the filter skipped: an empty result
+   with nothing skipped means no CUDA content at all, which the caller has to
+   word differently from an empty result caused by filtering.  */
+
+static std::vector<cuda_objfile_info>
+cuda_collect_objfiles (objfiles_scope scope,
+		       unsigned int *filtered_out = nullptr)
+{
+  std::vector<cuda_objfile_info> objfiles;
+  const bool detailed = (scope != objfiles_scope::inventory);
+
+  std::unordered_set<cuda_module *> active;
+  if (scope == objfiles_scope::detailed_active)
+    active = cuda_objfiles_with_active_kernels ();
+
+  for (const auto &entry : cuda_state::modules ())
+    {
+      cuda_module *module = entry.second.get ();
+      if (module == nullptr || !module->loaded ())
+	continue;
+      /* Constructing cuda_objfile_info is what materializes the cubin and
+	 runs nvdisasm, so the filter has to come before it.  */
+      if (scope == objfiles_scope::detailed_active
+	  && active.find (module) == active.end ())
+	{
+	  if (filtered_out != nullptr)
+	    ++*filtered_out;
+	  continue;
+	}
+      objfiles.emplace_back (module, detailed);
+    }
+  return objfiles;
+}
+
+static void
+info_cuda_objfiles_default (const std::vector<cuda_objfile_info> &objfiles)
+{
+  struct ui_out *uiout = current_uiout;
+  struct
+  {
+    size_t current, handle, debug_capability;
+  } width;
+
+  const std::string header_current{ " " };
+  const std::string header_handle{ "Handle" };
+  const std::string header_device{ "Dev" };
+  const std::string header_debug_capability{ "Debug Capability" };
+
+  if (objfiles.empty () && !uiout->is_mi_like_p ())
+    {
+      uiout->field_string (NULL, _ ("No CUDA objfiles.\n"));
+      return;
+    }
+
+  width.current = header_current.length ();
+  width.handle = header_handle.length ();
+  width.debug_capability = header_debug_capability.length ();
+  for (const auto &objfile : objfiles)
+    {
+      width.handle = std::max (width.handle, objfile.elf_handle ().length ());
+      width.debug_capability
+	= std::max (width.debug_capability,
+		    objfile.debug_capability ().length ());
+    }
+
+  ui_out_emit_table table_emitter (uiout, 4, objfiles.size (),
+				   "InfoCudaObjfilesTable");
+  uiout->table_header (width.current, ui_right, "current", header_current);
+  uiout->table_header (width.handle, ui_right, "handle", header_handle);
+  uiout->table_header (header_device.length (), ui_right, "device",
+		       header_device);
+  uiout->table_header (width.debug_capability, ui_left, "debug_capability",
+		       header_debug_capability);
+  uiout->table_body ();
+
+  for (const auto &objfile : objfiles)
+    {
+      ui_out_emit_tuple tuple_emitter (uiout, "InfoCudaObjfilesRow");
+      uiout->field_string ("current", objfile.current () ? "*" : " ");
+      uiout->field_string ("handle", objfile.elf_handle ());
+      uiout->field_signed ("device", objfile.device ());
+      uiout->field_string ("debug_capability", objfile.debug_capability ());
+      uiout->text ("\n");
+    }
+
+  if (!uiout->is_mi_like_p ())
+    uiout->message (_ ("\n%u CUDA objfile%s.\n"), (unsigned)objfiles.size (),
+		    objfiles.size () == 1 ? "" : "s");
+
+  gdb_flush (gdb_stdout);
+}
+
+static void
+info_cuda_objfiles_detailed (const std::vector<cuda_objfile_info> &objfiles,
+			     objfiles_scope scope, bool any_filtered_out)
+{
+  struct ui_out *uiout = current_uiout;
+
+  if (target_has_execution () && !current_inferior ()->attach_flag)
+    {
+      const gdb_environ &environment = current_inferior ()->environment;
+
+      uiout->text ("CUDA module environment:\n");
+      ui_out_emit_tuple tuple_emitter (
+	  uiout, "InfoCudaObjfilesSessionState");
+
+      uiout->text ("  JIT environment        : ");
+      uiout->field_fmt (
+	  "jit_environment",
+	  "CUDA_FORCE_PTX_JIT=%s, CUDA_DISABLE_PTX_JIT=%s",
+	  cuda_session_environment_value (
+	      environment.get ("CUDA_FORCE_PTX_JIT")),
+	  cuda_session_environment_value (
+	      environment.get ("CUDA_DISABLE_PTX_JIT")));
+      uiout->text ("\n");
+
+      uiout->text ("  JIT cache              : ");
+      uiout->field_fmt (
+	  "jit_cache",
+	  "CUDA_CACHE_PATH=%s, CUDA_CACHE_MAXSIZE=%s, CUDA_CACHE_DISABLE=%s",
+	  cuda_session_environment_value (
+	      environment.get ("CUDA_CACHE_PATH")),
+	  cuda_session_environment_value (
+	      environment.get ("CUDA_CACHE_MAXSIZE")),
+	  cuda_session_environment_value (
+	      environment.get ("CUDA_CACHE_DISABLE")));
+      uiout->text ("\n");
+
+      uiout->text ("  Lazy loading           : ");
+      uiout->field_fmt (
+	  "lazy_loading", "CUDA_MODULE_LOADING=%s",
+	  cuda_session_environment_value (
+	      environment.get ("CUDA_MODULE_LOADING")));
+      uiout->text ("\n\n");
+    }
+
+  /* Both empty-result wordings are wrong in the other case: the generic "No
+     CUDA objfiles." is false when modules are loaded and merely filtered out,
+     and this one is false when nothing is loaded at all, so the filter has to
+     say whether it skipped anything.  */
+  if (objfiles.empty () && scope == objfiles_scope::detailed_active
+      && any_filtered_out && !uiout->is_mi_like_p ())
+    {
+      uiout->field_string (NULL,
+			   _ ("No CUDA objfiles with active kernels.\n"));
+      return;
+    }
+
+  info_cuda_objfiles_default (objfiles);
+
+  if (objfiles.empty ())
+    return;
+
+  ui_out_emit_list list_emitter (uiout, "InfoCudaObjfilesDetails");
+  for (const auto &objfile : objfiles)
+    {
+      ui_out_emit_tuple tuple_emitter (uiout, "InfoCudaObjfileDetail");
+      uiout->text ("\nObjfile ");
+      uiout->field_string ("handle", objfile.elf_handle ());
+      uiout->text ("\n  Context                   : ");
+      uiout->field_string ("context", objfile.context ());
+      uiout->text ("\n  Debug sections present    : ");
+      uiout->field_string ("debug_sections", objfile.debug_sections ());
+      uiout->text ("\n  File path                 : ");
+      uiout->field_string ("file_path",
+			    or_unavailable (objfile.file_path ()));
+      uiout->text ("\n  Target architecture       : ");
+      uiout->field_string ("target_arch",
+			    or_unavailable (objfile.target_arch ()));
+      uiout->text ("\n  Virtual target SM         : ");
+      uiout->field_string ("virtual_target_sm",
+			    or_unavailable (objfile.nv_virtual_sm ()));
+      uiout->text ("\n  Toolkit version           : ");
+      uiout->field_string ("toolkit_version",
+			    or_unavailable (objfile.nv_toolkit_version ()));
+      uiout->text ("\n  Tool name                 : ");
+      uiout->field_string ("tool_name",
+			    or_unavailable (objfile.nv_tool_name ()));
+      uiout->text ("\n  Compile options           : ");
+      uiout->field_string ("compile_options",
+			    or_unavailable (objfile.nv_compile_options ()));
+      uiout->text ("\n  Lazy load events          : ");
+      uiout->field_unsigned ("lazy_load_events",
+			     objfile.lazy_load_event_count ());
+      uiout->text ("\n");
+    }
+
+  gdb_flush (gdb_stdout);
+}
+
+void
+info_cuda_objfiles_command (const char *arg)
+{
+  objfiles_scope scope = objfiles_scope::inventory;
+  arg = arg ? skip_spaces (arg) : "";
+  if (*arg != '\0')
+    {
+      if (!check_for_argument (&arg, "detailed"))
+	error (_ ("Unrecognized option: '%s'."), arg);
+      scope = objfiles_scope::detailed_active;
+
+      if (*arg != '\0')
+	{
+	  if (!check_for_argument (&arg, "all"))
+	    error (_ ("Unrecognized option: '%s'."), arg);
+	  scope = objfiles_scope::detailed_all;
+	}
+
+      if (*arg != '\0')
+	error (_ ("Unrecognized option: '%s'."), arg);
+    }
+
+  unsigned int filtered_out = 0;
+  std::vector<cuda_objfile_info> objfiles
+      = cuda_collect_objfiles (scope, &filtered_out);
+  if (scope == objfiles_scope::inventory)
+    info_cuda_objfiles_default (objfiles);
+  else
+    info_cuda_objfiles_detailed (objfiles, scope, filtered_out != 0);
+}
+
 static void
 print_managed_msymbol (struct ui_file *stb, struct bound_minimal_symbol &bmsym)
 {
@@ -3577,6 +4031,119 @@ info_cuda_line_command (const char *args)
   uiout->text ("\n");
 }
 
+static constexpr unsigned cuda_tmem_columns_per_allocation_unit = 32;
+
+static std::string
+cuda_tmem_allocated_columns_string (uint32_t mask)
+{
+  if (mask == 0)
+    return "none";
+
+  constexpr unsigned mask_bits = std::numeric_limits<uint32_t>::digits;
+  std::ostringstream columns;
+  const char *separator = "";
+
+  for (unsigned bit = 0; bit < mask_bits; ++bit)
+    {
+      if ((mask & (uint32_t { 1 } << bit)) == 0)
+	continue;
+
+      const unsigned first = bit;
+      while (bit + 1 < mask_bits
+	     && (mask & (uint32_t { 1 } << (bit + 1))) != 0)
+	++bit;
+
+      const auto first_column
+	  = first * cuda_tmem_columns_per_allocation_unit;
+      const auto last_column
+	  = (bit + 1) * cuda_tmem_columns_per_allocation_unit - 1;
+
+      columns << separator << first_column << '-' << last_column;
+      separator = ", ";
+    }
+
+  return columns.str ();
+}
+
+static std::string
+cuda_tmem_allocation_starts_string (uint32_t mask)
+{
+  if (mask == 0)
+    return "none";
+
+  constexpr unsigned mask_bits = std::numeric_limits<uint32_t>::digits;
+  std::ostringstream starts;
+  const char *separator = "";
+
+  for (unsigned bit = 0; bit < mask_bits; ++bit)
+    {
+      if ((mask & (uint32_t { 1 } << bit)) == 0)
+	continue;
+
+      starts << separator << bit * cuda_tmem_columns_per_allocation_unit;
+      separator = ", ";
+    }
+
+  return starts.str ();
+}
+
+static const char *
+cuda_tmem_allocation_phase_string (uint32_t phase)
+{
+  switch (phase)
+    {
+    case CUDBG_TCGEN05_TMEM_ALLOCATION_PHASE_UNKNOWN:
+      return "unknown";
+    case CUDBG_TCGEN05_TMEM_ALLOCATION_PHASE_ALLOC_PERMIT_AVAILABLE:
+      return "alloc permit available";
+    case CUDBG_TCGEN05_TMEM_ALLOCATION_PHASE_ALLOC_PERMIT_RELINQUISHED:
+      return "alloc permit relinquished";
+    case CUDBG_TCGEN05_TMEM_ALLOCATION_PHASE_EXCLUSIVE_ALLOC_ACTIVE:
+      return "exclusive allocation active";
+    default:
+      return "invalid";
+    }
+}
+
+void
+info_cuda_tmem_command (const char *arg)
+{
+  arg = arg ? skip_spaces (arg) : "";
+  if (*arg != '\0')
+    error (_ ("Usage: info cuda tmem."));
+
+  if (!cuda_current_focus::isDevice ())
+    {
+      current_uiout->field_string (NULL, _ ("Command requires CUDA focus.\n"));
+      return;
+    }
+
+  const auto &p = cuda_current_focus::get ().physical ();
+  CUDBGTcgen05TmemInfo info{};
+  CUDBGResult res
+      = cuda_debugapi::read_tmem_info (p.dev (), p.sm (), p.wp (), &info);
+  /* CUDA corefiles created without a TMEM table have no metadata to show.  */
+  if (res == CUDBG_ERROR_MISSING_DATA)
+    {
+      current_uiout->message ("No tmem info.\n");
+      return;
+    }
+  if (res != CUDBG_SUCCESS)
+    error (_ ("Failed to read tmem info: %s"), cudbgGetErrorString (res));
+
+  current_uiout->field_fmt ("cta_group", "CTA group: %u\n", info.ctaGroup);
+  current_uiout->field_fmt (
+      "allocation_phase", "Allocation phase: %s\n",
+      cuda_tmem_allocation_phase_string (info.allocationPhase));
+  current_uiout->field_fmt (
+      "allocated_columns", "Allocated columns: %s\n",
+      cuda_tmem_allocated_columns_string (info.allocationMask).c_str ());
+  current_uiout->field_fmt (
+      "allocation_starts", "Allocation starts: %s\n",
+      cuda_tmem_allocation_starts_string (info.allocationStartMask).c_str ());
+  gdb_flush (gdb_stdout);
+}
+
 void
 run_info_cuda_command (void (*command) (const char *), const char *arg)
 {
@@ -3619,6 +4186,12 @@ static struct
     "information about global managed variables" },
   { "line", info_cuda_line_command,
     "information about the filename and linenumber for a given $pc" },
+  { "tmem", info_cuda_tmem_command,
+    "information about tmem for the current CUDA focus" },
+  { "log", info_cuda_log_command, "configured CUDA log rules" },
+  { "objfiles", info_cuda_objfiles_command,
+    "information about loaded CUDA ELF/cubin objfiles ('detailed' shows "
+    "objfiles with active kernels; 'detailed all' shows every objfile)" },
   { NULL, NULL, NULL },
 };
 
@@ -3926,6 +4499,16 @@ cuda_info_command_completer (struct cmd_list_element *ignore,
     }
 }
 
+/* "maintenance cuda flush_cubins": write every loaded module's cubin to
+   its /tmp/cuda-dbg file, for tools (cuobjdump, nvdisasm) that need a real
+   on-disk image.  */
+static void
+cuda_flush_cubins_command (const char *args, int from_tty)
+{
+  for (const auto &iter : cuda_state::modules ())
+    iter.second->sync_to_disk_and_get_file_path ();
+}
+
 void _initialize_cuda_commands ();
 void
 _initialize_cuda_commands ()
@@ -3970,4 +4553,8 @@ _initialize_cuda_commands ()
   cuda_build_info_cuda_help_message ();
   cmd = add_info ("cuda", info_cuda_command, cuda_info_cmd_help_str.c_str ());
   set_cmd_completer (cmd, cuda_info_command_completer);
+
+  add_cmd ("flush_cubins", class_maintenance, cuda_flush_cubins_command,
+	   _ ("Write all loaded device cubins to their /tmp/cuda-dbg files."),
+	   &maintenance_cuda_cmdlist);
 }

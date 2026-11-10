@@ -23068,25 +23068,26 @@ cuda_add_minsyms (struct dwarf2_cu *cu,
     }
   return high_pc;
 }
-void
+bool
 cuda_decode_line_table (struct objfile *objfile)
 {
   /* Only force the decoding of the line table this way when there is no
      .debug_info section. This function also has the side-effect (yuck!) to
-     initialize dwarf2_per_objfile. */
+     initialize dwarf2_per_objfile. Returns true if a non-empty line program
+     was decoded, false otherwise. */
   if (dwarf2_has_info (objfile, NULL, true))
-    return;
-  
+    return false;
+
   struct dwarf2_per_objfile *dwarf2_per_objfile = get_dwarf2_per_objfile (objfile);
   if (!dwarf2_per_objfile->per_bfd->line.s.section)
-    return;
+    return false;
   auto per_cu = create_cu_from_index_list (dwarf2_per_objfile->per_bfd,
 					   &dwarf2_per_objfile->per_bfd->line,
 					   0,
 					   (sect_offset)0,
 					   0);
   if (!per_cu)
-    return;
+    return false;
   dwarf2_cu *cu = new dwarf2_cu (per_cu.get (), dwarf2_per_objfile);
   auto lang = objfile->per_bfd->language_of_main;
   /* If the language is unknown assume C++ */
@@ -23095,13 +23096,13 @@ cuda_decode_line_table (struct objfile *objfile)
   cu->language_defn = language_def (lang);
   dwarf2_per_objfile->per_bfd->all_units.push_back (std::move (per_cu));
   if (!cu)
-    return;
+    return false;
   struct dwarf2_section_info *section = get_debug_line_section (cu);
   if (!section)
-    return;
+    return false;
   section->read (objfile);
   if (!section->buffer)
-    return;
+    return false;
   unsigned int bytes_read = 0;
   bfd *abfd = section->get_bfd_owner ();
   cu->header.set_length (read_initial_length (abfd, section->buffer, &bytes_read));
@@ -23111,6 +23112,7 @@ cuda_decode_line_table (struct objfile *objfile)
   sect_offset line_offset = (sect_offset)0; /* assumption that lh starts at offset 0 */
   CORE_ADDR high_pc = cuda_add_minsyms (cu, objfile, objfile->original_name);
   bool complained = false;
+  bool decoded = false;
   do
     {
       /* We lack a proper file and directory entry for lineinfo. Pass in nullptr for the compdir. */
@@ -23132,8 +23134,10 @@ cuda_decode_line_table (struct objfile *objfile)
 	{
 	  cu->line_header = lh.release ();
 	  dwarf_decode_lines (cu->line_header, cu, (unrelocated_addr)0, 1);
+	  decoded = true;
 	}
     } while (to_underlying(line_offset) < get_dwarf2_per_objfile (objfile)->per_bfd->line.size);
   cu->get_builder ()->end_compunit_symtab (high_pc);
+  return decoded;
 }
 #endif

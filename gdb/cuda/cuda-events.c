@@ -25,6 +25,7 @@
 #endif
 #include "arch-utils.h"
 #include "exec.h"
+#include "objfiles.h"
 #include "observable.h"
 #include "source.h"
 #include "target.h"
@@ -152,20 +153,21 @@ cuda_event_pop_context (const uint32_t &dev_id, const uint64_t &context_id,
 static void
 cuda_event_load_elf_image (const uint32_t &dev_id, const uint64_t &context_id,
 			   const uint64_t &module_id,
+			   const uint64_t &elf_handle,
 			   const uint64_t &elf_image_size,
 			   const uint32_t &properties)
 {
   CUDA_EVENT_PROFILE (ELF_IMAGE_LOADED);
 
   cuda_trace_event ("CUDBG_EVENT_ELF_IMAGE_LOADED dev_id=%u context_id=0x%llx "
-		    "module_id=0x%llx image_size=%7llu properties=0x%04x",
-		    dev_id, context_id, module_id, elf_image_size, properties);
+		    "module_id=0x%llx elf_handle=0x%llx image_size=%7llu properties=0x%04x",
+		    dev_id, context_id, module_id, elf_handle, elf_image_size, properties);
 
   /* Allow smart resumption of device upon breakpoint insertion */
   cuda_device::cuda_device_execution_state_watcher watcher (
       cuda_state::device (dev_id));
 
-  auto module = cuda_state::create_module (module_id,
+  auto module = cuda_state::create_module (module_id, elf_handle,
 					   (CUDBGElfImageProperties)properties,
 					   context_id, elf_image_size);
 
@@ -175,31 +177,32 @@ cuda_event_load_elf_image (const uint32_t &dev_id, const uint64_t &context_id,
   insert_breakpoints ();
 
   cuda_trace_event ("CUDBG_EVENT_ELF_IMAGE_LOADED done loading %s",
-		    module->filename ().c_str ());
+		    objfile_name (module->objfile ()));
 }
 
 static void
 cuda_event_unload_elf_image (const uint32_t &dev_id,
 			     const uint64_t &context_id,
-			     const uint64_t &module_id, const uint64_t &handle)
+			     const uint64_t &module_id,
+			     const uint64_t &elf_handle)
 {
   CUDA_EVENT_PROFILE (ELF_IMAGE_UNLOADED);
 
   cuda_trace_event (
       "CUDBG_EVENT_ELF_IMAGE_UNLOADED dev_id=%u context_id=0x%llx "
-      "module_id=0x%llx handle=0x%llx",
-      dev_id, context_id, module_id, handle);
+      "module_id=0x%llx elf_handle=0x%llx",
+      dev_id, context_id, module_id, elf_handle);
 
   if (cuda_options_trace_domain_enabled (CUDA_TRACE_EVENT))
     {
-      auto module = cuda_state::find_module_by_id (module_id);
+      auto module = cuda_state::find_module_by_id (elf_handle);
       gdb_assert (module);
       cuda_trace_event (
 	  "CUDBG_EVENT_ELF_IMAGE_UNLOADED unloading %s size=%7llu",
-	  module->filename ().c_str (), module->size ());
+	  objfile_name (module->objfile ()), module->size ());
     }
 
-  cuda_state::destroy_module (module_id);
+  cuda_state::destroy_module (elf_handle);
 }
 
 /* TODO: CUDBG_EVENT_KERNEL_READY is being removed from the CUDA
@@ -210,7 +213,7 @@ cuda_event_unload_elf_image (const uint32_t &dev_id,
    this event - see cuda_options_break_on_launch_api_active(). */
 static void
 cuda_event_kernel_ready (const uint32_t &dev_id, const uint64_t &context_id,
-			 const uint64_t &module_id, const uint64_t &grid_id,
+			 const uint64_t &elf_handle, const uint64_t &grid_id,
 			 const uint32_t &tid, const uint64_t &virt_code_base,
 			 const CuDim3 &grid_dim, const CuDim3 &block_dim,
 			 const CUDBGKernelType &type)
@@ -218,9 +221,9 @@ cuda_event_kernel_ready (const uint32_t &dev_id, const uint64_t &context_id,
   CUDA_EVENT_PROFILE (KERNEL_READY);
 
   cuda_trace_event ("CUDBG_EVENT_KERNEL_READY dev_id=%u context_id=0x%lx"
-		    " module_id=0x%lx grid_id=%ld tid=%u type=%u",
-		    dev_id, context_id, module_id, (int64_t)grid_id, tid, type);
-
+		    " elf_handle=0x%lx grid_id=%ld tid=%u type=%u",
+		    dev_id, context_id, elf_handle, (int64_t)grid_id, tid,
+		    type);
   /* Allow smart resumption of device upon breakpoint insertion */
   cuda_device::cuda_device_execution_state_watcher watcher (
       cuda_state::device (dev_id));
@@ -252,7 +255,7 @@ cuda_event_kernel_ready (const uint32_t &dev_id, const uint64_t &context_id,
 #endif
 
   const auto kernel = cuda_state::create_kernel (
-      dev_id, grid_id, virt_code_base, module_id, grid_dim, block_dim,
+      dev_id, grid_id, virt_code_base, elf_handle, grid_dim, block_dim,
       CuDim3{ 0 }, CuDim3{ 0 }, type);
 
   // Add auto-breakpoints if necessary
@@ -314,19 +317,19 @@ cuda_event_timeout (void)
 static void
 cuda_event_functions_loaded (const uint32_t &dev_id,
 			     const uint64_t &context_id,
-			     const uint64_t &module_id, const uint32_t &count)
+			     const uint64_t &elf_handle, const uint32_t &count)
 {
   CUDA_EVENT_PROFILE (FUNCTIONS_LOADED);
 
   cuda_trace_event ("CUDBG_EVENT_FUNCTIONS_LOADED dev_id=%u context_id=0x%llx "
-		    "module_id=0x%llx count=%u",
-		    dev_id, context_id, module_id, count);
+		    "elf_handle=0x%llx count=%u",
+		    dev_id, context_id, elf_handle, count);
 
   /* Allow smart resumption of device upon breakpoint insertion */
   cuda_device::cuda_device_execution_state_watcher watcher (
       cuda_state::device (dev_id));
 
-  auto module = cuda_state::find_module_by_id (module_id);
+  auto module = cuda_state::find_module_by_id (elf_handle);
   gdb_assert (module);
 
   module->functions_loaded_event (count);
@@ -336,12 +339,77 @@ cuda_event_functions_loaded (const uint32_t &dev_id,
 
   cuda_trace_event ("CUDBG_EVENT_FUNCTIONS_LOADED done loading functions for "
 		    "%s (total functions loaded:%llu remaining unloaded:%llu)",
-		    module->filename ().c_str (), module->functions_loaded (),
+		    objfile_name (module->objfile ()),
+		    module->functions_loaded (),
 		    count - module->functions_loaded ());
 }
 
+/* Async CUDA log drain deferral; see cuda-events.h.  Wait-thread only.  */
+static bool cuda_async_log_drain_deferred = false;
+static bool cuda_async_log_drain_pending = false;
+
+cuda_scoped_defer_async_log_drain::cuda_scoped_defer_async_log_drain ()
+{
+  cuda_async_log_drain_deferred = true;
+  cuda_async_log_drain_pending = false;
+}
+
+cuda_scoped_defer_async_log_drain::~cuda_scoped_defer_async_log_drain ()
+{
+  cuda_async_log_drain_deferred = false;
+}
+
 static void
-cuda_event_cuda_logs_available (void)
+cuda_capture_log_stop_record ()
+{
+  cuda_log_stop_metadata metadata{};
+  if (cuda_consume_log_stop_record (&metadata))
+    cuda_set_log_stop_metadata (metadata);
+}
+
+void
+cuda_drain_deferred_async_logs ()
+{
+  if (!cuda_async_log_drain_pending)
+    return;
+  cuda_async_log_drain_pending = false;
+  if (cuda_options_logs_enabled ()
+      && !cuda_get_log_stop_metadata ().has_value ())
+    cuda_capture_log_stop_record ();
+}
+
+/* Shared CUDA-log event handling.  SYNC captures the stop record (and never
+   drains further this wait); ASYNC drains now, or defers when a SYNC capture
+   may still follow in this wait.  BUFFER_FULL emits the "logs may be lost"
+   warning (threshold event only): once on the SYNC path and before the ASYNC
+   defer-or-drain, matching the prior per-event behavior.  */
+static void
+cuda_handle_log_event (cuda_event_kind_t kind, bool buffer_full)
+{
+  static constexpr const char *log_buffer_full_msg
+      = N_ ("CUDA log buffer is full. Some logs may be lost.\n");
+
+  if (kind == CUDA_EVENT_SYNC)
+    {
+      if (cuda_options_logs_enabled ())
+	cuda_capture_log_stop_record ();
+      if (buffer_full)
+	warning ("%s", _ (log_buffer_full_msg));
+      return;
+    }
+
+  if (buffer_full)
+    warning ("%s", _ (log_buffer_full_msg));
+
+  /* Defer the drain if a SYNC capture may follow in this wait; else drain.  */
+  if (cuda_async_log_drain_deferred)
+    cuda_async_log_drain_pending = true;
+  else if (cuda_options_logs_enabled ())
+    cuda_consume_and_print_logs ();
+}
+
+static void
+cuda_event_cuda_logs_available (cuda_event_kind_t kind)
 {
   /* Logs available event is a notification that there are new logs
    * to consume. We need to drain the queue by calling consumeCudaLogs
@@ -351,12 +419,11 @@ cuda_event_cuda_logs_available (void)
 
   cuda_trace_event ("CUDBG_EVENT_CUDA_LOGS_AVAILABLE");
 
-  if (cuda_options_driver_logs_enabled ())
-    cuda_consume_and_print_driver_logs ();
+  cuda_handle_log_event (kind, false /* buffer_full */);
 }
 
 static void
-cuda_event_cuda_logs_threshold_reached (void)
+cuda_event_cuda_logs_threshold_reached (cuda_event_kind_t kind)
 {
   /* Threshold reached event indicates the log buffer is filling up
    * and we should drain it as soon as possible.
@@ -365,14 +432,11 @@ cuda_event_cuda_logs_threshold_reached (void)
 
   cuda_trace_event ("CUDBG_EVENT_CUDA_LOGS_THRESHOLD_REACHED");
 
-  warning (_ ("CUDA driver log buffer is full. Some logs may be lost.\n"));
-
-  if (cuda_options_driver_logs_enabled ())
-    cuda_consume_and_print_driver_logs ();
+  cuda_handle_log_event (kind, true /* buffer_full */);
 }
 
 static void
-cuda_process_event (const CUDBGEvent &event)
+cuda_process_event (const CUDBGEvent &event, cuda_event_kind_t kind)
 {
   /* Stop the cuda notification processing timer and update statistics */
   get_cuda_notification_statistics ().stop_timing ();
@@ -388,7 +452,8 @@ cuda_process_event (const CUDBGEvent &event)
 	const auto &module_id = event.cases.elfImageLoaded.module;
 	const auto &properties = event.cases.elfImageLoaded.properties;
 	const auto &elf_image_size = event.cases.elfImageLoaded.size;
-	cuda_event_load_elf_image (dev_id, context_id, module_id,
+	const auto &elf_handle = event.cases.elfImageLoaded.handle;
+	cuda_event_load_elf_image (dev_id, context_id, module_id, elf_handle,
 				   elf_image_size, properties);
 	break;
       }
@@ -401,14 +466,14 @@ cuda_process_event (const CUDBGEvent &event)
       {
 	const auto &dev_id = event.cases.kernelReady.dev;
 	const auto &context_id = event.cases.kernelReady.context;
-	const auto &module_id = event.cases.kernelReady.module;
+	const auto &elf_handle = event.cases.kernelReady.module;
 	const auto &grid_id = event.cases.kernelReady.gridId;
 	const auto &tid = event.cases.kernelReady.tid;
 	const auto &virt_code_base = event.cases.kernelReady.functionEntry;
 	const auto &grid_dim = event.cases.kernelReady.gridDim;
 	const auto &block_dim = event.cases.kernelReady.blockDim;
 	const auto &type = event.cases.kernelReady.type;
-	cuda_event_kernel_ready (dev_id, context_id, module_id, grid_id, tid,
+	cuda_event_kernel_ready (dev_id, context_id, elf_handle, grid_id, tid,
 				 virt_code_base, grid_dim, block_dim, type);
 	break;
       }
@@ -479,27 +544,43 @@ cuda_process_event (const CUDBGEvent &event)
 	const auto &dev_id = event.cases.elfImageUnloaded.dev;
 	const auto &context_id = event.cases.elfImageUnloaded.context;
 	const auto &module_id = event.cases.elfImageUnloaded.module;
-	const auto &handle = event.cases.elfImageUnloaded.handle;
-	cuda_event_unload_elf_image (dev_id, context_id, module_id, handle);
+	const auto &elf_handle = event.cases.elfImageUnloaded.handle;
+	cuda_event_unload_elf_image (dev_id, context_id, module_id, elf_handle);
 	break;
       }
     case CUDBG_EVENT_FUNCTIONS_LOADED:
       {
 	const auto &dev_id = event.cases.functionsLoaded.dev;
 	const auto &context_id = event.cases.functionsLoaded.context;
-	const auto &module_id = event.cases.functionsLoaded.module;
+	const auto &elf_handle = event.cases.functionsLoaded.elfImageHandle;
 	const auto &count = event.cases.functionsLoaded.count;
-	cuda_event_functions_loaded (dev_id, context_id, module_id, count);
+	cuda_event_functions_loaded (dev_id, context_id, elf_handle, count);
 	break;
       }
     case CUDBG_EVENT_ALL_DEVICES_SUSPENDED:
       break;
     case CUDBG_EVENT_CUDA_LOGS_AVAILABLE:
-      cuda_event_cuda_logs_available ();
+      cuda_event_cuda_logs_available (kind);
       break;
     case CUDBG_EVENT_CUDA_LOGS_THRESHOLD_REACHED:
-      cuda_event_cuda_logs_threshold_reached ();
+      cuda_event_cuda_logs_threshold_reached (kind);
       break;
+#if CUDBG_API_VERSION_REVISION >= 193
+    case CUDBG_EVENT_CUDA_LOGS_RULESET_CHANGED:
+      {
+	/* No-op: active index is tracked synchronously from setCudaLogRules.
+	   Only trace an index ahead of active (a ruleset GDB never installed,
+	   whose backend-id table we lack).  */
+	const uint32_t applied_index
+	    = event.cases.cudaLogsRulesetChanged.rulesetIndex;
+	const uint32_t active_index = cuda_options_log_active_ruleset_index ();
+	if (applied_index > active_index)
+	  cuda_trace_event ("CUDBG_EVENT_CUDA_LOGS_RULESET_CHANGED: applied "
+			    "ruleset %u ahead of tracked active %u",
+			    applied_index, active_index);
+	break;
+      }
+#endif
     case CUDBG_EVENT_INVALID:
     default:
       error (_ ("Invalid CUDA event type %u."), event.kind);
@@ -539,7 +620,7 @@ cuda_process_events (
       /* Only process events if we don't have a custom handler or if we do and
        * it returns true */
       if (!custom_handler || custom_handler (event))
-	cuda_process_event (event);
+	cuda_process_event (event, kind);
     }
 
   /* Acknowledge sync events if we handled any. */

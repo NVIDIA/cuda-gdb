@@ -71,4 +71,20 @@ extern "C" int tgetnum (const char *);
 #undef reg
 #endif
 
+#ifdef NVIDIA_BUGFIX
+/* libtinfo data symbols: with link-only prebuilts and --allow-shlib-undefined,
+   direct references become unresolved in the binary and fail on SLES/RHEL
+   where libtinfo exports versioned symbols (NCURSES6_TINFO_*).  Globals to
+   avoid: COLS, LINES, COLORS, COLOR_PAIRS, acs_map, stdscr, curscr, newscr,
+   ttytype, ESCDELAY, TABSIZE.  Use tigetnum(), rl_get_screen_size(),
+   tui_term_*(), and per-window handles instead.  */
+#undef COLS
+#undef LINES
+#undef COLORS
+#undef COLOR_PAIRS
+#undef acs_map
+#undef NCURSES_ACS
+#define NCURSES_ACS(c) ((chtype)NCURSES_CAST (unsigned char, (c)))
+#endif
+
 #endif /* GDB_GDB_CURSES_H */

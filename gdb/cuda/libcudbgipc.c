@@ -26,6 +26,9 @@
 #include "cuda/cuda-tdep.h"
 #include "gdbsupport/ptid.h"
 #include "inferior.h"
+#ifdef __QNXTARGET__
+#include "remote-nto.h"
+#endif
 #endif
 
 #include "gdbsupport/rsp-low.h"
@@ -330,7 +333,10 @@ public:
   void
   append_request (gdb::char_vector &buf)
   {
-    gdb_assert (has_space (buf.size ()));
+    if (!has_space (buf.size ()))
+      {
+	error (_("CUDA IPC request exceeds remote packet capacity"));
+      }
     m_out_buffer.insert (m_out_buffer.end (), buf.begin (), buf.end ());
   }
 
@@ -435,7 +441,15 @@ private:
   bool
   has_space (size_t size)
   {
-    return m_out_buffer.size () + size <= INT_MAX;
+#ifdef __QNXTARGET__
+    const size_t max_size = QNX_CUDA_PACKET_DATA_SIZE;
+    return m_out_buffer.size () < max_size
+	   && size <= max_size - m_out_buffer.size () - 1;
+#else
+    const size_t max_size = INT_MAX;
+    return m_out_buffer.size () <= max_size
+	   && size <= max_size - m_out_buffer.size ();
+#endif
   }
 
   gdb::char_vector m_out_buffer;

@@ -18,7 +18,6 @@
 
 #include "defs.h"
 
-#include "complaints.h"
 #include "cuda-sass-json.h"
 #include "cuda-tdep.h"
 
@@ -341,9 +340,9 @@ lexer::escapeChar (const size_t position, const int c)
     }
 }
 
-parser::parser (std::unique_ptr<istream> &&stream)
+parser::parser (std::unique_ptr<istream> &&stream, uint32_t insn_size)
     : m_lexer (std::move (stream)), m_state (parser_state::at_start),
-      m_on_function ()
+      m_on_function (), m_insn_size (insn_size)
 {
 }
 
@@ -358,7 +357,7 @@ parser::parse_json (schema_json &schema)
 
   next_expect (token_type::element_separator);
 
-  parse_functions_list (schema.m_functions);
+  parse_functions_list (schema.m_functions, m_insn_size);
 
   next_expect (token_type::end_array);
 
@@ -405,7 +404,7 @@ parser::stream_parse_functions (std::vector<schema_function> &functions)
 		   __func__, parser_state_to_string (m_state));
     }
 
-  parse_functions_list (functions);
+  parse_functions_list (functions, m_insn_size);
 
   set_state (parser_state::at_functions_end);
 }
@@ -498,12 +497,19 @@ parser::parse_metadata (schema_metadata &metadata)
 				string_token);
 	  parse_toolkit_info (metadata);
 	}
+      else if (string_token.m_string == ".note.nv.cuinfo")
+	{
+	  update_bitmask_field (fields_mask,
+				(int)metadata_properties::note_nv_cuda_info,
+				string_token);
+	  parse_cuda_info<cuda_info_kind::cuinfo> (metadata);
+	}
       else if (string_token.m_string == ".note.nv.cuver")
 	{
 	  update_bitmask_field (fields_mask,
 				(int)metadata_properties::note_nv_cuda_info,
 				string_token);
-	  parse_cuda_info (metadata);
+	  parse_cuda_info<cuda_info_kind::cuver> (metadata);
 	}
       else
 	{
@@ -853,6 +859,7 @@ parser::parse_toolkit_info (schema_metadata &metadata)
 			   "Missing required fields in ToolkitInfo object");
 }
 
+template <parser::cuda_info_kind Kind>
 void
 parser::parse_cuda_info (schema_metadata &metadata)
 {
@@ -860,10 +867,14 @@ parser::parse_cuda_info (schema_metadata &metadata)
   {
     version = (1 << 0),
     virtual_sm_version = (1 << 1),
+    tool_version = (1 << 2),
   };
   static constexpr int required_fields_mask
       = (int)cuda_info_properties::version
-	| (int)cuda_info_properties::virtual_sm_version;
+	| (int)cuda_info_properties::virtual_sm_version
+	| (Kind == cuda_info_kind::cuinfo
+	       ? (int)cuda_info_properties::tool_version
+	       : 0);
 
   next_expect (token_type::start_object);
 
@@ -876,14 +887,16 @@ parser::parse_cuda_info (schema_metadata &metadata)
       string_token = next_expect (token_type::string_value);
       next_expect (token_type::key_value_separator);
 
-      if (string_token.m_string == "nv_note_cuver")
+      if (string_token.m_string == "nv_note_cuinfo"
+	  || string_token.m_string == "nv_note_cuver")
 	{
 	  update_bitmask_field (
 	      fields_mask, (int)cuda_info_properties::version, string_token);
 	  integer_token = next_expect (token_type::integer_value);
 	  metadata.m_note_nv_cuda_version = integer_token.m_value.integer;
 	}
-      else if (string_token.m_string == "nv_note_cu_virt_smver")
+      else if (string_token.m_string == "nv_note_cuinfo_virt_sm"
+	       || string_token.m_string == "nv_note_cu_virt_smver")
 	{
 	  update_bitmask_field (fields_mask,
 				(int)cuda_info_properties::virtual_sm_version,
@@ -891,6 +904,14 @@ parser::parse_cuda_info (schema_metadata &metadata)
 	  integer_token = next_expect (token_type::integer_value);
 	  metadata.m_note_nv_cuda_virtual_sm_version
 	      = integer_token.m_value.integer;
+	}
+      else if (string_token.m_string == "nv_note_cuinfo_toolVersion")
+	{
+	  update_bitmask_field (fields_mask,
+				(int)cuda_info_properties::tool_version,
+				string_token);
+	  integer_token = next_expect (token_type::integer_value);
+	  metadata.m_note_nv_cuinfo_tool_version = integer_token.m_value.integer;
 	}
       else
 	{
@@ -908,11 +929,14 @@ parser::parse_cuda_info (schema_metadata &metadata)
   next_expect (token_type::end_object);
 
   validate_fields_bitmask (fields_mask, (int)required_fields_mask,
-			   "Missing required fields in CUver object");
+			   Kind == cuda_info_kind::cuinfo
+			       ? "Missing required fields in CUinfo object"
+			       : "Missing required fields in CUver object");
 }
 
 void
-parser::parse_functions_list (std::vector<schema_function> &functions)
+parser::parse_functions_list (std::vector<schema_function> &functions,
+			      uint32_t insn_size)
 {
   next_expect (token_type::start_array);
 
@@ -924,7 +948,7 @@ parser::parse_functions_list (std::vector<schema_function> &functions)
 	{
 	  schema_function function;
 
-	  parse_function (function);
+	  parse_function (function, insn_size);
 	  if (m_on_function)
 	    {
 	      m_on_function (function);
@@ -947,20 +971,22 @@ parser::parse_functions_list (std::vector<schema_function> &functions)
 }
 
 void
-parser::parse_function (schema_function &function)
+parser::parse_function (schema_function &function, uint32_t insn_size)
 {
   enum class function_properties : int
   {
     function_name = (1 << 0),
     start = (1 << 1),
     length = (1 << 2),
-    sass_instructions = (1 << 3),
-    other_attributes = (1 << 4),
+    nvsal_instructions = (1 << 3),
+    sass_instructions = (1 << 4),
+    other_attributes = (1 << 5),
+    annotations = (1 << 6),
   };
+
   static constexpr int required_fields_mask
       = (int)function_properties::function_name
-	| (int)function_properties::start | (int)function_properties::length
-	| (int)function_properties::sass_instructions;
+	| (int)function_properties::start | (int)function_properties::length;
 
   next_expect (token_type::start_object);
 
@@ -1000,7 +1026,14 @@ parser::parse_function (schema_function &function)
 	  update_bitmask_field (fields_mask,
 				(int)function_properties::sass_instructions,
 				string_token);
-	  parse_sass_instructions_list (function.m_instructions);
+	  parse_instructions_list ("sass", function.m_instructions);
+	}
+      else if (string_token.m_string == "nvsal-instructions")
+	{
+	  update_bitmask_field (fields_mask,
+				(int)function_properties::nvsal_instructions,
+				string_token);
+	  parse_instructions_list ("nvsal", function.m_instructions);
 	}
       else if (string_token.m_string == "other-attributes")
 	{
@@ -1008,6 +1041,13 @@ parser::parse_function (schema_function &function)
 				(int)function_properties::other_attributes,
 				string_token);
 	  parse_string_list (function.m_other_attributes);
+	}
+      else if (string_token.m_string == "annotations")
+	{
+	  update_bitmask_field (fields_mask,
+				(int)function_properties::annotations,
+				string_token);
+	  parse_annotations (function.m_annotations);
 	}
       else
 	{
@@ -1026,11 +1066,22 @@ parser::parse_function (schema_function &function)
 
   validate_fields_bitmask (fields_mask, (int)required_fields_mask,
 			   "Missing required fields in Function object");
+  if (!(fields_mask & (int)function_properties::sass_instructions)
+      && !(fields_mask & (int)function_properties::nvsal_instructions))
+    error ("Missing instructions in Function %s",
+	   function.m_function_name.c_str ());
+
+  uint64_t pc = function.m_start;
+  for (auto &instruction : function.m_instructions)
+    {
+      instruction.m_pc = pc;
+      pc += insn_size * instruction.m_count.value_or (1);
+    }
 }
 
 void
-parser::parse_sass_instructions_list (
-    std::vector<schema_sass_instruction> &instructions)
+parser::parse_instructions_list (const std::string &format,
+				 std::vector<schema_instruction> &instructions)
 {
   next_expect (token_type::start_array);
 
@@ -1040,10 +1091,7 @@ parser::parse_sass_instructions_list (
     {
       for (;;)
 	{
-	  schema_sass_instruction instruction;
-
-	  parse_sass_instruction (instruction);
-	  instructions.push_back (instruction);
+	  parse_instruction (format, instructions);
 
 	  if (peek ().m_type == token_type::end_array)
 	    {
@@ -1068,7 +1116,8 @@ enum class sass_instruction_fields : int
 };
 
 void
-parser::parse_sass_instruction (schema_sass_instruction &instruction)
+parser::parse_instruction (const std::string &format,
+			   std::vector<schema_instruction> &instructions)
 {
   static constexpr int required_fields_mask
       = (int)sass_instruction_fields::opcode;
@@ -1078,19 +1127,20 @@ parser::parse_sass_instruction (schema_sass_instruction &instruction)
   token string_token;
   int fields_mask = 0;
 
+  schema_instruction instruction;
+  instruction.m_pc = 0;
+
+  std::vector<cuda_instruction_attribute> attributes;
   for (;;)
     {
       string_token = next_expect (token_type::string_value);
       next_expect (token_type::key_value_separator);
 
-      parse_sass_instruction_field (
-	  instruction, string_token.m_string,
-	  fields_mask); // Check return if we want to log ignored fields
+      parse_instruction_attribute_field (format, instruction, attributes,
+					 string_token.m_string, fields_mask);
 
       if (peek ().m_type == token_type::end_object)
-	{
-	  break;
-	}
+	break;
 
       next_expect (token_type::element_separator);
     }
@@ -1099,13 +1149,16 @@ parser::parse_sass_instruction (schema_sass_instruction &instruction)
 
   validate_fields_bitmask (
       fields_mask, (int)required_fields_mask,
-      "Missing required fields in schema_sass_instruction object");
+      "Missing required fields in schema_instruction object");
+
+  instructions.push_back (instruction);
 }
 
 bool
-parser::parse_sass_instruction_field (schema_sass_instruction &instruction,
-				      const std::string &field,
-				      int &fields_mask)
+parser::parse_instruction_attribute_field (
+    const std::string &format, schema_instruction &instruction,
+    std::vector<cuda_instruction_attribute> &attributes,
+    const std::string &field, int &fields_mask)
 {
   // Fields accepted:
   // - predicate
@@ -1128,9 +1181,29 @@ parser::parse_sass_instruction_field (schema_sass_instruction &instruction,
 
     switch (field[0])
       {
+      case 'a': // a
+	EXPECT_KEY_EQUALS ("annotations", field, string_token);
+	parse_annotations (instruction.m_annotations);
+	return true;
+      case 'c': // c
+	EXPECT_KEY_EQUALS ("count", field, string_token);
+	// Only valid for NVSAL, optional field (default is 1)
+	if (format != "nvsal")
+	  {
+	    warning ("Ignoring count field for %s format", format.c_str ());
+	    skip_value (field);
+	    break;
+	  }
+	string_token = next_expect (token_type::integer_value);
+	instruction.m_count = string_token.m_value.integer;
+	return true;
       case 'p': // p
+	EXPECT_KEY_EQUALS ("predicate", field, string_token);
 	string_token = next_expect (token_type::string_value);
-	instruction.m_predicate = std::move (string_token.m_string);
+	update_bitmask_field (fields_mask,
+			      (int)sass_instruction_fields::predicate,
+			      string_token);
+	instruction.m_info.m_predicate = std::move (string_token.m_string);
 	return true;
       case 'o': // o
 	switch (field[1])
@@ -1144,7 +1217,8 @@ parser::parse_sass_instruction_field (schema_sass_instruction &instruction,
 				      (int)sass_instruction_fields::opcode,
 				      string_token);
 		string_token = next_expect (token_type::string_value);
-		instruction.m_opcode = std::move (string_token.m_string);
+		instruction.m_info.m_opcode
+		    = std::move (string_token.m_string);
 		return true;
 	      case 'e': // ope
 		EXPECT_KEY_EQUALS ("operands", field, string_token);
@@ -1152,7 +1226,8 @@ parser::parse_sass_instruction_field (schema_sass_instruction &instruction,
 				      (int)sass_instruction_fields::operands,
 				      string_token);
 		string_token = next_expect (token_type::string_value);
-		instruction.m_operands = std::move (string_token.m_string);
+		instruction.m_info.m_operands
+		    = std::move (string_token.m_string);
 		return true;
 	      default:
 		skip_value (field);
@@ -1173,7 +1248,7 @@ parser::parse_sass_instruction_field (schema_sass_instruction &instruction,
 		    fields_mask,
 		    (int)sass_instruction_fields::other_attributes,
 		    string_token);
-		parse_other_attributes_dict (instruction);
+		parse_instruction_attributes (instruction);
 		return true;
 	      case 'f': // ot----f
 		EXPECT_KEY_EQUALS ("other-flags", field, string_token);
@@ -1197,7 +1272,7 @@ parser::parse_sass_instruction_field (schema_sass_instruction &instruction,
 	update_bitmask_field (fields_mask, (int)sass_instruction_fields::extra,
 			      string_token);
 	string_token = next_expect (token_type::string_value);
-	instruction.m_extra = std::move (string_token.m_string);
+	instruction.m_info.m_extra = std::move (string_token.m_string);
 	break;
       default:
 	skip_value (field);
@@ -1236,12 +1311,12 @@ parser::parse_string_list (std::vector<std::string> &strings)
 }
 
 void
-parser::parse_other_attributes_dict (schema_sass_instruction &instruction)
+parser::parse_instruction_attributes_dict (
+    std::vector<std::pair<std::string, schema_value>> &attributes)
 {
   next_expect (token_type::start_object);
 
-  auto &dictionary = instruction.m_other_attributes;
-  dictionary.clear ();
+  attributes.clear ();
 
   if (peek ().m_type != token_type::end_object)
     {
@@ -1252,14 +1327,34 @@ parser::parse_other_attributes_dict (schema_sass_instruction &instruction)
 
 	  next_expect (token_type::key_value_separator);
 
-	  token value_token;
-	  value_token = next_expect (token_type::string_value);
-
-	  parse_instruction_other_attribute_field (
-	      instruction, string_token.m_string, value_token.m_string);
-
-	  dictionary.emplace_back (std::move (string_token.m_string),
-				   std::move (value_token.m_string));
+	  token value_token = peek ();
+	  if (value_token.m_type == token_type::string_value)
+	    {
+	      value_token = next_expect (token_type::string_value);
+	      attributes.emplace_back (
+		  std::move (string_token.m_string),
+		  schema_value (std::move (value_token.m_string)));
+	    }
+	  else if (value_token.m_type == token_type::integer_value)
+	    {
+	      value_token = next_expect (token_type::integer_value);
+	      attributes.emplace_back (
+		  std::move (string_token.m_string),
+		  schema_value (value_token.m_value.integer));
+	    }
+	  else if (value_token.m_type == token_type::true_literal
+		   || value_token.m_type == token_type::false_literal)
+	    {
+	      const bool boolean_value
+		  = (value_token.m_type == token_type::true_literal);
+	      next ();
+	      attributes.emplace_back (std::move (string_token.m_string),
+				       schema_value (boolean_value));
+	    }
+	  else
+	    throw_error (errors::NOT_SUPPORTED_ERROR,
+			 "Unexpected token type in value: %s",
+			 token_type_to_string (value_token.m_type));
 
 	  if (peek ().m_type == token_type::end_object)
 	    {
@@ -1274,21 +1369,154 @@ parser::parse_other_attributes_dict (schema_sass_instruction &instruction)
 }
 
 void
-parser::parse_instruction_other_attribute_field (
-    schema_sass_instruction &instruction, const std::string &field,
-    const std::string &value)
+parser::parse_instruction_attribute_object (schema_instruction &instruction)
 {
-  // Fields:
-  // - control-flow
-  // - subroutine-call
-  // - inter-warp-barrier
+  std::vector<std::pair<std::string, schema_value>> attributes_dict;
+  parse_instruction_attributes_dict (attributes_dict);
 
-  if (field == "control-flow")
-    instruction.m_opt_is_control_flow = (value == "True");
-  else if (field == "subroutine-call")
-    instruction.m_opt_is_subroutine_call = (value == "True");
-  else if (field == "inter-warp-barrier")
-    instruction.m_opt_is_inter_warp_barrier = (value == "True");
+  /* cuobjdump emits string "True"/"False"; NVSAL may use JSON booleans.  */
+  auto attribute_is_true = [] (const schema_value &value) {
+    if (value.is_boolean ())
+      return value.to_boolean ();
+    if (value.is_string ())
+      {
+	const std::string &s = value.to_string ();
+	return s == "True" || s == "true";
+      }
+    return false;
+  };
+
+  std::optional<uint32_t> padding;
+  auto attributes = cuda_instruction_attribute::none;
+  for (const auto &attr : attributes_dict)
+    {
+      if (attr.first == "control-flow")
+	{
+	  if (attribute_is_true (attr.second))
+	    attributes = attributes | cuda_instruction_attribute::control_flow;
+	}
+      else if (attr.first == "subroutine-call")
+	{
+	  if (attribute_is_true (attr.second))
+	    attributes
+		= attributes | cuda_instruction_attribute::subroutine_call;
+	}
+      else if (attr.first == "inter-warp-barrier")
+	{
+	  if (attribute_is_true (attr.second))
+	    attributes
+		= attributes | cuda_instruction_attribute::inter_warp_barrier;
+	}
+      else if (attr.first == "padding")
+	{
+	  if (attr.second.is_integer ())
+	    padding = static_cast<uint32_t> (attr.second.to_integer ());
+	  else
+	    cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
+			       "Ignoring padding attribute with unsupported "
+			       "value type");
+	}
+      else
+	cuda_trace_domain (CUDA_TRACE_DISASSEMBLER,
+			   "Ignoring unknown attribute: %s",
+			   attr.first.c_str ());
+    }
+  schema_instruction_attributes attributes_info (attributes, padding);
+  instruction.m_other_attributes.push_back (attributes_info);
+}
+
+void
+parser::parse_instruction_attributes (schema_instruction &instruction)
+{
+  if (peek ().m_type == token_type::start_array)
+    {
+      next_expect (token_type::start_array);
+      if (peek ().m_type != token_type::end_array)
+	{
+	  for (;;)
+	    {
+	      parse_instruction_attribute_object (instruction);
+	      if (peek ().m_type == token_type::end_array)
+		break;
+	      next_expect (token_type::element_separator);
+	    }
+	}
+      next_expect (token_type::end_array);
+    }
+  else
+    {
+      parse_instruction_attribute_object (instruction);
+    }
+}
+
+void
+parser::parse_value (schema_value &value)
+{
+  switch (peek ().m_type)
+    {
+    case token_type::string_value:
+      value = schema_value (
+	  std::move (next_expect (token_type::string_value).m_string));
+      break;
+    case token_type::integer_value:
+      value = schema_value (
+	  next_expect (token_type::integer_value).m_value.integer);
+      break;
+    case token_type::true_literal:
+      next ();
+      value = schema_value (true);
+      break;
+    case token_type::false_literal:
+      next ();
+      value = schema_value (false);
+      break;
+    default:
+      warning ("Unexpected token type in value: %s",
+	       token_type_to_string (peek ().m_type));
+      next ();
+      value = schema_value ();
+      break;
+    }
+}
+
+void
+parser::parse_annotation (schema_annotation &annotation)
+{
+  next_expect (token_type::start_object);
+
+  while (peek ().m_type != token_type::end_object)
+    {
+      token string_token;
+      string_token = next_expect (token_type::string_value);
+      next_expect (token_type::key_value_separator);
+      schema_value value;
+      parse_value (value);
+      annotation.add (string_token.m_string, value);
+      if (peek ().m_type == token_type::end_object)
+	break;
+      next_expect (token_type::element_separator);
+    }
+  next_expect (token_type::end_object);
+}
+
+void
+parser::parse_annotations (std::vector<schema_annotation> &annotations)
+{
+  next_expect (token_type::start_array);
+  annotations.clear ();
+  if (peek ().m_type != token_type::end_array)
+    {
+      for (;;)
+	{
+	  schema_annotation annotation;
+	  parse_annotation (annotation);
+	  annotations.push_back (annotation);
+	  if (peek ().m_type == token_type::end_array)
+	    break;
+	  next_expect (token_type::element_separator);
+	}
+    }
+  next_expect (token_type::end_array);
 }
 
 inline token
@@ -1305,7 +1533,7 @@ parser::next_expect (const token_type type)
 void
 parser::skip_value (const std::string &field)
 {
-  cuda_trace_domain (CUDA_TRACE_DISASSEMBLER, "Skipping JSON field: %s\n",
+  cuda_trace_domain (CUDA_TRACE_DISASSEMBLER, "Skipping JSON field: %s",
 		     field.c_str ());
 
   switch (peek ().m_type)
@@ -1412,30 +1640,13 @@ parser::parser_state_to_string (const parser_state state)
 }
 
 bool
-validate_sass_instruction_attributes (
-    const schema_sass_instruction &instruction)
+validate_instruction_attributes (
+    const schema_instruction_attributes &schema_attributes)
 {
-  bool valid = true;
-  std::string error_msg;
-
   /* Check: subroutine-call=True implies control-flow=True */
-  if (instruction.m_opt_is_subroutine_call.has_value ()
-      && *instruction.m_opt_is_subroutine_call)
-    {
-      if (!instruction.m_opt_is_control_flow.has_value ()
-	  || !*instruction.m_opt_is_control_flow)
-	{
-	  error_msg = string_printf (
-	      "Invalid JSON attributes: subroutine-call=True but "
-	      "control-flow!=True for instruction '%s'",
-	      instruction.m_opcode.c_str ());
-	  cuda_trace_domain (CUDA_TRACE_DISASSEMBLER, "%s",
-			     error_msg.c_str ());
-	  complaint ("%s", error_msg.c_str ());
-	  valid = false;
-	}
-    }
-
-  return valid;
+  if (schema_attributes.is_subroutine_call ()
+      && !schema_attributes.is_control_flow ())
+    return false;
+  return true;
 }
 }

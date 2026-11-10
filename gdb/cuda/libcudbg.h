@@ -239,6 +239,9 @@ typedef enum
   CUDBGAPIREQ_consumeCudaLogs,
   CUDBGAPIREQ_readRpcRegisters,
   CUDBGAPIREQ_writeRpcRegisters,
+
+  /* 13.5 Extensions */
+  CUDBGAPIREQ_readTcgen05TmemInfo,
 } CUDBGAPIREQ_t;
 
 typedef enum

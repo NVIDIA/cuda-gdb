@@ -82,6 +82,7 @@
 #include <optional>
 #include <unordered_set>
 #ifdef NVIDIA_CUDA_GDB
+#include "cuda/cuda-builtins.h"
 #include "cuda/cuda-tdep.h"
 #endif
 
@@ -2798,6 +2799,17 @@ lookup_global_or_static_symbol (const char *name,
   gdb_assert (block_index == GLOBAL_BLOCK || block_index == STATIC_BLOCK);
   gdb_assert (objfile == nullptr || block_index == GLOBAL_BLOCK);
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA built-ins live on the gdbarch, not in any objfile.  */
+  if (block_index == GLOBAL_BLOCK)
+    {
+      struct symbol *builtin
+	= cuda_lookup_builtin_symbol (name, domain);
+      if (builtin != nullptr)
+	return (struct block_symbol) { builtin, nullptr };
+    }
+#endif
+
   /* First see if we can find the symbol in the cache.
      This works because we use the current objfile to qualify the lookup.  */
   result = symbol_cache_lookup (cache, objfile, block_index, name, domain,
@@ -2880,20 +2892,30 @@ lookup_global_symbol (const char *name,
   const struct block *global_block
     = block == nullptr ? nullptr : block->global_block ();
   symbol *sym = NULL;
+  /* Block that SYM actually lives in.  Defaults to GLOBAL_BLOCK so
+     non-CUDA behavior matches upstream; the CUDA priority path can
+     find SYM in a different compunit of the same cubin objfile and
+     overrides this with the block returned by that lookup.  */
+  const struct block *sym_block = global_block;
   if (global_block != nullptr)
     {
 #ifdef NVIDIA_CUDA_GDB
-      struct block_symbol result = cuda_lookup_symbol_in_block (block->objfile (),
-					GLOBAL_BLOCK, name, domain);
+      /* Let device-side cubin symbols win over host shadows.  */
+      struct block_symbol result
+	= cuda_lookup_symbol_in_block (block->objfile (), GLOBAL_BLOCK,
+				       name, domain);
       if (result.symbol != NULL)
-	sym = result.symbol;
+	{
+	  sym = result.symbol;
+	  sym_block = result.block;
+	}
       else
 #endif
-      sym = lookup_symbol_in_block (name,
-				    symbol_name_match_type::FULL,
-				    global_block, domain);
+	sym = lookup_symbol_in_block (name,
+				      symbol_name_match_type::FULL,
+				      global_block, domain);
       if (sym != NULL && best_symbol (sym, domain))
-	return { sym, global_block };
+	return { sym, sym_block };
     }
 
   struct objfile *objfile = nullptr;
@@ -2907,7 +2929,7 @@ lookup_global_symbol (const char *name,
   block_symbol bs
     = lookup_global_or_static_symbol (name, GLOBAL_BLOCK, objfile, domain);
   if (better_symbol (sym, bs.symbol, domain) == sym)
-    return { sym, global_block };
+    return { sym, sym_block };
   else
     return bs;
 }
@@ -5527,6 +5549,32 @@ global_symbol_searcher::search () const
 	  break;
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* The CUDA built-ins live on the gdbarch, so the per-objfile loops
+     above never see them.  Inject them here when the search has no
+     filename filter (they have no symtab).  Apply the same name-regex,
+     type-regex, and result-cap filters as add_matching_symbols.  */
+  if ((m_kind & SEARCH_VAR_DOMAIN) != 0
+      && m_filenames.empty ())
+    {
+      cuda_for_each_builtin_symbol
+	([&] (struct symbol *sym)
+	 {
+	   if (result.size () >= m_max_search_results)
+	     return;
+	   if (preg.has_value ()
+	       && preg->exec (sym->natural_name (), 0, nullptr, 0) != 0)
+	     return;
+	   if ((sym->domain () == VAR_DOMAIN
+		|| sym->domain () == FUNCTION_DOMAIN)
+	       && treg.has_value ()
+	       && !treg_matches_sym_type_name (*treg, sym))
+	     return;
+	   result.emplace_back (GLOBAL_BLOCK, sym);
+	 });
+    }
+#endif
+
   return result;
 }
 
@@ -5597,6 +5645,23 @@ static void
 print_symbol_info (struct symbol *sym, int block, const char *last)
 {
   scoped_switch_to_sym_language_if_auto l (sym);
+
+#ifdef NVIDIA_CUDA_GDB
+  /* Non-objfile-owned symbols have no symtab; group them under a
+     synthetic header.  */
+  if (!sym->is_objfile_owned ())
+    {
+      static const char cuda_builtins_header[] = "<CUDA built-in variables>";
+      if (last != NULL && filename_cmp (last, cuda_builtins_header) != 0)
+	gdb_printf (_("\nFile %s:\n"), cuda_builtins_header);
+      if (last != NULL)
+	gdb_puts ("\t");
+      std::string str = symbol_to_info_string (sym, block);
+      gdb_printf ("%s\n", str.c_str ());
+      return;
+    }
+#endif
+
   struct symtab *s = sym->symtab ();
 
   if (last != NULL)
@@ -5732,8 +5797,18 @@ symtab_symbol_info (bool quiet, bool exclude_minsyms,
       else
 	{
 	  print_symbol_info (p.symbol, p.block, last_filename);
+#ifdef NVIDIA_CUDA_GDB
+	  /* Non-objfile-owned symbols have no symtab; use a fixed
+	     label matching the synthetic header above.  */
+	  if (!p.symbol->is_objfile_owned ())
+	    last_filename = "<CUDA built-in variables>";
+	  else
+	    last_filename
+	      = symtab_to_filename_for_display (p.symbol->symtab ());
+#else
 	  last_filename
 	    = symtab_to_filename_for_display (p.symbol->symtab ());
+#endif
 	}
     }
 }
@@ -6463,6 +6538,23 @@ default_collect_symbol_completion_matches_break_on
 				sym_text, word, code);
     }
 
+#ifdef NVIDIA_CUDA_GDB
+  /* CUDA built-ins (threadIdx, blockIdx, ...) are plain C identifiers
+     to the user but live on the gdbarch, not in any objfile or
+     compunit, so the loops above miss them.  Other architectures
+     expose comparable state via $-prefixed convenience variables,
+     which use a separate completion path.  */
+  if (code == TYPE_CODE_UNDEF)
+    cuda_for_each_builtin_symbol
+      ([&] (struct symbol *sym)
+       {
+	 if (completion_skip_symbol (mode, sym))
+	   return;
+	 completion_list_add_symbol (tracker, sym, lookup_name,
+				     sym_text, word);
+       });
+#endif
+
   /* Look through the partial symtabs for all symbols which begin by
      matching SYM_TEXT.  Expand all CUs that you find to the list.  */
   expand_symtabs_matching (NULL,
@@ -6998,6 +7090,17 @@ static int next_aclass_value = LOC_FINAL_VALUE;
 /* The maximum number of "aclass" registrations we support.  This is
    constant for convenience.  */
 #define MAX_SYMBOL_IMPLS (LOC_FINAL_VALUE + 11)
+
+#ifdef NVIDIA_CUDA_GDB
+/* Capture upstream's count, then redefine MAX_SYMBOL_IMPLS to add the
+   CUDA-reserved slots.  Capturing first means a future upstream bump
+   to the +11 above propagates automatically; we don't have to mirror
+   the literal here.  */
+static constexpr int cuda_upstream_max_symbol_impls = MAX_SYMBOL_IMPLS;
+#undef MAX_SYMBOL_IMPLS
+#define MAX_SYMBOL_IMPLS \
+  (cuda_upstream_max_symbol_impls + CUDA_EXTRA_SYMBOL_IMPLS)
+#endif
 
 /* The objects representing the various "aclass" values.  The elements
    from 0 up to LOC_FINAL_VALUE-1 represent themselves, and subsequent

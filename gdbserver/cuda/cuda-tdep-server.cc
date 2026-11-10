@@ -17,51 +17,62 @@
  */
 
 #include "cuda-tdep-server.h"
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <dlfcn.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #ifndef __QNXHOST__
-# include <sys/ptrace.h>
-# include <sys/signal.h>
-# include <sys/syscall.h>
+#include <sys/ptrace.h>
+#include <sys/signal.h>
+#include <sys/syscall.h>
 #endif /* __QNXHOST__ */
 #include <sys/wait.h>
 #ifndef __QNXHOST__
-# include <sys/syscall.h>
+#include <sys/syscall.h>
 #endif /* __QNXHOST__ */
 #include "cuda/cuda-notifications.h"
 #include <unistd.h>
 
 #ifdef __QNXHOST__
-# include "cuda-nto-protocol.h"
-# define write_memory qnx_write_inferior_memory
-#else
-# define write_memory target_write_memory
+/* For DS_DATA_MAX_SIZE used by cuda_enqueue_trace_message.  */
+#include "remote-nto.h"
 #endif
 
-/*----------------------------------------- Globals ---------------------------------------*/
+#ifdef __QNXHOST__
+/* Defined in cuda-nto-server.cc.  */
+extern int cuda_write_inferior_memory (CORE_ADDR memaddr,
+				       gdb::array_view<const gdb_byte> src);
+#else
+static int
+cuda_write_inferior_memory (CORE_ADDR memaddr,
+			    gdb::array_view<const gdb_byte> src)
+{
+  return target_write_memory (memaddr, src.data (), src.size ());
+}
+#endif /* __QNXHOST__ */
+
+/*----------------------------------------- Globals
+ * ---------------------------------------*/
 CUDBGResult api_initialize_res;
 CUDBGResult api_finalize_res;
 CUDBGResult get_debugger_api_res;
 CUDBGResult set_callback_api_res;
 
-struct cuda_sym cuda_symbol_list[] =
-{
+struct cuda_sym cuda_symbol_list[] = {
   /* Old fields are left to maintain the binary compatibility with legacy CUDA
    * GDB server binaries */
-  CUDA_SYM(CUDBG_IPC_FLAG_NAME),
-  CUDA_SYM(CUDBG_RPC_ENABLED),
-  CUDA_SYM(CUDBG_APICLIENT_PID),
-  CUDA_SYM(CUDBG_APICLIENT_REVISION),
-  CUDA_SYM(CUDBG_SESSION_ID),
-  CUDA_SYM(CUDBG_ATTACH_HANDLER_AVAILABLE),
-  CUDA_SYM(CUDBG_DEBUGGER_INITIALIZED),
-  CUDA_SYM(CUDBG_REPORTED_DRIVER_API_ERROR_CODE),
-  CUDA_SYM(CUDBG_REPORTED_DRIVER_INTERNAL_ERROR_CODE),
-  CUDA_SYM(CUDBG_ENABLE_LAUNCH_BLOCKING),
+  CUDA_SYM (CUDBG_IPC_FLAG_NAME),
+  CUDA_SYM (CUDBG_RPC_ENABLED),
+  CUDA_SYM (CUDBG_APICLIENT_PID),
+  CUDA_SYM (CUDBG_APICLIENT_REVISION),
+  CUDA_SYM (CUDBG_SESSION_ID),
+  CUDA_SYM (CUDBG_ATTACH_HANDLER_AVAILABLE),
+  CUDA_SYM (CUDBG_DEBUGGER_INITIALIZED),
+  CUDA_SYM (CUDBG_REPORTED_DRIVER_API_ERROR_CODE),
+  CUDA_SYM (CUDBG_REPORTED_DRIVER_INTERNAL_ERROR_CODE),
+  CUDA_SYM (CUDBG_ENABLE_LAUNCH_BLOCKING),
   /* This symbol is not exposed through cudadebugger.h yet */
-  CUDA_SYM(cudbgInjectionPath),
-  CUDA_SYM(CUDBG_DEBUGGER_CAPABILITIES),
+  CUDA_SYM (cudbgInjectionPath),
+  CUDA_SYM (CUDBG_DEBUGGER_CAPABILITIES),
 };
 
 CUDBGAPI cudbgAPI = NULL;
@@ -73,7 +84,7 @@ bool cuda_cleanup_completed = false;
 bool cuda_exit_requested = false;
 
 static bool inferior_in_debug_mode = false;
-static char cuda_gdb_session_dir[CUDA_GDB_TMP_BUF_SIZE] = {0};
+static char cuda_gdb_session_dir[CUDA_GDB_TMP_BUF_SIZE] = { 0 };
 static uint32_t cuda_gdb_session_id = 0;
 static uint32_t debugger_capabilities = CUDBG_DEBUGGER_CAPABILITY_NONE;
 
@@ -82,20 +93,22 @@ bool cuda_debug_general;
 bool cuda_debug_libcudbg;
 bool cuda_debug_notifications;
 bool cuda_notify_youngest;
-bool cuda_driver_logs = true;
+bool cuda_logs = true;
 bool cuda_printf_flushing = false;
+bool cuda_lazy_function_finalization = false;
 std::deque<std::string> cuda_trace_messages;
 
 ptid_t cuda_last_ptid;
 struct target_waitstatus cuda_last_ws;
 bool cuda_debugging_enabled = false;
 
-bool cuda_platform_supports_tid (void)
+bool
+cuda_platform_supports_tid (void)
 {
 #if defined(linux) && defined(SYS_gettid)
-    return true;
+  return true;
 #else
-    return false;
+  return false;
 #endif
 }
 
@@ -108,7 +121,8 @@ cuda_gdb_get_tid_or_pid (ptid_t ptid)
     return ptid.pid ();
 }
 
-/*---------------------------------------- sigpending -------------------------------------*/
+/*---------------------------------------- sigpending
+ * -------------------------------------*/
 #ifndef MAXPATHLEN
 #define MAXPATHLEN 1024
 #endif
@@ -136,25 +150,25 @@ add_line_to_sigset (const char *line, sigset_t *sigs)
       int digit;
 
       if (*p >= '0' && *p <= '9')
-        digit = *p - '0';
+	digit = *p - '0';
       else if (*p >= 'a' && *p <= 'f')
-        digit = *p - 'a' + 10;
+	digit = *p - 'a' + 10;
       else
-        {
-          fprintf (stderr, "Could not parse signal set: %s", line);
-          return -EINVAL;
-        }
+	{
+	  fprintf (stderr, "Could not parse signal set: %s", line);
+	  return -EINVAL;
+	}
 
       signum -= 4;
 
       if (digit & 1)
-        sigaddset (sigs, signum + 1);
+	sigaddset (sigs, signum + 1);
       if (digit & 2)
-        sigaddset (sigs, signum + 2);
+	sigaddset (sigs, signum + 2);
       if (digit & 4)
-        sigaddset (sigs, signum + 3);
+	sigaddset (sigs, signum + 3);
       if (digit & 8)
-        sigaddset (sigs, signum + 4);
+	sigaddset (sigs, signum + 4);
 
       p++;
     }
@@ -166,7 +180,8 @@ add_line_to_sigset (const char *line, sigset_t *sigs)
    SIGS to match.  */
 #ifndef __QNXHOST__
 static int
-linux_proc_pending_signals (long pid, sigset_t *pending, sigset_t *blocked, sigset_t *ignored)
+linux_proc_pending_signals (long pid, sigset_t *pending, sigset_t *blocked,
+			    sigset_t *ignored)
 {
   FILE *procfile;
   int rc = 0;
@@ -179,29 +194,31 @@ linux_proc_pending_signals (long pid, sigset_t *pending, sigset_t *blocked, sigs
   procfile = fopen (fname, "r");
   if (procfile == NULL)
     {
-      fprintf (stderr, "Could not open %s: %s(%d)", fname, strerror(errno), errno);
+      fprintf (stderr, "Could not open %s: %s(%d)", fname, strerror (errno),
+	       errno);
       return -errno;
-   }
+    }
 
   while (fgets (buffer, MAXPATHLEN, procfile) != NULL)
     {
       /* Normal queued signals are on the SigPnd line in the status
-         file.  However, 2.6 kernels also have a "shared" pending
-         queue for delivering signals to a thread group, so check for
-         a ShdPnd line also.
+	 file.  However, 2.6 kernels also have a "shared" pending
+	 queue for delivering signals to a thread group, so check for
+	 a ShdPnd line also.
 
-         Unfortunately some Red Hat kernels include the shared pending
-         queue but not the ShdPnd status field.  */
+	 Unfortunately some Red Hat kernels include the shared pending
+	 queue but not the ShdPnd status field.  */
 
       if (strncmp (buffer, "SigPnd:\t", 8) == 0)
-        rc = add_line_to_sigset (buffer + 8, pending);
+	rc = add_line_to_sigset (buffer + 8, pending);
       else if (strncmp (buffer, "ShdPnd:\t", 8) == 0)
-        rc =add_line_to_sigset (buffer + 8, pending);
+	rc = add_line_to_sigset (buffer + 8, pending);
       else if (strncmp (buffer, "SigBlk:\t", 8) == 0)
-        rc = add_line_to_sigset (buffer + 8, blocked);
+	rc = add_line_to_sigset (buffer + 8, blocked);
       else if (strncmp (buffer, "SigIgn:\t", 8) == 0)
-        rc = add_line_to_sigset (buffer + 8, ignored);
-      if (rc) break;
+	rc = add_line_to_sigset (buffer + 8, ignored);
+      if (rc)
+	break;
     }
 
   fclose (procfile);
@@ -214,9 +231,24 @@ linux_proc_pending_signals (long pid, sigset_t *pending, sigset_t *blocked, sigs
 static void
 cuda_clear_pending_sigint (pid_t pid)
 {
-  int status = 0, options = 0;
-  ptrace (PTRACE_CONT, pid, 0, 0); /* Resume the host to consume the pending SIGINT */
-  waitpid (pid, &status, options); /* Ensure we return for the right reason */
+  if (ptrace (PTRACE_CONT, pid, 0, 0) != 0)
+    {
+      warning ("Failed to resume %d to clear pending SIGINT: %s", (int)pid,
+	       strerror (errno));
+      return;
+    }
+
+  int status = 0;
+  pid_t waited;
+  do
+    waited = waitpid (pid, &status, 0);
+  while (waited < 0 && errno == EINTR);
+  if (waited < 0)
+    {
+      warning ("waitpid for %d failed: %s", (int)pid, strerror (errno));
+      return;
+    }
+
   gdb_assert (WIFSTOPPED (status) && WSTOPSIG (status) == SIGINT);
 }
 #endif
@@ -244,7 +276,8 @@ cuda_check_pending_sigint (ptid_t ptid)
   return false;
 }
 
-/*---------------------------------------- Routines ---------------------------------------*/
+/*---------------------------------------- Routines
+ * ---------------------------------------*/
 
 /* Debugger API statistics collection is disabled on cuda-gdbserver side */
 bool
@@ -274,10 +307,9 @@ cuda_enqueue_trace_message (const char *prefix, const char *fmt, va_list ap)
   cuda_trace_messages.emplace_back (std::move (msg));
 }
 
-ATTRIBUTE_PRINTF(1, 2) void
-cuda_trace (const char *fmt, ...)
+ATTRIBUTE_PRINTF (1, 2) void cuda_trace (const char *fmt, ...)
 {
-  if (!cuda_options_debug_general())
+  if (!cuda_options_debug_general ())
     return;
 
   va_list ap;
@@ -323,9 +355,9 @@ cuda_options_notify_youngest (void)
 }
 
 bool
-cuda_options_driver_logs (void)
+cuda_options_logs (void)
 {
-  return cuda_driver_logs;
+  return cuda_logs;
 }
 
 bool
@@ -334,25 +366,31 @@ cuda_options_printf_flushing (void)
   return cuda_printf_flushing;
 }
 
+bool
+cuda_options_lazy_function_finalization_enabled (void)
+{
+  return cuda_lazy_function_finalization;
+}
+
 /* We use the gdb initializers for some of the CUDA sources we share between
  * gdb and gdbserver. See gdb/make-init-c for more info. There is no
  * equivalent concept for gdbserver today. We need to explicitly call the
  * intializers once per execution. */
 
- void
- cuda_gdb_setup (void)
- {
-   static bool cuda_called_initializers = false;
-   extern void _initialize_cuda_notification ();
-   extern void _initialize_cuda_utils ();
-   if (!cuda_called_initializers)
-     {
-       cuda_called_initializers = true;
-       _initialize_cuda_notification ();
-       _initialize_cuda_utils ();
-     }
- }
- 
+void
+cuda_gdb_setup (void)
+{
+  static bool cuda_called_initializers = false;
+  extern void _initialize_cuda_notification ();
+  extern void _initialize_cuda_utils ();
+  if (!cuda_called_initializers)
+    {
+      cuda_called_initializers = true;
+      _initialize_cuda_notification ();
+      _initialize_cuda_utils ();
+    }
+}
+
 void
 cuda_cleanup (void)
 {
@@ -381,8 +419,10 @@ cuda_look_up_symbols (void)
   cuda_syms_looked_up = true;
   for (auto i = 0; i < cuda_get_symbol_cache_size (); i++)
     {
-      if (look_up_one_symbol (cuda_symbol_list[i].name, &(cuda_symbol_list[i].addr), 1) == 0)
-        cuda_syms_looked_up = false;
+      if (look_up_one_symbol (cuda_symbol_list[i].name,
+			      &(cuda_symbol_list[i].addr), 1)
+	  == 0)
+	cuda_syms_looked_up = false;
     }
 }
 
@@ -393,13 +433,13 @@ cuda_get_symbol_cache_size (void)
 }
 
 CORE_ADDR
-cuda_get_symbol_address_from_cache (const char* name)
+cuda_get_symbol_address_from_cache (const char *name)
 {
   int i;
 
   for (i = 0; i < cuda_get_symbol_cache_size (); i++)
-      if (strcmp (cuda_symbol_list[i].name, name) == 0)
-        return cuda_symbol_list[i].addr;
+    if (strcmp (cuda_symbol_list[i].name, name) == 0)
+      return cuda_symbol_list[i].addr;
 
   return 0;
 }
@@ -415,10 +455,9 @@ cuda_get_debugger_api (void)
 {
   gdb_assert (!cudbgAPI);
 
-  get_debugger_api_res = cudbgGetAPI (CUDBG_API_VERSION_MAJOR,
-                                      CUDBG_API_VERSION_MINOR,
-                                      CUDBG_API_VERSION_REVISION,
-                                      &cudbgAPI);
+  get_debugger_api_res
+      = cudbgGetAPI (CUDBG_API_VERSION_MAJOR, CUDBG_API_VERSION_MINOR,
+		     CUDBG_API_VERSION_REVISION, &cudbgAPI);
 
   return (get_debugger_api_res != CUDBG_SUCCESS);
 }
@@ -431,11 +470,13 @@ cuda_initialize (void)
   if (cuda_initialized)
     return;
 
-  set_callback_api_res = cudbgAPI->setNotifyNewEventCallback41 (cuda_notification_notify);
+  set_callback_api_res
+      = cudbgAPI->setNotifyNewEventCallback41 (cuda_notification_notify);
   api_initialize_res = cudbgAPI->initialize ();
   if (api_initialize_res != CUDBG_SUCCESS)
     {
-      cuda_trace ("CUDA initialize failed with error result: %u\n", (uint32_t) api_initialize_res);
+      cuda_trace ("CUDA initialize failed with error result: %u\n",
+		  (uint32_t)api_initialize_res);
       return;
     }
   /* Sucessfully initialized */
@@ -445,19 +486,22 @@ cuda_initialize (void)
   /* Check to see if we are using UD */
   CORE_ADDR useExtDebuggerAddr = 0;
   uint32_t useExtDebugger = 0;
-  useExtDebuggerAddr = cuda_get_symbol_address_from_cache (_STRING_(CUDBG_USE_EXTERNAL_DEBUGGER));
-  if (useExtDebuggerAddr) {
-    target_read_memory (useExtDebuggerAddr, (gdb_byte *)&useExtDebugger, sizeof(useExtDebugger));
+  useExtDebuggerAddr = cuda_get_symbol_address_from_cache (
+      _STRING_ (CUDBG_USE_EXTERNAL_DEBUGGER));
+  if (useExtDebuggerAddr)
+    {
+      target_read_memory (useExtDebuggerAddr, (gdb_byte *)&useExtDebugger,
+			  sizeof (useExtDebugger));
 
-    if (!useExtDebugger)
-      printf ("Running on legacy stack.\n");
-  }
+      if (!useExtDebugger)
+	printf ("Running on legacy stack.\n");
+    }
 }
 
 /* Can be removed when exposed through cudadebugger.h */
 #define CUDBG_INJECTION_PATH_SIZE 4096
 static bool
-cuda_initialize_injection ()
+cuda_initialize_injection (void)
 {
   CORE_ADDR injectionPathAddr;
   char *injectionPathEnv;
@@ -472,32 +516,42 @@ cuda_initialize_injection ()
 
   if (strlen (injectionPathEnv) >= CUDBG_INJECTION_PATH_SIZE)
     {
-      error (_("CUDBG_INJECTION_PATH must be no longer than %d: %s is %zd"), CUDBG_INJECTION_PATH_SIZE - 1, injectionPathEnv, strlen (injectionPathEnv));
+      error (_ ("CUDBG_INJECTION_PATH must be no longer than %d: %s is %zd"),
+	     CUDBG_INJECTION_PATH_SIZE - 1, injectionPathEnv,
+	     strlen (injectionPathEnv));
       return false;
     }
 
-  injectionLib = dlopen(injectionPathEnv, RTLD_LAZY);
+  injectionLib = dlopen (injectionPathEnv, RTLD_LAZY);
 
   if (injectionLib == NULL)
     {
-      error (_("Cannot open library %s pointed by CUDBG_INJECTION_PATH: %s"), injectionPathEnv, dlerror());
+      error (_ ("Cannot open library %s pointed by CUDBG_INJECTION_PATH: %s"),
+	     injectionPathEnv, dlerror ());
       return false;
     }
 
-  dlclose(injectionLib);
+  dlclose (injectionLib);
 
-
-  injectionPathAddr  = cuda_get_symbol_address_from_cache (_STRING_(cudbgInjectionPath));
+  injectionPathAddr
+      = cuda_get_symbol_address_from_cache (_STRING_ (cudbgInjectionPath));
   if (!injectionPathAddr)
     {
-      error (_("No `cudbgInjectionPath` symbol in the CUDA driver"));
+      error (_ ("No `cudbgInjectionPath` symbol in the CUDA driver"));
       return false;
     }
 
-  /* This message should be removed once we finalize the way the alternative API backend is injected */
-  printf ("CUDBG_INJECTION_PATH is set, forwarding it to the target (value: %s)\n", injectionPathEnv);
+  /* This message should be removed once we finalize the way the alternative
+   * API backend is injected */
+  printf (
+      "CUDBG_INJECTION_PATH is set, forwarding it to the target (value: %s)\n",
+      injectionPathEnv);
 
-  write_memory (injectionPathAddr, (gdb_byte *)injectionPathEnv, strlen(injectionPathEnv) + 1);
+  cuda_write_inferior_memory (
+      injectionPathAddr,
+      gdb::make_array_view (
+	  reinterpret_cast<const gdb_byte *> (injectionPathEnv),
+	  strlen (injectionPathEnv) + 1));
 
   return true;
 }
@@ -507,8 +561,8 @@ cuda_initialize_injection ()
 bool
 cuda_initialize_target (void)
 {
-  const unsigned char zero = 0;
-  const unsigned char one = 1;
+  const gdb_byte zero = 0;
+  const gdb_byte one = 1;
   CORE_ADDR debugFlagAddr;
   CORE_ADDR rpcFlagAddr;
   CORE_ADDR gdbPidAddr;
@@ -521,10 +575,11 @@ cuda_initialize_target (void)
   uint32_t sessionId;
 
   cuda_initialize ();
-  if (cuda_inferior_in_debug_mode())
+  if (cuda_inferior_in_debug_mode ())
     return true;
 
-  debugFlagAddr = cuda_get_symbol_address_from_cache (_STRING_(CUDBG_IPC_FLAG_NAME));
+  debugFlagAddr
+      = cuda_get_symbol_address_from_cache (_STRING_ (CUDBG_IPC_FLAG_NAME));
   if (!debugFlagAddr)
     return true;
 
@@ -532,46 +587,72 @@ cuda_initialize_target (void)
   sessionId = cuda_gdb_session_get_id ();
 
 #ifdef __QNXHOST__
-  /* FIXME: current_process() is not available, assume the process has been spawned */
+  /* FIXME: current_process() is not available, assume the process has been
+   * spawned */
   if (1)
 #else
-  if (!current_process()->attached)
+  if (!current_process ()->attached)
 #endif
     {
-      write_memory (debugFlagAddr, &one, 1);
+      cuda_write_inferior_memory (debugFlagAddr,
+				  gdb::make_array_view (&one, 1));
     }
 
-  rpcFlagAddr = cuda_get_symbol_address_from_cache (_STRING_(CUDBG_RPC_ENABLED));
+  rpcFlagAddr
+      = cuda_get_symbol_address_from_cache (_STRING_ (CUDBG_RPC_ENABLED));
   pid = getpid ();
-  gdbPidAddr = cuda_get_symbol_address_from_cache (_STRING_(CUDBG_APICLIENT_PID));
-  apiClientRevAddr = cuda_get_symbol_address_from_cache (_STRING_(CUDBG_APICLIENT_REVISION));
-  sessionIdAddr = cuda_get_symbol_address_from_cache (_STRING_(CUDBG_SESSION_ID));
-  launchblockingAddr = cuda_get_symbol_address_from_cache (_STRING_(CUDBG_ENABLE_LAUNCH_BLOCKING));
+  gdbPidAddr
+      = cuda_get_symbol_address_from_cache (_STRING_ (CUDBG_APICLIENT_PID));
+  apiClientRevAddr = cuda_get_symbol_address_from_cache (
+      _STRING_ (CUDBG_APICLIENT_REVISION));
+  sessionIdAddr
+      = cuda_get_symbol_address_from_cache (_STRING_ (CUDBG_SESSION_ID));
+  launchblockingAddr = cuda_get_symbol_address_from_cache (
+      _STRING_ (CUDBG_ENABLE_LAUNCH_BLOCKING));
 
-  if (!(rpcFlagAddr && gdbPidAddr && apiClientRevAddr &&
-      launchblockingAddr && sessionIdAddr))
+  if (!(rpcFlagAddr && gdbPidAddr && apiClientRevAddr && launchblockingAddr
+	&& sessionIdAddr))
     return false;
 
   if (!cuda_initialize_injection ())
     {
-      error (_("Failed to initialize the injection."));
+      error (_ ("Failed to initialize the injection."));
     }
 
-  write_memory (gdbPidAddr, (unsigned char*)&pid, sizeof (pid));
-  write_memory (rpcFlagAddr, &one, 1);
-  write_memory (apiClientRevAddr, (unsigned char*)&apiClientRev, sizeof(apiClientRev));
-  write_memory (sessionIdAddr, (unsigned char*)&sessionId, sizeof(sessionId));
-  write_memory (launchblockingAddr, cuda_options_launch_blocking () ? &one : &zero, 1);
+  cuda_write_inferior_memory (
+      gdbPidAddr,
+      gdb::make_array_view (reinterpret_cast<const gdb_byte *> (&pid),
+			    sizeof (pid)));
+  cuda_write_inferior_memory (rpcFlagAddr, gdb::make_array_view (&one, 1));
+  cuda_write_inferior_memory (
+      apiClientRevAddr,
+      gdb::make_array_view (reinterpret_cast<const gdb_byte *> (&apiClientRev),
+			    sizeof (apiClientRev)));
+  cuda_write_inferior_memory (
+      sessionIdAddr,
+      gdb::make_array_view (reinterpret_cast<const gdb_byte *> (&sessionId),
+			    sizeof (sessionId)));
+  cuda_write_inferior_memory (
+      launchblockingAddr,
+      gdb::make_array_view (cuda_options_launch_blocking () ? &one : &zero,
+			    1));
 
-  /* Setup our desired debugger capabilities for the debugger backend. It is alright
-   * if the older driver doesn't understand some of these flags. We will deal
-   * with those situations after initialization. */
+  /* Setup our desired debugger capabilities for the debugger backend. It is
+   * alright if the older driver doesn't understand some of these flags. We
+   * will deal with those situations after initialization. */
   CORE_ADDR capability_addr = cuda_get_symbol_address_from_cache (
       _STRING_ (CUDBG_DEBUGGER_CAPABILITIES));
   if (capability_addr)
     {
       cuda_trace ("requesting CUDA lazy function loading support\n");
       debugger_capabilities |= CUDBG_DEBUGGER_CAPABILITY_LAZY_FUNCTION_LOADING;
+
+      if (cuda_options_lazy_function_finalization_enabled ())
+	{
+	  cuda_trace ("requesting CUDA lazy function finalization support");
+	  debugger_capabilities
+	      |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LAZY_FUNCTION_FINALIZATION;
+	}
 
       cuda_trace ("requesting tracking of exceptions in exited warps\n");
       debugger_capabilities
@@ -581,36 +662,41 @@ cuda_initialize_target (void)
       debugger_capabilities |= CUDBG_DEBUGGER_CAPABILITY_SUSPEND_EVENTS;
 
       cuda_trace ("requesting no context push / pop events be delivered\n");
-      debugger_capabilities |= CUDBG_DEBUGGER_CAPABILITY_NO_CONTEXT_PUSH_POP_EVENTS;
+      debugger_capabilities
+	  |= CUDBG_DEBUGGER_CAPABILITY_NO_CONTEXT_PUSH_POP_EVENTS;
 
-      if (cuda_options_driver_logs ())
-        {
-          cuda_trace ("requesting CUDA driver logging\n");
-          debugger_capabilities |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
-        }
+      if (cuda_options_logs ())
+	{
+	  cuda_trace ("requesting CUDA logs\n");
+	  debugger_capabilities |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
+	}
 
       if (cuda_options_printf_flushing ())
-        {
-          cuda_trace ("requesting CUDA printf flushing on suspend\n");
-          debugger_capabilities |= CUDBG_DEBUGGER_CAPABILITY_FLUSH_PRINTF_ON_SUSPEND;
-        }
+	{
+	  cuda_trace ("requesting CUDA printf flushing on suspend\n");
+	  debugger_capabilities
+	      |= CUDBG_DEBUGGER_CAPABILITY_FLUSH_PRINTF_ON_SUSPEND;
+	}
 
 #if CUDBG_API_VERSION_REVISION > 167
       cuda_trace ("requesting break-on-launch capability\n");
       debugger_capabilities |= CUDBG_DEBUGGER_CAPABILITY_BREAK_ON_LAUNCH;
 #endif
 
-      write_memory (capability_addr, (const gdb_byte *)&debugger_capabilities,
-		    sizeof (debugger_capabilities));
+      cuda_write_inferior_memory (
+	  capability_addr,
+	  gdb::make_array_view (
+	      reinterpret_cast<const gdb_byte *> (&debugger_capabilities),
+	      sizeof (debugger_capabilities)));
     }
 
   inferior_in_debug_mode = true;
   return true;
 }
 
-/* Set the driver logging capability */
+/* Set the CUDA logs capability */
 void
-cuda_set_driver_logging (bool enable)
+cuda_set_logs (bool enable)
 {
   CORE_ADDR capability_addr = cuda_get_symbol_address_from_cache (
       _STRING_ (CUDBG_DEBUGGER_CAPABILITIES));
@@ -619,23 +705,29 @@ cuda_set_driver_logging (bool enable)
 #ifndef __QNXHOST__
       /* Read the current capabilities from the target process memory */
       /* target_read_memory is not supported on QNX.
-       * TODO: Implement target_read_memory for QNX and then remove the global */
+       * TODO: Implement target_read_memory for QNX and then remove the global
+       */
       target_read_memory (capability_addr, (gdb_byte *)&debugger_capabilities,
-        sizeof (debugger_capabilities));
+			  sizeof (debugger_capabilities));
 #endif
-      cuda_trace ("Current CUDA debugger capabilities: 0x%x\n", debugger_capabilities);
+      cuda_trace ("Current CUDA debugger capabilities: 0x%x\n",
+		  debugger_capabilities);
 
-      /* Set or clear the driver logging capability */
-      cuda_trace ("%s CUDA driver logging\n", enable ? "enabling" : "disabling");
+      /* Set or clear the CUDA logs capability */
+      cuda_trace ("%s CUDA logs\n", enable ? "enabling" : "disabling");
 
       if (enable)
-        debugger_capabilities |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
+	debugger_capabilities |= CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
       else
-        debugger_capabilities &= ~CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
+	debugger_capabilities &= ~CUDBG_DEBUGGER_CAPABILITY_ENABLE_CUDA_LOGS;
       /* Write the new capabilities back to the target */
-      cuda_trace ("setting CUDA debugger capabilities to 0x%x\n", debugger_capabilities);
-      write_memory (capability_addr, (const gdb_byte *)&debugger_capabilities,
-        sizeof (debugger_capabilities));
+      cuda_trace ("setting CUDA debugger capabilities to 0x%x\n",
+		  debugger_capabilities);
+      cuda_write_inferior_memory (
+	  capability_addr,
+	  gdb::make_array_view (
+	      reinterpret_cast<const gdb_byte *> (&debugger_capabilities),
+	      sizeof (debugger_capabilities)));
     }
 }
 
@@ -651,24 +743,26 @@ cuda_gdb_session_create (void)
   /* Check if the previous session was cleaned up */
   if (cuda_gdb_session_dir[0] != '\0')
     error ("The directory for the previous CUDA session was not cleaned up. "
-             "Try deleting %s and retrying.", cuda_gdb_session_dir);
+	   "Try deleting %s and retrying.",
+	   cuda_gdb_session_dir);
 
   cuda_gdb_session_id++;
 
-  snprintf (cuda_gdb_session_dir, CUDA_GDB_TMP_BUF_SIZE,
-            "%s/session%d", cuda_gdb_tmpdir_getdir (),
-            cuda_gdb_session_id);
+  snprintf (cuda_gdb_session_dir, CUDA_GDB_TMP_BUF_SIZE, "%s/session%d",
+	    cuda_gdb_tmpdir_getdir (), cuda_gdb_session_id);
 
   cuda_trace ("creating new session %d", cuda_gdb_session_id);
 
   ret = cuda_gdb_dir_create (cuda_gdb_session_dir, S_IRWXU | S_IRWXG,
-                             override_umask, &dir_exists);
+			     override_umask, &dir_exists);
 
   if (!ret && dir_exists)
     error ("A stale CUDA session directory was found. "
-             "Try deleting %s and retrying.", cuda_gdb_session_dir);
+	   "Try deleting %s and retrying.",
+	   cuda_gdb_session_dir);
   else if (ret)
-    error ("Failed to create session directory: %s (ret=%d).", cuda_gdb_session_dir, ret);
+    error ("Failed to create session directory: %s (ret=%d).",
+	   cuda_gdb_session_dir, ret);
 
   return ret;
 }

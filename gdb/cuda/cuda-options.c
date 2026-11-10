@@ -25,8 +25,13 @@
 #include "inferior.h"
 #include "remote.h"
 #include "top.h"
+#include "ui-file.h"
+#include "ui-out.h"
 
 #include "gdbsupport/buildargv.h"
+
+#include <algorithm>
+#include <chrono>
 
 #include "cuda-events.h"
 #include "cuda-notifications.h"
@@ -38,8 +43,6 @@
 #include "cuda-utils.h"
 #include "libcudbgipc.h"
 #include "objfiles.h"
-
-#include <chrono>
 
 /*List of set/show cuda commands */
 struct cmd_list_element *setcudalist;
@@ -547,7 +550,8 @@ cuda_set_break_on_launch (const char *args, int from_tty,
 	  if (cuda_state::enable_break_on_launch ())
 	    {
 	      s_break_on_launch_api_enabled = true;
-	      /* No need to use legacy auto-breakpoints when new API is active. */
+	      /* No need to use legacy auto-breakpoints when new API is active.
+	       */
 	      return;
 	    }
 	  /* Fall through to legacy method if new API fails. */
@@ -569,7 +573,8 @@ cuda_set_break_on_launch (const char *args, int from_tty,
 	}
       else
 	{
-	  /* !want_enabled && !s_break_on_launch_api_enabled - nothing to do. */
+	  /* !want_enabled && !s_break_on_launch_api_enabled - nothing to do.
+	   */
 	  return;
 	}
     }
@@ -639,10 +644,10 @@ cuda_options_initialize_break_on_launch_api (void)
   /* Called during CUDA initialization to enable the new break-on-launch API
      if the option was already set before the API was available. */
   if (s_break_on_launch_api_enabled)
-    return;  /* Already enabled. */
+    return; /* Already enabled. */
 
   if (!cuda_options_break_on_launch_application ())
-    return;  /* Option not set. */
+    return; /* Option not set. */
 
 #if CUDBG_API_VERSION_REVISION > 167
   /* Try to enable break-on-launch via the new API (CUDA 13.2+).
@@ -652,8 +657,9 @@ cuda_options_initialize_break_on_launch_api (void)
       && cuda_state::enable_break_on_launch ())
     {
       s_break_on_launch_api_enabled = true;
-      cuda_trace_domain (CUDA_TRACE_BREAKPOINT,
-			 "Break-on-launch API enabled during initialization\n");
+      cuda_trace_domain (
+	  CUDA_TRACE_BREAKPOINT,
+	  "Break-on-launch API enabled during initialization\n");
     }
   else
 #endif
@@ -664,17 +670,78 @@ cuda_options_initialize_break_on_launch_api (void)
     }
 }
 
-/*
- * set cuda disassemble_from
- */
+//
+// set cuda disassembly format and disassemble_from
+//
+// disassemble_from is deprecated, use disassembly instead
+//
+
 static const char cuda_disassemble_from_device_memory[] = "device_memory";
 static const char cuda_disassemble_from_elf_image[] = "elf_image";
 
+static const char *cuda_disassemble_from = cuda_disassemble_from_elf_image;
 static const char *cuda_disassemble_from_enums[]
     = { cuda_disassemble_from_device_memory, cuda_disassemble_from_elf_image,
 	NULL };
 
-static const char *cuda_disassemble_from = cuda_disassemble_from_elf_image;
+static const char cuda_disassembly_type_nvsal[] = "nvsal-elf";
+static const char cuda_disassembly_type_sass_elf[] = "sass-elf";
+static const char cuda_disassembly_type_sass_device[] = "sass-device";
+static const char cuda_disassembly_type_default_elf[] = "sass-elf";
+
+static const char *cuda_disassembly_type = cuda_disassembly_type_sass_elf;
+static const char *cuda_disassembly_type_enums[]
+    = { cuda_disassembly_type_nvsal, cuda_disassembly_type_sass_elf,
+	cuda_disassembly_type_sass_device, NULL };
+
+static void
+cuda_options_show_disassembly_type (struct ui_file *file, int from_tty,
+				    struct cmd_list_element *c,
+				    const char *value)
+{
+  gdb_printf (_ ("CUDA disassembly type is set to '%s'.\n"), value);
+}
+
+static void
+cuda_options_set_disassembly_type (const char *args, int from_tty,
+				   struct cmd_list_element *c)
+{
+  /* Assignment handled by add_setshow_enum_cmd. */
+}
+
+cuda_disassembly_type_t
+cuda_options_disassembly_type ()
+{
+  if (strcmp (cuda_disassembly_type, cuda_disassembly_type_nvsal) == 0)
+    return cuda_disassembly_type_t::nvsal_elf;
+  if (strcmp (cuda_disassembly_type, cuda_disassembly_type_sass_elf) == 0)
+    return cuda_disassembly_type_t::sass_elf;
+  if (strcmp (cuda_disassembly_type, cuda_disassembly_type_sass_device) == 0)
+    return cuda_disassembly_type_t::sass_device;
+  error (_ ("Unknown CUDA disassembly type: %s"), cuda_disassembly_type);
+}
+
+static void
+cuda_options_initialize_disassembly_type (void)
+{
+  add_setshow_enum_cmd (
+      "disassembly", class_cuda, cuda_disassembly_type_enums,
+      &cuda_disassembly_type,
+      _ ("Choose whether to disassemble from the SASS or NVSAL."),
+      _ ("Show the disassembly type."),
+      _ ("Choose the disassembly type:\n"
+	 "  sass-elf : disassemble from the SASS ELF image\n"
+	 "  sass-device : disassemble from the SASS device memory\n"
+	 "  nvsal-elf : disassemble from the NVSAL ELF image\n"),
+      cuda_options_set_disassembly_type, cuda_options_show_disassembly_type,
+      &setcudalist, &showcudalist);
+}
+
+//
+// set cuda disassemble_from
+//
+// disassemble_from is deprecated, use disassembly instead
+//
 
 static void
 cuda_show_disassemble_from (struct ui_file *file, int from_tty,
@@ -687,10 +754,29 @@ static void
 cuda_set_disassemble_from (const char *args, int from_tty,
 			   struct cmd_list_element *c)
 {
-  if (!target_has_execution ()
-      && cuda_disassemble_from == cuda_disassemble_from_device_memory)
-    warning (_ ("Cannot disassemble from %s with current target"),
-	     cuda_disassemble_from_device_memory);
+  if (strcmp (cuda_disassemble_from, cuda_disassemble_from_device_memory) == 0)
+    {
+      if (!target_has_execution ())
+	{
+	  warning (_ ("Cannot disassemble from %s with current target"),
+		   cuda_disassemble_from_device_memory);
+	  cuda_disassemble_from = cuda_disassemble_from_elf_image;
+	  if (strcmp (cuda_disassembly_type, cuda_disassembly_type_sass_device)
+	      == 0)
+	    cuda_disassembly_type = cuda_disassembly_type_default_elf;
+	}
+      else
+	cuda_disassembly_type = cuda_disassembly_type_sass_device;
+    }
+  else if (strcmp (cuda_disassemble_from, cuda_disassemble_from_elf_image)
+	   == 0)
+    {
+      if (strcmp (cuda_disassembly_type, cuda_disassembly_type_sass_device)
+	  == 0)
+	cuda_disassembly_type = cuda_disassembly_type_default_elf;
+    }
+  else
+    error (_ ("Unknown disassemble from: %s"), cuda_disassemble_from);
 }
 
 static void
@@ -709,33 +795,18 @@ cuda_options_initialize_disassemble_from (void)
       &showcudalist);
 }
 
-bool
-cuda_options_disassemble_from_device_memory (void)
-{
-  /* Force this to false if there is no target execution - we previously
-     warned the user about this when they switched the default. */
-  if (!target_has_execution ())
-    return false;
-  return cuda_disassemble_from == cuda_disassemble_from_device_memory;
-}
-
-bool
-cuda_options_disassemble_from_elf_image (void)
-{
-  /* Force this to true if there is no target execution - we previously
-     warned the user about this when they switched the default. */
-  if (!target_has_execution ())
-    return true;
-  return cuda_disassemble_from == cuda_disassemble_from_elf_image;
-}
-
+// Used by coredump where no device-side disassembly is possible
 void
 cuda_options_set_disassemble_from_elf_image (void)
 {
-  if (cuda_disassemble_from != cuda_disassemble_from_elf_image)
+  if (strcmp (cuda_disassemble_from, cuda_disassemble_from_elf_image) != 0)
     warning (_ ("cuda option `disassemble_from' was reset from %s to %s"),
 	     cuda_disassemble_from, cuda_disassemble_from_elf_image);
+
   cuda_disassemble_from = cuda_disassemble_from_elf_image;
+
+  if (strcmp (cuda_disassembly_type, cuda_disassembly_type_sass_device) == 0)
+    cuda_disassembly_type = cuda_disassembly_type_default_elf;
 }
 
 /*
@@ -898,6 +969,40 @@ cuda_options_initialize_launch_blocking (void)
 	 "starting from the next run."),
       cuda_set_launch_blocking, cuda_show_launch_blocking, &setcudalist,
       &showcudalist);
+}
+
+/*
+ * set cuda lazy_function_finalization
+ */
+static bool cuda_lazy_function_finalization = false;
+
+static void
+cuda_show_lazy_function_finalization (struct ui_file *file, int from_tty,
+				      struct cmd_list_element *c,
+				      const char *value)
+{
+  gdb_printf (file, _ ("CUDA lazy function finalization is %s.\n"), value);
+}
+
+bool
+cuda_options_lazy_function_finalization_enabled (void)
+{
+  return cuda_lazy_function_finalization;
+}
+
+static void
+cuda_options_initialize_lazy_function_finalization (void)
+{
+  add_setshow_boolean_cmd (
+      "lazy_function_finalization", class_cuda,
+      &cuda_lazy_function_finalization,
+      _ ("Turn on/off CUDA lazy function finalization (effective starting "
+	 "from the next run)"),
+      _ ("Show whether CUDA lazy function finalization is enabled."),
+      _ ("When enabled, cuda-gdb requests CUDA lazy function finalization "
+	 "support from the debugger backend. This option is disabled by "
+	 "default and is effective starting from the next run."),
+      NULL, cuda_show_lazy_function_finalization, &setcudalist, &showcudalist);
 }
 
 /*
@@ -1337,6 +1442,39 @@ cuda_options_initialize_stats (void)
 }
 
 /*
+ * maintenance set cuda profile_lfl
+ */
+static bool cuda_profile_lfl = false;
+
+static void
+cuda_show_profile_lfl (struct ui_file *file, int from_tty,
+		       struct cmd_list_element *c, const char *value)
+{
+  gdb_printf (file, _ ("CUDA LFL step profiling is %s.\n"), value);
+}
+
+bool
+cuda_options_profile_lfl (void)
+{
+  return cuda_profile_lfl;
+}
+
+static void
+cuda_options_initialize_profile_lfl (void)
+{
+  add_setshow_boolean_cmd (
+      "profile_lfl", class_maintenance, &cuda_profile_lfl,
+      _ ("Set collection of detailed CUDA LFL timing statistics."),
+      _ ("Show collection of detailed CUDA LFL timing statistics."),
+      _ ("When enabled, cuda-gdb records per-step timing rows for "
+	 "CUDBG_EVENT_FUNCTIONS_LOADED processing in the existing CUDA event "
+	 "statistics table. The top-level FUNCTIONS_LOADED event statistic is "
+	 "always collected."),
+      NULL, cuda_show_profile_lfl, &maintenance_set_cuda_cmdlist,
+      &maintenance_show_cuda_cmdlist);
+}
+
+/*
  * maintenance print cuda_regmap
  */
 static bool cuda_value_extrapolation = false;
@@ -1496,99 +1634,6 @@ cuda_options_device_resume_on_cpu_dynamic_function_call (void)
 }
 
 /*
- * set cuda driver_logs
- */
-static bool cuda_driver_logs = true;
-
-static void
-cuda_set_driver_logs (const char *args, int from_tty,
-		      struct cmd_list_element *c)
-{
-  if (is_remote_target (current_inferior ()->process_target ()))
-    cuda_remote_set_option ();
-  else
-    cuda_set_driver_log_capability (cuda_driver_logs);
-}
-
-static void
-cuda_show_driver_logs (struct ui_file *file, int from_tty,
-		       struct cmd_list_element *c, const char *value)
-{
-  gdb_printf (file, _ ("CUDA driver logs collection is %s.\n"), value);
-}
-
-bool
-cuda_options_driver_logs_enabled (void)
-{
-  return cuda_driver_logs;
-}
-
-static void
-cuda_options_initialize_driver_logs (void)
-{
-  add_setshow_boolean_cmd (
-      "driver_logs", class_cuda, &cuda_driver_logs,
-      _ ("Turn on/off collection and display of CUDA driver logs."),
-      _ ("Show if collection and display of CUDA driver logs is enabled."),
-      _ ("When turned on, CUDA driver logs are collected from the driver "
-	 "and displayed by the debugger."),
-      cuda_set_driver_logs, cuda_show_driver_logs, &setcudalist,
-      &showcudalist);
-}
-
-static const char *const cuda_driver_log_level_enums[]
-    = { "error", "warning", "extra", NULL };
-
-static const char *cuda_driver_log_level = "error";
-static cuda_log_level_t cuda_log_level = CUDA_LOG_LEVEL_ERROR;
-
-static void
-cuda_set_driver_log_level (const char *args, int from_tty,
-			   struct cmd_list_element *c)
-{
-  if (strcmp (cuda_driver_log_level, "error") == 0)
-    cuda_log_level = CUDA_LOG_LEVEL_ERROR;
-  else if (strcmp (cuda_driver_log_level, "warning") == 0)
-    cuda_log_level = CUDA_LOG_LEVEL_WARNING;
-  else if (strcmp (cuda_driver_log_level, "extra") == 0)
-    cuda_log_level = CUDA_LOG_LEVEL_EXTRA;
-  else
-    error (_ ("Unknown CUDA driver log level: %s"), cuda_driver_log_level);
-}
-
-static void
-cuda_show_driver_log_level (struct ui_file *file, int from_tty,
-			    struct cmd_list_element *c, const char *value)
-{
-  gdb_printf (file, _ ("CUDA driver logs level is set to '%s'.\n"), value);
-}
-
-cuda_log_level_t
-cuda_options_driver_log_level (void)
-{
-  return cuda_log_level;
-}
-
-static void
-cuda_options_initialize_driver_log_level (void)
-{
-  add_setshow_enum_cmd (
-      "driver_log_level", class_cuda, cuda_driver_log_level_enums,
-      &cuda_driver_log_level,
-      _ ("Set the minimum severity level for CUDA driver logs to display."),
-      _ ("Show the minimum severity level for CUDA driver logs to display."),
-      _ ("Valid options are:\n"
-	 "  error   - Print only CUDA driver errors (default).\n"
-	 "  warning - Print CUDA driver errors and warnings.\n"
-	 "  extra - Same as 'warning', but adds printing of logging thread IDs"
-	 " and log timestamps.\n"
-	 " A thread ID is the return value of pthread_self() printed in hex"
-	 " and timestamps are in local time formatted as HH:MM:SS.ms."),
-      cuda_set_driver_log_level, cuda_show_driver_log_level, &setcudalist,
-      &showcudalist);
-}
-
-/*
  * set cuda printf_flushing
  */
 static bool print_cudaf_flushing = false;
@@ -1673,17 +1718,18 @@ _initialize_cuda_options ()
   cuda_options_initialize_show_context_events ();
   cuda_options_initialize_launch_blocking ();
   cuda_options_initialize_kernel_launch_backtrace ();
+  cuda_options_initialize_lazy_function_finalization ();
   cuda_options_initialize_thread_selection ();
   cuda_options_initialize_copyright ();
   cuda_options_initialize_notify ();
   cuda_options_initialize_variable_value_cache_enabled ();
   cuda_options_initialize_stats ();
+  cuda_options_initialize_profile_lfl ();
   cuda_options_initialize_value_extrapolation ();
   cuda_options_initialize_single_stepping_optimization ();
   cuda_options_initialize_step_divergent_lanes ();
   cuda_options_initialize_device_resume_on_cpu_dynamic_function_call ();
-  cuda_options_initialize_driver_logs ();
-  cuda_options_initialize_driver_log_level ();
   cuda_options_initialize_printf_flushing ();
   cuda_options_initialize_preserve_tmp_data ();
+  cuda_options_initialize_disassembly_type ();
 }

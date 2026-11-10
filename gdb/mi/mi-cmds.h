@@ -52,6 +52,13 @@ extern mi_cmd_argv_ftype mi_cmd_break_commands;
 extern mi_cmd_argv_ftype mi_cmd_break_passcount;
 extern mi_cmd_argv_ftype mi_cmd_break_watch;
 #ifdef NVIDIA_CUDA_GDB
+extern mi_cmd_argv_ftype mi_cmd_cuda_log_set;
+extern mi_cmd_argv_ftype mi_cmd_cuda_log_status;
+extern mi_cmd_argv_ftype mi_cmd_cuda_log_add;
+extern mi_cmd_argv_ftype mi_cmd_cuda_log_delete;
+extern mi_cmd_argv_ftype mi_cmd_cuda_log_enable;
+extern mi_cmd_argv_ftype mi_cmd_cuda_log_disable;
+extern mi_cmd_argv_ftype mi_cmd_cuda_info_log;
 extern mi_cmd_argv_ftype mi_cmd_cuda_info_barriers;
 extern mi_cmd_argv_ftype mi_cmd_cuda_info_devices;
 extern mi_cmd_argv_ftype mi_cmd_cuda_info_sms;

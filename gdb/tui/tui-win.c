@@ -61,7 +61,6 @@ static void parse_scrolling_args (const char *,
 				  struct tui_win_info **, 
 				  int *);
 
-
 #ifndef ACS_LRCORNER
 #  define ACS_LRCORNER '+'
 #endif
@@ -166,7 +165,12 @@ The attribute mode to use for the TUI window borders is \"%s\".\n"),
 	      value);
 }
 
+#ifdef NVIDIA_BUGFIX
+/* acs_map is unavailable; ACS border chars render as garbage (e.g. 'q').  */
+static const char *tui_border_kind = "ascii";
+#else
 static const char *tui_border_kind = "acs";
+#endif
 static void
 show_tui_border_kind (struct ui_file *file, 
 		      int from_tty,
@@ -469,12 +473,44 @@ tui_win_info::right_scroll (int num_to_scroll)
 }
 
 
+#ifdef NVIDIA_BUGFIX
+static void
+tui_refresh_windows_nvidia (bool include_cmd_win)
+{
+  for (tui_win_info *win_info : all_tui_windows ())
+    {
+      if (!include_cmd_win && win_info == tui_cmd_win ())
+	continue;
+      if (win_info->handle != nullptr)
+	redrawwin (win_info->handle.get ());
+      win_info->refresh_window ();
+    }
+}
+#endif
+
 void
 tui_refresh_all_win (void)
 {
+#ifdef NVIDIA_BUGFIX
+  /* Upstream uses clearok(curscr) + doupdate().  We cannot touch curscr.
+     Use batch rendering so every window (including source/asm pads via
+     refresh_window) is wnoutrefresh'd once, then flushed with doupdate.
+     redrawwin forces a full window repaint to clear stale characters.  */
+  tui_batch_rendering batch;
+  tui_refresh_windows_nvidia (true);
+#else
   clearok (curscr, TRUE);
   doupdate ();
+#endif
 }
+
+#ifdef NVIDIA_BUGFIX
+void
+tui_refresh_other_wins (void)
+{
+  tui_refresh_windows_nvidia (false);
+}
+#endif
 
 void
 tui_rehighlight_all (void)
@@ -509,8 +545,23 @@ tui_resize_all (void)
 
       /* erase + clearok are used instead of a straightforward clear as
 	 AIX 5.3 does not define clear.  */
+#ifdef NVIDIA_BUGFIX
+      /* erase() expands to werase(stdscr); avoid stdscr (libtinfo global).
+	 Hidden windows (make_visible(false)) keep a nullptr handle.  */
+      for (tui_win_info *win_info : all_tui_windows ())
+	{
+	  if (win_info->handle != nullptr)
+	    werase (win_info->handle.get ());
+	}
+      for (tui_win_info *win_info : all_tui_windows ())
+	{
+	  if (win_info->handle != nullptr)
+	    touchwin (win_info->handle.get ());
+	}
+#else
       erase ();
       clearok (curscr, TRUE);
+#endif
       /* Apply the current layout.  The 'false' here allows the command
 	 window to resize proportionately with containing terminal, rather
 	 than maintaining a fixed size.  */

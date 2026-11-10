@@ -199,7 +199,8 @@ cuda_state::initialize (void)
   // Collect information about this system that doesn't change
   // during the debug session
   cuda_debugapi::get_num_devices (&m_instance.m_num_devices);
-  // Return early if no devices are found. This can be the case when reading invalid core files.
+  // Return early if no devices are found. This can be the case when reading
+  // invalid core files.
   if (m_instance.m_num_devices == 0)
     return;
 
@@ -276,30 +277,31 @@ cuda_state::find_context_by_id (uint64_t context_id)
 
 cuda_module *
 cuda_state::create_module (uint64_t module_id,
+			   uint64_t elf_handle,
 			   CUDBGElfImageProperties properties,
 			   uint64_t context_id, uint64_t elf_image_size)
 {
   CUDA_STATE_TRACE (
-      "Module create module_id 0x%llx context_id 0x%llx size %llu", module_id,
+      "Module create module_id 0x%llx elf_handle 0x%llx context_id 0x%llx size %llu", module_id, elf_handle,
       context_id, elf_image_size);
 
   /* Sanity - Classic stack at times will try to load the same module multiple
      times. To deal with this, destroy the previous module first. */
-  if (find_module_by_id (module_id))
+  if (find_module_by_id (elf_handle))
     {
-      CUDA_STATE_TRACE ("Module 0x%llx already loaded, destroying", module_id);
-      destroy_module (module_id);
+      CUDA_STATE_TRACE ("Module 0x%llx elf_handle 0x%llx already loaded, destroying", module_id, elf_handle);
+      destroy_module (elf_handle);
     }
 
   auto context = find_context_by_id (context_id);
   gdb_assert (context);
 
   // Install it in the map before doing anything else
-  m_instance.m_module_map[module_id] = std::make_unique<cuda_module> (
-      module_id, properties, context, elf_image_size);
+  m_instance.m_module_map[elf_handle] = std::make_unique<cuda_module> (
+      module_id, elf_handle, properties, context, elf_image_size);
 
   // Now get the cuda_module* and update the context map
-  auto module = m_instance.m_module_map[module_id].get ();
+  auto module = m_instance.m_module_map[elf_handle].get ();
   context->add_module (module);
 
   // Now that the module is in the map, the objfile can be loaded.
@@ -309,11 +311,11 @@ cuda_state::create_module (uint64_t module_id,
 }
 
 void
-cuda_state::destroy_module (uint64_t module_id)
+cuda_state::destroy_module (uint64_t elf_handle)
 {
-  CUDA_STATE_TRACE ("Module destroy 0x%llx", module_id);
+  CUDA_STATE_TRACE ("Module destroy 0x%llx", elf_handle);
 
-  auto module = find_module_by_id (module_id);
+  auto module = find_module_by_id (elf_handle);
   gdb_assert (module);
 
   // Remove the module from the context map
@@ -323,21 +325,21 @@ cuda_state::destroy_module (uint64_t module_id)
   module->unload_objfile (true);
 
   // Remove the module from the module map, destroying it
-  m_instance.m_module_map.erase (module->id ());
+  m_instance.m_module_map.erase (module->elf_handle ());
 }
 
 cuda_module *
-cuda_state::find_module_by_id (uint64_t module_id)
+cuda_state::find_module_by_id (uint64_t elf_handle)
 {
-  auto iter = m_instance.m_module_map.find (module_id);
+  auto iter = m_instance.m_module_map.find (elf_handle);
   if (iter != m_instance.m_module_map.end ())
     {
       auto module = iter->second.get ();
-      CUDA_STATE_TRACE ("Module 0x%llx found %p", module_id, module);
+      CUDA_STATE_TRACE ("Module 0x%llx elf_handle 0x%llx found %p", module->module_id (), module->elf_handle (), module);
       return module;
     }
 
-  CUDA_STATE_TRACE ("Module 0x%llx not found", module_id);
+  CUDA_STATE_TRACE ("Module elf_handle 0x%llx not found", elf_handle);
   return nullptr;
 }
 
@@ -390,12 +392,20 @@ cuda_state::is_context_active (cuda_context *context)
 }
 
 void
-cuda_state::flush_disasm_caches ()
+cuda_state::flush_disasm_caches (bool device_only)
 {
   CUDA_STATE_TRACE ("");
 
   for (auto &iter : m_instance.m_context_map)
-    iter.second->flush_disasm_caches ();
+    iter.second->flush_disasm_caches (device_only);
+}
+
+void
+cuda_state::flush_disasm_caches (uint32_t dev_id, bool device_only)
+{
+  CUDA_STATE_TRACE ("");
+
+  cuda_state::device (dev_id)->flush_disasm_caches (device_only);
 }
 
 void
@@ -475,13 +485,12 @@ cuda_state::create_kernel (uint32_t dev_id, uint64_t grid_id)
 		       "Could not find CUDA context for context_id 0x%lx",
 		       grid_info.context);
 
-  const auto module = cuda_state::find_module_by_id (grid_info.module);
-  CUDA_STATE_ERROR_IF (!module,
+  const auto elf_image_handle = grid_info.elfImageHandle;
+  const auto elf_image = cuda_state::find_module_by_id (elf_image_handle);
+  CUDA_STATE_ERROR_IF (!elf_image,
 		       "Could not find CUDA module for context_id 0x%lx "
-		       "module_id 0x%lx",
-		       grid_info.context, grid_info.module);
-
-  const auto module_id = grid_info.module;
+		       "elf_image_handle 0x%lx",
+		       grid_info.context, elf_image_handle);
 
   const auto virt_code_base = grid_info.functionEntry;
   const auto grid_dim = grid_info.gridDim;
@@ -491,21 +500,22 @@ cuda_state::create_kernel (uint32_t dev_id, uint64_t grid_id)
 
   const auto type = grid_info.type;
 
-  return create_kernel (dev_id, grid_id, virt_code_base, module_id, grid_dim,
+  return create_kernel (dev_id, grid_id, virt_code_base, elf_image_handle, grid_dim,
 			block_dim, cluster_dim_default, cluster_dim_preferred,
 			type);
 }
 
 cuda_kernel *
 cuda_state::create_kernel (uint32_t dev_id, uint64_t grid_id,
-			   uint64_t virt_code_base, uint64_t module_id,
+			   uint64_t virt_code_base,
+			   uint64_t elf_image_handle,
 			   CuDim3 grid_dim, CuDim3 block_dim,
 			   CuDim3 cluster_dim_default,
 			   CuDim3 cluster_dim_preferred, CUDBGKernelType type)
 {
   gdb_assert (dev_id < m_instance.m_num_devices);
 
-  auto module = find_module_by_id (module_id);
+  auto module = find_module_by_id (elf_image_handle);
   gdb_assert (module);
 
   auto kernel_id = m_instance.m_next_kernel_id++;
@@ -983,6 +993,14 @@ cuda_device::print ()
 }
 
 void
+cuda_device::flush_disasm_caches (bool device_only)
+{
+  for (auto &iter : cuda_state::contexts ())
+    if (iter.second->dev_id () == dev_idx ())
+      iter.second->flush_disasm_caches (device_only);
+}
+
+void
 cuda_device::resume ()
 {
   // There can be redundant calls to this, don't error out if so
@@ -1007,6 +1025,10 @@ cuda_device::resume ()
   cuda_debugapi::resume_device (dev_idx ());
 
   cuda_state::clear_suspended_devices_mask (dev_idx ());
+
+  // Flush the device disassembly cache. The ELF caches only change
+  // as a result of a LFL or LFF event.
+  flush_disasm_caches (true);
 }
 
 const CUDBGGridInfo &
@@ -1284,6 +1306,10 @@ cuda_sm::resume_warps_until_pc (cuda_api_warpmask *mask, uint64_t pc)
   else
     device ()->update (CUDBG_RESPONSE_TYPE_UPDATE);
 
+  // Flush the device disassembly cache. The ELF caches only change
+  // as a result of a LFL or LFF event.
+  cuda_state::flush_disasm_caches (dev_idx (), true);
+
   return true;
 }
 
@@ -1366,6 +1392,10 @@ cuda_sm::single_step_warp (uint32_t wp_id, uint32_t lane_id_hint,
 	  active_lanes_mask,
 	  active_lanes_mask ? warp (wp_id)->get_active_pc () : 0);
     }
+
+  // Flush the device disassembly cache. The ELF caches only change
+  // as a result of a LFL or LFF event.
+  device ()->flush_disasm_caches (true);
 
   // Return single-step success/failure
   return rc;
@@ -2142,20 +2172,23 @@ cuda_lane::get_rpc_register (uint32_t regno)
   CUDA_STATE_ERROR_IF (!valid (), "invalid lane");
 
   // Validate the parameters
-  CUDA_STATE_ERROR_IF (regno >= CUDA_REG_MAX_RPC_REGISTERS,
-		       "Attempting to get beyond RPC register: register out of range "
-		       "for this device");
+  CUDA_STATE_ERROR_IF (
+      regno >= CUDA_REG_MAX_RPC_REGISTERS,
+      "Attempting to get beyond RPC register: register out of range "
+      "for this device");
 
   if (!m_rpc_registers_p[regno])
     {
-	cuda_debugapi::read_rpc_register (dev_idx (), sm_idx (), warp_idx (),
-					  lane_idx (), regno, &m_rpc_registers[regno]);
-	m_rpc_registers_p[regno] = true;
+      cuda_debugapi::read_rpc_register (dev_idx (), sm_idx (), warp_idx (),
+					lane_idx (), regno,
+					&m_rpc_registers[regno]);
+      m_rpc_registers_p[regno] = true;
     }
   // Internal consistency checks
   gdb_assert (m_rpc_registers_p[regno]);
 
-  CUDA_STATE_TRACE_LANE (this, "RPC.%s = 0x%08x", regno == 0 ? "LO" : "HI", m_rpc_registers[regno]);
+  CUDA_STATE_TRACE_LANE (this, "RPC.%s = 0x%08x", regno == 0 ? "LO" : "HI",
+			 m_rpc_registers[regno]);
 
   return m_rpc_registers[regno];
 }
@@ -2166,12 +2199,13 @@ cuda_lane::set_rpc_register (uint32_t regno, uint32_t value)
   CUDA_STATE_ERROR_IF (!valid (), "invalid lane");
 
   // Validate the parameters
-  CUDA_STATE_ERROR_IF (regno >= CUDA_REG_MAX_RPC_REGISTERS,
-		       "Attempting to set beyond RPC register: register out of range "
-		       "for this device");
+  CUDA_STATE_ERROR_IF (
+      regno >= CUDA_REG_MAX_RPC_REGISTERS,
+      "Attempting to set beyond RPC register: register out of range "
+      "for this device");
 
   cuda_debugapi::write_rpc_register (dev_idx (), sm_idx (), warp_idx (),
-				 lane_idx (), regno, value);
+				     lane_idx (), regno, value);
 
   m_rpc_registers[regno] = value;
   m_rpc_registers_p[regno] = true;

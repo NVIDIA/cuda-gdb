@@ -231,9 +231,19 @@ mi_execute_command_wrapper (const char *cmd)
 void
 mi_interp::on_sync_execution_done ()
 {
+#ifdef NVIDIA_CUDA_GDB
+  bool deferred_prompt = this->deferred_prompt_pending;
+  this->deferred_prompt_pending = false;
+
+  /* If MI is sync, then output the MI prompt now, indicating we're
+     ready for further input.  In async MI the prompt is normally emitted at
+     resume time; emit it here only when an internal resume deferred it.  */
+  if (!mi_async_p () || deferred_prompt)
+#else
   /* If MI is sync, then output the MI prompt now, indicating we're
      ready for further input.  */
   if (!mi_async_p ())
+#endif
     display_mi_prompt (this);
 }
 
@@ -456,6 +466,21 @@ mi_interp::on_normal_stop (struct bpstat *bs, int print_frame)
   gdb_flush (this->raw_stdout);
 }
 
+#ifdef NVIDIA_CUDA_GDB
+/* True while CUDA attach/detach performs internal resumes that MI must hide. */
+static bool
+cuda_attach_or_detach_active ()
+{
+  if (cuda_debugapi::attach_or_detach_in_progress ())
+    return true;
+
+  inferior *inf = current_inferior ();
+  return inf != nullptr
+	 && (inf->cuda_attach_state == inferior::cuda_attach_state::INJECTING
+	     || inf->cuda_attach_state == inferior::cuda_attach_state::RESUMING);
+}
+#endif
+
 void
 mi_interp::on_about_to_proceed ()
 {
@@ -470,13 +495,13 @@ mi_interp::on_about_to_proceed ()
     }
 
 #ifdef NVIDIA_CUDA_GDB
-  /* CUDA - Attach/Detach support
-     If cuda-gdb is attaching or detaching, the inferior might
-     have been resumed to collect more information, and it does
-     not mean that attach/detach has completed. So we need to
-     return early and not send the "running" message to the client. */
-  if (cuda_debugapi::attach_or_detach_in_progress ())
-    return;
+  /* Hide internal CUDA attach/detach resumes from MI.  Clear mi_proceeded so
+     an earlier proceed cannot emit a spurious "^running" from a continuation.  */
+  if (cuda_attach_or_detach_active ())
+    {
+      this->mi_proceeded = 0;
+      return;
+    }
 #endif
   this->mi_proceeded = 1;
 }
@@ -729,6 +754,18 @@ mi_interp::on_target_resumed (ptid_t ptid)
   /* Suppress output while calling an inferior function.  */
   if (tp->control.in_infcall)
     return;
+
+#ifdef NVIDIA_CUDA_GDB
+  /* Hide internal CUDA attach/detach resumes from MI.  Record the deferred
+     prompt for the interpreter that started the operation.  */
+  if (cuda_attach_or_detach_active ())
+    {
+      inferior *inf = current_inferior ();
+      if (inf != nullptr && inf->cuda_waiting_ui == current_ui)
+	this->deferred_prompt_pending = true;
+      return;
+    }
+#endif
 
   target_terminal::scoped_restore_terminal_state term_state;
   target_terminal::ours_for_output ();
